@@ -106,24 +106,58 @@ const shareLinkFor = (
   });
 
 /**
+ * Starts a clipboard write NOW, in the gesture, with text that arrives later.
+ * WebKit (Safari, and the macOS desktop's WKWebView) refuses a clipboard write
+ * that starts after an `await`, outside the user's gesture; a `ClipboardItem`
+ * holding a promise is the standard way round it. False when that is not
+ * supported here or was refused, so the caller can fall back to `writeText`
+ * (which Chromium allows after an await).
+ */
+const writeLater = (text: Promise<string | undefined>): Promise<boolean> => {
+  const blob = text.then((held) => {
+    if (held === undefined) throw new Error("nothing to copy");
+    return new Blob([held], { type: "text/plain" });
+  });
+  // Nothing to copy is the caller's to say; the blob's rejection is not news.
+  blob.catch(() => undefined);
+  try {
+    if (typeof ClipboardItem === "undefined") return Promise.resolve(false);
+    return navigator.clipboard.write([new ClipboardItem({ "text/plain": blob })]).then(
+      () => true,
+      () => false,
+    );
+  } catch {
+    return Promise.resolve(false);
+  }
+};
+
+/**
  * Copies the share link to the place on screen: the address bar's path after
- * `/project/<slug>`, with its query, in the project at `root`.
+ * `/project/<slug>`, with its query, in the project at `root`. The write starts
+ * before the link is read (`writeLater`), so WebKit still counts it as the
+ * press's.
  */
 export const copyPlaceLink = async (services: Services, root: string): Promise<void> => {
   const rest = /^\/project\/[^/]+(.*)$/u.exec(window.location.pathname)?.[1] ?? "";
-  const path = await services.run(
-    shareLinkFor(services, root, rest, new URLSearchParams(window.location.search)),
-  );
-  if (path === undefined) {
+  const origin = window.location.origin;
+  const linked = services
+    .run(shareLinkFor(services, root, rest, new URLSearchParams(window.location.search)))
+    .then((path) => (path === undefined ? undefined : `${origin}${path}`));
+  const writing = writeLater(linked);
+  const link = await linked;
+  if (link === undefined) {
     toasts.error({
       title: t("This project has no link to share"),
       message: t("A link names the shared project, and this one is only on this device."),
     });
     return;
   }
-  const link = `${window.location.origin}${path}`;
-  await navigator.clipboard
-    .writeText(link)
-    .then(() => toasts.success({ title: t("Link copied"), message: link }))
-    .catch(() => toasts.error({ title: t("Could not copy the link"), message: link }));
+  const copied =
+    (await writing) ||
+    (await navigator.clipboard.writeText(link).then(
+      () => true,
+      () => false,
+    ));
+  if (copied) toasts.success({ title: t("Link copied"), message: link });
+  else toasts.error({ title: t("Could not copy the link"), message: link });
 };
