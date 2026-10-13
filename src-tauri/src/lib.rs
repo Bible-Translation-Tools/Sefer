@@ -54,8 +54,18 @@ pub fn run() {
     #[allow(unused_mut)]
     let mut context = tauri::generate_context!();
     #[cfg(feature = "webdriver")]
-    if let Some(url) = std::env::var("SEFER_DEV_URL").ok().and_then(|url| url.parse().ok()) {
-        context.config_mut().build.dev_url = Some(url);
+    {
+        if let Some(url) = std::env::var("SEFER_DEV_URL").ok().and_then(|url| url.parse().ok()) {
+            context.config_mut().build.dev_url = Some(url);
+        }
+        // A driven window is usually not frontmost (the person is elsewhere, or
+        // the screen is locked), and WKWebView throttles a hidden page until
+        // every IPC round trip takes 0.4–1.8 s: Translation Notes' first read
+        // of Psalms took minutes. A script must measure the app, not the nap.
+        for window in &mut context.config_mut().app.windows {
+            window.background_throttling =
+                Some(tauri::utils::config::BackgroundThrottlingPolicy::Disabled);
+        }
     }
 
     builder
