@@ -761,15 +761,19 @@ function Find() {
   // `references` is in the key for the reference scope alone: a link that
   // arrives with `scope=reference` searches before the project's sources are
   // registered (`bound` resolves a moment after mount), finds nothing, and
-  // has to search again once they are.
+  // has to search again once they are. Keyed on the ids themselves, so a
+  // source swapped for another searches again too; and that rerun leaves the
+  // box alone, because the person may be typing in it by then.
+  let lastAsked: { readonly q: string; readonly scope: string } | undefined;
   createEffect(
     () => ({
       q: asked(),
       scope: scope(),
-      references: scope() === "reference" ? bound().ids.length : 0,
+      references: scope() === "reference" ? bound().ids.join("\n") : "",
     }),
     (now) => {
-      setText(now.q);
+      if (lastAsked?.q !== now.q || lastAsked.scope !== now.scope) setText(now.q);
+      lastAsked = { q: now.q, scope: now.scope };
       untrack(() => {
         void run({ scope: now.scope, text: now.q });
       });
@@ -817,10 +821,12 @@ function Find() {
    * reference matched, does YOUR verse say what `expect` says it should?
    * Undefined outside the reference scope or with nothing expected.
    */
+  /** Only `expect`, so another param moving does not split the verses again. */
+  const expected = createMemo(() => params().expect ?? "", { name: "findExpect" });
   const expectation = createMemo(
     () => {
       if (scope() !== "reference") return undefined;
-      const pattern = expectedPattern(params().expect ?? "");
+      const pattern = expectedPattern(expected());
       if (pattern === undefined) return undefined;
       const addresses = referenceHits().flatMap((hit) =>
         hit.address === undefined ? [] : [hit.address],
