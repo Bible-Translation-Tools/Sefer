@@ -17,16 +17,15 @@ import { describe } from "../../describe";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import {
-  COPY_REVIEW,
-  isCopyHasWork,
   mySuggestions,
+  reviewNeeded,
   suggestMyChanges,
   withdrawSuggestion,
   type MySuggestion,
 } from "../../suggestions";
 import { ago } from "../panels/format";
 import { Button, toasts } from "../primitives";
-import { copyHasWorkMessage } from "./copy";
+import { offerRefusalCopy } from "./copy";
 import { QuietSection } from "./QuietSection";
 
 const statusOf = (mine: MySuggestion): string => {
@@ -77,16 +76,14 @@ export function YourSuggestions(props: {
     work
       .then(() => toasts.success({ title: done }))
       .catch((cause: unknown) => {
-        // The copy holds work this device lacks: not a failure, one decision.
-        if (isCopyHasWork(cause)) {
-          toasts.info({
-            title: t("Your copy has changes this device does not"),
-            message: copyHasWorkMessage(),
-          });
+        // Work this device lacks is in the way: not a failure, one decision.
+        const needed = reviewNeeded(cause);
+        if (needed !== undefined) {
+          toasts.info(offerRefusalCopy(needed));
           void navigate({
             to: "/project/$slug/review",
             params: { slug: shell.slug() },
-            search: COPY_REVIEW,
+            search: needed.search,
           });
           return;
         }

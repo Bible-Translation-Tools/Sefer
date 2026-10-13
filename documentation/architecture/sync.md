@@ -413,9 +413,21 @@ decision, instead of a dead end:
   `refused` with `toCopy`) and offers **Compare with your copy**, Review against the copy
   (`?against=shared&copy=1`, labelled "Your copy"). It used to say the shared project had changed,
   and its Compare compared with the shared project.
-- **Offer my changes** (Suggestions, the cloud popover, Save's receipt) reads the copy first
-  (`fetchCopy`); if the copy's tip is not in this device's history it pushes nothing and goes to the
-  same review (`CopyHasWork`), where before it failed on the push.
+- **Offer my changes** (Suggestions, the cloud popover, Save's receipt) reads the copy first and
+  pushes nothing when work this device lacks is in the way, going to the review that settles it
+  (`NeedsReview`), where before it failed on the push.
+- **One rule says what is in the way**, `CopyStanding` (`suggestions.ts`), read by the offer, by a
+  refused send and by the popover's "your copy has work" line (`copyHasMore`): `none` (the copy's tip
+  is in this device's history: nothing to settle), `shared` (it is in the shared project's: the copy
+  only caught up, and what this device lacks is the shared project's work, so Review against the
+  shared project, never labelled the copy's), `behind` (this device's tip is in the copy's: an offer
+  needs no send) and `own` (Review against the copy). Both hosts report a lock, a disk or a TLS
+  failure as `Rejected` just as they do a non-fast-forward, so a refused send to the copy reads the
+  copy again and goes by its standing: with nothing in the way, the receipt says what actually went
+  wrong ("Not sent to your copy") rather than leading into an empty review.
+- Pressing **Compare with your copy** while already in that review reads the copy and the comparison
+  again, and switching a review in place between the shared project and the copy starts its decisions
+  over; the labels, the Save text and the default message follow the side.
 - **The review's Save is the decision.** What only the copy changed is preset to the copy's side;
   choosing "Keep the editor's" for those passages records "keep ours". Either way `settleWithShared`
   combines with the copy's tip as "theirs": one decision commit whose parents are this device's head

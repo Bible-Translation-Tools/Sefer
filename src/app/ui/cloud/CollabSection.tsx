@@ -24,11 +24,11 @@ import { collaboration } from "../../collaboration";
 import { describe } from "../../describe";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import { COPY_REVIEW, isCopyHasWork, suggestMyChanges } from "../../suggestions";
+import { reviewNeeded, suggestMyChanges } from "../../suggestions";
 import { ago } from "../panels/format";
 import { Button, toasts } from "../primitives";
 import { chooseOwnCopy, chooseShared } from "./collab";
-import { copyHasWorkMessage } from "./copy";
+import { offerRefusalCopy } from "./copy";
 
 export function CollabSection(props: { readonly onLeave: () => void }) {
   const shell = useShell();
@@ -64,27 +64,23 @@ export function CollabSection(props: { readonly onLeave: () => void }) {
           ),
         });
       } catch (cause) {
-        // The copy holds work this device lacks: not a failure, one decision.
-        if (isCopyHasWork(cause)) {
-          toasts.info({
-            title: t("Your copy has changes this device does not"),
-            message: copyHasWorkMessage(),
-          });
-          toCopyReview();
-        } else toasts.error({ title: t("Could not offer your changes"), message: describe(cause) });
+        // Work this device lacks is in the way: not a failure, one decision.
+        const needed = reviewNeeded(cause);
+        if (needed === undefined)
+          toasts.error({ title: t("Could not offer your changes"), message: describe(cause) });
+        else {
+          toasts.info(offerRefusalCopy(needed));
+          toReview(needed.search);
+        }
       } finally {
         await collaboration.refresh(services, project);
       }
     });
 
-  /** Review against the person's own copy: the one decision a refused offer leads to. */
-  const toCopyReview = (): void => {
+  /** The review a refused offer leads to: against the person's copy, or the shared project. */
+  const toReview = (search: NonNullable<ReturnType<typeof reviewNeeded>>["search"]): void => {
     props.onLeave();
-    void navigate({
-      to: "/project/$slug/review",
-      params: { slug: shell.slug() },
-      search: COPY_REVIEW,
-    });
+    void navigate({ to: "/project/$slug/review", params: { slug: shell.slug() }, search });
   };
 
   const toSettings = (): void => {

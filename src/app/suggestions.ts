@@ -31,7 +31,7 @@
  */
 import { Effect, Option } from "effect";
 
-import { Git, type Commit } from "#core/git/git";
+import { Git, type Commit, type Repo } from "#core/git/git";
 import { Settings } from "#core/host/settings";
 import type { Project } from "#core/project/project";
 import { Gitea, type ForkParent, type RemoteRepo } from "#core/remote/gitea";
@@ -372,28 +372,103 @@ const suggestionTitle = (now = new Date()): string =>
   });
 
 /**
- * The person's copy holds versions this device does not have, so nothing can
- * be sent to it as it is: a send is a fast-forward, and Sefer never forces
- * one. Not an error to retry. The one way on is Review against the copy
- * (`?against=shared&copy=1`), whose Save records a decision commit on top of
- * both and sends it as an ordinary fast-forward.
+ * Where the person's copy stands against this device and the shared project,
+ * read from the local refs (`copyRef`, `trackingRef`; read the copy first):
+ *
+ * - `none` — no copy ref, or its tip is already in this device's history: a
+ *   send to it is a fast-forward and nothing needs settling;
+ * - `shared` — the copy's tip is in the shared project's history: what this
+ *   device lacks is the shared project's work, to bring from the shared
+ *   project (Review against it), never to be labelled the copy's;
+ * - `behind` — this device's tip is in the copy's history, and the copy has
+ *   more that the shared project does not (another device's work);
+ * - `own` — the copy holds versions of its own that neither has: the one
+ *   decision is Review against the copy.
+ *
+ * One rule for every caller: the offer, a refused send, and the popover's
+ * "your copy has work" line (`copyHasMore`).
  */
-class CopyHasWork extends Error {
-  readonly reason = "copy-has-work";
-  constructor() {
-    super("your copy has changes this device does not have");
+export type CopyStanding = "none" | "shared" | "behind" | "own";
+
+/** Is `older` already in `newer`'s history? */
+const within = (repo: Repo, older: string, newer: string) =>
+  Effect.gen(function* () {
+    if (older === newer) return true;
+    const base = yield* (yield* Git).mergeBase(repo, older, newer);
+    return Option.isSome(base) && base.value === older;
+  });
+
+const standingOfCopy = (repo: Repo, branch: string) =>
+  Effect.gen(function* () {
+    const git = yield* Git;
+    const tipOf = (ref: string) => Effect.map(git.resolve(repo, ref), Option.getOrUndefined);
+    const copy = yield* tipOf(copyRef(branch));
+    const head = yield* tipOf("HEAD");
+    const shared = yield* tipOf(trackingRef(branch));
+    const standing: CopyStanding =
+      copy === undefined || (head !== undefined && (yield* within(repo, copy, head)))
+        ? "none"
+        : shared !== undefined && (yield* within(repo, copy, shared))
+          ? "shared"
+          : head !== undefined && (yield* within(repo, head, copy))
+            ? "behind"
+            : "own";
+    return standing;
+  });
+
+/** Reads the person's copy's branch into `copyRef`; a failed read leaves the last one. */
+const readCopy = (repo: Repo, branch: string) =>
+  Effect.gen(function* () {
+    const remote = yield* Remote;
+    yield* Effect.ignore(remote.fetchRef(repo, `refs/heads/${branch}`, copyRef(branch), COPY));
+  });
+
+/**
+ * An offer that cannot go as it is, because work this device lacks is in the
+ * way, and which Review settles it: against the person's own copy (`copy`: it
+ * holds versions of its own, another device's or an older offer the shared
+ * project never took), or against the shared project (the copy caught up with
+ * it and this device has not). Not an error to retry. That review's Save
+ * records a decision commit on top of both and sends it as an ordinary
+ * fast-forward; nothing is forced.
+ */
+class NeedsReview extends Error {
+  readonly reason = "needs-review";
+  constructor(readonly copy: boolean) {
+    super(
+      copy
+        ? "your copy has changes this device does not have"
+        : "the shared project has changes this device does not have",
+    );
   }
 }
 
-/** Whatever a rejected offer carried, read by its `reason`, as `describe` reads every failure. */
-export const isCopyHasWork = (cause: unknown): boolean =>
-  typeof cause === "object" &&
-  cause !== null &&
-  "reason" in cause &&
-  cause.reason === "copy-has-work";
-
 /** The search that opens Review against the person's own copy. */
 export const COPY_REVIEW = { against: "shared", copy: 1 } as const;
+
+/** The search that opens Review against the shared project. */
+const SHARED_REVIEW = { against: "shared" } as const;
+
+/**
+ * Which review a refused offer asks for, and the search that opens it, read by
+ * its `reason` as `describe` reads every failure; undefined for any other
+ * failure.
+ */
+export const reviewNeeded = (
+  cause: unknown,
+):
+  | { readonly copy: boolean; readonly search: typeof COPY_REVIEW | typeof SHARED_REVIEW }
+  | undefined => {
+  if (
+    typeof cause !== "object" ||
+    cause === null ||
+    !("reason" in cause) ||
+    cause.reason !== "needs-review"
+  )
+    return undefined;
+  const copy = "copy" in cause && cause.copy === true;
+  return { copy, search: copy ? COPY_REVIEW : SHARED_REVIEW };
+};
 
 /**
  * Suggests what this project's copy holds to the shared project: one open
@@ -410,26 +485,21 @@ export const suggestMyChanges = (services: Services, project: Project): Promise<
       const git = yield* Git;
       const remote = yield* Remote;
       const repo = yield* git.open(project.root);
-      // Only when the copy lacks this device's newest version. Save has
-      // usually just sent it there, and sending the same commit again, a
-      // moment after the suggestion opened, showed on WACS as "force-pushed
-      // d3d8722 to d3d8722".
-      // The copy read again first: if it holds work this device lacks (sent
-      // from another device, or an older offer the shared project never
-      // took) the push could only be refused, so say that instead and offer
-      // the one decision that settles it, Review against the copy.
-      yield* Effect.ignore(
-        remote.fetchRef(repo, `refs/heads/${at.branch}`, copyRef(at.branch), COPY),
-      );
-      const head = yield* git.resolve(repo, "HEAD");
-      const sent = yield* git.resolve(repo, copyRef(at.branch));
-      if (Option.isSome(head) && Option.isSome(sent) && head.value !== sent.value) {
-        const base = yield* git.mergeBase(repo, head.value, sent.value);
-        if (!(Option.isSome(base) && base.value === sent.value))
-          return yield* Effect.fail(new CopyHasWork());
-      }
-      if (Option.isNone(head) || Option.isNone(sent) || head.value !== sent.value)
-        yield* remote.push(repo, COPY);
+      // The copy read again first. When work this device lacks is in the way
+      // the push could only be refused, so say which review settles it
+      // instead (`standingOfCopy`, the rule `copyHasMore` reads too). When
+      // the copy already has this device's tip nothing is sent: sending the
+      // same commit again, a moment after the suggestion opened, showed on
+      // WACS as "force-pushed d3d8722 to d3d8722".
+      yield* readCopy(repo, at.branch);
+      const standing = yield* standingOfCopy(repo, at.branch);
+      const head = Option.getOrUndefined(yield* git.resolve(repo, "HEAD"));
+      const sent = Option.getOrUndefined(yield* git.resolve(repo, copyRef(at.branch)));
+      const headInCopy =
+        head !== undefined && sent !== undefined && (yield* within(repo, head, sent));
+      if (standing === "own") return yield* Effect.fail(new NeedsReview(true));
+      if (standing === "shared" && !headInCopy) return yield* Effect.fail(new NeedsReview(false));
+      if (!headInCopy) yield* remote.push(repo, COPY);
       return yield* (yield* Suggestions).suggest(at.host, at.owner, at.name, {
         from: at.me,
         branch: at.branch,
@@ -611,11 +681,10 @@ export const fetchCopy = (services: Services, project: Project): Promise<void> =
       Effect.gen(function* () {
         if (!(yield* copyAttached(project))) return;
         const git = yield* Git;
-        const remote = yield* Remote;
         const repo = yield* git.open(project.root);
         const branch = Option.getOrUndefined(yield* git.branch(repo));
         if (branch === undefined) return;
-        yield* remote.fetchRef(repo, `refs/heads/${branch}`, copyRef(branch), COPY);
+        yield* readCopy(repo, branch);
       }),
       () => undefined,
     ),
@@ -626,29 +695,23 @@ export const fetchCopy = (services: Services, project: Project): Promise<void> =
  * device nor the shared project has? A fresh copy holds the shared project's
  * versions, and those are the shared project's to bring, not the copy's.
  */
-export const copyHasMore = (services: Services, project: Project): Promise<boolean> =>
+export const copyHasMore = async (services: Services, project: Project): Promise<boolean> => {
+  const standing = await copyStanding(services, project);
+  return standing === "behind" || standing === "own";
+};
+
+/** Where the person's copy stands (`CopyStanding`) as it was last read; `none` when it cannot be told. */
+export const copyStanding = (services: Services, project: Project): Promise<CopyStanding> =>
   services.run(
     Effect.orElseSucceed(
       Effect.gen(function* () {
         const git = yield* Git;
         const repo = yield* git.open(project.root);
         const branch = Option.getOrUndefined(yield* git.branch(repo));
-        if (branch === undefined) return false;
-        const copy = yield* git.resolve(repo, copyRef(branch));
-        if (Option.isNone(copy)) return false;
-        /** Is the copy's tip already in `ref`'s history? */
-        const within = (ref: string) =>
-          Effect.gen(function* () {
-            const tip = yield* git.resolve(repo, ref);
-            if (Option.isNone(tip)) return false;
-            if (tip.value === copy.value) return true;
-            const base = yield* git.mergeBase(repo, copy.value, tip.value);
-            return Option.isSome(base) && base.value === copy.value;
-          });
-        if (yield* within("HEAD")) return false;
-        return !(yield* within(trackingRef(branch)));
+        if (branch === undefined) return "none" satisfies CopyStanding;
+        return yield* standingOfCopy(repo, branch);
       }),
-      () => false,
+      (): CopyStanding => "none",
     ),
   );
 

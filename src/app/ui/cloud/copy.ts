@@ -408,6 +408,14 @@ export const sendOutcomeCopy = (
                 "They came from another device, or from changes you offered before. Compare with your copy and choose what to keep; then it sends as usual. Nothing is lost on either side.",
               ),
             };
+          if (outcome.description !== undefined)
+            return {
+              tone: "warning",
+              title: t("Saved here. Not sent to your copy"),
+              detail: t("Your work is safe on this device. What went wrong: {description}", {
+                description: outcome.description,
+              }),
+            };
           return {
             tone: "warning",
             title: t("Saved here. Not sent: the shared project has changed"),
@@ -442,10 +450,23 @@ export const sendOutcomeCopy = (
 };
 
 /**
- * What an offer says when the person's copy holds changes this device does
- * not: the one decision, Review against the copy, comes next.
+ * What an offer says when work this device lacks is in the way
+ * (`reviewNeeded`): in the person's copy, or in the shared project the copy
+ * caught up with. The one decision, that review, comes next.
  */
-export const copyHasWorkMessage = (): string =>
-  t(
-    "Compare with your copy and choose what to keep; then offer again. Nothing is lost on either side.",
-  );
+export const offerRefusalCopy = (needed: {
+  readonly copy: boolean;
+}): { readonly title: string; readonly message: string } =>
+  needed.copy
+    ? {
+        title: t("Your copy has changes this device does not"),
+        message: t(
+          "Compare with your copy and choose what to keep; then offer again. Nothing is lost on either side.",
+        ),
+      }
+    : {
+        title: t("The shared project has changes this device does not"),
+        message: t(
+          "Compare the changes and choose what to keep; then offer again. Nothing is lost on either side.",
+        ),
+      };

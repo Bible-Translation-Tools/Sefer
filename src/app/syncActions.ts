@@ -36,10 +36,10 @@ import {
 } from "#core/sync";
 
 import { collaboration } from "./collaboration";
-import { remoteReasonOf } from "./describe";
+import { describe, remoteReasonOf } from "./describe";
 import { recordVersion, type RecordOutcome } from "./recordVersion";
 import type { Services } from "./services";
-import { fetchCopy, modeOf, sendingTo } from "./suggestions";
+import { copyStanding, fetchCopy, modeOf, sendingTo } from "./suggestions";
 import { syncPreferences } from "./syncSettings";
 import { syncStatus } from "./syncStatus";
 import { syncWatch } from "./syncWatch";
@@ -154,12 +154,18 @@ export type SendOutcome =
   | { readonly kind: "detached" }
   | { readonly kind: "held" }
   /**
-   * `toCopy`: it was the person's own copy that refused. `Rejected` then means
-   * the copy holds work this device does not (another device's, or an older
-   * offer the shared project never took), and the way on is Review against
-   * the copy, not against the shared project.
+   * `toCopy`: the person's own copy refused because it holds work this device
+   * does not (another device's, or an older offer the shared project never
+   * took), and the way on is Review against the copy, not against the shared
+   * project. `description`: the copy refused with nothing in the way, so this
+   * is what went wrong (a lock, the disk, the connection), said as it is.
    */
-  | { readonly kind: "refused"; readonly reason: RemoteFailureReason; readonly toCopy?: true };
+  | {
+      readonly kind: "refused";
+      readonly reason: RemoteFailureReason;
+      readonly toCopy?: true;
+      readonly description?: string;
+    };
 
 /**
  * Send this device's versions now, whatever the project's send-on-save says:
@@ -229,12 +235,25 @@ const attemptSend = async (
     return target === "copy" ? { kind: "sent", toCopy: true } : { kind: "sent" };
   } catch (cause) {
     const reason = remoteReasonOf(cause) ?? "Rejected";
+    // Both hosts report a refused non-fast-forward, a lock, a disk or a TLS
+    // failure alike as `Rejected`, so the copy's refusal is judged by the
+    // facts, read again: only work this device lacks leads to Review against
+    // the copy (`own`, `behind`) or the shared project (`shared`); anything
+    // else says what actually went wrong.
+    const standing =
+      to === "copy" && reason === "Rejected"
+        ? await fetchCopy(services, project).then(() => copyStanding(services, project))
+        : undefined;
     syncStatus.noteSend({ refused: reason });
     operation.end(remoteVerdict(reason), {
       "sync.reason": reason,
       ...(to === undefined ? {} : { "sync.to": to }),
+      ...(standing === undefined ? {} : { "sync.copy": standing }),
     });
-    return to === "copy" ? { kind: "refused", reason, toCopy: true } : { kind: "refused", reason };
+    if (standing === "own" || standing === "behind")
+      return { kind: "refused", reason, toCopy: true };
+    if (standing === "none") return { kind: "refused", reason, description: describe(cause) };
+    return { kind: "refused", reason };
   }
 };
 

@@ -81,7 +81,8 @@ import {
   COPY_REVIEW,
   copyRef,
   declineSuggestion,
-  isCopyHasWork,
+  fetchCopy,
+  reviewNeeded,
   suggestionRef,
   suggestMyChanges,
 } from "../../suggestions";
@@ -89,7 +90,13 @@ import { sendAfterSave, sendNow, settleWithShared, type SendOutcome } from "../.
 import { setAuthorName, syncPreferences } from "../../syncSettings";
 import { syncWatch } from "../../syncWatch";
 import { forgetWriterWork, takeWriterWork, writerWatch } from "../../writerWatch";
-import { combineRefusal, combineTrouble, receiveRefusal, sendOutcomeCopy } from "../cloud/copy";
+import {
+  combineRefusal,
+  combineTrouble,
+  offerRefusalCopy,
+  receiveRefusal,
+  sendOutcomeCopy,
+} from "../cloud/copy";
 import { SyncLine } from "../cloud/SyncLine";
 import { unsavedChanges } from "../panels/changes";
 import { ago } from "../panels/format";
@@ -150,8 +157,11 @@ export function ReviewPanel() {
     const held = untrack(() => search().pull);
     return typeof held === "number" ? held : undefined;
   };
-  /** The person's own copy, as another of their devices left it, is "theirs". */
-  const fromCopy = (): boolean => untrack(() => search().copy) === 1;
+  /**
+   * The person's own copy, as another of their devices left it, is "theirs".
+   * Read reactively, so the labels and the Save text follow a switch in place.
+   */
+  const fromCopy = (): boolean => search().copy === 1;
   const theirsRef = (): string | undefined => {
     const number = pull();
     if (number !== undefined) return suggestionRef(number);
@@ -1102,11 +1112,17 @@ export function ReviewPanel() {
     // Against the shared project the version is a settling, and says which
     // books it settled; anything else names the books it records.
     const settledNames = reviewBooks().map((book) => bookName(book.bookId, metadataOf(project)));
+    // Which side this review is against, as it was when Save was pressed.
+    const copyReview = fromCopy();
     const settling = !againstShared()
       ? undefined
-      : settledNames.length === 0
-        ? t("Combined with the shared project")
-        : t("Combined {books} with the shared project", { books: settledNames.join(", ") });
+      : copyReview
+        ? settledNames.length === 0
+          ? t("Combined with your copy")
+          : t("Combined {books} with your copy", { books: settledNames.join(", ") })
+        : settledNames.length === 0
+          ? t("Combined with the shared project")
+          : t("Combined {books} with the shared project", { books: settledNames.join(", ") });
     const staticMessage = typedMessage !== "" ? typedMessage : (settling ?? defaultMessage());
     // Asked once per device, when nobody is signed in: a version carries a
     // person's name, and "Sefer" would say nothing about who changed the text.
@@ -1162,7 +1178,7 @@ export function ReviewPanel() {
         // copy is caught up with and sent back to, as any send in their mode.
         pull() !== undefined
           ? { theirs: theirsRef(), sendTo: "origin" }
-          : fromCopy()
+          : copyReview
             ? { theirs: theirsRef() }
             : {},
       );
@@ -1214,7 +1230,7 @@ export function ReviewPanel() {
           );
           setRecordedLine({
             tone: "success",
-            title: fromCopy()
+            title: copyReview
               ? t("Combined with your copy on this device")
               : t("Combined with the shared project on this device"),
             detail: staticMessage,
@@ -1246,7 +1262,9 @@ export function ReviewPanel() {
               );
               setRecordedLine({
                 tone: "success",
-                title: t("Combined with the shared project on this device"),
+                title: copyReview
+                  ? t("Combined with your copy on this device")
+                  : t("Combined with the shared project on this device"),
                 detail: staticMessage,
               });
               follow(outcome.sending);
@@ -1465,16 +1483,16 @@ export function ReviewPanel() {
               ),
             }),
           )
-          .catch((cause: unknown) =>
+          .catch((cause: unknown) => {
+            const needed = reviewNeeded(cause);
+            const said = needed === undefined ? undefined : offerRefusalCopy(needed);
             setSendLine(
-              isCopyHasWork(cause)
+              needed !== undefined && said !== undefined
                 ? {
                     tone: "warning",
-                    title: t("Not offered yet: your copy has changes this device does not"),
-                    detail: t(
-                      "Compare with your copy and choose what to keep; then offer again. Nothing is lost on either side.",
-                    ),
-                    action: "copy",
+                    title: t("Not offered yet: {why}", { why: said.title }),
+                    detail: said.message,
+                    action: needed.copy ? "copy" : "see",
                   }
                 : {
                     tone: "error",
@@ -1482,8 +1500,8 @@ export function ReviewPanel() {
                     detail: describe(cause),
                     action: "offer",
                   },
-            ),
-          )
+            );
+          })
           .finally(() => void collaboration.refresh(services, project));
         return;
     }
@@ -1495,6 +1513,15 @@ export function ReviewPanel() {
    * on top of this device's work and the copy's, sent as a fast-forward.
    */
   const seeCopy = (): void => {
+    const project = shell.project();
+    // Already against the copy: no search changes, so nothing would read it
+    // again, and the decision would be made against a tip that may have moved
+    // (the copy's newer versions would then arrive unseen with Save). Read the
+    // copy, then the comparison, again.
+    if (untrack(fromCopy) && untrack(() => search().against) === "shared") {
+      if (project !== undefined) void fetchCopy(services, project).then(seeShared);
+      return;
+    }
     void navigate({
       to: "/project/$slug/review",
       params: { slug: shell.slug() },
@@ -1515,11 +1542,17 @@ export function ReviewPanel() {
   // The cloud popover's "See the changes" navigates here with `against=shared`;
   // when Review is already open that is a search change, not a mount.
   // "Review their changes" does the same with `against=writer`.
+  // `copy` too: from a review already against the shared project, "Compare
+  // with your copy" changes only that, and "theirs" must be read again. The
+  // decisions made against one side mean nothing against the other, so
+  // switching sides in place starts over.
+  let wasCopy = untrack(fromCopy);
   createEffect(
-    // `copy` too: from a review already against the shared project, "Compare
-    // with your copy" changes only that, and "theirs" must be read again.
     () => `${String(search().against)}:${String(search().copy)}`,
     () => {
+      const nowCopy = untrack(fromCopy);
+      if (nowCopy !== wasCopy) untrack(startOver);
+      wasCopy = nowCopy;
       const against = untrack(() => search().against);
       if (against === "shared") untrack(seeShared);
       if (against === "writer" && untrack(rightId) !== "writer" && untrack(leftId) !== "writer")
