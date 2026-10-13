@@ -36,7 +36,7 @@ import path from "node:path";
 import process from "node:process";
 
 import { buildDesktop, startDesktop } from "./desktopApp.ts";
-import { newRun } from "./devServer.ts";
+import { newRun, sleep } from "./devServer.ts";
 
 interface Options {
   readonly check: boolean;
@@ -86,12 +86,24 @@ const check = async (base: string): Promise<Record<string, unknown>> => {
     sessionId: string;
   };
   try {
-    const page = await call(base, "POST", `/session/${session.sessionId}/execute/sync`, {
-      script:
-        "return { title: document.title, url: location.href, sefer: typeof globalThis.__sefer, host: typeof globalThis.__TAURI_INTERNALS__ }",
-      args: [],
-    });
-    return { session: true, page };
+    // The server answers before the page has loaded: the first visit compiles
+    // the dev module graph, and a script sent meanwhile times out. Ask until
+    // the shell has booted (`__sefer` is set), for up to two minutes.
+    const until = Date.now() + 120_000;
+    for (;;) {
+      try {
+        // SAFETY: the script below returns exactly this shape.
+        const page = (await call(base, "POST", `/session/${session.sessionId}/execute/sync`, {
+          script:
+            "return { title: document.title, url: location.href, sefer: typeof globalThis.__sefer, host: typeof globalThis.__TAURI_INTERNALS__ }",
+          args: [],
+        })) as { sefer: string };
+        if (page.sefer === "object" || Date.now() > until) return { session: true, page };
+      } catch (error) {
+        if (Date.now() > until) throw error;
+      }
+      await sleep(1000);
+    }
   } finally {
     await call(base, "DELETE", `/session/${session.sessionId}`);
   }
