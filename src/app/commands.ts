@@ -17,7 +17,7 @@
  * its port; a command that navigates calls `bridge.go`.
  */
 
-import { emptyBlocks, structureAt, withoutScrolling } from "@sefer/editor";
+import { withoutScrolling } from "@sefer/editor";
 import type { EditorAction, EditorBook, ProjectionName } from "@sefer/editor";
 import type { UseNavigateResult } from "@tanstack/solid-router";
 import { Effect, Option, Result, type Scope } from "effect";
@@ -555,12 +555,12 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
         // A selection in the editor is the question: a few words on one line
         // land in the box and are searched, as every editor's find does.
         // Anything longer, multi-line or reaching into markup opens Find empty.
-        const state = bridge.focused()?.state;
-        const range = state?.selection.main;
+        const book = bridge.focused();
+        const range = book?.selection();
         const picked =
-          state === undefined || range === undefined || range.empty
+          book === undefined || range === undefined || range.from === range.to
             ? ""
-            : state.sliceDoc(range.from, range.to).trim();
+            : book.source().text.slice(range.from, range.to).trim();
         const usable = picked !== "" && picked.length <= 200 && !/[\n\\]/.test(picked);
         void bridge.navigate({
           to: "/project/$slug/find",
@@ -851,11 +851,13 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
     ...(() => {
       /** The `\c` number the caret is inside, or `undefined` in front matter. */
       const chapterAtCaret = (book: EditorBook): number | undefined => {
-        const at = book.state.selection.main.head;
-        const row = structureAt(book.state).chapters.find(
-          (chapter: { readonly from: number; readonly to: number }) =>
-            at >= chapter.from && at < chapter.to,
-        );
+        const at = book.selection().head;
+        const row = book
+          .structure()
+          .chapters.find(
+            (chapter: { readonly from: number; readonly to: number }) =>
+              at >= chapter.from && at < chapter.to,
+          );
         const number = row === undefined ? Number.NaN : Number.parseInt(row.label, 10);
         return Number.isFinite(number) ? number : undefined;
       };
@@ -890,14 +892,16 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
         within?: { readonly from: number; readonly to: number },
       ) =>
         Effect.gen(function* () {
-          const holes = emptyBlocks(book.state).filter(
-            (hole) => within === undefined || (hole.from >= within.from && hole.from < within.to),
-          );
+          const holes = book
+            .emptyBlocks()
+            .filter(
+              (hole) => within === undefined || (hole.from >= within.from && hole.from < within.to),
+            );
           if (holes.length === 0) {
             bridge.report(done);
             return;
           }
-          const caret = book.state.selection.main.head;
+          const caret = book.selection().head;
           const next = holes.find((hole) => hole.from >= caret) ?? holes[0];
           bridge.aim(book.id, next.from);
           const ghostKey = shellKeys(bridge.services.settings).annotateEmptyParagraphs;
@@ -968,9 +972,11 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
           const extent =
             chapter === undefined
               ? undefined
-              : structureAt(book.state).chapters.find(
-                  (row: { readonly label: string }) => Number.parseInt(row.label, 10) === chapter,
-                );
+              : book
+                  .structure()
+                  .chapters.find(
+                    (row: { readonly label: string }) => Number.parseInt(row.label, 10) === chapter,
+                  );
           yield* showWhatNeedsText(
             book,
             chapter === undefined

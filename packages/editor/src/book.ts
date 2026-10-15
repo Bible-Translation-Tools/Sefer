@@ -65,6 +65,7 @@ import { assignment } from "./core/registry";
 import { withoutScrolling } from "./core/scroll";
 import { changesOf, fromCanonical, type Funnel, type Receive, type SurfaceTerms } from "./funnel";
 import { observabilityTracer, type EditorObservability } from "./observability";
+import { emptyBlocks } from "./recipes/emptyBlocks";
 
 /**
  * A Book whose text lives in a CodeMirror state, plus the four things only
@@ -76,6 +77,15 @@ export interface EditorBook extends Book {
   readonly state: EditorState;
   /** The canonical parse, for a surface that borrows instead of analyzing. */
   structure(): DocStructure;
+  /** The main selection: the caret is `head`, and an empty one has `from === to`. */
+  selection(): {
+    readonly anchor: number;
+    readonly head: number;
+    readonly from: number;
+    readonly to: number;
+  };
+  /** The blocks a translator still has to fill: where each one's text goes, and its marker. */
+  emptyBlocks(): readonly { readonly from: number; readonly marker: string }[];
   /**
    * Binds a view to this book's state; returns the unbind. The view MUST route
    * its transactions through `fromView` (`dispatchTransactions: (trs) =>
@@ -433,6 +443,13 @@ export const editorBook = (plain: Book, options: EditorBookOptions): EditorBook 
     source: (): Source => ({ text: docText(state()), stamp: stamp(), form }),
 
     structure: () => structureAt(state()),
+
+    selection: () => {
+      const { anchor, head, from, to } = state().selection.main;
+      return { anchor, head, from, to };
+    },
+
+    emptyBlocks: () => emptyBlocks(state()),
 
     apply: (changes, origin, trust = UNTRUSTED): Result.Result<Receipt, Refusal> => {
       const list = asChangeList(changes);
