@@ -98,10 +98,3 @@ export const handleFor = <Rest extends object>(
   views.set(handle, view);
   return handle;
 };
-
-/**
- * TRANSITIONAL. A handle over a view the host built itself — only `BookEditor`
- * still does, until it mounts through the package (the planning item
- * "embeddable editor", step 3, last). Delete with that.
- */
-export const handleOfView = (view: EditorView): EditorHandle => handleFor(view, {});

@@ -1,34 +1,32 @@
 /**
- * The editor's front door.
+ * The editor's front door: what a host mounts, what it holds, and the words
+ * it passes in.
  *
- * Everything above this line — composition, the Solid shell, Save, Findings —
- * imports from `src/editor`, and nothing above it imports CodeMirror. The
- * editor imports Galley's `Analysis` and core's `Book`/`Source` vocabulary and
- * nothing else from the app.
- *
- * Grouped by seam: the engine seam, the assembled editor,
- * the editor-backed Book and its funnel, satellites, views,
- * diagnostics, instruments, and the test harness.
+ * A host never touches CodeMirror. It seats a Book (`seatBook`), mounts what
+ * it shows — the whole book, a card over a stretch of it, a read-only reader,
+ * a diff, a reference — and holds a handle with methods and callbacks
+ * (`EditorHandle` and each mount's own). The engine is the host's: it passes
+ * an `Analyze` and serves the wasm. Planning item "embeddable editor".
  */
 
-// Structured entry: the named insert gestures, and the front matter card.
-export { type EditorAction } from "./core/actions";
-export { frontMatterCard } from "./core/frontmatter";
+// What a host holds for any mount: methods, never the view.
+export { type EditorHandle, type RevealOptions, type RevealScroll } from "./handle";
+export { type Where } from "./recipes/whereAmI";
 
-// State: structure, plan, paint, decorations, render window.
-export { structureAt } from "./core/editorState";
-export { anchorFrom } from "./core/clip";
-export { type ChapterRow } from "./core/docStructure";
-
-// The editor-backed Book and the port other surfaces submit through.
+// The editor-backed Book: seated once per book, and the port a satellite
+// (or a reader following the book) goes through.
 export { type EditorBook } from "./book";
 export { seatBook } from "./seat";
 export { type Funnel } from "./funnel";
+export { type EditorAction } from "./core/actions";
 
-// A card's editor over a stretch of the book, and the read-only reader an
-// excerpt shows until it is edited.
-export { type MarkedRange } from "./recipes/satellite";
-export { mountReader, type ReaderMount } from "./recipes/reader";
+// Mounts.
+export {
+  mountBookEditor,
+  type BookEditorMount,
+  type BookEditorOptions,
+  type RememberedPlace,
+} from "./bookEditor";
 export {
   mountCard,
   type CardCaret,
@@ -36,10 +34,7 @@ export {
   type CardOptions,
   type CardSession,
 } from "./recipes/card";
-
-// What a host holds for any mount: methods, never the view.
-export { handleOfView, type EditorHandle, type RevealOptions, type RevealScroll } from "./handle";
-export { type Where } from "./recipes/whereAmI";
+export { mountReader, type ReaderMount } from "./recipes/reader";
 export { mountStamp } from "./recipes/stamp";
 export {
   mountDiffView,
@@ -47,49 +42,26 @@ export {
   type DiffPaint,
   type DiffViewMount,
 } from "./recipes/diffView";
+export { mountReference, type ReferenceMount } from "./recipes/reference";
+export { type PairedRange } from "./recipes/pairing";
+export { type MarkedRange } from "./recipes/satellite";
+
+// Editors shown side by side, aligned by verse.
+export { createAlignedGroup, type AlignedGroup } from "./recipes/align";
+
+// How a surface draws and guards its text.
+export { editorPolicy, policyKey, type EditorPolicy, type ProjectionName } from "./views";
+
+// The book's chapters, and where one starts.
+export { anchorFrom } from "./core/clip";
+export { type ChapterRow } from "./core/docStructure";
+
+// The host's own findings, drawn with the engine's.
+export { type CorpusFinding } from "./recipes/lint";
 
 // Doing something to the book without moving the page (core/scroll.ts).
 export { withoutScrolling } from "./core/scroll";
 
-// Blocks a translator still has to fill: the ghost, and the set behind it.
-export {
-  annotateEmptyBlocks,
-  blockNamer,
-  emptyBlocks,
-  showEmptyBlocks,
-} from "./recipes/emptyBlocks";
-
-// Views: a projection on a surface (`modeView`), and the chapter clip.
-export {
-  editorPolicy,
-  modeView,
-  pickChapter,
-  policyKey,
-  type EditorPolicy,
-  type ProjectionName,
-} from "./views";
-
-// The read-only reference pane: another resource's book, same projection.
-export { mountReference, type ReferenceMount } from "./recipes/reference";
-export { pairingHere, showBlockPairs, type PairedRange } from "./recipes/pairing";
-
-// Arriving somewhere: the brief mark that says the jump landed.
-export { flash, flashing } from "./recipes/flash";
-
-// Diagnostics, sink 1.
-export { showCorpusFindings, type CorpusFinding } from "./recipes/lint";
-export { watchLocation } from "./recipes/whereAmI";
-export { createAlignedGroup, type AlignedGroup } from "./recipes/align";
-export { noteBookIs } from "./recipes/noteEditor";
-
-// Clipboard and the attribute popover.
-
-// Instruments. `core/instrument.ts` is the one instrument for the pipeline —
-// one trace per transaction, the stages in order — and `observabilityTracer`
-// is the one bridge into Sefer's ring. `core/timing.ts` is the local span ring
-// the keystroke meter attributes time with; `core/trace.ts` is the flat
-// per-event adapter over the same instrument.
-export { keystrokeMeter } from "./core/meter";
-export { span } from "./core/timing";
+// Tracing: the open gesture, for a host that records what it caused, and a
+// repaint the host provoked.
 export { annotateRepaint, gestureTrace } from "./observability";
-export { annotateOpen } from "./core/instrument";

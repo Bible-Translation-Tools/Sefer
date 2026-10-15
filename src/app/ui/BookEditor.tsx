@@ -1,62 +1,32 @@
 /**
- * The one place a Solid component touches CodeMirror and a Book.
+ * The one place a Solid component holds the book editor and a Book.
  *
  * This is the Solid/Book boundary (`documentation/architecture/shell.md`): the
- * canonical text lives in the `EditorBook`'s `EditorState`, and the shell must
- * not hold a second copy of it. So:
+ * canonical text lives in the `EditorBook`, and the shell must not hold a
+ * second copy of it. So:
  *
- *  - The view is created ONCE, over `book.state`, and destroyed in
- *    the mount effect's returned cleanup. Solid never re-renders it — a
- *    component runs once, and the
- *    document is CodeMirror's business from here down. A different book means
- *    a different component instance (the route keys on the book id).
- *  - Every transaction goes through `book.fromView`, which is where a keystroke
- *    becomes a receipt every reader sees. Binding a view that dispatched on its
- *    own would make the book's publication silently incomplete — `apply`
- *    throws rather than report a receipt nobody heard.
+ *  - The editor is mounted ONCE (`mountBookEditor`, which owns everything
+ *    CodeMirror-shaped about showing a book) and destroyed in the mount
+ *    effect's returned cleanup. A different book means a different component
+ *    instance (the route keys on the book id).
  *  - ONE subscription per book, here: `book.changes` writes a stamp signal (so
  *    the status bar is reactive) and hands the editor's own parse to
  *    ProjectAnalysis, so a keystroke costs no second wasm call.
  *  - The corpus half of sink 1 flows the other way through the same seam. The
  *    editor cannot compute a Sous finding, so `ProjectAnalysis.watch()` — which
  *    fires once per scheduler pass, after the publication — is the cue to push
- *    the book's fresh corpus findings into the editor's `sousField`. Off the
- *    keystroke path by construction: a keystroke arms the scheduler and clears
- *    the field; the refill arrives when the corpus publishes.
- *
- * Mode and chapter are dispatched into the canonical state through a
- * compartment. Neither is a document change, so `fromView` ignores them —
- * which is exactly right: a projection is presentation and a clip is a view
- * choice, and neither is an edit.
+ *    the book's fresh corpus findings into the editor. Off the keystroke path
+ *    by construction: a keystroke arms the scheduler and clears the field; the
+ *    refill arrives when the corpus publishes.
  */
 
-import { Compartment, StateEffect, type EditorState } from "@codemirror/state";
-import { EditorView } from "@codemirror/view";
 import {
-  annotateEmptyBlocks,
-  annotateOpen,
   annotateRepaint,
-  blockNamer,
-  flash,
-  flashing,
-  frontMatterCard,
   gestureTrace,
-  handleOfView,
-  keystrokeMeter,
-  modeView,
-  noteBookIs,
-  pairingHere,
-  pickChapter,
-  showBlockPairs,
-  showCorpusFindings,
-  showEmptyBlocks,
-  span,
-  structureAt,
-  watchLocation,
+  mountBookEditor,
+  type BookEditorMount,
   type CorpusFinding,
   type EditorBook,
-  type EditorHandle,
-  type ProjectionName,
 } from "@sefer/editor";
 import type { SourceStamp } from "@sefer/text/source";
 import { Effect, Fiber, Stream } from "effect";
@@ -73,83 +43,12 @@ import { nameBlock } from "./workspace/blockNames";
 import { LocationBar } from "./workspace/LocationBar";
 import { metadataOf } from "./workspace/project";
 
-// Last measurements for the dev surface; one module-level ring is enough.
-
-/**
- * Which books have already had the mountable half of the editor appended to
- * their canonical state, and the projection compartment that went in with it.
- *
- * Module-level and weak, because the fact being remembered is a fact about the
- * BOOK and not about this component: `appendConfig` dispatched through a bound
- * view lands in the Book's state and stays there after the view is destroyed.
- */
-const mountedConfig = new WeakMap<EditorBook, Compartment>();
-
 // The editor's own stylesheet. It ships with the editor module and is imported
 // where the view mounts, so a route that never opens a book never loads it.
 import "@sefer/editor/editor.css";
 
 export interface BookEditorProps {
   readonly book: EditorBook;
-}
-
-/**
- * The offset a remembered place names now, or `undefined`.
- *
- * A LADDER, because the document may have moved while the reader was away —
- * they may have been in Find for the express purpose of changing it:
- *
- *   1. the exact offset, when the document is the same length as when it was
- *      taken (see `LastLocation.place` for why length and not a hash);
- *   2. the VERSE, by its number, scoped to its chapter;
- *   3. the CHAPTER, by `\c`'s own label;
- *   4. nothing, and stay at the top.
- *
- * Every rung below the first is looked up by what the document SAYS rather
- * than by an ordinal or an offset, so a book that gained a `\toc` line still
- * resolves and a verse that was deleted falls to its chapter instead of
- * landing in whatever now occupies its coordinates.
- */
-const placeOf = (
-  state: EditorState,
-  place: {
-    readonly chapter: string;
-    readonly verse?: string;
-    readonly offset?: number;
-    readonly hash?: string;
-    readonly length?: number;
-  },
-): number | undefined => {
-  const structureNow = structureAt(state);
-  // The hash when BOTH sides have one — a fresh view has not parsed yet, so
-  // `analysis` is routinely null exactly here (see `LastLocation.place`) — and
-  // the length otherwise. Same length is weaker than same hash: an edit that
-  // swapped one word for another of equal width would pass it, and the cost of
-  // being wrong is an offset a few characters stale, which at scroll
-  // granularity nobody can see. A different length is proof of change either
-  // way, and drops to the verse.
-  const hash = structureNow.analysis?.sourceHash;
-  const unmoved =
-    hash !== undefined && place.hash !== undefined
-      ? String(hash) === place.hash
-      : place.length === state.doc.length;
-  if (place.offset !== undefined && unmoved) return Math.min(place.offset, state.doc.length);
-  const chapter = structureNow.chapters.find((row) => row.label === place.chapter);
-  if (chapter === undefined) return undefined;
-  if (place.verse === undefined) return chapter.from;
-  // Scoped to the chapter: verse numbers repeat, and `10` alone names sixty
-  // places in a book.
-  const verse = structureNow.verses.find(
-    (row) =>
-      row.markerFrom >= chapter.from && row.markerFrom < chapter.to && row.num === place.verse,
-  );
-  return verse?.markerFrom ?? chapter.from;
-};
-
-interface Bound {
-  readonly view: EditorView;
-  readonly projection: Compartment;
-  readonly handle: EditorHandle;
 }
 
 export function BookEditor(props: BookEditorProps) {
@@ -159,7 +58,9 @@ export function BookEditor(props: BookEditorProps) {
   // The book this instance is for, read once — see the mount effect below.
   const bookId = untrack(() => props.book.id);
   const [stamp, setStamp] = createSignal<SourceStamp | undefined>(undefined, { name: "stamp" });
-  const [bound, setBound] = createSignal<Bound | undefined>(undefined, { name: "boundView" });
+  const [bound, setBound] = createSignal<BookEditorMount | undefined>(undefined, {
+    name: "boundView",
+  });
   /** The page's aligned group, when the editor is shown beside others. */
   const aligned = useAlignedGroup();
   const [host, setHost] = createSignal<HTMLDivElement | undefined>(undefined, {
@@ -194,149 +95,24 @@ export function BookEditor(props: BookEditorProps) {
       // instance and this prop cannot change under a mounted view.
       const book = untrack(() => props.book);
 
-      let view: EditorView | undefined;
-      view = new EditorView({
-        state: book.state,
+      const settings = shell.services.settings;
+      const keys = shellKeys(settings);
+      const editor = mountBookEditor({
         parent,
-        dispatchTransactions: (transactions) => {
-          if (view === undefined) return;
-          // CodeMirror's update and DOM sync, named, so the keystroke meter
-          // can say where a gesture went instead of leaving it in `other`.
-          // Spans opened inside (analyze, decorate, …) are subtracted from it.
-          const done = span("dispatch");
-          book.fromView(view, transactions);
-          done();
-        },
+        book,
+        // Where the caret is, published to the shell. The write is
+        // unconditional and the consumers derive — see `Shell.noteCaret`.
+        onCaret: (head) => shell.noteCaret(head),
+        // Blocks with no words, named where the words go. The initial value
+        // is the reader's setting; the fiber below follows it, so turning it
+        // off moves the page rather than the next reload.
+        blockName: nameBlock,
+        emptyBlocks: settings.get(keys.annotateEmptyParagraphs),
+        pairBlocks: settings.get(keys.pairBlocks),
       });
-      const created = view;
-      const unbind = book.bindView(created);
-      // The note editor mounts a satellite over this book, and a satellite is
-      // built from a `Funnel` — which comes from the Book, not from the view.
-      // This is the one place that knows both.
-      const unname = noteBookIs(created, book);
-      // The mountable half of the editor, appended ONCE PER BOOK.
-      //
-      // Once, because `appendConfig` goes through the view and the view is
-      // bound to the Book — so the extension lands in the Book's CANONICAL
-      // state and outlives this component. Mounting a second view over the
-      // same book (leave the route, come back) would otherwise append the
-      // whole set again: two `editorAttributes` writing `cm-mode-regular`, two
-      // keystroke meters, two notes per keypress, two front matter cards. The compartment
-      // is remembered with it, because a compartment that is not in the config
-      // is a reconfigure that does nothing.
-      //
-      // It is added here rather than baked into the seat because the canonical
-      // state must also work headless: the meter and the front matter card are
-      // DOM surfaces, and a Book in Node has no DOM.
-      let projection = mountedConfig.get(book);
-      if (projection === undefined) {
-        projection = new Compartment();
-        mountedConfig.set(book, projection);
-        // The keystroke meter closes one gesture per DOM event and reports the
-        // JS work, the time to paint, the analyzes it cost, and the per-span
-        // totals — which sum to the JS work. The line itself is the meter's
-        // (`Measured.note`), so the format lives beside the arithmetic that
-        // makes it add up. The ring gets one bounded note per gesture; the dev
-        // surface keeps the last fifty measurements whole.
-        const meter = keystrokeMeter((measured) => {
-          // Onto the gesture's own record. The meter measures THROUGH the
-          // paint, which lands after the transaction's rules are done but
-          // before the next transaction opens, so the gesture is still the one
-          // that is open — and `annotateOpen` says so rather than assuming it.
-          // A `keystroke` note of its own was a root beside the mutation it
-          // described, which is the shape this whole pass is removing.
-          //
-          // Both are measured from the DOM EVENT, where the gesture's own span
-          // starts at the first phase rule a fraction of a millisecond later —
-          // so `to_paint_ms` can read slightly longer than the span that
-          // carries it. Named for their windows rather than left to look like
-          // a contradiction.
-          //
-          // `to_paint_ms` is also mostly not work: a keystroke that lands
-          // mid-frame waits for the next vsync, so ~16ms at 60Hz is the floor,
-          // not a cost. `gesture_ms` is the half we can do anything about,
-          // and `browser_input_ms` is the part of it the browser owns.
-          //
-          // `to_paint_source` says which instrument answered. `event` is the
-          // browser's own Event Timing number and is what to trust; `frame` is
-          // the requestAnimationFrame inference, which reads up to a frame
-          // high because the timeout witnessing the paint can land after it.
-          // Comparing the two across records without reading this field is
-          // how "a 3ms keystroke took 33ms" gets believed. Measured on en_ulb,
-          // same typing, same machine: `event` says 16ms — one frame, the
-          // vsync floor — where `frame` says 29 to 33.
-          //
-          // The SPAN's own duration is not a third answer. The gesture closes
-          // when its measurement lands, so `editor.mutation`'s ms is "until we
-          // were told", which on the event path includes the observer's own
-          // latency. `editor.to_paint_ms` is the number to read.
-          const onGesture = annotateOpen({
-            "editor.gesture_ms": measured.gesture,
-            "editor.browser_input_ms": measured.browser,
-            "editor.analyzes": measured.analyzes,
-            "editor.unaccounted_ms": measured.other,
-            ...(measured.render === null
-              ? {}
-              : {
-                  "editor.to_paint_ms": measured.render,
-                  "editor.to_paint_source": measured.renderSource ?? "frame",
-                }),
-          });
-          if (!onGesture)
-            // No gesture was open — the meter measured a repaint nobody
-            // typed for, and it belongs to that rather than to a keystroke.
-            annotateRepaint({
-              "editor.gesture_ms": measured.gesture,
-              "book.id": book.id,
-              ...(measured.render === null
-                ? {}
-                : {
-                    "editor.to_paint_ms": measured.render,
-                    "editor.to_paint_source": measured.renderSource ?? "frame",
-                  }),
-            });
-        });
-        created.dispatch({
-          effects: StateEffect.appendConfig.of([
-            projection.of([]),
-            meter.extension,
-            flashing(),
-            // Where the caret is, published to the shell.
-            //
-            // `selectionSet` and not every update: a document change that does
-            // not move the caret is not news to anybody reading this, and an
-            // update fires for scrolls, measurements and reconfigures too. The
-            // head rather than the anchor, because a reader dragging a
-            // selection is asking about the end they are dragging.
-            //
-            // The write is unconditional and the consumers derive — see
-            // `Shell.noteCaret`. Comparing here would mean this listener
-            // holding a copy of the last offset, which is a second record of
-            // the thing the signal already is.
-            EditorView.updateListener.of((update) => {
-              if (update.selectionSet) shell.noteCaret(update.state.selection.main.head);
-            }),
-            frontMatterCard(),
-            // Blocks with no words, named where the words go. The initial
-            // value is the reader's setting; the fiber below follows it, so
-            // turning it off moves the page rather than the next reload.
-            blockNamer.of(nameBlock),
-            annotateEmptyBlocks(
-              shell.services.settings.get(
-                shellKeys(shell.services.settings).annotateEmptyParagraphs,
-              ),
-            ),
-            // The editor's half of the block pairing. It marks the block the
-            // caret is in; the panes beside it mark the block at the same
-            // address, and the CORRESPONDENCE is the pair of marks. One
-            // without the other asserts something the reader cannot check.
-            pairingHere(shell.services.settings.get(shellKeys(shell.services.settings).pairBlocks)),
-          ]),
-        });
-      }
 
       const supply = (): void => {
-        const analysis = structureAt(book.state).analysis;
+        const analysis = book.structure().analysis;
         // The gesture's trace goes with it: the pass this arms is debounced,
         // so it will carry `op.cause` rather than being a child of any one
         // keystroke. Called inside `book.changes`, which runs inside the
@@ -368,7 +144,7 @@ export function BookEditor(props: BookEditorProps) {
         // whole project's list to filter it.
         for (const finding of shell.services.projectAnalysis.crossBookOf(book.id))
           if (!stale(finding, book)) list.push(finding);
-        showCorpusFindings(created, list);
+        editor.setHostDiagnostics(list);
         // Counts and ids only — a finding's message quotes the document and
         // never reaches the ring.
         //
@@ -398,7 +174,7 @@ export function BookEditor(props: BookEditorProps) {
       const ghosting = shell.services.runtime.runFork(
         Stream.runForEach(shell.services.settings.changes(ghostKey), (on) =>
           Effect.sync(() => {
-            showEmptyBlocks(created, on);
+            editor.setEmptyBlocks(on);
           }),
         ),
       );
@@ -410,14 +186,14 @@ export function BookEditor(props: BookEditorProps) {
       const pairing = shell.services.runtime.runFork(
         Stream.runForEach(shell.services.settings.changes(pairKey), (on) =>
           Effect.sync(() => {
-            showBlockPairs(created, on);
+            editor.setPairBlocks(on);
           }),
         ),
       );
 
       // The location bar's reading. One passive scroll listener, coalesced into
       // an animation frame by the recipe.
-      const unwatch = watchLocation(created, (where) => {
+      const unwatch = editor.onViewport((where) => {
         setAtTop(where === null ? undefined : where.ordinal);
         // And it is written down. A book opens WHOLE, so the clip alone said
         // nothing about where in it the reader had got to, and reopening a
@@ -446,41 +222,12 @@ export function BookEditor(props: BookEditorProps) {
       // me here", and restoring a remembered place over the top of one would
       // be answering a question nobody asked. The reveal effect below does the
       // moving in that case.
-      const resume = remembered === undefined ? undefined : placeOf(created.state, remembered);
-      if (resume !== undefined && resume > 0) {
-        // The CARET goes with the scroll, and that is not a flourish.
-        //
-        // A fresh view puts the caret at offset 0. Restore the scroll without
-        // it and the reader is looking at chapter 18 with the cursor in the
-        // front matter — so the first thing they type lands at the top of the
-        // book, and anything that follows the caret has nothing to say. The
-        // block pairing showed that plainly: the setting was on, the panes
-        // were bound, and nothing was marked until you clicked, which reads as
-        // the feature being broken rather than as the caret being elsewhere.
-        created.dispatch({
-          selection: { anchor: resume },
-          effects: EditorView.scrollIntoView(resume, { y: "start" }),
-        });
-        // TWICE, a frame apart. CodeMirror ESTIMATES the height of content it
-        // has not rendered, so a jump deep into a book lands approximately —
-        // measured at ~1,300px out, a screenful, in Genesis. The first scroll
-        // brings the region into the render window and the real heights are
-        // measured; the second lands on them. Without it the reader comes back
-        // near where they were, which is the kind of nearly-right that reads
-        // as a bug.
-        requestAnimationFrame(() => {
-          if (created.dom.isConnected)
-            created.dispatch({ effects: EditorView.scrollIntoView(resume, { y: "start" }) });
-        });
-      }
+      if (remembered !== undefined) editor.resume(remembered);
 
-      // The group knows the editor by its handle (until this component mounts
-      // through the package, it is made over the view built above).
-      const handle = handleOfView(created);
-      setBound({ view: created, projection, handle });
+      setBound(editor);
 
       // Beside the references, the editor leads them and follows them.
-      const leave = aligned?.join({ editor: handle, book: bookId });
+      const leave = aligned?.join({ editor, book: bookId });
 
       // RETURNED, not `onCleanup`. A Solid 2 effect's cleanup is its return
       // value; `onCleanup` inside an effect callback is called outside any
@@ -495,70 +242,24 @@ export function BookEditor(props: BookEditorProps) {
         shell.noteCaret(undefined);
         Effect.runFork(Fiber.interrupt(ghosting));
         Effect.runFork(Fiber.interrupt(pairing));
-        unname();
         Effect.runFork(Fiber.interrupt(watching));
         unsubscribe();
         releaseReports();
-        unbind();
-        created.destroy();
+        editor.destroy();
         setBound(undefined);
       };
     },
   );
 
-  /**
-   * The mode the view is currently configured for, so a flip can be told from
-   * a first bind or a clip. Not a signal: nothing renders from it.
-   */
-  let showing: ProjectionName | undefined;
-
-  /** The document position sitting at the top of the viewport, right now. */
-  const topOfViewport = (view: EditorView): number | undefined => {
-    const box = view.scrollDOM.getBoundingClientRect();
-    // A few pixels in, so the probe lands inside the first visible line rather
-    // than on the boundary above it.
-    return view.posAtCoords({ x: box.left + 4, y: box.top + 4 }) ?? undefined;
-  };
-
   // The view choices: which classes paint how, and which chapter is editable.
+  // Flipping Regular/USFM keeps the reader where they were (`setMode`); a clip
+  // does not re-anchor, which would fight the deliberate jump just asked for.
   createRenderEffect(
-    () => ({ held: bound(), mode: shell.mode(), chapter: shell.chapter() }),
-    ({ held, mode, chapter }) => {
-      if (held === undefined) return;
-      /**
-       * Flipping Regular/USFM must not move the reader.
-       *
-       * Both modes are the SAME DOCUMENT — Regular paints over markup rather
-       * than removing it — so an offset means the same verse in both, and the
-       * selection survives the reconfigure for free. What does not survive is
-       * the SCROLL: hidden markup collapses lines, so the same offset sits at
-       * a different height and the page appears to jump somewhere else in the
-       * book. Checking your work in the other mode is the whole reason to
-       * flip, and landing three chapters away defeats it.
-       *
-       * Only on a flip. This effect also runs on a CLIP, where re-anchoring
-       * would fight the deliberate jump the reader just asked for.
-       */
-      const flipped = showing !== undefined && showing !== mode;
-      showing = mode;
-      const anchor = flipped ? topOfViewport(held.view) : undefined;
-      // The mode class rides the compartment as an editor attribute, not a
-      // hand-added class: CodeMirror rewrites `view.dom`'s class attribute from
-      // its facets whenever focus changes, and a class it did not put there is
-      // wiped on the first click into the text.
-      held.view.dispatch({
-        effects: [
-          held.projection.reconfigure(modeView(mode)),
-          // In the SAME transaction as the reconfigure, not a second one after
-          // it. A separate dispatch measures the old layout — the decorations
-          // have changed but the heights have not been recomputed — so the
-          // scroll lands where the anchor used to be and the reader is thrown
-          // to the top of the book. One transaction lets CodeMirror apply the
-          // configuration and honour the scroll request in a single measure.
-          ...(anchor === undefined ? [] : [EditorView.scrollIntoView(anchor, { y: "start" })]),
-        ],
-      });
-      held.view.dispatch(pickChapter(held.view.state, chapter));
+    () => ({ editor: bound(), mode: shell.mode(), chapter: shell.chapter() }),
+    ({ editor, mode, chapter }) => {
+      if (editor === undefined) return;
+      editor.setMode(mode);
+      editor.setChapter(chapter);
     },
   );
 
@@ -571,28 +272,19 @@ export function BookEditor(props: BookEditorProps) {
   // second hit in the book they are already in, and the page not moving reads
   // as the click not landing.
   createEffect(
-    () => ({ held: bound(), aimed: shell.reveal() }),
-    ({ held, aimed }) => {
-      if (held === undefined || aimed === undefined || aimed.bookId !== bookId) return;
-      const length = held.view.state.doc.length;
-      const at = Math.min(aimed.from, length);
-      const end = Math.min(aimed.to ?? at, length);
+    () => ({ editor: bound(), aimed: shell.reveal() }),
+    ({ editor, aimed }) => {
+      if (editor === undefined || aimed === undefined || aimed.bookId !== bookId) return;
       // A finding or a search hit is a point in the middle of a page, so it is
       // centred; a CHAPTER is the first line you read, so it goes to the top
-      // with the rest of the book below it.
-      // The caret goes where the reader was sent, not only the scroll: every
-      // command that asks "which chapter" or "where am I" reads the caret, and
-      // one left behind at the top of the book (or in the chapter before)
-      // made "Match formatting: this chapter" refuse, or quietly work on the
-      // wrong chapter, right after a chapter tile.
-      held.view.dispatch({
-        selection: { anchor: at },
-        effects: EditorView.scrollIntoView(at, { y: aimed.at === "top" ? "start" : "center" }),
-      });
+      // with the rest of the book below it. The caret goes too (`jump`).
+      const cancel = editor.jump(
+        { from: aimed.from, ...(aimed.to === undefined ? {} : { to: aimed.to }) },
+        aimed.at === "top" ? "top" : "center",
+      );
       // A jump on purpose leads the references beside it, as a scroll would;
       // the group does not hear it otherwise, since nobody scrolled.
-      aligned?.lead(held.handle);
-      const cancel = flash(held.view, { from: at, to: end });
+      aligned?.lead(editor);
       return cancel;
     },
   );
