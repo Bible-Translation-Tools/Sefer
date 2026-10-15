@@ -18,9 +18,12 @@
  * then the Library's own copies, scripture before helps (the PO's two words:
  * source texts, reference material) — then, folded away, the reader's other
  * projects (a neighbouring heart language reads well beside a translation;
- * Will, 2026-10-08), then the catalogue's other gateway languages, to
- * download. A download is a source text: it lands in the Library's folder
- * through `arrival.ts`, never the projects folder, and is then picked.
+ * Will, 2026-10-08), then reference material — the Translation Notes the
+ * Language API lists, one per language, and nothing else (Will, 2026-10-15)
+ * — then the catalogue's other gateway languages, to download. A download
+ * lands in the Library's folder through `arrival.ts`, never the projects
+ * folder, and is then picked. This menu is the one place notes are offered:
+ * they are not on the projects page.
  *
  * With nothing picked, the pane shows what the project DECLARES
  * (`Library.resolve` falls back to it; Will, 2026-10-06), so there is no
@@ -52,22 +55,16 @@ import {
 } from "#core/resources/relationships";
 
 import { announceSourceTexts, libraryRevision, sourceTextCopy } from "../../arrival";
-import {
-  catalogueFor,
-  gatewayTexts,
-  HELP_TEXTS,
-  type CatalogueEntry,
-  type HelpText,
-} from "../../catalogue";
+import { catalogueFor, gatewayTexts, type CatalogueEntry, type HelpText } from "../../catalogue";
 import { describe, remoteReasonOf } from "../../describe";
 import { t } from "../../i18n";
-import { downloadHelp, helpUrl } from "../../kinds/download";
+import { downloadHelp, helpDownloads } from "../../kinds/download";
 import { KIND_ROLES, roleFor } from "../../kinds/table";
 import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
 import { ResourceCard, ResourcePane } from "../kinds/registry";
 import { listProjects, type ProjectSummary } from "../landing/summaries";
-import { Button, EmptyState, IconButton, Menu, MenuItem } from "../primitives";
+import { Button, EmptyState, IconButton, Menu, MenuItem, MenuLabel } from "../primitives";
 
 /**
  * The roles the column shows, in the order it shows them: every role some
@@ -94,6 +91,13 @@ const languageName = (code: string | undefined): string | undefined => {
     return code;
   }
 };
+
+/** The catalogue's Translation Notes, as far as the menu has read them. */
+type HelpsRead =
+  | { readonly state: "loading" }
+  | { readonly state: "ready"; readonly rows: readonly HelpText[] }
+  /** `offline`: the request never reached the API (`fetch` rejects with a `TypeError`). */
+  | { readonly state: "failed"; readonly offline: boolean };
 
 export interface ReferenceColumnProps {
   /**
@@ -124,6 +128,13 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
   /** The catalogue's gateway texts, read when the menu first opens. */
   const [gateways, setGateways] = createSignal<readonly CatalogueEntry[] | undefined>(undefined, {
     name: "referenceGateways",
+  });
+  /**
+   * The Translation Notes the catalogue lists, read when the menu first
+   * opens; read again on the next open after a failure.
+   */
+  const [notes, setNotes] = createSignal<HelpsRead | undefined>(undefined, {
+    name: "referenceNotes",
   });
   /** Declared source texts with no copy on this device. */
   const [missing, setMissing] = createSignal<readonly RelatedResource[]>([], {
@@ -239,6 +250,19 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
         .entries()
         .then(({ rows }) => setGateways(gatewayTexts(rows)))
         .catch(() => setGateways([]));
+    const read = notes();
+    if (read === undefined || read.state === "failed") {
+      setNotes({ state: "loading" });
+      void catalogueFor(services.settings)
+        .translationNotes()
+        .then((rows) => setNotes({ state: "ready", rows }))
+        .catch((cause: unknown) =>
+          setNotes({
+            state: "failed",
+            offline: cause instanceof TypeError || globalThis.navigator?.onLine === false,
+          }),
+        );
+    }
   };
 
   /** On this device: what the project shows, then the Library's copies, scripture first. */
@@ -350,25 +374,32 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
   };
 
   /**
-   * Reference material this device does not hold yet, by the URL it would be
-   * cloned from: the helps the catalogue does not list (`HELP_TEXTS`).
+   * The Translation Notes this device does not hold yet, by the URL each
+   * would be cloned from, A–Z by language as the catalogue gives them.
    */
-  const helps = (): readonly { readonly help: HelpText; readonly url: string }[] => {
+  const helps = (): readonly HelpText[] => {
+    const read = notes();
+    if (read?.state !== "ready") return [];
     const held = new Set(
       copies().flatMap((resource) =>
         resource.upstream === undefined ? [] : [normaliseRepoUrl(resource.upstream.url)],
       ),
     );
-    return HELP_TEXTS.flatMap((help) => {
-      const url = helpUrl(help);
-      return held.has(normaliseRepoUrl(url)) ? [] : [{ help, url }];
-    });
+    return read.rows.filter((help) => !held.has(normaliseRepoUrl(help.url)));
+  };
+
+  /** Why the notes list could not be read, while that is the last word. */
+  const notesFailure = () => {
+    const read = notes();
+    return read?.state === "failed" ? read : undefined;
   };
 
   /** Downloads reference material into the Library (once per device), then shows it. */
   const fetchHelp = (help: HelpText): void => {
     setBusy(true);
-    setFetching(help.title);
+    setFetching(
+      t("Translation Notes · {language}", { language: help.languageName || help.language }),
+    );
     void downloadHelp(services, help)
       // oxlint-disable-next-line solid/reactivity -- a promise continuation: runs once, when the copy is here
       .then((resource) => show(resource))
@@ -543,32 +574,78 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
             </For>
           </Show>
         </Show>
-        <Show when={helps().length > 0}>
+        {/* Shown while the list is read and when it could not be, so the
+            group does not appear from nowhere, nor vanish without a word. */}
+        <Show when={notes() !== undefined && (notes()?.state !== "ready" || helps().length > 0)}>
           <GroupToggle
             testId="reference-material"
-            label={t("Reference material ({count})", { count: helps().length })}
+            label={
+              notes()?.state === "ready"
+                ? t("Reference material ({count})", { count: helps().length })
+                : t("Reference material")
+            }
             open={showHelps()}
             onToggle={() => setShowHelps(!showHelps())}
           />
           <Show when={showHelps()}>
-            <For each={helps()}>
-              {(entry) => (
-                <MenuItem
-                  class={ROW}
-                  data-testid={`pick-help-${entry.help.repository}`}
-                  title={t("Download {title} to read beside this project", {
-                    title: entry.help.title,
-                  })}
-                  onSelect={() => fetchHelp(entry.help)}
-                >
-                  <RowText
-                    name={entry.help.title}
-                    detail={languageName(entry.help.language) ?? entry.help.language}
-                  />
-                  <Download aria-hidden="true" class="size-5 shrink-0" />
-                </MenuItem>
-              )}
-            </For>
+            <div role="group" aria-label={t("Translation Notes")} data-testid="reference-notes">
+              <MenuLabel>{t("Translation Notes")}</MenuLabel>
+              <Show when={notes()?.state === "loading"}>
+                <p role="status" class={`${ROW} py-3 text-small text-on-surface-tertiary`}>
+                  {t("Loading the list…")}
+                </p>
+              </Show>
+              <Show when={notesFailure()}>
+                {(failure) => (
+                  <p role="status" class={`${ROW} py-3 text-small text-on-surface-tertiary`}>
+                    {failure().offline
+                      ? t("You are offline. Open this menu again to retry.")
+                      : t("Could not read the list. Open this menu again to retry.")}
+                  </p>
+                )}
+              </Show>
+              <For each={helps()}>
+                {(help) => (
+                  <MenuItem
+                    class={ROW}
+                    data-testid={`pick-help-${help.repository}`}
+                    data-language={help.language}
+                    title={t("Download {title} to read beside this project", {
+                      title: t("Translation Notes · {language}", {
+                        language: help.languageName || help.language,
+                      }),
+                    })}
+                    onSelect={() => fetchHelp(help)}
+                  >
+                    <span class="flex min-w-0 flex-1 flex-col">
+                      <span class="truncate">
+                        {`${help.languageName || help.language} (${help.language})`}
+                      </span>
+                      <Show
+                        when={help.nationalName !== "" && help.nationalName !== help.languageName}
+                      >
+                        <span
+                          dir={help.direction}
+                          class="truncate text-start text-smallest text-on-surface-tertiary"
+                        >
+                          {help.nationalName}
+                        </span>
+                      </Show>
+                    </span>
+                    <Show
+                      when={helpDownloads().has(help.repository)}
+                      fallback={<Download aria-hidden="true" class="size-5 shrink-0" />}
+                    >
+                      <span
+                        role="status"
+                        aria-label={t("Downloading")}
+                        class="size-5 shrink-0 animate-spin rounded-full border-2 border-on-surface-tertiary border-t-transparent"
+                      />
+                    </Show>
+                  </MenuItem>
+                )}
+              </For>
+            </div>
           </Show>
         </Show>
         <Show when={downloadable().length > 0}>

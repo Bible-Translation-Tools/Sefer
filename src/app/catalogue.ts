@@ -132,6 +132,34 @@ export interface CatalogueService {
    * thousands of rows, so the screen asks only once two letters are typed.
    */
   readonly writerLanguages: (search: string) => Promise<readonly WriterLanguage[]>;
+  /** The Translation Notes there are to download, one per language, A–Z by English name. */
+  readonly translationNotes: () => Promise<readonly HelpText[]>;
+}
+
+/**
+ * Translation Notes Sefer can download, one row per language, as the Language
+ * API lists them (`translationNotes`). Only TN, by product ruling
+ * (2026-10-15): no other help kind is offered until it is asked for.
+ */
+export interface HelpText {
+  /** What it is, raw and translated where drawn: "Translation Notes". */
+  readonly title: string;
+  /** Its language's tag. */
+  readonly language: string;
+  /** The language's name in English; its own name when the API gives no English one. */
+  readonly languageName: string;
+  /** The language's name in itself ("" when the API gives none). */
+  readonly nationalName: string;
+  /** Which way `nationalName` is written. */
+  readonly direction: "ltr" | "rtl";
+  /** Where it is on its host, `Owner/repo`: the key a download is known by. */
+  readonly repository: string;
+  /**
+   * Its git URL, on its own server: what Download clones. The row names its
+   * host, as a share link does, so the configured cloud says nothing about
+   * where WA publishes its helps.
+   */
+  readonly url: string;
 }
 
 /** One language with single-book Writer projects on WACS. */
@@ -281,6 +309,47 @@ const Regions = Schema.Struct({
 
 const decodeRegions = Schema.decodeUnknownResult(Regions);
 
+/**
+ * Translation Notes published under `WA-Catalog`, the catalogue owner: one
+ * repository per language. `resource_type` is reliable for `tn` (probed
+ * 2026-10-15: 34 rows on the production API, 33 on dev, every one `*_tn`).
+ */
+const TRANSLATION_NOTES_QUERY = `{
+  content(where: {
+    resource_type: { _eq: "tn" }
+    git_repo: { username: { _eq: "WA-Catalog" } }
+  }) {
+    language { ietf_code english_name national_name direction }
+    git_repo { username repo_name repo_url }
+  }
+}`;
+
+const TranslationNotes = Schema.Struct({
+  data: Schema.Struct({
+    content: Schema.Array(
+      Schema.Struct({
+        language: Schema.NullOr(
+          Schema.Struct({
+            ietf_code: Schema.String,
+            english_name: Schema.NullOr(Schema.String),
+            national_name: Schema.NullOr(Schema.String),
+            direction: Schema.NullOr(Schema.String),
+          }),
+        ),
+        git_repo: Schema.NullOr(
+          Schema.Struct({
+            username: Schema.String,
+            repo_name: Schema.String,
+            repo_url: Schema.String,
+          }),
+        ),
+      }),
+    ),
+  }),
+});
+
+const decodeTranslationNotes = Schema.decodeUnknownResult(TranslationNotes);
+
 const STATUSES: readonly CandidateStatus[] = ["Primary", "Active", "Inactive"];
 
 /**
@@ -428,6 +497,33 @@ const languageApiCatalogue = (origin: string): CatalogueService => ({
       };
     });
   },
+  translationNotes: async () => {
+    const decoded = decodeTranslationNotes(await graphql(origin, TRANSLATION_NOTES_QUERY));
+    if (Result.isFailure(decoded))
+      throw new CatalogueError(
+        `Language API payload not understood: ${decoded.failure.message}`,
+        "payload",
+      );
+    const rows = decoded.success.data.content.flatMap((row): HelpText[] => {
+      if (row.language === null || row.git_repo === null || row.git_repo.repo_url === "") return [];
+      const english = row.language.english_name ?? "";
+      const national = row.language.national_name ?? "";
+      return [
+        {
+          title: "Translation Notes",
+          language: row.language.ietf_code,
+          languageName: english === "" ? national : english,
+          nationalName: national,
+          direction: row.language.direction === "rtl" ? "rtl" : "ltr",
+          repository: `${row.git_repo.username}/${row.git_repo.repo_name}`,
+          url: row.git_repo.repo_url,
+        },
+      ];
+    });
+    return rows.sort((a, b) =>
+      (a.languageName || a.language).localeCompare(b.languageName || b.language),
+    );
+  },
   entries: async () => {
     const decoded = decodeRepos(await graphql(origin, REPOS_QUERY));
     if (Result.isFailure(decoded))
@@ -517,6 +613,8 @@ const sampleCatalogue = (): CatalogueService => ({
   // Sample rows clone nothing, so they offer no books either.
   writerBooks: () => Promise.resolve([]),
   writerLanguages: () => Promise.resolve([]),
+  // No sample notes: a sample row must not clone a repository.
+  translationNotes: () => Promise.resolve([]),
 });
 
 /**
@@ -535,37 +633,6 @@ export const catalogueFor = (settings: SettingsService): CatalogueService => {
  * column offers to download. WA publishes them under `wa-catalog`; where it
  * has several in one language, the ULB is the one a translator reads from.
  */
-/** Reference material to download, where the catalogue lists none. */
-export interface HelpText {
-  /** What the menu says: "Translation Notes". */
-  readonly title: string;
-  /** Its language's tag. */
-  readonly language: string;
-  /** Where it is on its host, `Owner/repo`. */
-  readonly repository: string;
-  /**
-   * The host it lives on, named, as a share link names its cloud
-   * (`host=`): the configured cloud says nothing about where WA publishes
-   * its helps, and the dev channel's cloud (WACS dev) holds an older copy.
-   */
-  readonly host: string;
-}
-
-/**
- * The helps Sefer can read, by repository, because the Language API's view
- * has no rows for them (plan §6, "Catalogue gap"): a second source, stated
- * here and nowhere else, until the API lists them. Each names its host. WA's canonical `en_tn`,
- * not `en_tn_condensed`.
- */
-export const HELP_TEXTS: readonly HelpText[] = [
-  {
-    title: "Translation Notes",
-    language: "en",
-    repository: "WycliffeAssociates/en_tn",
-    host: "https://content.bibletranslationtools.org",
-  },
-];
-
 export const gatewayTexts = (rows: readonly CatalogueEntry[]): readonly CatalogueEntry[] => {
   const ulb = (entry: CatalogueEntry): boolean => /_ulb$/iu.test(entry.repo);
   const best = new Map<string, CatalogueEntry>();

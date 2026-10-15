@@ -81,7 +81,27 @@ WA's `en_tn` (`type: help`, `text/markdown`) is chapter directories of chunk fil
 
 The on-disk layout stays upstream's; what Sefer reads is a derived per-book pack, `<root>/.sefer/packs/tn/<BOOK>.json` (`kinds/tn/pack.ts`). Where the raw tree is present (desktop's clone, a picked folder) a pack is stamped with a fingerprint of its book directory's listing and rebuilt when that moves, so a pull invalidates exactly the books it touched; `.sefer/` is in a clone's git exclude. Where it is not — the Web — the packs ARE the resource: `arrival.referenceCopy` clones newest-only into the memory FileSystem, `recognizeRoot` reads its manifest, the kind's `pack` step (`packHelp`, reading through an `UpstreamTree`, `kinds/tree.ts`) writes one pack per book plus `manifest.yaml`, `LICENSE.md`, `README.md`, checks each pack reads back whole (same book, same number of notes; the full schema decode every later read makes was most of the step's time), and only then is the root added to the Library; a failure removes what was written. On desktop `referenceCopy` is an ordinary clone into the Library's folder, then indexed at once by the kind's `index` step (`indexHelp`: every book's tree-stamped pack built in place, with the same "Packing PSA: book 19 of 66" progress the Web shows), so neither a book's first read nor a first search over a Bible is the moment its pack is built; a failed index does not fail the download, because a read rebuilds. Where the host provides `FolderTree` (desktop, `kinds/tree.ts`) a book's listing for the freshness check, and its files for a build, are one call each instead of one per file; the handle captures it at open, as it captures its `FileSystem`, because the notes pane forks its reads outside the services runtime. Measured with the display awake (2026-10-13): Psalms' notes 1.3 s on first read and 0.25 s from a pack, where they were 39.8 s and 12.3 s; en_tn's download 29 s and its indexing about four minutes; the Bisa Bible's first notes search 2–3 s, where it was about seven minutes. The handle (`kinds/tn/adapter.ts`) holds three books' packs and loads others on demand.
 
-`en_tn` is offered in two places, from `HELP_TEXTS` (`src/app/catalogue.ts`), a stated second source because the catalogue lists no helps, each row naming its host as a share link does (WA's `en_tn` on WACS, whichever cloud the build is configured for): the reference column's menu under **Reference material**, and the projects page's **Translation Notes** section ([landing](landing.md)). Both download through `downloadHelp` (`src/app/kinds/download.ts`), which joins a download already running for the same repository rather than starting a second into the same folder: one `import.remote` operation and one progress toast that moves the whole way — the megabytes received (the Web transport counts the pack as it arrives, since git reports nothing between "Compressing objects" and the end of the download), then reading, then "Packing ROM: book 45 of 66" — and ends saying what happened. On slow 3G (400 kbit/s) en_tn took 176 s and the toast moved every 5 s throughout. Picked, the column draws it through the registry as `NotesPane`: the notes for `shell.place()`, each its own block, consumed through `createHeld` so the last verse's notes stay while the next load.
+Translation Notes are offered in one place: the reference column's menu, under **Reference material**, in a section headed **Translation Notes** — one row per language, "English (en)" with the language's own name below it (drawn in its `direction`), and a download icon that turns to a spinner while that one downloads. The rows are the Language API's (`CatalogueService.translationNotes`, `src/app/catalogue.ts`; the configured catalogue, `VITE_SEFER_CATALOGUE_URL`), read the first time the menu opens, decoded through an Effect Schema, A–Z by English name, less the ones already held (by upstream URL):
+
+```graphql
+{
+  content(where: { resource_type: { _eq: "tn" }, git_repo: { username: { _eq: "WA-Catalog" } } }) {
+    language {
+      ietf_code
+      english_name
+      national_name
+      direction
+    }
+    git_repo {
+      username
+      repo_name
+      repo_url
+    }
+  }
+}
+```
+
+`repo_url` names its own host, as a share link does, so whichever cloud the build is configured for the notes come from where WA publishes them. Probed 2026-10-15: 34 languages on the production API (English is `WA-Catalog/en_tn`), 33 on the dev API (no English). While the list is read the section says so; a failed read says "offline" (the request never reached the API) or "could not read", and the next open of the menu asks again. A build with no catalogue URL (the sample catalogue) offers no notes. Only TN: no other help kind is listed until the PO asks for it (2026-10-15). The projects page lists no notes ([landing](landing.md)). Every row downloads through `downloadHelp` (`src/app/kinds/download.ts`), which joins a download already running for the same repository rather than starting a second into the same folder: one `import.remote` operation and one progress toast that moves the whole way — the megabytes received (the Web transport counts the pack as it arrives, since git reports nothing between "Compressing objects" and the end of the download), then reading, then "Packing ROM: book 45 of 66" — and ends saying what happened. On slow 3G (400 kbit/s) en_tn took 176 s and the toast moved every 5 s throughout. Picked, the column draws it through the registry as `NotesPane`: the notes for `shell.place()`, each its own block, consumed through `createHeld` so the last verse's notes stay while the next load.
 
 ### Provenance and updates
 
@@ -101,7 +121,7 @@ Every copy of reference material records where it came from and which version it
 **How an update check would work:**
 
 1. **Ask.** `Remote.probe(upstream.url)`: the server's refs in one round trip, no transfer. If `head` equals `upstream.commit`, nothing is new. This is the question the shared project's check asks first (`checkForChanges`, [sync](sync.md), "Checking on open, and sending on save") and the one the Writer upstream check asks for each `.upstreams.json` row (same chapter, "Writer projects a project follows").
-2. **Say.** "Translation Notes have changed upstream": on the `/projects` Notes section's row, and wherever the copy is picked. Nothing moves without the person.
+2. **Say.** "Translation Notes have changed upstream": wherever the copy is picked (the `/projects` Notes section it once named is gone). Nothing moves without the person.
 3. **Bring it in.**
    - **Web:** `referenceCopy` again, into a fresh folder beside the old one: clone newest-only into memory, `packHelp` writes every book's pack (about 13 s for `en_tn` in all, of which packing is under 4 s, so re-packing only the changed books from the clone's own diff, `Git.changedPathsBetween`, would save little), `Library.add` with the new commit, then the old folder is removed. A failure leaves the old copy as it was.
    - **Desktop:** a fast-forward pull in the copy itself. Nobody edits a reference copy, so it never conflicts. The pull changes files in the chapter directories, each book's listing fingerprint moves, and `bookPack` rebuilds exactly the books the pull touched the next time each is read. Then `Library.add(root, { url, commit: newHead })` records the new commit.
