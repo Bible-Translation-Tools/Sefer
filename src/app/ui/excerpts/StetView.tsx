@@ -27,6 +27,7 @@
  * question the screen is asking.
  */
 
+import type { BookId } from "@sefer/text/book";
 import CheckIcon from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronRight from "lucide-solid/icons/chevron-right";
@@ -35,7 +36,6 @@ import PencilIcon from "lucide-solid/icons/pencil";
 import ThumbsUpIcon from "lucide-solid/icons/thumbs-up";
 import { For, Show, createMemo, createSignal, onCleanup } from "solid-js";
 
-import type { BookId } from "#core/book/book";
 import type { BookExcerpts, Excerpt, Extent, OutlineRow } from "#core/excerpts/excerpts";
 import type { Analysis } from "#core/galley";
 import type { Guide, Term } from "#core/stet/stet";

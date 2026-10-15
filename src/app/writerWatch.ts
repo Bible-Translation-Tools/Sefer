@@ -17,6 +17,7 @@
  * they record there marks it taken (`takeWriterWork`), in the same commit.
  */
 
+import { decode } from "@sefer/text/source";
 import { Effect, Option } from "effect";
 import { createSignal, untrack } from "solid-js";
 
@@ -33,7 +34,6 @@ import {
 } from "#core/migrate/writerWork";
 import { Observability } from "#core/observability";
 import type { Project } from "#core/project/project";
-import { decode } from "#core/source/source";
 import { trackingRef } from "#core/sync";
 
 import { APP_AUTHOR, personAuthor } from "./author";

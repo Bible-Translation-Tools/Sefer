@@ -27,7 +27,7 @@
  * them (`a`-`z`).
  */
 
-import type { BookId } from "../book/book";
+import type { BookId } from "../book";
 
 export interface Point {
   readonly chapter: number;

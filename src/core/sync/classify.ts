@@ -1,3 +1,5 @@
+import { identifyBook, trustedBy, type Book, type Origin } from "@sefer/text/book";
+import type { SourceStamp } from "@sefer/text/source";
 /**
  * The change facts for a receive or a combine, taken from the Books.
  *
@@ -8,11 +10,9 @@
  */
 import { Effect, FileSystem, Option, Result } from "effect";
 
-import { identifyBook, trustedBy, type Book, type Origin } from "../book/book";
 import { Galley, toLf } from "../galley";
 import { Git, repositoryPath, type ChangedPath, type CommitId, type Repo } from "../git/git";
 import type { Project } from "../project/project";
-import type { SourceStamp } from "../source/source";
 import { bookFacts, type BookFacts, type Diff } from "./facts";
 
 const USFM = /\.usfm$/iu;

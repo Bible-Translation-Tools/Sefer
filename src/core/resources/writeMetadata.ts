@@ -20,10 +20,10 @@
  * second tool needs it, then extracted (the note's "shared org library").
  */
 
+import { CANON } from "@sefer/text/location/canon";
 import { Result } from "effect";
 import { stringify as stringifyYaml } from "yaml";
 
-import { CANON } from "../location/canon";
 import { decodeBurritoMetadata } from "./burrito";
 import { fingerprint } from "./checksum";
 import { SOURCE_AUTHORITY, toBurritoRelationships, type RelatedResource } from "./relationships";

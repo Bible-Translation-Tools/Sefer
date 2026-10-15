@@ -31,6 +31,7 @@
  * Genesis" is a question somebody can answer; "keep all 2,799" is not.
  */
 
+import type { BookId } from "@sefer/text/book";
 import type { JSX } from "@solidjs/web";
 import { Effect } from "effect";
 import ArrowDown from "lucide-solid/icons/arrow-down";
@@ -43,7 +44,6 @@ import Columns2 from "lucide-solid/icons/columns-2";
 import MoreVertical from "lucide-solid/icons/more-vertical";
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 
-import type { BookId } from "#core/book/book";
 import type { Analysis, DecisionUnit, DiffSkeleton, MergeSide } from "#core/galley";
 import type { EditorBook } from "#editor/index";
 

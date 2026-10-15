@@ -19,10 +19,9 @@
 // comparison itself then needs no context, which is what lets it run from a
 // component, a command or a test with one `run`.
 
+import type { BookId, Receipt } from "@sefer/text/book";
+import type { SourceStamp } from "@sefer/text/source";
 import { Data, Effect } from "effect";
-
-import type { BookId, Receipt } from "../book/book";
-import type { SourceStamp } from "../source/source";
 
 /**
  * Well-known source kinds. It is a plain string union rather than an enum

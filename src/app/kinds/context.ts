@@ -6,10 +6,10 @@
  * end of one of its chapters says only where it starts.
  */
 
+import { lastVerseOf } from "@sefer/text/location/locate";
 import { Option } from "effect";
 
 import { tocViewOf } from "#core/galley";
-import { lastVerseOf } from "#core/location/locate";
 import type { PlaceContext } from "#core/resources/kinds/handle";
 
 import type { Services } from "../services";

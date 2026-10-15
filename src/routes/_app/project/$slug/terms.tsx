@@ -1,3 +1,4 @@
+import type { Address } from "@sefer/text/location/address";
 import { createFileRoute, useNavigate } from "@tanstack/solid-router";
 import { Effect, Result } from "effect";
 import { createEffect, createMemo, createSignal, Show, untrack } from "solid-js";
@@ -9,7 +10,6 @@ import { PanelHeader, SegmentedControl } from "#app/ui/primitives";
 import { ShellGate } from "#app/ui/ShellGate";
 import { keyTermGuides, keyTerms, sourceReadings, type SourceReading } from "#app/workflows/stet";
 import { refOccurrences, type Occurrence } from "#core/excerpts/excerpts";
-import type { Address } from "#core/location/address";
 import { DEFAULT_LOCALE } from "#core/stet/fixture";
 import type { Guide, Term } from "#core/stet/stet";
 

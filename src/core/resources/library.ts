@@ -22,6 +22,8 @@
 // Classification is not duplicated here: `add` calls `classify` from
 // ./import.ts, the one place that decides what a folder is.
 
+import { localized } from "@sefer/text/localized";
+import { decode } from "@sefer/text/source";
 import {
   Context,
   Data,
@@ -39,10 +41,9 @@ import { joinPath, lastSegment, parentPath } from "../fileSystem/path";
 import { Observability, type ObservabilityService } from "../observability";
 import { readProjectMetadata } from "../project/discovery";
 import { readProjectState, updateProjectState } from "../project/projectState";
-import { decode } from "../source/source";
 import { classify, readJson, type Classification } from "./import";
 import { recognize, type ContainerKind, type ContentKind, type Recognition } from "./kinds/content";
-import { localized, type Declared } from "./projectMetadata";
+import { type Declared } from "./projectMetadata";
 import { normaliseRepoUrl, type RelatedResource } from "./relationships";
 
 /**

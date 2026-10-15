@@ -22,9 +22,9 @@
  * member on `edit`'s satellite variant, and the compiler finds every screen.
  */
 
+import type { BookId } from "@sefer/text/book";
 import type { JSX } from "@solidjs/web";
 
-import type { BookId } from "#core/book/book";
 import type { Excerpt, Extent, OutlineRow, BookExcerpts } from "#core/excerpts/excerpts";
 import type { EditorPolicy } from "#editor/index";
 

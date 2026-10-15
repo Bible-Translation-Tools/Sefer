@@ -35,7 +35,9 @@
 // Pure: no Effect, no Solid, no host. It takes the snapshot and a resolver and
 // returns plain values, exactly as `filter.ts` does for the panel.
 
-import type { BookId } from "../book/book";
+import type { BookId } from "@sefer/text/book";
+import type { SourceStamp } from "@sefer/text/source";
+
 import {
   OUTER_CLASSES,
   PATTERN_DIGIT_GLYPH,
@@ -51,7 +53,6 @@ import {
   type Pool,
   type Usual,
 } from "../galley";
-import type { SourceStamp } from "../source/source";
 
 /** The word channels: they judge a word, not a scalar, and carry a hash. */
 const WORD_CHANNELS: ReadonlySet<Channel> = new Set<Channel>(["Casing", "WordLength", "Doubled"]);

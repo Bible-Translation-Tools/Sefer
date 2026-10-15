@@ -20,8 +20,7 @@ import {
   Transaction,
 } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, keymap } from "@codemirror/view";
-
-import { Refusal } from "#core/book/book";
+import { Refusal } from "@sefer/text/book";
 
 import { settleTheCaretOnALegalPosition } from "../core/caret";
 import { pullSelectionsIntoTheClip } from "../core/clip";

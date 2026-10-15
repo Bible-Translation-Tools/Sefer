@@ -21,13 +21,13 @@
 // revision and one Undo step, but the untouched units keep their offsets, so a
 // cursor, a finding and a search hit outside what changed survive the write.
 
+import type { BookId } from "@sefer/text/book";
+import { trustedBy } from "@sefer/text/book";
+import type { Change } from "@sefer/text/source";
 import { Effect, Result } from "effect";
 
-import type { BookId } from "../book/book";
-import { trustedBy } from "../book/book";
 import type { Project } from "../project/project";
 import { nameOfRoot } from "../project/slug";
-import type { Change } from "../source/source";
 import { failCompare, type CompareSource } from "./source";
 
 /**

@@ -1,3 +1,4 @@
+import type { SourceStamp } from "@sefer/text/source";
 /**
  * The Git port: the intersection of the user's version-control jobs, not the
  * union of two libraries' APIs. Desktop answers it with git2 behind Tauri
@@ -13,7 +14,6 @@
 import { Context, Data, Effect, Option, Result } from "effect";
 
 import { escapesRoot, normalisePath } from "../fileSystem/path";
-import type { SourceStamp } from "../source/source";
 
 /**
  * The branch a repository Sefer creates starts on. A clone takes whatever

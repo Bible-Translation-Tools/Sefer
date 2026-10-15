@@ -16,9 +16,9 @@
  * one entry here plus one file in `src/core/compare`.
  */
 
+import type { Book } from "@sefer/text/book";
 import { Option, Result } from "effect";
 
-import type { Book } from "#core/book/book";
 import {
   currentProjectSource,
   folderSource,

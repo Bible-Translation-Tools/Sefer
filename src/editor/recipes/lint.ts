@@ -23,6 +23,7 @@
 import { type Diagnostic as CmDiagnostic, forceLinting, linter } from "@codemirror/lint";
 import { StateEffect, StateField, type EditorState, type Extension } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
+import type { SourceStamp } from "@sefer/text/source";
 
 import {
   type EngineStamp,
@@ -34,7 +35,6 @@ import {
   stampOf,
   versionOf,
 } from "#core/galley";
-import type { SourceStamp } from "#core/source/source";
 
 import { analyzed, analyzer } from "../core/analyzer";
 import { structureAt } from "../core/docStructure";

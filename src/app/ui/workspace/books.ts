@@ -8,7 +8,7 @@
  * a finding's message names a book too; the workspace reads all three here.
  */
 
-import { bookName, CANON, testamentOf, type Testament } from "#core/location/canon";
+import { bookName, CANON, testamentOf, type Testament } from "@sefer/text/location/canon";
 
 export { bookName, CANON, testamentOf };
 export type { Testament };

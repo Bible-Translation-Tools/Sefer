@@ -9,25 +9,36 @@
 //
 // Two implementations satisfy the port: the plain in-memory Book here (text
 // held as a `Source`; no rules, no history) and the editor-backed Book in
-// `src/editor`, whose canonical text is a CodeMirror state and whose `apply`
+// `@sefer/editor`, whose canonical text is a CodeMirror state and whose `apply`
 // runs the editing phases before accepting. Readers cannot tell them apart.
 //
 // Publication is synchronous and explicit — a Set of subscribers run in order
 // after acceptance, never a bus or an async queue — because the keystroke path
 // (phases → analyze → mutate → publish) must finish inside one frame.
 
-import { Data, Effect, FileSystem, Option, Result, type PlatformError } from "effect";
+import { Data, Result } from "effect";
 
-import { Observability, type ObservabilityService } from "../observability";
 import {
   applyChange,
-  decode,
   type Change,
   type Source,
   type SourceChangeError,
-  type SourceDecodeError,
   type SourceStamp,
-} from "../source/source";
+} from "./source";
+
+/**
+ * Where a plain Book reports what `apply` did, if anywhere. A structural port
+ * rather than an observability service, so this package depends on nobody's
+ * tracing: the app's `ObservabilityService` satisfies it as it stands.
+ */
+export interface BookNotes {
+  readonly note: (
+    rule: string,
+    verdict: "refused" | "rewrote",
+    detail?: string,
+    attrs?: Readonly<Record<string, string | number | boolean>>,
+  ) => void;
+}
 
 /** The `\id` code when the text declares one, otherwise the file stem. */
 export type BookId = string;
@@ -179,11 +190,7 @@ export const makeListeners = (): {
  * own, no history. Used for census, project analysis, search and multi-book
  * operations over books the user is not editing.
  */
-export const makeBook = (
-  path: string,
-  initial: Source,
-  observability?: ObservabilityService,
-): Book => {
+export const makeBook = (path: string, initial: Source, observability?: BookNotes): Book => {
   const id = identifyBook(initial.text, path);
   const listeners = makeListeners();
   let current = initial;
@@ -220,14 +227,3 @@ export const makeBook = (
     history: () => null,
   };
 };
-
-export const openBook = (
-  path: string,
-): Effect.Effect<Book, PlatformError.PlatformError | SourceDecodeError, FileSystem.FileSystem> =>
-  Effect.gen(function* () {
-    const fileSystem = yield* FileSystem.FileSystem;
-    const observability = yield* Effect.serviceOption(Observability);
-    const bytes = yield* fileSystem.readFile(path);
-    const source = yield* Effect.fromResult(decode(bytes));
-    return makeBook(path, source, Option.getOrUndefined(observability));
-  });

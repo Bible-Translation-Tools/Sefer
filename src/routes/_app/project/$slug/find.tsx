@@ -1,3 +1,6 @@
+import type { BookId } from "@sefer/text/book";
+import type { Address } from "@sefer/text/location/address";
+import { bookName } from "@sefer/text/location/canon";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/solid-router";
 import { Effect, Exit, Option, Result } from "effect";
 import CaseSensitiveIcon from "lucide-solid/icons/case-sensitive";
@@ -37,7 +40,6 @@ import { createFindSource } from "#app/ui/search/findSource";
 import { ShellGate } from "#app/ui/ShellGate";
 import { metadataOf } from "#app/ui/workspace/project";
 import * as Workflows from "#app/workflows/references";
-import type { BookId } from "#core/book/book";
 import {
   refOccurrences,
   type BookText,
@@ -45,8 +47,6 @@ import {
   type Occurrence,
 } from "#core/excerpts/excerpts";
 import { bookHeading, type Analysis } from "#core/galley";
-import type { Address } from "#core/location/address";
-import { bookName } from "#core/location/canon";
 import type { Documents } from "#core/resources/kinds/handle";
 import type { Resource } from "#core/resources/library";
 import { expectIn, expectedPattern } from "#core/search/expect";

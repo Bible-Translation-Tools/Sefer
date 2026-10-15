@@ -19,10 +19,11 @@
  * a reference search; Key terms could use it over a guide's verses.
  */
 
+import type { Address } from "@sefer/text/location/address";
+import { resolve } from "@sefer/text/location/locate";
+
 import type { BookText, Occurrence } from "../excerpts/excerpts";
 import { tocViewOf } from "../galley";
-import type { Address } from "../location/address";
-import { resolve } from "../location/locate";
 
 /**
  * The expected rendering as typed, as a pattern, or undefined when nothing

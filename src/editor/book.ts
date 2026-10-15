@@ -39,8 +39,6 @@ import {
   type TransactionSpec,
 } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
-import { Result } from "effect";
-
 import {
   Refusal,
   UNTRUSTED,
@@ -51,9 +49,11 @@ import {
   type Origin,
   type Receipt,
   type Trust,
-} from "#core/book/book";
+} from "@sefer/text/book";
+import type { Change, Source, SourceStamp } from "@sefer/text/source";
+import { Result } from "effect";
+
 import type { ObservabilityService } from "#core/observability";
-import type { Change, Source, SourceStamp } from "#core/source/source";
 
 import { actionCommand, type EditorAction } from "./core/actions";
 import type { Analyze } from "./core/analyzer";

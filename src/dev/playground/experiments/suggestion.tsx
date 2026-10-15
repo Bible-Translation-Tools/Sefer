@@ -28,11 +28,11 @@
  * the cards' Edit seats nothing, so the project is untouched.
  */
 
+import type { BookId } from "@sefer/text/book";
 import { For, Show, createMemo, createSignal } from "solid-js";
 
 import { Button, Card } from "#app/ui/primitives";
 import { ReviewReader, type ReviewBook } from "#app/ui/review/ReviewReader";
-import type { BookId } from "#core/book/book";
 import type { DecisionUnit, MergeSide } from "#core/galley";
 
 import type { Experiment, ExperimentProps } from "../experiment";

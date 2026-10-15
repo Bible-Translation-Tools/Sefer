@@ -11,10 +11,10 @@
  * by book.
  */
 
+import type { BookId } from "@sefer/text/book";
+import type { Address } from "@sefer/text/location/address";
 import { Effect, Option, type FileSystem } from "effect";
 
-import type { BookId } from "../../../book/book";
-import type { Address } from "../../../location/address";
 import {
   Unavailable,
   type HaystackDocument,

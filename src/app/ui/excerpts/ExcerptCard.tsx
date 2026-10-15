@@ -37,6 +37,7 @@
  */
 import { ChangeSet, StateField } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
+import { tocUnits, unitIndexAt } from "@sefer/text/location/locate";
 import type { JSX } from "@solidjs/web";
 import ChevronDownIcon from "lucide-solid/icons/chevron-down";
 import ChevronUpIcon from "lucide-solid/icons/chevron-up";
@@ -53,7 +54,6 @@ import {
   type Occurrence,
 } from "#core/excerpts/excerpts";
 import { tocViewOf, type Analysis } from "#core/galley";
-import { tocUnits, unitIndexAt } from "#core/location/locate";
 import {
   fromCanonical,
   ownEcho,

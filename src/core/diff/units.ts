@@ -10,11 +10,11 @@
 // VALUE (`BaselineLike`, structural, so this never imports Save) and the
 // engine as a service.
 
+import { Refusal, trustedBy, type Book, type BookId, type Receipt } from "@sefer/text/book";
+import type { SourceStamp } from "@sefer/text/source";
 import { Result } from "effect";
 
-import { Refusal, trustedBy, type Book, type BookId, type Receipt } from "../book/book";
 import type { DecisionUnit, GalleyService } from "../galley";
-import type { SourceStamp } from "../source/source";
 import { diffSkeleton } from "./skeleton";
 
 /**

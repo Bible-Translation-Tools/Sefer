@@ -15,11 +15,11 @@
  * USFM book code within one (language, resource): no Bible prints John twice.
  */
 
+import { CANON, type Testament } from "@sefer/text/location/canon";
 import { Data, Effect, FileSystem, Option } from "effect";
 
 import { lastSegment } from "../fileSystem/path";
 import { Git, type Author } from "../git/git";
-import { CANON, type Testament } from "../location/canon";
 import { Observability } from "../observability";
 import { Remote } from "../remote/remote";
 import {

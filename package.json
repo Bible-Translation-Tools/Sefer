@@ -47,6 +47,7 @@
     "@corvu-next/dialog": "0.1.5",
     "@corvu-next/popover": "0.1.5",
     "@corvu-next/tooltip": "0.1.5",
+    "@sefer/text": "workspace:*",
     "@solidjs/web": "^2.0.0-rc.9",
     "@tanstack/solid-router": "^2.0.0-rc.8",
     "@tanstack/virtual-core": "^3.17.11",

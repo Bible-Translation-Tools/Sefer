@@ -18,11 +18,11 @@
  * source text has 105, and comparing it shows Jude's text in it.
  */
 
+import { CANON } from "@sefer/text/location/canon";
 import { Result } from "effect";
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 
 import { diffSkeleton } from "#core/diff/skeleton";
-import { CANON } from "#core/location/canon";
 import { candidateLabel, type BookCandidate } from "#core/migrate/candidate";
 import type { Health } from "#core/migrate/check";
 

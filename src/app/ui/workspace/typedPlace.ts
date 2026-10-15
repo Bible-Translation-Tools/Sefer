@@ -8,7 +8,7 @@
  * the book goes to that chapter rather than to wherever the book was left.
  */
 
-import type { Address } from "#core/location/address";
+import type { Address } from "@sefer/text/location/address";
 
 import type { Location } from "../../location";
 

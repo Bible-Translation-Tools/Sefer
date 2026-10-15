@@ -16,7 +16,17 @@
  * offer a translator two places to disagree about what Mark is called.
  */
 
-import { localized, type ProjectMetadata } from "../resources/projectMetadata";
+import { localized, type LocalizedText } from "../localized";
+
+/**
+ * What a project says its books are called: the slice of the app's
+ * `ProjectMetadata` that naming a book reads, so this package needs no project
+ * model of its own. `ProjectMetadata` satisfies it as it stands.
+ */
+export interface BookNames {
+  readonly bookNames: Readonly<Record<string, LocalizedText>>;
+  readonly defaultLocale?: string | undefined;
+}
 
 export type Testament = "ot" | "nt";
 
@@ -112,7 +122,7 @@ export const testamentOf = (id: string): Testament =>
  * first, English second; never blank — the id is always something a reader
  * can act on.
  */
-export const bookName = (id: string, metadata?: ProjectMetadata, heading?: string): string => {
+export const bookName = (id: string, metadata?: BookNames, heading?: string): string => {
   const local = localized(metadata?.bookNames[id], [metadata?.defaultLocale]);
   if (local !== "") return local;
   if (heading !== undefined && heading !== "") return heading;

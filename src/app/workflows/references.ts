@@ -28,12 +28,12 @@
  * something to consult), which matters to the screens and not to a search.
  */
 
+import { decode } from "@sefer/text/source";
 import { Effect, FileSystem, Result } from "effect";
 
 import { ProjectAnalysis, type ReferenceText } from "#core/analysis/projectAnalysis";
 import { joinPath } from "#core/fileSystem/path";
 import { Library, ROLES, type Resource } from "#core/resources/library";
-import { decode } from "#core/source/source";
 
 import { holdsEngineBooks } from "../kinds/table";
 

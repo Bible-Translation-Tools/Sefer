@@ -28,10 +28,9 @@
  *    project, which is the whole point of comparing against it.
  */
 
+import type { BookId } from "@sefer/text/book";
+import { versesAddress, type Address } from "@sefer/text/location/address";
 import { Context, Data, Effect, Option, Result, Schema } from "effect";
-
-import type { BookId } from "../book/book";
-import { versesAddress, type Address } from "../location/address";
 
 // ---------------------------------------------------------------------------
 // The envelope, as it is written

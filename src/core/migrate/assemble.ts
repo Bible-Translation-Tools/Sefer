@@ -25,6 +25,7 @@
  * Nothing is sent: the project reaches a server through ordinary sync.
  */
 
+import { CANON } from "@sefer/text/location/canon";
 import { Data, Effect, FileSystem, Option, Result } from "effect";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
@@ -32,7 +33,6 @@ import { joinPath } from "../fileSystem/path";
 import { DEFAULT_BRANCH, Git, type Author, type GitError } from "../git/git";
 import { intakeRepository, type IntakeResult } from "../git/intake";
 import type { Repositories } from "../git/repository";
-import { CANON } from "../location/canon";
 import { Observability } from "../observability";
 import { decodeBurritoMetadata } from "../resources/burrito";
 import { fingerprint } from "../resources/checksum";

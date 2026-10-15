@@ -11,9 +11,8 @@
  * does not want, and would put its open state in two places.
  */
 
+import type { Address } from "@sefer/text/location/address";
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
-
-import type { Address } from "#core/location/address";
 
 import { availableCommands, runCommand } from "../commands";
 import { t } from "../i18n";

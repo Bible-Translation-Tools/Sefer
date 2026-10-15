@@ -22,11 +22,11 @@
  * `replayWriterHistories` writes them all as one pack (`../git/pack.ts`).
  */
 
+import { decode } from "@sefer/text/source";
 import { Effect } from "effect";
 
 import { Git, type CommitId, type GitError, type Repo, type Signature } from "../git/git";
 import { commitBody, packWriter, treeBody, type FinishedPack } from "../git/pack";
-import { decode } from "../source/source";
 import { isWriterTextPath, treeFromFiles, usfmFileName, writerBookToUsfm } from "./writerBook";
 
 /** One Writer save that changed a text file: who, when, and those files' new text (`null`: deleted). */

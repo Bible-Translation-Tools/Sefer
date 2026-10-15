@@ -162,7 +162,7 @@ export default defineConfig(({ mode }) => {
           test: {
             name: "core",
             environment: "node",
-            include: ["src/**/*.test.ts", "tools/**/*.test.ts"],
+            include: ["src/**/*.test.ts", "packages/*/src/**/*.test.ts", "tools/**/*.test.ts"],
             exclude: [...configDefaults.exclude, "**/*.browser.test.*"],
           },
         },

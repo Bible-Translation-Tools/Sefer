@@ -28,10 +28,11 @@
  *    repository's exclusive lane.
  */
 
+import type { BookId } from "@sefer/text/book";
+import type { SourceStamp } from "@sefer/text/source";
 import { Data, Effect, FileSystem, Option, type PlatformError, Result } from "effect";
 
 import { ProjectAdmin } from "../admin/projectAdmin";
-import type { BookId } from "../book/book";
 import { parentPath } from "../fileSystem/path";
 import type { Galley } from "../galley";
 import {
@@ -49,7 +50,6 @@ import { METADATA_FILE } from "../project/discovery";
 import type { Project } from "../project/project";
 import { Remote, type RemoteError } from "../remote/remote";
 import { SaveCoordinator } from "../save/saveCoordinator";
-import type { SourceStamp } from "../source/source";
 import {
   booksByPath,
   classify,

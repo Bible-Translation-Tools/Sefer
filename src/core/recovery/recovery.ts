@@ -25,16 +25,16 @@
 // The journal root is a plain string option; the composition feeds it
 // `HostInfo.paths().appData`.
 
+import { trustedBy, type Book, type BookId, type Origin, type Receipt } from "@sefer/text/book";
+import type { Change, SourceStamp } from "@sefer/text/source";
 import { Context, Data, Effect, FileSystem, Layer, Option, Result, Scope } from "effect";
 
-import { trustedBy, type Book, type BookId, type Origin, type Receipt } from "../book/book";
 import { writeFileStringAtomic } from "../fileSystem/atomic";
 import { joinPath, normalisePath } from "../fileSystem/path";
 import { Observability } from "../observability";
 import type { Project } from "../project/project";
 import type { Baseline } from "../save/baseline";
 import { debounced, type DebouncePolicy } from "../schedule/debounce";
-import type { Change, SourceStamp } from "../source/source";
 
 /** One accepted apply, in the shape the journal line carries. */
 export interface JournalEntry {

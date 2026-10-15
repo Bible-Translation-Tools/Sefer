@@ -1,3 +1,5 @@
+import type { Book, BookId } from "@sefer/text/book";
+import type { SourceStamp } from "@sefer/text/source";
 /**
  * Record a version: write the books' files, then keep them as one commit —
  * the one way the project file is written.
@@ -11,10 +13,8 @@
  */
 import { Effect, Option, Result } from "effect";
 
-import type { Book, BookId } from "#core/book/book";
 import type { Author, CommitId } from "#core/git/git";
 import type { Project } from "#core/project/project";
-import type { SourceStamp } from "#core/source/source";
 
 import type { Services } from "./services";
 

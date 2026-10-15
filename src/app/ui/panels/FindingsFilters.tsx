@@ -12,13 +12,13 @@
  * severity ones take the severity's own tone, which is the only colour here.
  */
 
+import type { BookId } from "@sefer/text/book";
+import { bookName } from "@sefer/text/location/canon";
 import Search from "lucide-solid/icons/search";
 import { Show, createEffect, createSignal, untrack } from "solid-js";
 
-import type { BookId } from "#core/book/book";
 import type { Facet, Facets, FindingsFilter } from "#core/findings/filter";
 import type { Producer, Severity } from "#core/findings/finding";
-import { bookName } from "#core/location/canon";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";

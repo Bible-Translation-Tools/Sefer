@@ -19,6 +19,7 @@
  */
 
 import { lintGutter } from "@codemirror/lint";
+import type { BookId } from "@sefer/text/book";
 import { Effect, FileSystem, Layer, ManagedRuntime, Option, Result, Scope } from "effect";
 
 import {
@@ -32,7 +33,6 @@ import {
   ProjectAnalysisLive,
   type ProjectAnalysisService,
 } from "#core/analysis/projectAnalysis";
-import type { BookId } from "#core/book/book";
 import type { HostFacts } from "#core/diagnostics/header";
 import { MemoryFileSystemLive } from "#core/fileSystem/memory";
 import {

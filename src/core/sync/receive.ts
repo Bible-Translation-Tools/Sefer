@@ -1,3 +1,4 @@
+import type { BookId } from "@sefer/text/book";
 /**
  * Receive: bring the shared project's new commits into this project — only
  * forward, only what the policy lets through, and through the Books.
@@ -28,7 +29,6 @@
  */
 import { Data, Effect, type FileSystem, Option } from "effect";
 
-import type { BookId } from "../book/book";
 import type { Galley } from "../galley";
 import { Git, type CommitId } from "../git/git";
 import { Repositories } from "../git/repository";

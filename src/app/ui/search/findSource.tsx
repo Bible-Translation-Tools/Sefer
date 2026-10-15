@@ -14,10 +14,10 @@
  * references are re-registered with the corpus and the project re-judged.
  */
 
+import type { BookId } from "@sefer/text/book";
 import { Effect, Option, Result } from "effect";
 import { Show, createEffect, createSignal } from "solid-js";
 
-import type { BookId } from "#core/book/book";
 import type { BookText, Excerpt } from "#core/excerpts/excerpts";
 import { bookHeading } from "#core/galley";
 import type { Resource } from "#core/resources/library";

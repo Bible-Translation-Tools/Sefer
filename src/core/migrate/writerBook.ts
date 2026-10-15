@@ -25,12 +25,12 @@
  * or ignored, never a reason to refuse.
  */
 
+import { CANON } from "@sefer/text/location/canon";
+import { decode } from "@sefer/text/source";
 import { Effect, FileSystem, Result, Schema } from "effect";
 
 import { joinPath, lastSegment } from "../fileSystem/path";
-import { CANON } from "../location/canon";
 import { fromWriterSourceTranslations, type RelatedResource } from "../resources/relationships";
-import { decode } from "../source/source";
 
 const Manifest = Schema.Struct({
   target_language: Schema.Struct({

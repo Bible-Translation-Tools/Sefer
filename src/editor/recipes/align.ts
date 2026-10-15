@@ -36,11 +36,10 @@
  */
 
 import { EditorView } from "@codemirror/view";
-
-import type { BookId } from "#core/book/book";
-import { tocViewOf } from "#core/galley/location";
-import type { Address } from "#core/location/address";
-import { addressAt, resolve, type TocView } from "#core/location/locate";
+import type { BookId } from "@sefer/text/book";
+import { tocViewOf } from "@sefer/text/engine/location";
+import type { Address } from "@sefer/text/location/address";
+import { addressAt, resolve, type TocView } from "@sefer/text/location/locate";
 
 import { structureAt } from "../core/docStructure";
 

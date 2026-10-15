@@ -29,7 +29,17 @@
  * (`search.planReplace`).
  */
 
-import type { BookId } from "../book/book";
+import type { BookId } from "@sefer/text/book";
+import { addressCode, bookAddress, type Address } from "@sefer/text/location/address";
+import {
+  resolve,
+  tocUnits,
+  unitAddress,
+  unitIndexAt,
+  type TocUnit,
+  type TocView,
+} from "@sefer/text/location/locate";
+
 import {
   CLASS,
   FLAG,
@@ -41,15 +51,6 @@ import {
   tocViewOf,
   type Analysis,
 } from "../galley";
-import { addressCode, bookAddress, type Address } from "../location/address";
-import {
-  resolve,
-  tocUnits,
-  unitAddress,
-  unitIndexAt,
-  type TocUnit,
-  type TocView,
-} from "../location/locate";
 
 /** One match inside an excerpt, in the book's SOURCE coordinates. */
 export interface Occurrence {

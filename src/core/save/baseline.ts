@@ -12,8 +12,8 @@
 // identity ACROSS sessions; within one session the stamp's revision decides.
 // Length alone never identifies text.
 
-import type { BookId } from "../book/book";
-import type { SourceStamp } from "../source/source";
+import type { BookId } from "@sefer/text/book";
+import type { SourceStamp } from "@sefer/text/source";
 
 export interface Baseline {
   readonly bookId: BookId;

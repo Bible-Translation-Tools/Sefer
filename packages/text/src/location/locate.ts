@@ -26,7 +26,7 @@
  * Offsets are UTF-16 code units, half-open.
  */
 
-import type { BookId } from "../book/book";
+import type { BookId } from "../book";
 import {
   bookAddress,
   chaptersAddress,

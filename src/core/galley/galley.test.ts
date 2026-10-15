@@ -11,12 +11,12 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
+import { describesExactly, sameSource, toLf } from "@sefer/text/engine/analysis";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 
 import { NodeGalleyLive } from "#platform/node/galley";
 
-import { describesExactly, sameSource, toLf } from "./analysis";
 import { EngineInputError, Galley, type GalleyService } from "./galley";
 
 const fixture = (name: string): string =>

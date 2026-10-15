@@ -9,11 +9,11 @@
  * screen to go to. See `documentation/glossary.md`, "Overlay".
  */
 
+import type { BookId } from "@sefer/text/book";
+import { resolve } from "@sefer/text/location/locate";
 import { Effect, Option } from "effect";
 
-import type { BookId } from "#core/book/book";
 import { Galley, tocViewOf, type Analysis } from "#core/galley";
-import { resolve } from "#core/location/locate";
 import { ROLES, type LibraryService, type Resource } from "#core/resources/library";
 import { StetCatalogFixtureLive } from "#core/stet/fixture";
 import {

@@ -20,9 +20,9 @@
  * no summary.
  */
 
+import type { Book, BookId } from "@sefer/text/book";
 import { Option, Result } from "effect";
 
-import type { Book, BookId } from "#core/book/book";
 import { textChanges, unitChanges, type BaselineLike, type UnitChanges } from "#core/diff/units";
 import type { GalleyService } from "#core/galley";
 

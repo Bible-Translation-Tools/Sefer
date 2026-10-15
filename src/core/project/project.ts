@@ -31,6 +31,8 @@
 // a hop on the keystroke path, which §1.2 rules out. Holding a Book reference
 // across an `instantiate` or `release` is therefore a bug in the holder.
 
+import { makeBook, type Book, type BookId, type Receipt } from "@sefer/text/book";
+import type { Change, SourceDecodeError } from "@sefer/text/source";
 import {
   Data,
   Duration,
@@ -43,11 +45,10 @@ import {
   Stream,
 } from "effect";
 
-import { makeBook, openBook, type Book, type BookId, type Receipt } from "../book/book";
+import { openBook } from "../book/open";
 import { normalisePath } from "../fileSystem/path";
 import { Observability, type ObservabilityService, type Operation } from "../observability";
 import type { ProjectMetadata } from "../resources/projectMetadata";
-import type { Change, SourceDecodeError } from "../source/source";
 import { discoverBooks, readProjectMetadata } from "./discovery";
 
 /**

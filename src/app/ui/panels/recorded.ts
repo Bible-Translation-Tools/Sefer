@@ -21,13 +21,13 @@
  * say exactly that rather than inventing an empty baseline to diff against.
  */
 
+import type { BookId } from "@sefer/text/book";
+import { decode, type Source } from "@sefer/text/source";
 import { Effect, Option, Result } from "effect";
 import { createEffect, createSignal, type Accessor } from "solid-js";
 
-import type { BookId } from "#core/book/book";
 import { Git, repositoryPath } from "#core/git/git";
 import type { Project } from "#core/project/project";
-import { decode, type Source } from "#core/source/source";
 import { trackingRef } from "#core/sync";
 
 import type { Shell } from "../../ProjectContext";

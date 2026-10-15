@@ -18,6 +18,7 @@
  * failure are for.
  */
 
+import type { Analysis, DiagnosticView } from "@sefer/text/engine/analysis";
 import {
   Hits,
   FORMAT_VERSION as FIND_FORMAT_VERSION,
@@ -51,7 +52,6 @@ import * as wasmModule from "@wycliffeassociates/scripture-kitchen/web";
 import { Context, Data, Effect, Layer, Option, Result } from "effect";
 
 import { Observability, type ObservabilityService } from "../observability";
-import type { Analysis, DiagnosticView } from "./analysis";
 import {
   engineDiff,
   engineMerge,

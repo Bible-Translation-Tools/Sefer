@@ -3,9 +3,9 @@
  * nothing outside `src/core/galley` imports the engine package.
  */
 
-export * from "./analysis";
+export * from "@sefer/text/engine/analysis";
 export * from "./diff";
 export * from "./format";
 export * from "./overlay";
 export * from "./galley";
-export * from "./location";
+export * from "@sefer/text/engine/location";

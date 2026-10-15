@@ -15,12 +15,12 @@
 // a project's lifetime, and none of that means anything for a side nobody can
 // write to. Decoded text and an id is the whole of what a read-only side is.
 
+import { identifyBook, type BookId } from "@sefer/text/book";
+import { decode } from "@sefer/text/source";
 import { Effect, FileSystem, Result } from "effect";
 
-import { identifyBook, type BookId } from "../book/book";
 import { discoverBooks } from "../project/discovery";
 import { nameOfRoot } from "../project/slug";
-import { decode } from "../source/source";
 import { failCompare, type CompareSource } from "./source";
 
 interface Scan {

@@ -16,20 +16,20 @@
  * ordinary edit that Undo takes back and Record a version keeps.
  */
 
+import type { Book, BookId } from "@sefer/text/book";
+import { decode, type Source } from "@sefer/text/source";
 import { useNavigate, useSearch } from "@tanstack/solid-router";
 import { Effect, Option, Result } from "effect";
 import GitCommitVertical from "lucide-solid/icons/git-commit-vertical";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 
-import type { Book, BookId } from "#core/book/book";
 import { diffSkeleton } from "#core/diff/skeleton";
 import { revertUnits, type UnitChanges } from "#core/diff/units";
 import type { Analysis, DecisionUnit } from "#core/galley";
 import type { Commit, Version } from "#core/git/git";
 import { Git, repositoryPath } from "#core/git/git";
 import { Remote, type Deepen } from "#core/remote/remote";
-import { decode, type Source } from "#core/source/source";
 import { trackingRef } from "#core/sync";
 import type { EditorBook } from "#editor/index";
 

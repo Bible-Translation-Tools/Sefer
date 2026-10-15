@@ -16,10 +16,10 @@
 // A book present on only one side is its own kind of difference: there is
 // nothing to line up.
 
+import type { BookId } from "@sefer/text/book";
+import type { SourceStamp } from "@sefer/text/source";
 import { Effect } from "effect";
 
-import type { BookId } from "../book/book";
-import type { SourceStamp } from "../source/source";
 import { sourceRef, type CompareSource, type CompareError, type SourceRef } from "./source";
 
 /** Which sides hold this book at all. */

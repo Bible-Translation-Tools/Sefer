@@ -33,6 +33,8 @@
 // and external-change comparison use the hash across sessions while the
 // revision keeps deciding within one.
 
+import { trustedBy, type Book, type BookId, type Origin } from "@sefer/text/book";
+import { decode, encode, type SourceStamp } from "@sefer/text/source";
 import {
   Context,
   Data,
@@ -46,12 +48,10 @@ import {
   Stream,
 } from "effect";
 
-import { trustedBy, type Book, type BookId, type Origin } from "../book/book";
 import { writeFileAtomic } from "../fileSystem/atomic";
 import { Observability, type ObservabilityService } from "../observability";
 import type { ExternalChange } from "../project/project";
 import { Recovery } from "../recovery/recovery";
-import { decode, encode, type SourceStamp } from "../source/source";
 import type { Baseline } from "./baseline";
 
 /** What one successful write did. Git commits receipts, never guesses. */

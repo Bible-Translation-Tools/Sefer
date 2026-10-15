@@ -17,11 +17,12 @@
  * is painted, and the card's OWN changes are the ones it decides.
  */
 
+import { addressCode, type Address } from "@sefer/text/location/address";
+import { tocUnits, unitAddress, unitIndexAt, type TocUnit } from "@sefer/text/location/locate";
+
 import type { Extent } from "#core/excerpts/excerpts";
 import { tocViewOf, type Analysis } from "#core/galley";
 import type { DecisionUnit } from "#core/galley/diff";
-import { addressCode, type Address } from "#core/location/address";
-import { tocUnits, unitAddress, unitIndexAt, type TocUnit } from "#core/location/locate";
 
 import { changed } from "./paint";
 

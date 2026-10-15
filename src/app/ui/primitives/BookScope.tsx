@@ -9,10 +9,9 @@
  * turns it into books with `scopeBooks`.
  */
 
+import type { BookId } from "@sefer/text/book";
+import { testamentOf } from "@sefer/text/location/canon";
 import { Show } from "solid-js";
-
-import type { BookId } from "#core/book/book";
-import { testamentOf } from "#core/location/canon";
 
 import { t } from "../../i18n";
 import { Badge } from "./Badge";

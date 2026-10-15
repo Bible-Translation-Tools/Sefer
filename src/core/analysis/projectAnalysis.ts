@@ -41,9 +41,11 @@
 // Telemetry carries counts and codes only. A diagnostic's message quotes the
 // document and lives in Findings.
 
+import type { Book, BookId } from "@sefer/text/book";
+import { bookName } from "@sefer/text/location/canon";
+import type { SourceStamp } from "@sefer/text/source";
 import { Context, Duration, Effect, Latch, Layer, Option, PubSub, Scope, Stream } from "effect";
 
-import type { Book, BookId } from "../book/book";
 import {
   corpusReader,
   fromAnalysis,
@@ -60,10 +62,8 @@ import {
   type FindingsSnapshot,
   type GalleyService,
 } from "../galley";
-import { bookName } from "../location/canon";
 import { Observability, type ObservabilityService } from "../observability";
 import type { Project } from "../project/project";
-import type { SourceStamp } from "../source/source";
 
 /**
  * Quiet window before a changed book is re-analyzed. Long enough that typing

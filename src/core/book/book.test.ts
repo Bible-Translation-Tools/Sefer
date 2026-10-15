@@ -1,10 +1,10 @@
+import type { Book, Receipt } from "@sefer/text/book";
 import { Effect, Layer, Result } from "effect";
 import { expect, test } from "vitest";
 
 import { FixtureFileSystemLive, SMALL_NT_ROOT } from "../fixture/smallNt";
 import { Observability, ObservabilityLive } from "../observability";
-import type { Book, Receipt } from "./book";
-import { openBook } from "./book";
+import { openBook } from "./open";
 
 const PHILEMON = `${SMALL_NT_ROOT}/58-PHM.usfm`;
 

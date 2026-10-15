@@ -20,6 +20,10 @@
  * read would re-run on.
  */
 
+import type { Book, BookId } from "@sefer/text/book";
+import { addressCode, chaptersAddress, type Address } from "@sefer/text/location/address";
+import { addressAt, resolve } from "@sefer/text/location/locate";
+import type { SourceStamp } from "@sefer/text/source";
 import type { UseNavigateResult } from "@tanstack/solid-router";
 import { Effect, Fiber, Option, Result, Stream } from "effect";
 import {
@@ -37,7 +41,6 @@ import {
 } from "solid-js";
 
 import { ProjectAnalysis, type BookSummary } from "#core/analysis/projectAnalysis";
-import type { Book, BookId } from "#core/book/book";
 import type { Finding } from "#core/findings/finding";
 import { navigateTarget } from "#core/findings/findings";
 import type { Inventory } from "#core/findings/inventory";
@@ -45,8 +48,6 @@ import * as Fixes from "#core/fixes/fixes";
 import { tocViewOf } from "#core/galley";
 import { Repositories } from "#core/git/repository";
 import type { SettingKey } from "#core/host/settings";
-import { addressCode, chaptersAddress, type Address } from "#core/location/address";
-import { addressAt, resolve } from "#core/location/locate";
 import { Observability } from "#core/observability";
 import { openProject as openProjectEffect, type Project } from "#core/project/project";
 import { mintSlug } from "#core/project/slug";
@@ -54,7 +55,6 @@ import { DEFAULT_JOURNAL_POLICY, type Restorable } from "#core/recovery/recovery
 import { pendingOnOpen } from "#core/recovery/reopen";
 import { highestVersions } from "#core/resources/relationships";
 import { SaveCoordinator } from "#core/save/saveCoordinator";
-import type { SourceStamp } from "#core/source/source";
 import { anchorFrom, type ChapterRow, type EditorBook, type ProjectionName } from "#editor/index";
 import { detectHost } from "#platform/host";
 

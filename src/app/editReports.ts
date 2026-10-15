@@ -11,7 +11,7 @@
  * nobody.
  */
 
-import type { BookId } from "#core/book/book";
+import type { BookId } from "@sefer/text/book";
 
 const held = new Map<BookId, number>();
 

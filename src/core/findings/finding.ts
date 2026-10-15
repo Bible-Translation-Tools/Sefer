@@ -25,7 +25,9 @@
 // `message` is panel text: it quotes the document. It must never reach
 // Observability, which records counts and codes only.
 
-import type { BookId } from "../book/book";
+import type { BookId } from "@sefer/text/book";
+import type { SourceStamp } from "@sefer/text/source";
+
 import {
   booksByPattern,
   diagnosticMessage,
@@ -44,7 +46,6 @@ import {
   type MaskMap,
   type Pattern,
 } from "../galley";
-import type { SourceStamp } from "../source/source";
 import { comparisonOf } from "./compare";
 import { describeSous, render } from "./messages";
 

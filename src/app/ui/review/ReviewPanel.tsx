@@ -42,6 +42,7 @@
  * catches this device up with another of theirs and sends back to the copy.
  */
 
+import { trustedBy, type BookId } from "@sefer/text/book";
 import { useNavigate, useSearch } from "@tanstack/solid-router";
 import { Effect, Option, Result } from "effect";
 import Check from "lucide-solid/icons/check";
@@ -54,7 +55,6 @@ import Scale from "lucide-solid/icons/scale";
 import TriangleAlert from "lucide-solid/icons/triangle-alert";
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 
-import { trustedBy, type BookId } from "#core/book/book";
 import {
   bookComparison,
   compareBooks,

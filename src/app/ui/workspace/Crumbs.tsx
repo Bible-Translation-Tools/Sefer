@@ -10,13 +10,12 @@
  * and steps to the first change in what was picked.
  */
 
+import { fold } from "@sefer/text/location/names";
 import type { JSX } from "@solidjs/web";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronUp from "lucide-solid/icons/chevron-up";
 import ListTree from "lucide-solid/icons/list-tree";
 import { Show, createMemo, createSignal } from "solid-js";
-
-import { fold } from "#core/location/names";
 
 import { t } from "../../i18n";
 import { FilterList, IconButton, Popover } from "../primitives";

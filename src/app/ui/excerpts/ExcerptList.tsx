@@ -13,10 +13,10 @@
  * of scripture, and the one-card-at-a-time edit session.
  */
 
+import type { BookId } from "@sefer/text/book";
 import type { JSX } from "@solidjs/web";
 import { createMemo, createSignal, onCleanup, untrack } from "solid-js";
 
-import type { BookId } from "#core/book/book";
 import {
   withoutHits,
   type BookExcerpts,

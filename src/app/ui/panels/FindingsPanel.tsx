@@ -43,6 +43,7 @@
  * on the card holding the current match.
  */
 
+import type { BookId } from "@sefer/text/book";
 import { useNavigate, useSearch } from "@tanstack/solid-router";
 import { Option, Result } from "effect";
 import ChevronDown from "lucide-solid/icons/chevron-down";
@@ -53,7 +54,6 @@ import Wrench from "lucide-solid/icons/wrench";
 import X from "lucide-solid/icons/x";
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 
-import type { BookId } from "#core/book/book";
 import type { Excerpt } from "#core/excerpts/excerpts";
 import * as Filter from "#core/findings/filter";
 import type { Finding } from "#core/findings/finding";

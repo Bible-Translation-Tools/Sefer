@@ -17,10 +17,10 @@
 // project file and nothing here replays: `Recovery.restore` still owns that,
 // through the Book's funnel, so an undo history exists for what comes back.
 
+import { decode } from "@sefer/text/source";
 import { Effect, FileSystem, Option, Result } from "effect";
 
 import { Observability } from "../observability";
-import { decode } from "../source/source";
 import type { RecoveryService, Restorable } from "./recovery";
 
 /**

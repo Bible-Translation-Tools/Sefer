@@ -28,6 +28,6 @@
       "#platform/*": ["./src/platform/*"]
     }
   },
-  "include": ["src", "tools", "*.ts"],
+  "include": ["src", "packages/*/src", "tools", "*.ts"],
   "exclude": ["node_modules", "dist", "src-tauri"]
 }

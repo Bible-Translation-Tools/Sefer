@@ -14,9 +14,9 @@
  * `./policy.ts` and `./plan.ts` say what follows.
  */
 
+import { identifyBook } from "@sefer/text/book";
 import { Effect, FileSystem, Result } from "effect";
 
-import { identifyBook } from "../book/book";
 import { Galley, toLf } from "../galley";
 import { Git, type ChangedPath, type Commit, type Repo } from "../git/git";
 import type { Project } from "../project/project";

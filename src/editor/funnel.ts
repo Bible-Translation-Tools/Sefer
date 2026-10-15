@@ -26,9 +26,8 @@
  */
 
 import { Annotation, type ChangeSet, type EditorState, type Text } from "@codemirror/state";
-
-import type { Origin, Receipt, Refusal } from "#core/book/book";
-import type { Change } from "#core/source/source";
+import type { Origin, Receipt, Refusal } from "@sefer/text/book";
+import type { Change } from "@sefer/text/source";
 
 import type { DocStructure } from "./core/docStructure";
 import type { Tracer } from "./core/instrument";

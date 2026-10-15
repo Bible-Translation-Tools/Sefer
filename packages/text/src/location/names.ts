@@ -16,7 +16,7 @@
  * Philemon and no Philippians goes to the book that is there.
  */
 
-import type { BookId } from "../book/book";
+import type { BookId } from "../book";
 import { CANON } from "./canon";
 
 export interface NameCatalogue {

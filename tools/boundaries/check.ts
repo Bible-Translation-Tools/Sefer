@@ -355,6 +355,15 @@ const main = (): void => {
     // the same sentence. Solid is on the forbidden list, which is the whole
     // point: the overlay is a DOM tool, and the day it imports `solid-js` is
     // the day it stops being droppable into anything that is not this app.
+    // The workspace packages other apps install. `@sefer/text` gets core's
+    // rule set and one more: it is BELOW the editor, so it may not import it.
+    ...checkCoreBoundary({
+      coreDir: path.join(root, "packages", "text", "src"),
+      label: "@sefer/text",
+      paths,
+      pathsBase: base,
+      forbiddenPackages: [...DEFAULT_FORBIDDEN_PACKAGES, "@sefer/editor", "@sefer/editor/*"],
+    }),
     ...checkCoreBoundary({
       coreDir: path.join(dev, "annotate"),
       label: "the annotator",
@@ -364,7 +373,7 @@ const main = (): void => {
   ];
 
   if (violations.length === 0) {
-    process.stdout.write("boundaries: src/core is clean, src/dev is sealed\n");
+    process.stdout.write("boundaries: src/core and the packages are clean, src/dev is sealed\n");
     return;
   }
 

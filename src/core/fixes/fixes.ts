@@ -25,9 +25,10 @@
 // but it still goes through the ONE write path — Undo, Save, Recovery and the
 // findings panel all learn about it because they subscribe to the Book.
 
+import { Refusal, trustedBy, type Book, type Receipt } from "@sefer/text/book";
+import type { Change, SourceStamp } from "@sefer/text/source";
 import { Data, Result } from "effect";
 
-import { Refusal, trustedBy, type Book, type Receipt } from "../book/book";
 import type { Finding } from "../findings/finding";
 import {
   describesExactly,
@@ -38,7 +39,6 @@ import {
   type GalleyService,
   type OverlayOptions,
 } from "../galley";
-import type { Change, SourceStamp } from "../source/source";
 
 /**
  * One offered repair, resolved into Sefer's own vocabulary and stamped with

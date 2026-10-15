@@ -12,11 +12,11 @@
  * together, and a note covering more than the verse says which verses.
  */
 
+import { addressCode, type Address } from "@sefer/text/location/address";
 import { Effect } from "effect";
 import NotebookText from "lucide-solid/icons/notebook-text";
 import { For, Show } from "solid-js";
 
-import { addressCode, type Address } from "#core/location/address";
 import type { ResourceHandle } from "#core/resources/kinds/handle";
 import type { Note } from "#core/resources/kinds/tn/note";
 import type { Resource } from "#core/resources/library";

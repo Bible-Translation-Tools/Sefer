@@ -9,7 +9,8 @@
 // filtering is presentation policy and hiding a category does not alter
 // analysis truth.
 
-import type { BookId } from "../book/book";
+import type { BookId } from "@sefer/text/book";
+
 import type { Finding } from "./finding";
 
 export type { Finding } from "./finding";

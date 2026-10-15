@@ -25,6 +25,7 @@
  * beyond the functions it is handed.
  */
 
+import type { BookId } from "@sefer/text/book";
 import type { JSX } from "@solidjs/web";
 import {
   createEffect,
@@ -35,7 +36,6 @@ import {
   type Accessor,
 } from "solid-js";
 
-import type { BookId } from "#core/book/book";
 import type { EditorBook } from "#editor/index";
 
 import { t } from "../../i18n";

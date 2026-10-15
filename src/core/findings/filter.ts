@@ -19,7 +19,8 @@
 // Solid: a click is a click, and a filter that could suspend would be a filter
 // the panel has to await on every keystroke.
 
-import type { BookId } from "../book/book";
+import type { BookId } from "@sefer/text/book";
+
 import type { Finding, Producer, Severity } from "./finding";
 
 /**

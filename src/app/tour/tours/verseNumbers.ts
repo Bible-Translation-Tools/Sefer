@@ -1,12 +1,12 @@
+import { trustedBy, type BookId } from "@sefer/text/book";
+import { addressCode, addressLabel } from "@sefer/text/location/address";
+import { bookName } from "@sefer/text/location/canon";
+import { addressAt } from "@sefer/text/location/locate";
 import { Option, Result } from "effect";
 
-import { trustedBy, type BookId } from "#core/book/book";
 import type { Finding } from "#core/findings/finding";
 import * as Fixes from "#core/fixes/fixes";
 import { tocViewOf } from "#core/galley";
-import { addressCode, addressLabel } from "#core/location/address";
-import { bookName } from "#core/location/canon";
-import { addressAt } from "#core/location/locate";
 
 import { t } from "../../i18n";
 import { codeLabel } from "../../ui/panels/findingLabels";

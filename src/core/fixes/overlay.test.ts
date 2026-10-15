@@ -10,14 +10,14 @@
  * untouched.
  */
 
+import { makeBook, type Book } from "@sefer/text/book";
+import { decode } from "@sefer/text/source";
 import { Effect, Result } from "effect";
 import { describe, expect, it } from "vitest";
 
 import { NodeGalleyLive } from "#platform/node/galley";
 
-import { makeBook, type Book } from "../book/book";
 import { Galley, type GalleyService } from "../galley";
-import { decode } from "../source/source";
 import { applyOverlay, overlayBook } from "./fixes";
 
 /**

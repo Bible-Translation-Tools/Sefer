@@ -19,10 +19,10 @@
  *     edit        typed, absent            absent                     absent: alignment is a write to the project
  */
 
+import type { BookId } from "@sefer/text/book";
+import type { Address } from "@sefer/text/location/address";
 import { Data, type Effect } from "effect";
 
-import type { BookId } from "../../book/book";
-import type { Address } from "../../location/address";
 import type { ContentKind } from "./content";
 import type { Note } from "./tn/note";
 

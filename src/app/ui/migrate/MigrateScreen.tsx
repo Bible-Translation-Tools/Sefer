@@ -21,6 +21,7 @@
  * so the health a person chooses by is there when they look.
  */
 
+import { CANON } from "@sefer/text/location/canon";
 import { useNavigate } from "@tanstack/solid-router";
 import { Option } from "effect";
 import FileArchive from "lucide-solid/icons/file-archive";
@@ -28,7 +29,6 @@ import FolderOpen from "lucide-solid/icons/folder-open";
 import Link from "lucide-solid/icons/link";
 import { For, Show, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 
-import { CANON } from "#core/location/canon";
 import { prefillForm } from "#core/migrate/assemble";
 import {
   candidateLabel,

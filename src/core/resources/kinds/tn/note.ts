@@ -6,13 +6,14 @@
  * from.
  */
 
-import type { BookId } from "../../../book/book";
+import type { BookId } from "@sefer/text/book";
 import {
   chaptersAddress,
   introAddress,
   versesAddress,
   type Address,
-} from "../../../location/address";
+} from "@sefer/text/location/address";
+
 import type { PlaceContext } from "../handle";
 import type { NoteRecord, Span } from "./rcHelpMarkdown";
 

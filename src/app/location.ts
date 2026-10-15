@@ -18,14 +18,14 @@
  * shell's rule is that Effect is not a reason to make a service of a noun.
  */
 
+import type { BookId } from "@sefer/text/book";
+import { addressLabel, type Address } from "@sefer/text/location/address";
+import { citationWords, parseCitation, type Citation } from "@sefer/text/location/citation";
+import { addressAt } from "@sefer/text/location/locate";
+import { booksMatching, nameCatalogue, type NameCatalogue } from "@sefer/text/location/names";
 import { createMemo, type Accessor } from "solid-js";
 
-import type { BookId } from "#core/book/book";
 import { stampMatches, tocViewOf, type Analysis, type EngineStamp } from "#core/galley";
-import { addressLabel, type Address } from "#core/location/address";
-import { citationWords, parseCitation, type Citation } from "#core/location/citation";
-import { addressAt } from "#core/location/locate";
-import { booksMatching, nameCatalogue, type NameCatalogue } from "#core/location/names";
 import type { Project } from "#core/project/project";
 
 import { t } from "./i18n";

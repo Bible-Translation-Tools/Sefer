@@ -12,10 +12,9 @@
 // and changed under us, so a project command's Undo is offered only while
 // every affected book still stands exactly where the operation left it.
 
+import { trustedBy, type Book, type BookId, type Receipt } from "@sefer/text/book";
+import type { Change } from "@sefer/text/source";
 import { Result } from "effect";
-
-import { trustedBy, type Book, type BookId, type Receipt } from "../book/book";
-import type { Change } from "../source/source";
 
 /** What one cross-book operation did. `books` lists only the books it changed. */
 export interface CrossBookEdit {

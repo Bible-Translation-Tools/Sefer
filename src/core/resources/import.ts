@@ -13,11 +13,11 @@
 // fixture. It records no content hash: identity of text belongs to the engine's
 // xxh3 at the Galley boundary, never to core (see documentation/architecture/source.md).
 
+import { decode } from "@sefer/text/source";
 import { Data, Effect, FileSystem, Result, type PlatformError } from "effect";
 
 import { joinPath, lastSegment, parentPath } from "../fileSystem/path";
 import { appendArrival } from "../project/provenance";
-import { decode } from "../source/source";
 import { decodeBurritoMetadata } from "./burrito";
 import { readResourceContainerManifest } from "./projectMetadata";
 import { decodeResourceContainerManifest } from "./resourceContainer";

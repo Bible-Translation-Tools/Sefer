@@ -24,13 +24,13 @@
  *    decides every unit.
  */
 
+import { decode } from "@sefer/text/source";
 import { Effect, FileSystem, Option, Result } from "effect";
 
 import type { Addr, GalleyService, MergeSide } from "../galley";
 import { Git } from "../git/git";
 import { Remote } from "../remote/remote";
 import { normaliseRepoUrl } from "../resources/relationships";
-import { decode } from "../source/source";
 import { readUpstreams, UPSTREAMS_FILE, upstreamsText, type Upstream } from "./upstreams";
 import {
   isWriterTextPath,

@@ -45,7 +45,7 @@
  * Pure: text and a catalogue in, a value out. Pinned by `citation.test.ts`.
  */
 
-import type { BookId } from "../book/book";
+import type { BookId } from "../book";
 import {
   chaptersAddress,
   comparePoints,

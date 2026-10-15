@@ -27,11 +27,11 @@
 // `recordedSource` is frozen by construction: the map is read once per HEAD by
 // `src/app/ui/panels/recorded.ts` and rebuilt when a commit moves it.
 
+import type { Book, BookId } from "@sefer/text/book";
+import type { SourceStamp } from "@sefer/text/source";
 import { Effect, Option } from "effect";
 
-import type { Book, BookId } from "../book/book";
 import type { Project } from "../project/project";
-import type { SourceStamp } from "../source/source";
 import { failCompare, type CompareSource } from "./source";
 
 /** Just enough of a `Baseline` to be one side: what Save last wrote. */

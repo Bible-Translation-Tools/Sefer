@@ -39,9 +39,10 @@
 // the markup, and that a literal search can deliberately run over the markup
 // instead. Those two are unreachable through `findAll` at any price.
 
-import type { BookId } from "../book/book";
+import type { BookId } from "@sefer/text/book";
+import type { SourceStamp } from "@sefer/text/source";
+
 import type { GalleyService, MaskMap } from "../galley/galley";
-import type { SourceStamp } from "../source/source";
 
 /** A half-open range, in UTF-16 units, into a book's canonical text. */
 export interface SourceRange {

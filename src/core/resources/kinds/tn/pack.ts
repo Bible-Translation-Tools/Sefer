@@ -20,11 +20,11 @@
  * the tree at import (`packHelp`) and the tree was never written.
  */
 
+import { decode } from "@sefer/text/source";
 import { Effect, FileSystem, Result, Schema } from "effect";
 
 import { writeFileStringAtomic } from "../../../fileSystem/atomic";
 import { joinPath, normalisePath } from "../../../fileSystem/path";
-import { decode } from "../../../source/source";
 import { readResourceContainerManifest } from "../../projectMetadata";
 import { Unavailable } from "../handle";
 import { filesBelow, treeInFolder, type PackProgress, type UpstreamTree } from "../tree";

@@ -1,3 +1,4 @@
+import type { BookId } from "@sefer/text/book";
 /**
  * The two sync settings that reach the network, as what they do.
  *
@@ -21,7 +22,6 @@
  */
 import { Effect, Option } from "effect";
 
-import type { BookId } from "#core/book/book";
 import { Git, type Author } from "#core/git/git";
 import type { Verdict } from "#core/observability";
 import type { Project } from "#core/project/project";

@@ -39,9 +39,9 @@
  * host, so moving it is a cut and paste.
  */
 
+import type { BookId } from "@sefer/text/book";
 import { createMemo, type Accessor } from "solid-js";
 
-import type { BookId } from "#core/book/book";
 import type { BookExcerpts, Excerpt, Occurrence, OutlineRow } from "#core/excerpts/excerpts";
 import type { Finding, Severity } from "#core/findings/finding";
 

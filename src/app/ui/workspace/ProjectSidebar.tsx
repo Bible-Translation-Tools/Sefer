@@ -14,6 +14,7 @@
  * until somebody asks for one book's chapters.
  */
 
+import { chaptersAddress, introAddress } from "@sefer/text/location/address";
 import { useNavigate, useRouterState } from "@tanstack/solid-router";
 import { Option } from "effect";
 import ArrowRight from "lucide-solid/icons/arrow-right";
@@ -26,7 +27,6 @@ import SearchIcon from "lucide-solid/icons/search";
 import { For, Show, createMemo, createSignal } from "solid-js";
 
 import { tocViewOf } from "#core/galley";
-import { chaptersAddress, introAddress } from "#core/location/address";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";

@@ -5,6 +5,9 @@
 # wrangler can resolve a worker's dependencies when it is deployed with
 # `--config` from the repository root.
 packages:
+  # The framework-free libraries the app is built from and other apps install:
+  # the scripture text model and the editor (planning item "embeddable editor").
+  - "packages/*"
   - "workers/*"
   # The planning site (Astro, MDX). Its own package so its dependencies stay
   # out of the app; see planning/README.md.

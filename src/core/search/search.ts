@@ -41,8 +41,6 @@
 // Both produce the same `Hit`, so `spansMarkup` and `planReplace` are written
 // once.
 
-import { Data, Result } from "effect";
-
 import {
   identifyBook,
   Refusal,
@@ -50,14 +48,16 @@ import {
   type Book,
   type BookId,
   type Receipt,
-} from "../book/book";
-import { describesExactly, type Analysis } from "../galley/analysis";
+} from "@sefer/text/book";
+import { describesExactly, type Analysis } from "@sefer/text/engine/analysis";
+import { tocViewOf } from "@sefer/text/engine/location";
+import type { Address } from "@sefer/text/location/address";
+import { addressAt } from "@sefer/text/location/locate";
+import type { Change, SourceStamp } from "@sefer/text/source";
+import { Data, Result } from "effect";
+
 import type { EngineHit } from "../galley/galley";
-import { tocViewOf } from "../galley/location";
-import type { Address } from "../location/address";
-import { addressAt } from "../location/locate";
 import type { HaystackDocument } from "../resources/kinds/handle";
-import type { Change, SourceStamp } from "../source/source";
 import type { Reading, Readings } from "./reading";
 
 export interface Query {
