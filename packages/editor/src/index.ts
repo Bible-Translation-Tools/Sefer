@@ -11,9 +11,6 @@
  * diagnostics, instruments, and the test harness.
  */
 
-// The assembled editor.
-export { commandsLayer, viewLayer } from "./core/compose";
-
 // Structured entry: the named insert gestures, and the front matter card.
 export { type EditorAction } from "./core/actions";
 export { frontMatterCard } from "./core/frontmatter";
@@ -24,7 +21,8 @@ export { anchorFrom } from "./core/clip";
 export { type ChapterRow } from "./core/docStructure";
 
 // The editor-backed Book and the port other surfaces submit through.
-export { editorBook, type EditorBook } from "./book";
+export { type EditorBook } from "./book";
+export { seatBook } from "./seat";
 export { type Funnel } from "./funnel";
 
 // A card's editor over a stretch of the book, and the read-only reader an
@@ -79,11 +77,10 @@ export { pairingHere, showBlockPairs, type PairedRange } from "./recipes/pairing
 export { flash, flashing } from "./recipes/flash";
 
 // Diagnostics, sink 1.
-export { showCorpusFindings, usfmLinter, type CorpusFinding } from "./recipes/lint";
-export { lintHoverGrace } from "./recipes/lintHover";
+export { showCorpusFindings, type CorpusFinding } from "./recipes/lint";
 export { watchLocation } from "./recipes/whereAmI";
 export { createAlignedGroup, type AlignedGroup } from "./recipes/align";
-export { noteBookIs, noteEditing } from "./recipes/noteEditor";
+export { noteBookIs } from "./recipes/noteEditor";
 
 // Clipboard and the attribute popover.
 

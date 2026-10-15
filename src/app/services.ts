@@ -18,17 +18,7 @@
  * Effect-shaped operations (open, save, commit) go through `run`.
  */
 
-import { lintGutter } from "@codemirror/lint";
-import {
-  commandsLayer,
-  editorBook,
-  gestureTrace,
-  lintHoverGrace,
-  noteEditing,
-  usfmLinter,
-  viewLayer,
-  type EditorBook,
-} from "@sefer/editor";
+import { gestureTrace, seatBook, type EditorBook } from "@sefer/editor";
 import type { BookId } from "@sefer/text/book";
 import { Effect, FileSystem, Layer, ManagedRuntime, Option, Result, Scope } from "effect";
 
@@ -646,29 +636,15 @@ export const composeServices = async (
   );
 
   /**
-   * The seat: how a plain Book becomes the editor-backed one. A fresh
-   * `galley.memoize()` per book keeps one book's memoised parse out of
-   * another's.
+   * The seat: how a plain Book becomes the editor-backed one (`seatBook`, which
+   * brings the whole editor). A fresh `galley.memoize()` per book keeps one
+   * book's memoised parse out of another's.
    */
-  // The inline linter needs one @codemirror/state instance shared with
-  // @codemirror/lint; vite.config.ts dedupes the package for that reason.
-  const mountable = [
-    commandsLayer,
-    viewLayer(),
-    usfmLinter(),
-    lintHoverGrace(),
-    lintGutter(),
-    // Footnote callers that follow and note bodies that can be typed in. A DOM
-    // surface, so it belongs with the mountable half and not in the seat.
-    noteEditing(),
-  ];
-
   const seats = new Map<BookId, EditorBook>();
   const seat: Seat = (plain) => {
-    const seated = editorBook(plain, {
+    const seated = seatBook(plain, {
       analyze: galley.memoize(plain.id),
       observability: composition.observability,
-      extensions: mountable,
     });
     seats.set(plain.id, seated);
     return seated;
