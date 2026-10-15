@@ -1,7 +1,7 @@
 # Roadmap
 
 From the sefer-next-features doc's status of 2026-10-13, and the items as they stand
-(2026-10-14). Steps run in rough order within a phase.
+(updated 2026-10-15). Steps run in rough order within a phase.
 
 Sefer aims to be the organisation's best tool for reading and writing Bible-domain text, starting
 with scripture revision. Not a study tool like Logos or Accordance; publishing stays separate.
@@ -15,15 +15,23 @@ with scripture revision. Not a study tool like Logos or Accordance; publishing s
 
 <Question id="order">Is this the order?</Question>
 
-<Phase id="now" title="Now" goal="The Oct 12–13 stack is on master and the planning site is the record">
-  <Step item="2026-10-14-land-the-oct-12-13-stack">Fast-forward master, close PR #1, prune worktrees.</Step>
+<Phase id="shipped" title="Shipped, 2026-10-15" goal="On master and deployed to dev (fea64ef → 082c09c, then f10cfb5)">
+  <Step item="2026-10-14-land-the-oct-12-13-stack">The Oct 12–13 stack and the planning migration are on master.</Step>
+  <Step item="2026-10-14-embeddable-editor">Steps 1–3: `@sefer/text` and `@sefer/editor` as framework-free packages; no app code imports CodeMirror; an adversarial review's fixes; installable from git outside Sefer (checked with a hub-shaped app).</Step>
+  <Step item="2026-10-06-resource-kinds">Translation Notes leave the projects page; Reference material lists them from the Language API, with Remove.</Step>
+  <Step item="2026-09-14-scripture-kitchen-asks">scripture-kitchen v0.1.10: the engine fills `{aux}`, labels keyed by its unions.</Step>
+  <Step item="2026-10-14-editor-sharp-edges">Backspace in an open footnote deletes one character, not the note (f10cfb5).</Step>
+</Phase>
+
+<Phase id="now" title="Now" goal="What shipped holds up, and the hub is on the package">
+  <Gate>Test-drive on dev: the reference pane following the editor, footnote editing, and the corresponding block on Bisa beside Cebuano.</Gate>
+  <Step item="2026-10-14-land-the-oct-12-13-stack">Close PR #1, prune the old worktrees and branches.</Step>
+  <Step item="2026-10-14-embeddable-editor">Step 5: the hub swaps its fork for the package (installs by sha; handoff written).</Step>
   <Step item="2026-10-06-project-state-and-suppressions">Will still thinking: one mechanism, per device or committed.</Step>
-  <Gate>Test-drive the merged stack.</Gate>
 </Phase>
 
 <Phase id="next" title="Next" goal="Sharpen what is built">
-  <Step item="2026-10-14-embeddable-editor">Cut the editor into a TS-only workspace package first: the boundary the sharp-edge tests are written against.</Step>
-  <Step item="2026-10-14-editor-sharp-edges" with="tests">Copy, paste and Enter tests, a playground pass, the formatter, the Enter decision.</Step>
+  <Step item="2026-10-14-editor-sharp-edges" with="tests">Step 4 of the package: the Enter decision, then copy, paste and Enter tests on the package's harness, a playground pass, the formatter.</Step>
   <Together>
     <Step item="2026-10-14-a-collaboration-tutorial" />
     <Step item="2026-10-13-tour-depth">"See more" modals first.</Step>

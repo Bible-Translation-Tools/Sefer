@@ -4,7 +4,7 @@ title: "Editor sharp edges"
 kind: plan
 status: planned
 created: 2026-10-14
-updated: 2026-10-14
+updated: 2026-10-15
 sha: 50aa9cd
 priority: 1
 tags: [editor]
@@ -18,6 +18,39 @@ code is the gnarliest in the app (binary searches, high cyclomatic complexity).
 <Followup id="headline-rule">State the headline rule at the top of `documentation/architecture/editor.md`: **a CodeMirror line is not a USFM line.** Newlines are drawn by context (a joined newline is a space), so never split on doc lines or use `doc.line` as a unit. (Added Oct 8; check it is committed.)</Followup>
 
 <Followup id="cursor">Refine cursor mechanics on the playground with the arrow keys. Cursor code is a first target for the [fallow pass](/items/2026-10-14-fallow-readability-pass).</Followup>
+
+<Followup id="footnote-backspace" done>
+
+Fixed 2026-10-15 (f10cfb5). Will reported it:
+
+> It's the backsapce key that is deleting the whole note
+
+An open note was one point-painted owned set over everything visible in it.
+So the Book's `deleteMarkersWholeOrNotAtAll`, judging the note editor's edit
+under that editor's own terms, widened any deletion in the body to the whole
+note. An expanded note's BODY parts are now `editable` spans when `note.body`
+is directly mutable. That happens only under the note editor's policy.
+
+This was not a regression from the package move: the same repro deletes the
+note on fea64ef.
+
+</Followup>
+
+<Followup id="pairing-bisa">
+
+"Show what a block corresponds to" did not mark the reference's block for Will
+on Bisa Mark beside Cebuano Marcos (2026-10-15). The editor's own mark was
+there.
+
+It works on master with bsb Genesis beside x-en-ulb: both sides are marked and
+`data-pair` reads `GEN 1:2`. Read `data-pair` on the reference pane's root in
+the failing case. Its value names the cause:
+
+- `unpaired:<sid>`: the reference has no verse with that id.
+- `no-source`: the reference text never reached the engine.
+- `no-caret`: the editor is not reporting the caret.
+
+</Followup>
 
 <Followup id="tests">Put tests back around copy, paste and Enter.</Followup>
 
