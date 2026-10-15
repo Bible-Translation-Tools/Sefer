@@ -25,7 +25,9 @@ export {
   mountBookEditor,
   type BookEditorMount,
   type BookEditorOptions,
+  type DrawnDiagnostic,
   type RememberedPlace,
+  type ViewportSource,
 } from "./bookEditor";
 export {
   mountCard,

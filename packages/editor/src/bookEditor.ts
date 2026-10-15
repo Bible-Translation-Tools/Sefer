@@ -20,8 +20,12 @@
  *    presentation and a clip is a view choice, and neither is an edit.
  */
 
-import { Compartment, StateEffect, type EditorState } from "@codemirror/state";
+import { forEachDiagnostic, setDiagnosticsEffect } from "@codemirror/lint";
+import { Compartment, EditorState, StateEffect } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
+import { tocViewOf } from "@sefer/text/engine/location";
+import type { Address } from "@sefer/text/location/address";
+import { addressAt, resolve } from "@sefer/text/location/locate";
 
 import { seatedOf, type EditorBook } from "./book";
 import { structureAt } from "./core/editorState";
@@ -36,6 +40,7 @@ import { flash, flashing } from "./recipes/flash";
 import { showCorpusFindings, type CorpusFinding } from "./recipes/lint";
 import { noteBookIs } from "./recipes/noteEditor";
 import { pairingHere, showBlockPairs } from "./recipes/pairing";
+import { watchLocation, type Where } from "./recipes/whereAmI";
 import { modeView, pickChapter, type ProjectionName } from "./views";
 
 /**
@@ -61,7 +66,25 @@ export interface BookEditorOptions {
   /** The empty-block ghost and the block pairing, as the reader's settings start. */
   readonly emptyBlocks?: boolean;
   readonly pairBlocks?: boolean;
+  /** A viewer: nothing can be typed, and everything else — lint, reveal, where — still works. */
+  readonly readOnly?: boolean;
 }
+
+/** One mark the linter draws: the engine's and the host's (`setHostDiagnostics`) as one set. */
+export interface DrawnDiagnostic {
+  readonly from: number;
+  readonly to: number;
+  readonly severity: "hint" | "info" | "warning" | "error";
+  readonly message: string;
+  readonly source?: string;
+}
+
+/**
+ * Why the viewport moved: the reader scrolled, or the editor was told to go
+ * somewhere (`reveal`, `jump`, `resume`, a mode flip). A host that pins a
+ * chapter after a jump keeps the pin until the reader scrolls.
+ */
+export type ViewportSource = "user" | "reveal";
 
 export interface BookEditorMount extends EditorHandle {
   /**
@@ -76,6 +99,24 @@ export interface BookEditorMount extends EditorHandle {
   setPairBlocks(on: boolean): void;
   /** The host's own findings for this book, drawn with the engine's as one set. */
   setHostDiagnostics(findings: readonly CorpusFinding[]): void;
+  /** What the linter draws now. */
+  diagnostics(): readonly DrawnDiagnostic[];
+  /** Called when the drawn set changes, not on every lint pass. Returns the detach. */
+  onDiagnostics(listener: (drawn: readonly DrawnDiagnostic[]) => void): () => void;
+  setReadOnly(readOnly: boolean): void;
+  /** The scripture address an offset is in (a verse, a heading's unit, the intro). */
+  addressAt(offset: number): Address | undefined;
+  /** Where the caret is, as an address. */
+  where(): Address | undefined;
+  /** Called with the caret's address whenever the caret moves. Returns the detach. */
+  onWhere(listener: (where: Address | undefined) => void): () => void;
+  /**
+   * Goes to an address: caret and scroll, as `jump` does. Answers false when
+   * the book has no such place (a verse it lacks), and moves nothing then.
+   */
+  revealAddress(address: Address, at?: "top" | "center"): boolean;
+  /** `onViewport`, with why it moved. Returns the detach. */
+  onViewportSource(report: (where: Where | null, source: ViewportSource) => void): () => void;
   /**
    * Puts the reader back at a remembered place, caret and scroll. Answers the
    * offset it landed on, or undefined when the place no longer resolves (or
@@ -100,10 +141,52 @@ export interface BookEditorMount extends EditorHandle {
  * matter cards — and a compartment that is not in the config is a
  * reconfigure that does nothing.
  */
-const mountedConfig = new WeakMap<EditorBook, Compartment>();
+const mountedConfig = new WeakMap<
+  EditorBook,
+  { readonly projection: Compartment; readonly readOnly: Compartment }
+>();
 
 /** Every caret listener of a book, so the once-per-book listener reaches this view's. */
 const caretListeners = new WeakMap<EditorBook, Set<(head: number) => void>>();
+
+/** Every listener for a new drawn set, by book, as the caret's are. */
+const drawnListeners = new WeakMap<EditorBook, Set<() => void>>();
+
+const listenersOf = <T>(map: WeakMap<EditorBook, Set<T>>, book: EditorBook): Set<T> => {
+  let held = map.get(book);
+  if (held === undefined) {
+    held = new Set();
+    map.set(book, held);
+  }
+  return held;
+};
+
+const drawnOf = (state: EditorState): DrawnDiagnostic[] => {
+  const out: DrawnDiagnostic[] = [];
+  forEachDiagnostic(state, (diagnostic, from, to) =>
+    out.push({
+      from,
+      to,
+      severity: diagnostic.severity,
+      message: diagnostic.message,
+      ...(diagnostic.source === undefined ? {} : { source: diagnostic.source }),
+    }),
+  );
+  return out;
+};
+
+const sameDrawn = (a: readonly DrawnDiagnostic[], b: readonly DrawnDiagnostic[]): boolean =>
+  a.length === b.length &&
+  a.every((one, at) => {
+    const other = b[at];
+    return (
+      other !== undefined &&
+      one.from === other.from &&
+      one.to === other.to &&
+      one.severity === other.severity &&
+      one.message === other.message
+    );
+  });
 
 /**
  * The offset a remembered place names now, or `undefined`.
@@ -214,22 +297,29 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
   // this is the one place that knows both the view and the Book.
   const unname = noteBookIs(created, book);
 
-  let listeners = caretListeners.get(book);
-  if (listeners === undefined) {
-    listeners = new Set();
-    caretListeners.set(book, listeners);
-  }
+  const heard = listenersOf(caretListeners, book);
   const onCaret = options.onCaret;
-  if (onCaret !== undefined) listeners.add(onCaret);
-  const heard = listeners;
+  if (onCaret !== undefined) heard.add(onCaret);
+  const drawnHeard = listenersOf(drawnListeners, book);
+  /** This mount's own listeners, so `destroy` takes back only what it added. */
+  const mine = new Set<() => void>();
 
-  let projection = mountedConfig.get(book);
-  if (projection === undefined) {
-    projection = new Compartment();
-    mountedConfig.set(book, projection);
+  let config = mountedConfig.get(book);
+  if (config === undefined) {
+    config = { projection: new Compartment(), readOnly: new Compartment() };
+    mountedConfig.set(book, config);
     created.dispatch({
       effects: StateEffect.appendConfig.of([
-        projection.of([]),
+        config.projection.of([]),
+        config.readOnly.of([]),
+        // A new drawn set, to whoever asked: only on a lint publication.
+        EditorView.updateListener.of((update) => {
+          if (drawnHeard.size === 0) return;
+          const linted = update.transactions.some((tr) =>
+            tr.effects.some((effect) => effect.is(setDiagnosticsEffect)),
+          );
+          if (linted) for (const listener of drawnHeard) listener();
+        }),
         meterFor(book).extension,
         flashing(),
         // Where the caret is, on `selectionSet` and not every update: a
@@ -250,7 +340,43 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
       ]),
     });
   }
-  const compartment = projection;
+  const { projection: compartment, readOnly: readOnlyCompartment } = config;
+  const readOnlyOf = (on: boolean) =>
+    on ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : [];
+  if (options.readOnly === true)
+    created.dispatch({ effects: readOnlyCompartment.reconfigure(readOnlyOf(true)) });
+
+  /** When the editor last moved the viewport itself, so a scroll can say why it happened. */
+  let movedAt = Number.NEGATIVE_INFINITY;
+  const moved = (): void => {
+    movedAt = performance.now();
+  };
+  /** A scroll this long after the editor moved is the editor's, landing. */
+  const LANDING_MS = 400;
+
+  const toc = () => {
+    const analysis = book.structure().analysis;
+    // A parse of an older text would name the wrong verse; none until it lands.
+    if (analysis === null || analysis.text.length !== created.state.doc.length) return undefined;
+    return tocViewOf(analysis);
+  };
+  const addressOf = (offset: number): Address | undefined => {
+    const view = toc();
+    return view === undefined ? undefined : addressAt(book.id, view, offset);
+  };
+  const jumpTo = (range: { readonly from: number; readonly to?: number }, at: "top" | "center") => {
+    const length = created.state.doc.length;
+    const from = Math.min(range.from, length);
+    const to = Math.min(range.to ?? from, length);
+    moved();
+    // The caret goes where the reader was sent, not only the scroll: every
+    // command that asks "which chapter" or "where am I" reads the caret.
+    created.dispatch({
+      selection: { anchor: from },
+      effects: EditorView.scrollIntoView(from, { y: at === "top" ? "start" : "center" }),
+    });
+    return flash(created, { from, to });
+  };
 
   /** The mode the view is configured for, so a flip can be told from a first set. */
   let showing: ProjectionName | undefined;
@@ -260,6 +386,7 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
       const flipped = showing !== undefined && showing !== mode;
       showing = mode;
       const anchor = flipped ? topOfViewport(created) : undefined;
+      if (flipped) moved();
       // The mode class rides the compartment as an editor attribute, not a
       // hand-added class: CodeMirror rewrites `view.dom`'s class attribute
       // from its facets whenever focus changes.
@@ -282,6 +409,7 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
     resume: (place: RememberedPlace) => {
       const at = placeOf(created.state, place);
       if (at === undefined || at <= 0) return undefined;
+      moved();
       // The CARET goes with the scroll: a fresh view puts it at offset 0, and
       // the first thing typed would land at the top of the book.
       created.dispatch({
@@ -297,20 +425,48 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
       });
       return at;
     },
-    jump: (range: { readonly from: number; readonly to?: number }, at: "top" | "center") => {
-      const length = created.state.doc.length;
-      const from = Math.min(range.from, length);
-      const to = Math.min(range.to ?? from, length);
-      // The caret goes where the reader was sent, not only the scroll: every
-      // command that asks "which chapter" or "where am I" reads the caret.
-      created.dispatch({
-        selection: { anchor: from },
-        effects: EditorView.scrollIntoView(from, { y: at === "top" ? "start" : "center" }),
-      });
-      return flash(created, { from, to });
+    jump: (range: { readonly from: number; readonly to?: number }, at: "top" | "center") =>
+      jumpTo(range, at),
+    diagnostics: () => drawnOf(created.state),
+    onDiagnostics: (listener: (drawn: readonly DrawnDiagnostic[]) => void) => {
+      let last = drawnOf(created.state);
+      const check = (): void => {
+        const next = drawnOf(created.state);
+        if (sameDrawn(next, last)) return;
+        last = next;
+        listener(next);
+      };
+      drawnHeard.add(check);
+      mine.add(check);
+      return () => {
+        drawnHeard.delete(check);
+        mine.delete(check);
+      };
     },
+    setReadOnly: (on: boolean) =>
+      created.dispatch({ effects: readOnlyCompartment.reconfigure(readOnlyOf(on)) }),
+    addressAt: (offset: number) => addressOf(offset),
+    where: () => addressOf(created.state.selection.main.head),
+    onWhere: (listener: (where: Address | undefined) => void) => {
+      const report = (head: number): void => listener(addressOf(head));
+      heard.add(report);
+      return () => heard.delete(report);
+    },
+    revealAddress: (address: Address, at: "top" | "center" = "center") => {
+      const view = toc();
+      if (view === undefined) return false;
+      const found = resolve(view, address);
+      if (found.kind !== "found") return false;
+      jumpTo({ from: found.from, to: found.to }, at);
+      return true;
+    },
+    onViewportSource: (report: (where: Where | null, source: ViewportSource) => void) =>
+      watchLocation(created, (where) =>
+        report(where, performance.now() - movedAt < LANDING_MS ? "reveal" : "user"),
+      ),
     destroy: () => {
       if (onCaret !== undefined) heard.delete(onCaret);
+      for (const check of mine) drawnHeard.delete(check);
       unname();
       unbind();
       created.destroy();
