@@ -370,13 +370,26 @@ export const blockAtOffset = (
  * mean a `\q1` here and a `\q2` there never pair, which is exactly the
  * correspondence the reader opened this to see.
  */
+/**
+ * The same verse id in two texts. The engine builds a sid from the book code
+ * as the text's own `\id` writes it, and real files write `\id mrk` as well as
+ * `\id MRK`; a project and its reference must still pair verse for verse
+ * (2026-10-15: a merged Bisa Mark, `mrk 1:1`, found nothing in Cebuano's
+ * `MRK 1:1`). The whole sid is compared without case; a verse part written
+ * `1a` in one text and `1A` in the other is the same verse anyway.
+ */
+const sameSid = (left: string, right: string): boolean =>
+  left === right || left.toUpperCase() === right.toUpperCase();
+
 export const equivalentBlock = (
   blocks: readonly SkeletonRow[],
   address: { readonly sid: string; readonly where: BlockWhere; readonly ordinal: number },
 ): SkeletonRow | undefined =>
   blocks.find(
     (row) =>
-      row.sid === address.sid && row.where === address.where && row.ordinal === address.ordinal,
+      sameSid(row.sid, address.sid) &&
+      row.where === address.where &&
+      row.ordinal === address.ordinal,
   );
 
 /**
@@ -412,4 +425,4 @@ export const verseAtOffset = (skeleton: Skeleton, offset: number): SkeletonVerse
 
 /** The verse of THIS skeleton with the same sid. The sid is the whole address. */
 export const equivalentVerse = (skeleton: Skeleton, sid: string): SkeletonVerse | undefined =>
-  skeleton.verses.find((row) => row.sid === sid);
+  skeleton.verses.find((row) => sameSid(row.sid, sid));
