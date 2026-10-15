@@ -1,9 +1,10 @@
 /**
- * The projects page: what is already on this device, the Translation Notes
- * here and to download (`NotesSection`), then what is available on WACS to
- * download.
+ * The projects page: what is already on this device, then what is available
+ * on WACS to download. Reference material (Translation Notes) is not listed
+ * here: it is chosen and downloaded in a book's reference column (Will,
+ * 2026-10-15).
  *
- * Three sections, one page. There is no separate find screen, and the
+ * Two sections, one page. There is no separate find screen, and the
  * add-a-project cards are gone:
  * importing is `ImportHub`, as buttons under the table and as the app bar's menu.
  *
@@ -22,7 +23,6 @@ import { t } from "../../i18n";
 import { PanelHeader } from "../primitives";
 import { RecoveryBanner } from "../recovery/RecoveryBanner";
 import type { PendingDownload } from "./downloads";
-import { NotesSection } from "./NotesSection";
 import { WacsProjects } from "./WacsProjects";
 import { YourProjects } from "./YourProjects";
 
@@ -49,8 +49,6 @@ export function ProjectsLanding() {
           onDismiss={(id) => setDownloads((held) => held.filter((item) => item.id !== id))}
         />
       </section>
-
-      <NotesSection />
 
       <WacsProjects
         downloads={{

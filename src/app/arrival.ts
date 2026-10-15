@@ -57,8 +57,6 @@ export const libraryRevision = revision;
 const libraryChanged = (): void => {
   setRevision((held) => held + 1);
 };
-/** For a screen that changed the Library itself (removed a copy), so the pickers re-read. */
-export const noteLibraryChanged = libraryChanged;
 
 /** `https://host/Owner/repo.git` → `owner`, `repo`, as the folder they clone into. */
 const ownerAndRepo = (url: string): { readonly owner: string; readonly repo: string } => {

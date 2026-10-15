@@ -1,9 +1,10 @@
 import type { Tour, TourContext } from "../machine";
 
 /**
- * Translation Notes, end to end: where to get them (the projects page's
- * Notes section), downloading them, opening a project, choosing them in the
- * reference column, the notes following the caret, and Find searching them.
+ * Translation Notes, end to end: opening a project, choosing (and, the first
+ * time, downloading) them in the reference column's menu, the notes following
+ * the caret, and Find searching them. The projects page lists no notes
+ * (Will, 2026-10-15); the menu's Reference material is where they come from.
  *
  * It needs no project to start: it begins on `/projects`, and opens a
  * translation, the Bisa Bible, through its share link with the host named
@@ -48,44 +49,6 @@ export const notesTour: Tour = {
   start: "/projects",
   steps: [
     {
-      go: (context) => void context.navigate({ to: "/projects" }),
-      spotlight: {
-        anchor: "[data-tour=notes-section]",
-        title: "Translation Notes",
-        body: "Reference material lives here, on the projects page: the notes on this device, and the ones you can download. The search box filters them by language or title.",
-      },
-      advance: "user",
-    },
-    {
-      ready: () => present("[data-tour=notes-download]") || present("[data-tour=notes-remove]"),
-      spotlight: {
-        anchor: "[data-tour=notes-download], [data-tour=notes-remove]",
-        title: "Download them",
-        body: "Press Download. The notes come down once for this device, newest version only, and a toast in the corner shows how far it has got. If this row already says Remove, they are here already: press Next.",
-      },
-      // Moves on as soon as the download has started, or already failed, or
-      // was never needed.
-      advance: () =>
-        present("[data-tour=notes-remove]") ||
-        present("[data-tour=notes-download][data-state=failed]") ||
-        document.querySelector("[data-tour=notes-download] [class*=animate-spin]") !== null,
-    },
-    {
-      // Waits for the download to END: the row turns into "on this device",
-      // or, when it failed, the Download button says so (`data-state`). A
-      // failure must not leave this step waiting out its ten minutes.
-      ready: () =>
-        present("[data-tour=notes-remove]") ||
-        present("[data-tour=notes-download][data-state=failed]"),
-      timeoutMs: DOWNLOAD_MS,
-      spotlight: {
-        anchor: "[data-tour=notes-remove], [data-tour=notes-download]",
-        title: "On this device",
-        body: "That is all 29,000 notes files, kept as one file per book. Remove takes them off again; nothing else depends on them. If the row still says Download, it did not finish: the message in the corner says why. Press Download to try again, then Next.",
-      },
-      advance: "user",
-    },
-    {
       go: (context) => void context.navigate({ href: PROJECT }),
       // Either the link's Download (the project is not here yet) or the
       // project opening straight away (it is).
@@ -109,7 +72,7 @@ export const notesTour: Tour = {
         anchor: "aside[data-references]",
         side: "right",
         title: "Choose them beside the text",
-        body: "Open the Reference language menu at the top of this column and choose “Translation Notes · English (en)”. It is with the texts on this device; until you download them, it is under Reference material.",
+        body: "Open the Reference language menu at the top of this column. If “Translation Notes · English (en)” is with the texts on this device, choose it. If not, open Reference material and, under Translation Notes, choose English (en): the notes come down once for this device, a toast in the corner shows how far it has got, and they open here when they arrive.",
       },
       advance: () => present("[data-testid=notes-pane]"),
     },
