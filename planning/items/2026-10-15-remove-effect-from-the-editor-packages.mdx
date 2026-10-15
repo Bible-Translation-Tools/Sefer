@@ -1,0 +1,41 @@
+---
+id: 8e6256bf-e140-49f2-b247-9bf9a6cc4e24
+title: "Remove Effect from the editor packages"
+kind: idea
+status: idea
+created: 2026-10-15
+updated: 2026-10-15
+sha: c273001
+tags: [editor]
+related: [c8b63600-40a8-4937-bc03-e0264e9a13f0]
+---
+
+For purity, `@sefer/text` and `@sefer/editor` could stop depending on Effect.
+Today it is a peer dependency of both (2026-10-15).
+
+> Fine for nwo and document in ideas might should remove for purity sake
+
+## Why it stays for now
+
+- **The hub already has it.** It depends on `effect@4.0.0-rc.112`, the same
+  version as Sefer, in both `web/` and `spikes/viewer`. So the peer
+  dependency costs the hub nothing.
+- **The packages use little of it:**
+  - `Result` in the Book port (`apply` returns `Result<Receipt, Refusal>`)
+  - `Data.TaggedError` for `Refusal`, `SourceDecodeError` and
+    `SourceChangeError`
+  - `Result` from `decode`
+- **The app depends on those being Effect's.** About 20 `apply` sites check
+  the result with Effect's `Result.isFailure` / `isSuccess`, and 15 files use
+  `Refusal`. Effect's helpers look only at `_tag`, but its `Result` type,
+  `isResult` and `yield*` need Effect's own prototype. So plain look-alikes
+  would not typecheck at those sites.
+
+## What removing it would take
+
+- The packages define their own small `Result` and error classes.
+- Sefer's core adapts them at the boundary, in one module that turns a package
+  `Result` into Effect's.
+- Every `apply` / `decode` call site goes through that adapter.
+
+It is mechanical, but it touches about 35 files.

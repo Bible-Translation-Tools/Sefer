@@ -552,7 +552,7 @@ USFM mode has no light theme yet. Later, after the boundaries are clean
 
 </Followup>
 
-<Followup id="step3-left">
+<Followup id="step3-left" done>
 
 Left from the contract after step 3:
 
@@ -575,3 +575,25 @@ Left from the contract after step 3:
   - footnote editing
 
 </Followup>
+
+**Step 3's leftovers, closed 2026-10-15 (c273001):**
+
+- **`onViewport` on every mount** reports `(where, source)`. It reports
+  `"reveal"` for 400 ms after the package moved the view, and `"user"`
+  otherwise.
+- **`setPolicy` on the book editor** replaces `setMode`.
+- **`offsetMap(raw)`** in `@sefer/text/source` maps raw offsets to canonical
+  ones and back.
+- **The annotator needed nothing.** Its `isTyping` already reads
+  `contenteditable`.
+- **Effect stays a peer dependency.** See
+  [Remove Effect from the editor packages](/items/2026-10-15-remove-effect-from-the-editor-packages).
+
+The same commit holds the adversarial review's fixes:
+
+- `readOnly` belongs to the mount, not the Book.
+- Each mount keeps its own `onWhere` and caret listeners.
+- An excerpt card's Save/Cancel starts clean.
+- `pnpm boundaries` holds `src/` to the front door.
+
+Review's live pane was driven on the rig profile's `x-en-ulb`.
