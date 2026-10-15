@@ -4,7 +4,7 @@ title: "Land the Oct 12–13 stack"
 kind: plan
 status: in-progress
 created: 2026-10-14
-updated: 2026-10-14
+updated: 2026-10-15
 sha: 50aa9cd
 priority: 0
 tags: [merge]
@@ -36,9 +36,16 @@ The Oct 12–13 work is one stack of branches, reviewed, fixed and green: 75 com
 
 ## Steps
 
-<Followup id="ff">`git merge --ff-only worktree-agent-a17ed3f46486c3e91`, then push (Will's biometric).</Followup>
+**Landed 2026-10-15.** Master is the stack (95fedfd), then the re-lint fix
+(1436b03), then the planning migration replayed on top (3ef17e2). The
+migration was a rebase, not a fast-forward, so history stays linear. Then
+`.fallowrc` skips `planning/` (fea64ef). Pushed `7f2684c..fea64ef`. The old
+planning folders are gone, and the stack's paths into them are repointed to
+`items/`.
 
-<Followup id="planning-paths">The stack still edits five files under the old planning folders, which master's uncommitted migration deletes, so a fast-forward refuses over the dirty tree. Stash or commit the migration first; afterwards delete `planning/00-ideas/`, `01-discussing/` and `02-inProgress/` again. Their content is already in `items/` (resource kinds §14–16, cloud and git, tour depth, the diverged-copy guide).</Followup>
+<Followup id="ff" done>`git merge --ff-only worktree-agent-a17ed3f46486c3e91`, then push (Will's biometric).</Followup>
+
+<Followup id="planning-paths" done>The stack still edits five files under the old planning folders, which master's uncommitted migration deletes, so a fast-forward refuses over the dirty tree. Stash or commit the migration first; afterwards delete `planning/00-ideas/`, `01-discussing/` and `02-inProgress/` again. Their content is already in `items/` (resource kinds §14–16, cloud and git, tour depth, the diverged-copy guide).</Followup>
 
 <Followup id="pr1">Close PR #1 on the sandbox (`Will_Kelly/x-en-ulb`), the diverged-copy proof.</Followup>
 

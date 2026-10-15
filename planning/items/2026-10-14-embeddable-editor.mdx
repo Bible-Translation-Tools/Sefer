@@ -2,7 +2,7 @@
 id: c8b63600-40a8-4937-bc03-e0264e9a13f0
 title: Sefer's editor as an embeddable, framework-free package
 kind: plan
-status: planned
+status: in-progress
 created: 2026-10-14
 updated: 2026-10-15
 sha: 95fedfd
@@ -458,8 +458,18 @@ one. Until then, the package documents one marker config per page.
 
 For the hub's packaging notes:
 
-- The wasm is an asset the host serves.
+- The wasm is the caller's: the host imports its engine build and serves the `.wasm` file from its own origin (Vite's `?url`). The package never bundles or fetches it, and is only handed a ready `Analyze`.
 - Styles are keyed on `.cm-host`, which becomes the documented host class.
 - CodeMirror is a peer dependency, so the lint state isn't split between two copies.
+
+</Followup>
+
+<Followup id="usfm-light">
+
+USFM mode has no light theme yet. Later, after the boundaries are clean
+(2026-10-15):
+
+> we need a light mode for usfm mode, but we can do that later. I jut want to get
+> these architecturally boundaries clean first.
 
 </Followup>
