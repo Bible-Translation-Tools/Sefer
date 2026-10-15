@@ -36,7 +36,7 @@ import { readingLayer, viewLayer } from "../core/compose";
 import { borrowedStructure, structureAt, type DocStructure } from "../core/docStructure";
 import { renderRangeField } from "../core/render";
 import { span } from "../core/timing";
-import { fromCanonical, type Funnel } from "../funnel";
+import { fromCanonical, funnelOf, type Following, type Funnel } from "../funnel";
 import { handleFor, type EditorHandle } from "../handle";
 import { policyKey, policyView, type EditorPolicy } from "../views";
 import {
@@ -90,7 +90,7 @@ export interface ReaderMount extends EditorHandle {
    * `undefined` stops following. Refused (answers false) when the seat's text
    * is not this view's: then the caller's next excerpt is the fresh one.
    */
-  follow(host: Funnel | undefined): boolean;
+  follow(host: Following | undefined): boolean;
   destroy(): void;
 }
 
@@ -208,9 +208,10 @@ export function mountReader(options: ReaderOptions): ReaderMount {
       marks = next;
       remark(view, next);
     },
-    follow: (host: Funnel | undefined) => {
+    follow: (following: Following | undefined) => {
       stop();
-      if (host === undefined) return true;
+      if (following === undefined) return true;
+      const host = funnelOf(following);
       // The engine's hash and length, not a compare of the two texts: a whole
       // book per card, for every card, each time a book is seated.
       const seated = host.structure().analysis;

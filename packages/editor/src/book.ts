@@ -63,7 +63,15 @@ import { clearRefusal, lastRefusal, localTracer, tracer } from "./core/instrumen
 import { modeFacet, trusted } from "./core/kernel";
 import { assignment } from "./core/registry";
 import { withoutScrolling } from "./core/scroll";
-import { changesOf, fromCanonical, type Funnel, type Receive, type SurfaceTerms } from "./funnel";
+import {
+  changesOf,
+  fromCanonical,
+  madeFunnel,
+  type Following,
+  type Funnel,
+  type Receive,
+  type SurfaceTerms,
+} from "./funnel";
 import { observabilityTracer, type EditorObservability } from "./observability";
 import { emptyBlocks } from "./recipes/emptyBlocks";
 
@@ -72,9 +80,13 @@ import { emptyBlocks } from "./recipes/emptyBlocks";
  * such a Book can answer. It satisfies `Seated`, so `openProject`'s `seat`
  * option accepts it (`services.ts` builds that seat).
  */
+/**
+ * A seated book, as a host holds it: the Book, plus what the editor adds that
+ * a host may ask — its parse, the caret, the blocks still to fill, a named
+ * gesture, a hold, and a token a reader can follow it by. Nothing here is
+ * CodeMirror's; `SeatedBook` below is the whole of it, inside the package.
+ */
 export interface EditorBook extends Book {
-  /** The canonical state: the bound view's when one is bound, else the held one. */
-  readonly state: EditorState;
   /** The canonical parse, for a surface that borrows instead of analyzing. */
   structure(): DocStructure;
   /** The main selection: the caret is `head`, and an empty one has `from === to`. */
@@ -86,6 +98,30 @@ export interface EditorBook extends Book {
   };
   /** The blocks a translator still has to fill: where each one's text goes, and its marker. */
   emptyBlocks(): readonly { readonly from: number; readonly marker: string }[];
+  /** Views plus satellites currently holding this book; blocks `project.release`. */
+  attached(): number;
+  /** A non-view attachment (a satellite). Release to let go. */
+  hold(): () => void;
+  /**
+   * Runs one named editor gesture — an insertion, focusing the front matter
+   * card — against whichever seat is canonical, and reports whether it ran.
+   *
+   * The gesture builds its own transaction from the CURRENT selection and
+   * dispatches it, so the phases judge it exactly as they judge a keystroke
+   * and it lands as one Undo step. Named rather than passed as a function
+   * because the caller is the shell, and the shell does not import CodeMirror.
+   */
+  perform(action: EditorAction): boolean;
+  /** This book as something a reader can follow (`ReaderMount.follow`). */
+  funnel(): Following;
+  /** Drops the state, the view binding and every subscriber. */
+  close(): void;
+}
+
+/** The whole seated book, CodeMirror's vocabulary included. Package-internal. */
+export interface SeatedBook extends EditorBook {
+  /** The canonical state: the bound view's when one is bound, else the held one. */
+  readonly state: EditorState;
   /**
    * Binds a view to this book's state; returns the unbind. The view MUST route
    * its transactions through `fromView` (`dispatchTransactions: (trs) =>
@@ -97,10 +133,6 @@ export interface EditorBook extends Book {
   bindView(view: EditorView): () => void;
   /** The bound view's dispatch hook: update the view, then publish. */
   fromView(view: EditorView, trs: readonly Transaction[]): void;
-  /** Views plus satellites currently holding this book; blocks `project.release`. */
-  attached(): number;
-  /** A non-view attachment (a satellite). Release to let go. */
-  hold(): () => void;
   /**
    * An edit from a SURFACE, judged under that surface's terms — its
    * projection, its mode, its range — by the Book's own phases, then
@@ -117,23 +149,21 @@ export interface EditorBook extends Book {
     changes: readonly Change[],
     origin: Origin,
   ): Result.Result<Receipt, Refusal>;
-  /**
-   * Runs one named editor gesture — an insertion, focusing the front matter
-   * card — against whichever seat is canonical, and reports whether it ran.
-   *
-   * The gesture builds its own transaction from the CURRENT selection and
-   * dispatches it, so the phases judge it exactly as they judge a keystroke
-   * and it lands as one Undo step. Named rather than passed as a function
-   * because the caller is the shell, and the shell does not import CodeMirror.
-   */
-  perform(action: EditorAction): boolean;
   /** Publication in CodeMirror's own vocabulary, for borrowing surfaces. */
   attach(receive: Receive): () => void;
   /** This book as the port satellites submit through. */
   funnel(): Funnel;
-  /** Drops the state, the view binding and every subscriber. */
-  close(): void;
 }
+
+/** The books `editorBook` made, so an `EditorBook` handed back can be trusted. */
+const seatedBooks = new WeakSet<EditorBook>();
+
+/** The whole seated book behind an `EditorBook` a host handed back. */
+export const seatedOf = (book: EditorBook): SeatedBook => {
+  if (!seatedBooks.has(book)) throw new Error("not a book this editor seated");
+  // SAFETY: only `editorBook` adds to `seatedBooks`, and what it adds is a `SeatedBook`.
+  return book as SeatedBook;
+};
 
 export interface EditorBookOptions {
   /** The engine for this book — composition passes `galley.memoize()`. */
@@ -207,7 +237,7 @@ const minimalChanges = (changes: readonly Change[], doc: Text): readonly Change[
     };
   });
 
-export const editorBook = (plain: Book, options: EditorBookOptions): EditorBook => {
+export const editorBook = (plain: Book, options: EditorBookOptions): SeatedBook => {
   const { id, path } = plain;
   const observability = options.observability;
   const listeners = makeListeners();
@@ -432,7 +462,7 @@ export const editorBook = (plain: Book, options: EditorBookOptions): EditorBook 
     }).state;
   };
 
-  const book: EditorBook = {
+  const book: SeatedBook = {
     id,
     path,
 
@@ -548,6 +578,7 @@ export const editorBook = (plain: Book, options: EditorBookOptions): EditorBook 
     },
   };
 
+  seatedBooks.add(book);
   return book;
 };
 
@@ -557,16 +588,18 @@ export const editorBook = (plain: Book, options: EditorBookOptions): EditorBook 
  * unwrapped because a satellite wants the `Refusal` itself (to say which rule
  * refused) rather than a Result it must destructure.
  */
-export const funnelFor = (book: EditorBook): Funnel => ({
-  doc: () => book.state.doc,
-  structure: () => book.structure(),
-  submit: (changes, origin, terms) => {
-    const result = book.applyFrom(terms, changes, origin);
-    return Result.isSuccess(result) ? result.success : result.failure;
-  },
-  attach: book.attach,
-  undo: () => book.history()?.undo() ?? false,
-  redo: () => book.history()?.redo() ?? false,
-  depth: () => book.history()?.depth() ?? { undo: 0, redo: 0 },
-  tracer: () => book.state.facet(tracer),
-});
+export const funnelFor = (book: SeatedBook): Funnel =>
+  madeFunnel({
+    kind: "funnel",
+    doc: () => book.state.doc,
+    structure: () => book.structure(),
+    submit: (changes, origin, terms) => {
+      const result = book.applyFrom(terms, changes, origin);
+      return Result.isSuccess(result) ? result.success : result.failure;
+    },
+    attach: book.attach,
+    undo: () => book.history()?.undo() ?? false,
+    redo: () => book.history()?.redo() ?? false,
+    depth: () => book.history()?.depth() ?? { undo: 0, redo: 0 },
+    tracer: () => book.state.facet(tracer),
+  });

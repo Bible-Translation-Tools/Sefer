@@ -14,7 +14,7 @@
  * they arrive in (`core/excerpts`' `Occurrence`).
  */
 
-import type { EditorBook, Funnel } from "@sefer/editor";
+import type { EditorBook, Following } from "@sefer/editor";
 import type { BookId } from "@sefer/text/book";
 import { useNavigate } from "@tanstack/solid-router";
 import { Effect, Option, Result, Stream } from "effect";
@@ -57,7 +57,7 @@ export interface ExcerptFeed {
    * A book's seat, while one is open — the book in the editor, or the one a
    * card is editing — for every card of that book to follow as it changes.
    */
-  readonly seatedOf: (bookId: BookId) => Funnel | undefined;
+  readonly seatedOf: (bookId: BookId) => Following | undefined;
   /**
    * `into` is the operation the jump belongs to, when the caller opened one
    * (the Findings panel's `findings.navigate`); without it the span is a root
@@ -297,8 +297,8 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
    * and the one card that asked to edit would be the only one to change.
    */
   const [seats, setSeats] = createSignal(0, { name: "excerptSeats" });
-  const funnels = new WeakMap<EditorBook, Funnel>();
-  const seatedOf = (bookId: BookId): Funnel | undefined => {
+  const funnels = new WeakMap<EditorBook, Following>();
+  const seatedOf = (bookId: BookId): Following | undefined => {
     seats();
     const book = shell.services.seated(bookId);
     if (book === undefined) return undefined;

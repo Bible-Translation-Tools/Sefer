@@ -13,7 +13,7 @@
 import { ChangeSet, Compartment, Prec, StateField, type Extension } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 
-import type { EditorBook } from "../book";
+import { seatedOf, type EditorBook } from "../book";
 import { analyzer, type Analyze } from "../core/analyzer";
 import { readingLayer } from "../core/compose";
 import { fromCanonical, ownEcho } from "../funnel";
@@ -119,7 +119,7 @@ const sessionUndo = (): StateField<ChangeSet> =>
   });
 
 export function mountCard(options: CardOptions): CardMount {
-  const { book } = options;
+  const book = seatedOf(options.book);
   const surface = options.surface ?? "cm-excerpt";
   const clip = options.clip !== false;
   const range = clip ? clipSpan(book.state.doc, options.range) : options.range;

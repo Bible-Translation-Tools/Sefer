@@ -27,7 +27,7 @@
  * question the screen is asking.
  */
 
-import type { EditorBook, Funnel } from "@sefer/editor";
+import type { EditorBook, Following } from "@sefer/editor";
 import type { BookId } from "@sefer/text/book";
 import CheckIcon from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
@@ -70,7 +70,7 @@ export interface StetViewProps {
   readonly outline: readonly OutlineRow[];
   readonly onOpen: (bookId: BookId, from: number, to?: number) => void;
   readonly seat: (bookId: BookId) => Promise<EditorBook | undefined>;
-  readonly seatedOf?: (bookId: BookId) => Funnel | undefined;
+  readonly seatedOf?: (bookId: BookId) => Following | undefined;
   readonly shownOf?: (excerpt: Excerpt) => Excerpt;
   readonly analyze: (text: string) => Analysis;
   readonly onEdited?: (bookId: BookId) => void;

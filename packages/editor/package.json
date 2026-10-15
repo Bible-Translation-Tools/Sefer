@@ -7,7 +7,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./editor.css": "./src/editor.css",
-    "./*": "./src/*.ts"
+    "./testing/*": "./src/testing/*.ts"
   },
   "dependencies": {
     "@sefer/text": "workspace:*"

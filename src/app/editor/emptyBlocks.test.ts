@@ -12,8 +12,12 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { EditorView } from "@codemirror/view";
-import { annotateEmptyBlocks, blockNamer, emptyBlocks } from "@sefer/editor/recipes/emptyBlocks";
-import { surface } from "@sefer/editor/testing/harness";
+import {
+  annotateEmptyBlocks,
+  blockNamer,
+  emptyBlocks,
+  surface,
+} from "@sefer/editor/testing/harness";
 import { makeBook } from "@sefer/text/book";
 import { decode } from "@sefer/text/source";
 import { Effect } from "effect";

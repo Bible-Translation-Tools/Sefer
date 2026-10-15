@@ -13,7 +13,7 @@
  * of scripture, and the one-card-at-a-time edit session.
  */
 
-import type { EditorBook, Funnel } from "@sefer/editor";
+import type { EditorBook, Following } from "@sefer/editor";
 import type { BookId } from "@sefer/text/book";
 import type { JSX } from "@solidjs/web";
 import { createMemo, createSignal, onCleanup, untrack } from "solid-js";
@@ -53,7 +53,7 @@ export interface ExcerptListProps {
    */
   readonly shownOf?: (excerpt: Excerpt) => Excerpt;
   /** A book's seat while one is open, for every card of it to follow. */
-  readonly seatedOf?: (bookId: BookId) => Funnel | undefined;
+  readonly seatedOf?: (bookId: BookId) => Following | undefined;
   readonly analyze: (text: string) => Analysis;
   /**
    * Told the book an edit is in — at each pause, and when the edit ends — so

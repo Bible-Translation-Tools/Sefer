@@ -17,7 +17,7 @@ export { type Where } from "./recipes/whereAmI";
 // (or a reader following the book) goes through.
 export { type EditorBook } from "./book";
 export { seatBook } from "./seat";
-export { type Funnel } from "./funnel";
+export { type Following } from "./funnel";
 export { type EditorAction } from "./core/actions";
 
 // Mounts.

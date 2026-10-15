@@ -14,7 +14,7 @@ import {
   mountReader,
   policyKey,
   type EditorPolicy,
-  type Funnel,
+  type Following,
   type MarkedRange,
   type ReaderMount,
 } from "@sefer/editor";
@@ -36,7 +36,7 @@ export interface ExcerptReaderProps {
    * The seated Book of this text, when one is open: the view follows its
    * published changes, so it shows another card's typing as it happens.
    */
-  readonly follow?: Funnel | undefined;
+  readonly follow?: Following | undefined;
   /**
    * Double-click: edit. `at` is the source offset under the pointer, and the
    * point rides along for the satellite — laid out identically — to answer.

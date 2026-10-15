@@ -23,7 +23,7 @@
 import { Compartment, StateEffect, type EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
-import type { EditorBook } from "./book";
+import { seatedOf, type EditorBook } from "./book";
 import { structureAt } from "./core/editorState";
 import { frontMatterCard } from "./core/frontmatter";
 import { annotateOpen } from "./core/instrument";
@@ -194,7 +194,7 @@ const meterFor = (book: EditorBook) =>
   });
 
 export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
-  const { book } = options;
+  const book = seatedOf(options.book);
   let view: EditorView | undefined;
   view = new EditorView({
     state: book.state,

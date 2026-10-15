@@ -39,7 +39,7 @@ import {
   type CardMount,
   type EditorBook,
   type EditorPolicy,
-  type Funnel,
+  type Following,
   type MarkedRange,
 } from "@sefer/editor";
 import { tocUnits, unitIndexAt } from "@sefer/text/location/locate";
@@ -117,7 +117,7 @@ export interface ExcerptCardProps {
   readonly seat: () => Promise<EditorBook | undefined>;
   readonly analyze: (text: string) => Analysis;
   /** This book's seat while one is open, which the read-only view follows live. */
-  readonly follow?: Funnel | undefined;
+  readonly follow?: Following | undefined;
   readonly paired?: Paired | undefined;
   /**
    * The SOURCE offset of the match the find bar's cursor is on, when it is one

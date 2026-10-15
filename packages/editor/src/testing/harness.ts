@@ -29,6 +29,10 @@ import { type TraceSink, traceSink } from "../core/trace";
 
 export const DEFAULT_OPTS = DEFAULT_BUILD_OPTS;
 
+// Recipes a host's own tests drive with the real engine, which this package
+// does not bring (the empty-block ghost over real Psalms, in Sefer's app).
+export { annotateEmptyBlocks, blockNamer, emptyBlocks } from "../recipes/emptyBlocks";
+
 export interface SurfaceOptions {
   /** The engine, per state. See `src/editor/core/analyzer.ts`. */
   analyze: Analyze;

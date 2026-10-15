@@ -76,7 +76,16 @@ export interface SurfaceTerms {
   readonly event?: string;
 }
 
-export interface Funnel {
+/**
+ * A book a read-only surface can follow, as a host holds it: opaque. The host
+ * takes it from `EditorBook.funnel()` and hands it to a reader's `follow`;
+ * what is inside is CodeMirror's vocabulary and stays in the package.
+ */
+export interface Following {
+  readonly kind: "funnel";
+}
+
+export interface Funnel extends Following {
   /** The canonical text, as CodeMirror holds it — no string is allocated. */
   doc(): Text;
   /**
@@ -111,4 +120,20 @@ export const changesOf = (changes: ChangeSet): Change[] => {
     out.push({ from: fromA, to: toA, insert: inserted.toString() });
   });
   return out;
+};
+
+/** The funnels the package made, so a `Following` handed back can be trusted. */
+const made = new WeakSet<Following>();
+
+/** Records a funnel the package made. */
+export const madeFunnel = <F extends Funnel>(funnel: F): F => {
+  made.add(funnel);
+  return funnel;
+};
+
+/** The funnel behind a `Following` a host handed back. */
+export const funnelOf = (following: Following): Funnel => {
+  if (!made.has(following)) throw new Error("not a funnel this editor made");
+  // SAFETY: only `madeFunnel` adds to `made`, and it is given a `Funnel`.
+  return following as Funnel;
 };

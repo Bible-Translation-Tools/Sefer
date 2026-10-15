@@ -37,7 +37,7 @@ import {
 import { EditorView, ViewPlugin, keymap } from "@codemirror/view";
 import { NOTE_PART } from "@sefer/text/engine/analysis";
 
-import { funnelFor, type EditorBook } from "../book";
+import { funnelFor, seatedOf, type EditorBook } from "../book";
 import { analyzer } from "../core/analyzer";
 import {
   buildNoteApparatus,
@@ -267,7 +267,7 @@ class NoteSurfaces {
 
     const satellite = mountSatellite({
       parent: slot,
-      host: funnelFor(book),
+      host: funnelFor(seatedOf(book)),
       range: span,
       editable: true,
       label: `note:${String(at)}`,
