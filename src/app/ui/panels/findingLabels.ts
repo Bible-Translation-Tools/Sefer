@@ -2,19 +2,14 @@
  * What a person reads for a finding's producer and code — first-pass English
  * until the app has real i18n.
  *
- * Exhaustive by type, not by hope. Each table is a `Record` over the producer's
- * OWN vocabulary from kitchen — onion's catalogue names (`CODES`), and sous's
- * hygiene classes, presence kinds and convention channels — so a code kitchen
- * adds fails the typecheck here until it has a label. An unknown string (a
- * newer engine, `sous.convention.unknown`) falls back to the raw code.
+ * Exhaustive by type, not by hope. Each table is a `Record` over the union
+ * kitchen exports for its producer (0.1.10): onion's `DiagnosticName` and
+ * sous's `SousCode` — so a code kitchen adds fails the typecheck here until it
+ * has a label. An unknown string (a newer engine) falls back to the raw code.
  */
 
-import type { CODES } from "@wycliffeassociates/scripture-kitchen/reader";
-import type {
-  Channel,
-  HygieneClass,
-  PresenceKind,
-} from "@wycliffeassociates/scripture-kitchen/sous-reader";
+import type { DiagnosticName } from "@wycliffeassociates/scripture-kitchen/reader";
+import type { SousCode } from "@wycliffeassociates/scripture-kitchen/sous-reader";
 
 import type { Producer } from "#core/findings/finding";
 
@@ -31,8 +26,6 @@ export const producerLabel = (producer: Producer): string => {
       return t("Other");
   }
 };
-
-type OnionCode = (typeof CODES)[number]["name"];
 
 const ONION = {
   "unclosed-note": "Note not closed",
@@ -96,58 +89,53 @@ const ONION = {
   "delimiter-single": "Double spacing",
   "designator-ws-single": "Spacing after a number",
   "marker-ws-at-line-start": "Space before a marker at line start",
-} satisfies Record<OnionCode, string>;
+} satisfies Record<DiagnosticName, string>;
 
-const HYGIENE = {
-  C0Control: "Invisible control character",
-  Delete: "Delete character",
-  C1Control: "Invisible control character",
-  ReplacementChar: "Replacement character (�)",
-  StrayCarriageReturn: "Stray carriage return",
-  StrandedBackslash: "Stray backslash",
-  ConflictMarker: "Merge conflict marker",
-  FreeCombiningMark: "Accent mark with no letter",
-  MisplacedFormat: "Misplaced formatting character",
-  NoBreakSpace: "No-break space",
-  Noncharacter: "Invalid character",
-} satisfies Record<HygieneClass, string>;
-
-const PRESENCE = {
-  Missing: "Verse missing",
-  Extra: "Extra verse",
-  Empty: "Empty verse",
-} satisfies Record<PresenceKind, string>;
-
-const CONVENTION = {
-  ExactNeighbor: "Unusual punctuation pair",
-  PooledNeighbor: "Unusual punctuation next to a letter",
-  RunShape: "Unusual run of punctuation",
-  Placement: "Punctuation in an unusual place",
-  Rarity: "Rare character",
-  Casing: "Unusual capitalization",
-  WordLength: "Unusually long word",
-  Doubled: "Doubled word",
-  LetterRun: "Repeated letters",
-  SentenceStart: "Sentence starts in lowercase",
-  BookRate: "Unusual for this book",
-} satisfies Record<Channel, string>;
+/** Sous by its own code; Sefer files them under `sous.<code>`. */
+const SOUS = {
+  "hygiene.C0Control": "Invisible control character",
+  "hygiene.Delete": "Delete character",
+  "hygiene.C1Control": "Invisible control character",
+  "hygiene.ReplacementChar": "Replacement character (�)",
+  "hygiene.StrayCarriageReturn": "Stray carriage return",
+  "hygiene.StrandedBackslash": "Stray backslash",
+  "hygiene.ConflictMarker": "Merge conflict marker",
+  "hygiene.FreeCombiningMark": "Accent mark with no letter",
+  "hygiene.MisplacedFormat": "Misplaced formatting character",
+  "hygiene.NoBreakSpace": "No-break space",
+  "hygiene.Noncharacter": "Invalid character",
+  "presence.Missing": "Verse missing",
+  "presence.Extra": "Extra verse",
+  "presence.Empty": "Empty verse",
+  "convention.ExactNeighbor": "Unusual punctuation pair",
+  "convention.PooledNeighbor": "Unusual punctuation next to a letter",
+  "convention.RunShape": "Unusual run of punctuation",
+  "convention.Placement": "Punctuation in an unusual place",
+  "convention.Rarity": "Rare character",
+  "convention.Casing": "Unusual capitalization",
+  "convention.WordLength": "Unusually long word",
+  "convention.Doubled": "Doubled word",
+  "convention.LetterRun": "Repeated letters",
+  "convention.SentenceStart": "Sentence starts in lowercase",
+  "convention.BookRate": "Unusual for this book",
+  sourceCopy: "Copied from the source",
+  lengthProportionality: "Verse length differs from the source",
+} satisfies Record<SousCode, string>;
 
 const lookup = (table: Readonly<Record<string, string>>, key: string): string | undefined =>
   Object.hasOwn(table, key) ? table[key] : undefined;
 
 /** A finding code as a person reads it; the raw code when this table has none. */
+/** Sefer's two kebab-case sous codes, as kitchen spells them. */
+const SOUS_SPELLING: Readonly<Record<string, string>> = {
+  "source-copy": "sourceCopy",
+  "length-proportionality": "lengthProportionality",
+};
+
+/** A finding code as a person reads it; the raw code when this table has none. */
 export const codeLabel = (code: string): string => {
-  const sous = /^sous\.(hygiene|presence|convention)\.(.+)$/.exec(code);
+  const sous = code.startsWith("sous.") ? code.slice("sous.".length) : undefined;
   const english =
-    sous !== null
-      ? lookup(
-          sous[1] === "hygiene" ? HYGIENE : sous[1] === "presence" ? PRESENCE : CONVENTION,
-          sous[2] ?? "",
-        )
-      : code === "sous.source-copy"
-        ? "Copied from the source"
-        : code === "sous.length-proportionality"
-          ? "Verse length differs from the source"
-          : lookup(ONION, code);
+    sous === undefined ? lookup(ONION, code) : lookup(SOUS, SOUS_SPELLING[sous] ?? sous);
   return english === undefined ? code : t(english);
 };

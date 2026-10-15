@@ -4,18 +4,18 @@ title: "Engine asks: what Sefer still needs from Onion, Sous and Galley"
 kind: idea
 status: idea
 created: 2026-09-14
-updated: 2026-10-14
+updated: 2026-10-15
 tags: [kitchen]
 source: planning/00-ideas/scripture-kitchen-asks.md
 ---
 
 ## Audit, 2026-10-14
 
-Sefer pins `scripture-kitchen#v0.1.9`; kitchen has tagged **v0.1.10**, which delivers asks 9
+At the audit Sefer pinned `v0.1.9`; kitchen has tagged **v0.1.10**, which delivers asks 9
 (`message()` fills `{aux}`, fc468e4) and 10 (`DiagnosticName`, `FindingName`, `SousCode`, d648e07).
 Ask 8 is delivered (v0.1.8, f8dd7e8) and Sefer uses it. Still open upstream: 2, 4, 6, 7.
 
-<Followup id="bump-0-1-10">Bump to v0.1.10: delete the `aux` fill in `diagnosticMessage` (`src/core/galley/analysis.ts`) and key `src/app/ui/panels/findingLabels.ts` by `SousCode` and `DiagnosticName`.</Followup>
+<Followup id="bump-0-1-10" done>**Done 2026-10-15 on branch `editor-package`.** Checked on `99-BAD.usfm`: "verse 2 repeats the verse at 2; expected 3". Bump to v0.1.10: delete the `aux` fill in `diagnosticMessage` (now `packages/text/src/engine/analysis.ts`) and key `src/app/ui/panels/findingLabels.ts` by `SousCode` and `DiagnosticName`.</Followup>
 
 <Followup id="same-source">Sefer side of ask 8: skip `diff` when both sides carry the same `sameSource` stamp.</Followup>
 
