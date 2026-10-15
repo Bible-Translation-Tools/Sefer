@@ -1,7 +1,7 @@
 /**
  * One excerpt, read: the editor's own reading of a range of a book, read-only.
  *
- * The card's resting state (`#editor` `mountReader`). It is a view of the
+ * The card's resting state (`@sefer/editor` `mountReader`). It is a view of the
  * book's text through the book's parse — the same projection, verse pips and
  * paragraph shapes the editor paints — clipped to the excerpt, so a list of
  * results reads like the pages they came from.
@@ -11,9 +11,6 @@
  */
 
 import { EditorView } from "@codemirror/view";
-import { createEffect, createMemo, createSignal, untrack } from "solid-js";
-
-import type { Analysis } from "#core/galley";
 import {
   mountReader,
   policyKey,
@@ -21,9 +18,12 @@ import {
   type Funnel,
   type MarkedRange,
   type ReaderMount,
-} from "#editor/index";
+} from "@sefer/editor";
+import { createEffect, createMemo, createSignal, untrack } from "solid-js";
 
-import "#editor/editor.css";
+import type { Analysis } from "#core/galley";
+
+import "@sefer/editor/editor.css";
 
 export interface ExcerptReaderProps {
   readonly analysis: Analysis;

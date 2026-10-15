@@ -32,11 +32,6 @@
 
 import { Compartment, StateEffect, type EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import type { SourceStamp } from "@sefer/text/source";
-import { Effect, Fiber, Stream } from "effect";
-import { createEffect, createRenderEffect, createSignal, untrack } from "solid-js";
-
-import { stale } from "#core/findings/finding";
 import {
   annotateOpen,
   annotateRepaint,
@@ -60,7 +55,12 @@ import {
   showEmptyBlocks,
   span,
   watchLocation,
-} from "#editor/index";
+} from "@sefer/editor";
+import type { SourceStamp } from "@sefer/text/source";
+import { Effect, Fiber, Stream } from "effect";
+import { createEffect, createRenderEffect, createSignal, untrack } from "solid-js";
+
+import { stale } from "#core/findings/finding";
 
 import { reportEdits } from "../editReports";
 import { textDirection } from "../language";
@@ -85,7 +85,7 @@ const mountedConfig = new WeakMap<EditorBook, Compartment>();
 
 // The editor's own stylesheet. It ships with the editor module and is imported
 // where the view mounts, so a route that never opens a book never loads it.
-import "#editor/editor.css";
+import "@sefer/editor/editor.css";
 
 export interface BookEditorProps {
   readonly book: EditorBook;

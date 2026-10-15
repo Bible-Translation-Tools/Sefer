@@ -1,3 +1,4 @@
+import { createAlignedGroup } from "@sefer/editor";
 import { createFileRoute } from "@tanstack/solid-router";
 import { Show, createEffect, createSignal, untrack } from "solid-js";
 
@@ -10,7 +11,6 @@ import { RecoveryBanner } from "#app/ui/recovery/RecoveryBanner";
 import { AlignedProvider } from "#app/ui/workspace/aligned";
 import { ReferenceColumn } from "#app/ui/workspace/ReferenceColumn";
 import { Toolbar } from "#app/ui/workspace/Toolbar";
-import { createAlignedGroup } from "#editor/index";
 
 /**
  * The editor screen: the workspace toolbar, the reference column, and the book
@@ -32,7 +32,7 @@ import { createAlignedGroup } from "#editor/index";
 function BookPage(props: { readonly root: string; readonly bookId: string }) {
   const shell = useShell();
   // The page holds the editors' alignment: they each report where they are,
-  // and it decides who follows (`#editor` `createAlignedGroup`). Reveal: a
+  // and it decides who follows (`@sefer/editor` `createAlignedGroup`). Reveal: a
   // pane moves only when the verse scrolled to is not already in its view.
   const aligned = createAlignedGroup("reveal");
   // Plain variables: `Resizable.Panel` reads its three sizes once, during

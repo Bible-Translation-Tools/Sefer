@@ -335,6 +335,8 @@ const main = (): void => {
       paths,
       pathsBase: base,
       rawAssetDirs: [path.join(root, "fixtures")],
+      // Core is below the editor: it may use the text model, never the editor.
+      forbiddenPackages: [...DEFAULT_FORBIDDEN_PACKAGES, "@sefer/editor", "@sefer/editor/*"],
     }),
     ...checkReach({
       from: source,
@@ -363,6 +365,16 @@ const main = (): void => {
       paths,
       pathsBase: base,
       forbiddenPackages: [...DEFAULT_FORBIDDEN_PACKAGES, "@sefer/editor", "@sefer/editor/*"],
+    }),
+    // `@sefer/editor` is core's rule set with CodeMirror allowed: it is the
+    // one package that owns CodeMirror, and nothing framework- or host-shaped
+    // gets in. Hosts bring the engine, so the editor imports none of its own.
+    ...checkCoreBoundary({
+      coreDir: path.join(root, "packages", "editor", "src"),
+      label: "@sefer/editor",
+      paths,
+      pathsBase: base,
+      forbiddenPackages: DEFAULT_FORBIDDEN_PACKAGES.filter((name) => name !== "@codemirror/*"),
     }),
     ...checkCoreBoundary({
       coreDir: path.join(dev, "annotate"),

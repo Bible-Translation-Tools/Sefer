@@ -16,11 +16,6 @@
  */
 
 import { EditorView } from "@codemirror/view";
-import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
-
-import type { Analysis } from "#core/galley";
-import type { DecisionUnit } from "#core/galley/diff";
-import type { ObservabilityService } from "#core/observability";
 import {
   analyzer,
   createAlignedGroup,
@@ -34,9 +29,14 @@ import {
   type DiffPaint,
   type DiffViewMount,
   type EditorBook,
-} from "#editor/index";
+} from "@sefer/editor";
+import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
 
-import "#editor/editor.css";
+import type { Analysis } from "#core/galley";
+import type { DecisionUnit } from "#core/galley/diff";
+import type { ObservabilityService } from "#core/observability";
+
+import "@sefer/editor/editor.css";
 
 import { t } from "../../i18n";
 import { cx } from "../primitives";

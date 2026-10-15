@@ -9,7 +9,7 @@
  * numbers included, for a reader who flipped a card to edit exactly that.
  */
 
-import { editorPolicy, type EditorPolicy, type ProjectionName } from "#editor/index";
+import { editorPolicy, type EditorPolicy, type ProjectionName } from "@sefer/editor";
 
 export const cardPolicy = (
   mode: "regular" | "usfm",

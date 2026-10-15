@@ -22,11 +22,11 @@
  * member on `edit`'s satellite variant, and the compiler finds every screen.
  */
 
+import type { EditorPolicy } from "@sefer/editor";
 import type { BookId } from "@sefer/text/book";
 import type { JSX } from "@solidjs/web";
 
 import type { Excerpt, Extent, OutlineRow, BookExcerpts } from "#core/excerpts/excerpts";
-import type { EditorPolicy } from "#editor/index";
 
 import type { CardAction } from "../multibuffer/CardAction";
 import type { CardView, ContextStep } from "../multibuffer/cardState";

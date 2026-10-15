@@ -17,6 +17,8 @@
  * its port; a command that navigates calls `bridge.go`.
  */
 
+import { emptyBlocks, structureAt, withoutScrolling } from "@sefer/editor";
+import type { EditorAction, EditorBook, ProjectionName } from "@sefer/editor";
 import type { UseNavigateResult } from "@tanstack/solid-router";
 import { Effect, Option, Result, type Scope } from "effect";
 import { createSignal } from "solid-js";
@@ -25,8 +27,6 @@ import { applyFormat, applyOverlay, formatBook, overlayBook } from "#core/fixes/
 import { makeMultiBook } from "#core/multibook/multibook";
 import { Observability, type ObservabilityService } from "#core/observability";
 import type { Project } from "#core/project/project";
-import { emptyBlocks, structureAt, withoutScrolling } from "#editor/index";
-import type { EditorAction, EditorBook, ProjectionName } from "#editor/index";
 
 import { personAuthor } from "./author";
 import { contentHostFor } from "./endpoints";

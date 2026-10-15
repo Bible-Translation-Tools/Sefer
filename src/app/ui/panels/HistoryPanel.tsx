@@ -16,6 +16,7 @@
  * ordinary edit that Undo takes back and Record a version keeps.
  */
 
+import type { EditorBook } from "@sefer/editor";
 import type { Book, BookId } from "@sefer/text/book";
 import { decode, type Source } from "@sefer/text/source";
 import { useNavigate, useSearch } from "@tanstack/solid-router";
@@ -31,7 +32,6 @@ import type { Commit, Version } from "#core/git/git";
 import { Git, repositoryPath } from "#core/git/git";
 import { Remote, type Deepen } from "#core/remote/remote";
 import { trackingRef } from "#core/sync";
-import type { EditorBook } from "#editor/index";
 
 import { remoteReasonOf } from "../../describe";
 import { t } from "../../i18n";

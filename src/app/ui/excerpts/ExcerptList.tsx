@@ -13,6 +13,7 @@
  * of scripture, and the one-card-at-a-time edit session.
  */
 
+import type { EditorBook, Funnel } from "@sefer/editor";
 import type { BookId } from "@sefer/text/book";
 import type { JSX } from "@solidjs/web";
 import { createMemo, createSignal, onCleanup, untrack } from "solid-js";
@@ -25,7 +26,6 @@ import {
   type OutlineRow,
 } from "#core/excerpts/excerpts";
 import type { Analysis } from "#core/galley";
-import type { EditorBook, Funnel } from "#editor/index";
 
 import { t } from "../../i18n";
 import { CardList } from "../multibuffer/CardList";

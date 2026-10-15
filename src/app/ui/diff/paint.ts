@@ -1,5 +1,5 @@
 /**
- * The engine's diff as paint: what `#editor` `mountDiffView` draws on a text,
+ * The engine's diff as paint: what `@sefer/editor` `mountDiffView` draws on a text,
  * worked out from decision units. Shared by `/review` and the playground's diff
  * experiments, so every surface paints a change the same way.
  *
@@ -8,10 +8,11 @@
  * where the reading stops.
  */
 
+import type { DiffHunk, DiffPaint } from "@sefer/editor";
+
 import { readingEnd } from "#core/excerpts/excerpts";
 import type { Analysis } from "#core/galley";
 import { unitReference, type DecisionUnit, type MergeSide } from "#core/galley/diff";
-import type { DiffHunk, DiffPaint } from "#editor/index";
 
 export type Side = "baseline" | "current";
 

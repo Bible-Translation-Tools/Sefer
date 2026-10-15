@@ -39,12 +39,43 @@
  * They stay on the local trace.
  */
 
-import type {
-  Level,
-  ObservabilityService,
-  Operation,
-  Verdict as RingVerdict,
-} from "#core/observability";
+/** The verdicts a host's event ring records. */
+type RingVerdict =
+  | "ready"
+  | "passed"
+  | "refused"
+  | "rewrote"
+  | "consumed"
+  | "declined"
+  | "unavailable"
+  | "failed";
+
+/** How much the host wants recorded. */
+type Level = "off" | "verdicts" | "spans" | "all";
+
+type Attrs = Readonly<Record<string, string | number | boolean>>;
+
+/** The operations the editor opens. */
+type EditorOperationName = "editor.mutation" | "editor.selection" | "editor.render";
+
+interface Operation {
+  readonly trace: string;
+  readonly attr: (attrs: Attrs) => void;
+  readonly rename: (name: EditorOperationName) => void;
+  readonly end: (verdict?: RingVerdict, attrs?: Attrs, ms?: number) => number;
+  readonly note: (rule: string, verdict: RingVerdict, detail?: string, attrs?: Attrs) => void;
+}
+
+/**
+ * The slice of a host's observability the editor writes to. Structural, so the
+ * package depends on nobody's tracing: Sefer's `EditorObservability` satisfies
+ * it as it stands, and a host with none passes nothing.
+ */
+export interface EditorObservability {
+  readonly level: () => Level;
+  readonly operation: (name: EditorOperationName, attrs?: Attrs) => Operation;
+  readonly note: (rule: string, verdict: RingVerdict, detail?: string, attrs?: Attrs) => void;
+}
 
 import {
   makeTracer,
@@ -91,7 +122,7 @@ const BURST_MS = 120;
  * won, and every repaint after that was labelled with its id whoever caused
  * it. So the burst names no book: a repaint is not necessarily about one.
  */
-let repaintInto: ObservabilityService | null = null;
+let repaintInto: EditorObservability | null = null;
 /**
  * The trace of the gesture in flight, for work that will FOLLOW it.
  *
@@ -173,10 +204,7 @@ const SILENT: TraceEmit = {
  * Observability; every state that shares the book shares the trace, so a
  * satellite edit the book judges traces under the same correlation.
  */
-export const observabilityTracer = (
-  observability: ObservabilityService,
-  bookId: string,
-): Tracer => {
+export const observabilityTracer = (observability: EditorObservability, bookId: string): Tracer => {
   repaintInto ??= observability;
   const emit: Emitter = (trace) => {
     const volume = VOLUME[observability.level()];

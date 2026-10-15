@@ -11,8 +11,7 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { EditorState, type Extension, Prec, Transaction } from "@codemirror/state";
 import { Decoration, EditorView, drawSelection, keymap, type KeyBinding } from "@codemirror/view";
-
-import { type Analysis, TOKEN_SPELLING_BIT } from "#core/galley";
+import { type Analysis, TOKEN_SPELLING_BIT } from "@sefer/text/engine/analysis";
 
 import { type Analyze, analyzed, analyzer } from "./analyzer";
 import { caretLineBoundary, extendCaret, moveCaret, moveCaretByWord } from "./caret";

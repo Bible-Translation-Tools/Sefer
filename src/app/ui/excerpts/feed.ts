@@ -14,6 +14,7 @@
  * they arrive in (`core/excerpts`' `Occurrence`).
  */
 
+import type { EditorBook, Funnel } from "@sefer/editor";
 import type { BookId } from "@sefer/text/book";
 import { useNavigate } from "@tanstack/solid-router";
 import { Effect, Option, Result, Stream } from "effect";
@@ -31,7 +32,6 @@ import {
 } from "#core/excerpts/excerpts";
 import { bookHeading, describesExactly, type Analysis } from "#core/galley";
 import type { ObservabilityService } from "#core/observability";
-import type { EditorBook, Funnel } from "#editor/index";
 
 import { t } from "../../i18n";
 import { useShell, type Shell } from "../../ProjectContext";

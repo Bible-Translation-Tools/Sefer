@@ -8,7 +8,7 @@
  * paragraph, does it paint its own line.
  */
 
-import { TOKEN } from "#core/galley";
+import { TOKEN } from "@sefer/text/engine/analysis";
 
 import { spellingAt } from "./cst";
 import {

@@ -15,8 +15,7 @@
  */
 
 import { Facet } from "@codemirror/state";
-
-import type { Analysis } from "#core/galley";
+import type { Analysis } from "@sefer/text/engine/analysis";
 
 import { span } from "./timing";
 

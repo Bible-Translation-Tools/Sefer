@@ -42,6 +42,7 @@
  * catches this device up with another of theirs and sends back to the copy.
  */
 
+import type { EditorBook } from "@sefer/editor";
 import { trustedBy, type BookId } from "@sefer/text/book";
 import { useNavigate, useSearch } from "@tanstack/solid-router";
 import { Effect, Option, Result } from "effect";
@@ -68,7 +69,6 @@ import type { Author } from "#core/git/git";
 import { Observability } from "#core/observability";
 import type { Restorable } from "#core/recovery/recovery";
 import { bookFacts, type Diff } from "#core/sync/facts";
-import type { EditorBook } from "#editor/index";
 
 import { personAuthor } from "../../author";
 import { collaboration } from "../../collaboration";

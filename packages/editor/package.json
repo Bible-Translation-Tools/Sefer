@@ -1,0 +1,32 @@
+{
+  "name": "@sefer/editor",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Sefer's USFM editor, framework-free: CodeMirror over the scripture-kitchen engine, mounted by any host. The host brings its engine build and serves the wasm.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./editor.css": "./src/editor.css",
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@sefer/text": "workspace:*"
+  },
+  "devDependencies": {
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/lint": "^6.9.7",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.13",
+    "@wycliffeassociates/scripture-kitchen": "github:WycliffeAssociates/scripture-kitchen#v0.1.9",
+    "effect": "4.0.0-rc.112",
+    "vitest": "5.0.1"
+  },
+  "peerDependencies": {
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/lint": "^6.9.7",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.13",
+    "@wycliffeassociates/scripture-kitchen": "*",
+    "effect": "4.0.0-rc.112"
+  }
+}

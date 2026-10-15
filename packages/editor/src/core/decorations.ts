@@ -17,8 +17,13 @@ import {
   EditorView,
   WidgetType,
 } from "@codemirror/view";
-
-import { FLAG, NOTE_PART, TOKEN, TOKEN_SPELLING_BIT, classWordOf } from "#core/galley";
+import {
+  FLAG,
+  NOTE_PART,
+  TOKEN,
+  TOKEN_SPELLING_BIT,
+  classWordOf,
+} from "@sefer/text/engine/analysis";
 
 import { blockHost } from "./blockHost";
 import { lineIndexAt, type DocStructure, type NoteRange } from "./docStructure";

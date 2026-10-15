@@ -17,7 +17,7 @@
  *    parses a book and not a passage;
  *  - the MODE, from `shell.mode()`, so Regular/USFM switches both panes at
  *    once and a translator comparing markup sees markup on both sides;
- *  - the PLACE, through the book page's aligned group (`#editor`
+ *  - the PLACE, through the book page's aligned group (`@sefer/editor`
  *    `createAlignedGroup`): scroll the book and the verse you scrolled to is
  *    brought into this pane when it is not already showing, and scrolling
  *    this pane leads the book the same way.
@@ -49,6 +49,7 @@
  * gets one line, not an empty editor.
  */
 
+import { mountReference, type PairedRange, type ReferenceMount } from "@sefer/editor";
 import type { JSX } from "@solidjs/web";
 import { Effect, Fiber, Option, Result, Stream } from "effect";
 import X from "lucide-solid/icons/x";
@@ -74,7 +75,6 @@ import {
 } from "#core/galley";
 import type { Attrs } from "#core/observability";
 import type { Resource, Role } from "#core/resources/library";
-import { mountReference, type PairedRange, type ReferenceMount } from "#editor/index";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
@@ -88,7 +88,7 @@ import { metadataOf } from "./project";
 // The editor's own stylesheet, for the same reason `BookEditor` imports it:
 // the pane paints with `usfm-*` classes and a route that never opens a book
 // never loads them.
-import "#editor/editor.css";
+import "@sefer/editor/editor.css";
 
 export interface ReferencePaneProps {
   readonly resource: Resource;

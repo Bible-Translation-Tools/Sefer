@@ -29,8 +29,7 @@
 
 import { type ChangeSet, Compartment, EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-
-import { sameSource, type Analysis } from "#core/galley";
+import { sameSource, type Analysis } from "@sefer/text/engine/analysis";
 
 import { analyzer } from "../core/analyzer";
 import { readingLayer, viewLayer } from "../core/compose";

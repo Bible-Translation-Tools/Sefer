@@ -12,6 +12,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { EditorView } from "@codemirror/view";
+import { annotateEmptyBlocks, blockNamer, emptyBlocks } from "@sefer/editor/recipes/emptyBlocks";
+import { surface } from "@sefer/editor/testing/harness";
 import { makeBook } from "@sefer/text/book";
 import { decode } from "@sefer/text/source";
 import { Effect } from "effect";
@@ -20,9 +22,6 @@ import { describe, expect, it } from "vitest";
 import { applyOverlay, overlayBook } from "#core/fixes/fixes";
 import { Galley, toLf, type GalleyService } from "#core/galley";
 import { NodeGalleyLive } from "#platform/node/galley";
-
-import { surface } from "../testing/harness";
-import { annotateEmptyBlocks, blockNamer, emptyBlocks } from "./emptyBlocks";
 
 const PSALMS = toLf(
   readFileSync(

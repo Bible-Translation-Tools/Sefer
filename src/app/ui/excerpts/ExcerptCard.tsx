@@ -37,6 +37,14 @@
  */
 import { ChangeSet, StateField } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
+import {
+  fromCanonical,
+  ownEcho,
+  type EditorBook,
+  type EditorPolicy,
+  type Funnel,
+  type MarkedRange,
+} from "@sefer/editor";
 import { tocUnits, unitIndexAt } from "@sefer/text/location/locate";
 import type { JSX } from "@solidjs/web";
 import ChevronDownIcon from "lucide-solid/icons/chevron-down";
@@ -54,14 +62,6 @@ import {
   type Occurrence,
 } from "#core/excerpts/excerpts";
 import { tocViewOf, type Analysis } from "#core/galley";
-import {
-  fromCanonical,
-  ownEcho,
-  type EditorBook,
-  type EditorPolicy,
-  type Funnel,
-  type MarkedRange,
-} from "#editor/index";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";

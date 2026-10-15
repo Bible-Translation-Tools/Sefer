@@ -38,7 +38,7 @@ import { parseTransport } from "#core/remote/transport";
 
 // The diff's tokens and marks, so the sample under "Removed words" is drawn
 // by the same rules as Review.
-import "#editor/editor.css";
+import "@sefer/editor/editor.css";
 
 /**
  * The settings screen, under the open project (Will, 2026-10-07: leaving

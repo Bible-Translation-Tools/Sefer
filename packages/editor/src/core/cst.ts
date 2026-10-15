@@ -36,7 +36,7 @@ import {
   TokenKind,
   TokenView,
   isMarkerKind,
-} from "#core/galley";
+} from "@sefer/text/engine/analysis";
 
 import {
   type NodeShape,

@@ -1,5 +1,5 @@
 /**
- * One change as a card: the diff view (`#editor` `mountDiffView`) CLIPPED to
+ * One change as a card: the diff view (`@sefer/editor` `mountDiffView`) CLIPPED to
  * the change and its context, so it reads exactly as the editor does —
  * regular mode or USFM, split (baseline beside current) or unified (the
  * current text with the baseline's words struck through where they were).
@@ -18,13 +18,6 @@
  */
 
 import type { EditorView } from "@codemirror/view";
-import type { JSX } from "@solidjs/web";
-import CheckIcon from "lucide-solid/icons/check";
-import CodeIcon from "lucide-solid/icons/code";
-import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
-
-import type { Analysis, MergeSide } from "#core/galley";
-import type { DecisionUnit } from "#core/galley/diff";
 import {
   liveDiff,
   mountDiffView,
@@ -33,9 +26,16 @@ import {
   type DiffPaint,
   type DiffViewMount,
   type EditorBook,
-} from "#editor/index";
+} from "@sefer/editor";
+import type { JSX } from "@solidjs/web";
+import CheckIcon from "lucide-solid/icons/check";
+import CodeIcon from "lucide-solid/icons/code";
+import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
 
-import "#editor/editor.css";
+import type { Analysis, MergeSide } from "#core/galley";
+import type { DecisionUnit } from "#core/galley/diff";
+
+import "@sefer/editor/editor.css";
 
 import { t } from "../../i18n";
 import { CardActions, type CardAction } from "../multibuffer/CardAction";

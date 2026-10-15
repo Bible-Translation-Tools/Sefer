@@ -26,9 +26,6 @@
 
 import { Compartment, Prec, type Extension } from "@codemirror/state";
 import { keymap, type EditorView } from "@codemirror/view";
-import { createEffect, createMemo, createSignal, untrack } from "solid-js";
-
-import type { Analysis } from "#core/galley";
 import {
   analyzer,
   clippedToScope,
@@ -44,9 +41,12 @@ import {
   type EditorBook,
   type MarkedRange,
   type Satellite,
-} from "#editor/index";
+} from "@sefer/editor";
+import { createEffect, createMemo, createSignal, untrack } from "solid-js";
 
-import "#editor/editor.css";
+import type { Analysis } from "#core/galley";
+
+import "@sefer/editor/editor.css";
 
 export interface CardEditorProps {
   readonly book: EditorBook;

@@ -48,7 +48,7 @@ The generated half looks after itself; the judgement half does not. When a gate 
 | oxlint warnings | 0 | `pnpm lint` fails on any, every commit |
 | fallow dead code (`pnpm deadcode`) | 0 issue(s) | every deploy; advisory on branches |
 | fallow duplication | 1.7% in 66 clone group(s) | none — advisory |
-| suppression comments | 15 | each listed below with its reason |
+| suppression comments | 12 | each listed below with its reason |
 
 ### Oxlint warnings, by rule and file
 
@@ -70,9 +70,6 @@ None.
 | `src/app/ui/workspace/ReferenceColumn.tsx` | `oxlint-disable-next-line` | solid/reactivity -- a promise continuation: runs once, when the copy is here |
 | `src/app/workflows/drafting.ts` | `fallow-ignore-file` | unused-file -- a deliberate stub; see the note below for why it is not wired. |
 | `src/core/git/contract.ts` | `fallow-ignore-file` | unused-file -- registered nowhere on purpose; see the note below. |
-| `src/editor/core/instrument.ts` | `oxlint-disable-next-line` | no-console -- no ring is registered: a standalone editor still says it broke |
-| `src/editor/testing/harness.ts` | `fallow-ignore-file` | unused-export unused-type -- the editor tests that use these come back once behaviour locks. |
-| `src/editor/testing/mount.ts` | `fallow-ignore-file` | unused-file -- kept for the browser-mode editor tests that will want it. |
 
 ### Fallow configuration exceptions
 

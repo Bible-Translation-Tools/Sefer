@@ -9,7 +9,7 @@
  * book has thousands.
  */
 
-import { NOTE_PART } from "#core/galley";
+import { NOTE_PART } from "@sefer/text/engine/analysis";
 
 import { lineIndexAt, type DocStructure } from "./docStructure";
 import { paintOver, type PaintIndex } from "./paint";

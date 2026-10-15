@@ -7,7 +7,7 @@
  * they get a row class of their own rather than a span pair.
  */
 
-import type { NodeView, NotePart } from "#core/galley";
+import type { NodeView, NotePart } from "@sefer/text/engine/analysis";
 
 import { notePartsOf } from "./cst";
 import type { NoteRange } from "./fold";

@@ -24,7 +24,6 @@
       "#app/*": ["./src/app/*"],
       "#core/*": ["./src/core/*"],
       "#dev/*": ["./src/dev/*"],
-      "#editor/*": ["./src/editor/*"],
       "#platform/*": ["./src/platform/*"]
     }
   },

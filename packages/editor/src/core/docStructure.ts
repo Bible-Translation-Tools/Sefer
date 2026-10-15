@@ -14,7 +14,6 @@
  */
 
 import { EditorState, Facet, StateField, type Text } from "@codemirror/state";
-
 import {
   type Analysis,
   type TokenView,
@@ -23,7 +22,7 @@ import {
   NodeView,
   TOKEN,
   describesExactly,
-} from "#core/galley";
+} from "@sefer/text/engine/analysis";
 
 import { analyzed, analyzer } from "./analyzer";
 import { type BlockColumns, Blocks, NO_BLOCKS } from "./blockTable";

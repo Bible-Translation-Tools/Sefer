@@ -35,8 +35,7 @@ import {
   type Transaction,
 } from "@codemirror/state";
 import { EditorView, ViewPlugin, keymap } from "@codemirror/view";
-
-import { NOTE_PART } from "#core/galley";
+import { NOTE_PART } from "@sefer/text/engine/analysis";
 
 import { funnelFor, type EditorBook } from "../book";
 import { analyzer } from "../core/analyzer";

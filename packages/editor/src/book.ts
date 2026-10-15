@@ -53,8 +53,6 @@ import {
 import type { Change, Source, SourceStamp } from "@sefer/text/source";
 import { Result } from "effect";
 
-import type { ObservabilityService } from "#core/observability";
-
 import { actionCommand, type EditorAction } from "./core/actions";
 import type { Analyze } from "./core/analyzer";
 import { surfaceRange } from "./core/clip";
@@ -66,7 +64,7 @@ import { modeFacet, trusted } from "./core/kernel";
 import { assignment } from "./core/registry";
 import { withoutScrolling } from "./core/scroll";
 import { changesOf, fromCanonical, type Funnel, type Receive, type SurfaceTerms } from "./funnel";
-import { observabilityTracer } from "./observability";
+import { observabilityTracer, type EditorObservability } from "./observability";
 
 /**
  * A Book whose text lives in a CodeMirror state, plus the four things only
@@ -133,7 +131,7 @@ export interface EditorBookOptions {
   /** Extra extensions for the canonical state (a linter, a projection). */
   readonly extensions?: Extension;
   /** When present, `apply` and refusals are noted. Absent is fine. */
-  readonly observability?: ObservabilityService;
+  readonly observability?: EditorObservability;
 }
 
 /**

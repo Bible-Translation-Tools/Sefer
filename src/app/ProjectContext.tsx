@@ -20,6 +20,7 @@
  * read would re-run on.
  */
 
+import { anchorFrom, type ChapterRow, type EditorBook, type ProjectionName } from "@sefer/editor";
 import type { Book, BookId } from "@sefer/text/book";
 import { addressCode, chaptersAddress, type Address } from "@sefer/text/location/address";
 import { addressAt, resolve } from "@sefer/text/location/locate";
@@ -55,7 +56,6 @@ import { DEFAULT_JOURNAL_POLICY, type Restorable } from "#core/recovery/recovery
 import { pendingOnOpen } from "#core/recovery/reopen";
 import { highestVersions } from "#core/resources/relationships";
 import { SaveCoordinator } from "#core/save/saveCoordinator";
-import { anchorFrom, type ChapterRow, type EditorBook, type ProjectionName } from "#editor/index";
 import { detectHost } from "#platform/host";
 
 import { registerShellCommands, type ShellBridge } from "./commands";

@@ -130,6 +130,9 @@ importers:
       '@corvu-next/tooltip':
         specifier: 0.1.5
         version: 0.1.5(@solidjs/web@2.0.0-rc.9(solid-js@2.0.0-rc.9))(solid-js@2.0.0-rc.9)
+      '@sefer/editor':
+        specifier: workspace:*
+        version: link:packages/editor
       '@sefer/text':
         specifier: workspace:*
         version: link:packages/text
@@ -287,6 +290,34 @@ importers:
       wrangler:
         specifier: ^4.136.3
         version: 4.136.3(@types/node@26.6.2)
+
+  packages/editor:
+    dependencies:
+      '@sefer/text':
+        specifier: workspace:*
+        version: link:../text
+    devDependencies:
+      '@codemirror/commands':
+        specifier: ^6.11.1
+        version: 6.11.1
+      '@codemirror/lint':
+        specifier: ^6.9.7
+        version: 6.9.7
+      '@codemirror/state':
+        specifier: ^6.7.6
+        version: 6.7.6
+      '@codemirror/view':
+        specifier: ^6.43.13
+        version: 6.43.13
+      '@wycliffeassociates/scripture-kitchen':
+        specifier: github:WycliffeAssociates/scripture-kitchen#v0.1.9
+        version: https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/5fe3f72cee3b887f5e3aca55ea701832da361437
+      effect:
+        specifier: 4.0.0-rc.112
+        version: 4.0.0-rc.112
+      vitest:
+        specifier: 5.0.1
+        version: 5.0.1(@types/node@26.6.2)(@vitest/browser-playwright@5.0.1)(@vitest/ui@5.0.1)(jsdom@25.0.1(supports-color@8.1.1))(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/text:
     devDependencies:

@@ -27,6 +27,7 @@
  * question the screen is asking.
  */
 
+import type { EditorBook, Funnel } from "@sefer/editor";
 import type { BookId } from "@sefer/text/book";
 import CheckIcon from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
@@ -39,7 +40,6 @@ import { For, Show, createMemo, createSignal, onCleanup } from "solid-js";
 import type { BookExcerpts, Excerpt, Extent, OutlineRow } from "#core/excerpts/excerpts";
 import type { Analysis } from "#core/galley";
 import type { Guide, Term } from "#core/stet/stet";
-import type { EditorBook, Funnel } from "#editor/index";
 
 import { t } from "../../i18n";
 import type { SourceReading } from "../../workflows/stet";

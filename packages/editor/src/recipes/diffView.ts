@@ -37,8 +37,7 @@ import {
   gutter,
   layer,
 } from "@codemirror/view";
-
-import type { Analysis } from "#core/galley";
+import type { Analysis } from "@sefer/text/engine/analysis";
 
 import { type Analyze, analyzer } from "../core/analyzer";
 import { readingLayer, viewLayer } from "../core/compose";

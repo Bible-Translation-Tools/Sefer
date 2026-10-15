@@ -18,7 +18,7 @@ import {
   SpecContext,
   StructuralWhitespaceRequirement,
   TokenKind,
-} from "#core/galley";
+} from "@sefer/text/engine/analysis";
 
 import { type ClassKey, type OwnedSetName, OWNED_SETS } from "./registry";
 

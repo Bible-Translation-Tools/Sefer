@@ -19,6 +19,16 @@
  */
 
 import { lintGutter } from "@codemirror/lint";
+import {
+  commandsLayer,
+  editorBook,
+  gestureTrace,
+  lintHoverGrace,
+  noteEditing,
+  usfmLinter,
+  viewLayer,
+  type EditorBook,
+} from "@sefer/editor";
 import type { BookId } from "@sefer/text/book";
 import { Effect, FileSystem, Layer, ManagedRuntime, Option, Result, Scope } from "effect";
 
@@ -63,16 +73,6 @@ import {
   SaveCoordinatorLive,
   type SaveCoordinatorService,
 } from "#core/save/saveCoordinator";
-import {
-  commandsLayer,
-  editorBook,
-  gestureTrace,
-  lintHoverGrace,
-  noteEditing,
-  usfmLinter,
-  viewLayer,
-  type EditorBook,
-} from "#editor/index";
 import { detectHost } from "#platform/host";
 import { browserFacts } from "#platform/hostFacts";
 import { WebCredentialsLive } from "#platform/web/credentials";

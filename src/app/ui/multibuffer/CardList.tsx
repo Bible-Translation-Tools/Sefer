@@ -25,6 +25,7 @@
  * beyond the functions it is handed.
  */
 
+import type { EditorBook } from "@sefer/editor";
 import type { BookId } from "@sefer/text/book";
 import type { JSX } from "@solidjs/web";
 import {
@@ -35,8 +36,6 @@ import {
   untrack,
   type Accessor,
 } from "solid-js";
-
-import type { EditorBook } from "#editor/index";
 
 import { t } from "../../i18n";
 import { VirtualList, type VirtualSection } from "../primitives";

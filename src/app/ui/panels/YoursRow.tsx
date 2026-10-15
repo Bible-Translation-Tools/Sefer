@@ -8,9 +8,8 @@
  * replace by adopting either side.
  */
 
+import { mountDiffView } from "@sefer/editor";
 import { For, createEffect, createSignal, untrack } from "solid-js";
-
-import { mountDiffView } from "#editor/index";
 
 import { t } from "../../i18n";
 import { wasBlock, type DiffSides } from "../diff/DiffCard";

@@ -10,7 +10,7 @@
  * decorations).
  */
 
-import { NOTE_PART } from "#core/galley";
+import { NOTE_PART } from "@sefer/text/engine/analysis";
 
 import {
   isBlankLine,
