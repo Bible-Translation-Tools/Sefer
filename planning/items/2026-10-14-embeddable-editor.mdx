@@ -392,7 +392,21 @@ the last reach-in goes.</Question>
 
 1. **Inventory.** Write down each reach-in in the table above: which method or
    event replaces it.
-2. **Cut the package (about a day).**
+2. **Cut the package. Done 2026-10-15 on branch `editor-package`.** It became
+   two packages, not one, because `core/book` mixed the pure Book port with
+   Effect `FileSystem` loading, and the hub wants the address parser without
+   CodeMirror:
+   - `@sefer/text`, commit 21b8e04:
+     - `Source`
+     - the Book port, with `openBook` staying in core
+     - location
+     - localized names
+     - the engine's analysis vocabulary
+   - `@sefer/editor`, commit c18fbf6: the editor, with an `EditorObservability`
+     port and CodeMirror as a peer dependency, so there is one copy of its state.
+   - `pnpm boundaries` holds both, and forbids core from importing the editor.
+
+   The original plan for this step:
    - Move `src/editor` to `packages/editor`, with CodeMirror as a peer dependency.
    - Move location in.
    - Add a `pnpm boundaries` rule: no `#app` and no framework imports.
@@ -451,6 +465,17 @@ already takes the registry as a parameter internally (`marker_idx(…, ext)`,
 `lex_with`). An ask for scripture-kitchen: a parse door that takes extensions
 per call, or a handle per registry, with the global kept for callers that want
 one. Until then, the package documents one marker config per page.
+
+</Followup>
+
+<Followup id="exports-narrow">
+
+Both packages export `"./*"`, so every file is public. That also hides dead
+code inside them from fallow, because every file is an entry. Narrow the exports
+once step 3 has the instance API:
+
+- `@sefer/editor`: `"."`, `"./testing"` and `"./editor.css"`.
+- `@sefer/text`: the modules a host actually needs.
 
 </Followup>
 
