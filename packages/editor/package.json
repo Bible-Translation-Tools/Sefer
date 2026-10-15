@@ -9,14 +9,12 @@
     "./editor.css": "./src/editor.css",
     "./testing/*": "./src/testing/*.ts"
   },
-  "dependencies": {
-    "@sefer/text": "workspace:*"
-  },
   "devDependencies": {
     "@codemirror/commands": "^6.11.1",
     "@codemirror/lint": "^6.9.7",
     "@codemirror/state": "^6.7.6",
     "@codemirror/view": "^6.43.13",
+    "@sefer/text": "workspace:*",
     "@wycliffeassociates/scripture-kitchen": "github:WycliffeAssociates/scripture-kitchen#v0.1.9",
     "effect": "4.0.0-rc.112",
     "vitest": "5.0.1"
@@ -26,6 +24,7 @@
     "@codemirror/lint": "^6.9.7",
     "@codemirror/state": "^6.7.6",
     "@codemirror/view": "^6.43.13",
+    "@sefer/text": "*",
     "@wycliffeassociates/scripture-kitchen": "*",
     "effect": "4.0.0-rc.112"
   }

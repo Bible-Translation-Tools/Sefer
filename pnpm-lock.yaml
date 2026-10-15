@@ -292,10 +292,6 @@ importers:
         version: 4.136.3(@types/node@26.6.2)
 
   packages/editor:
-    dependencies:
-      '@sefer/text':
-        specifier: workspace:*
-        version: link:../text
     devDependencies:
       '@codemirror/commands':
         specifier: ^6.11.1
@@ -309,6 +305,9 @@ importers:
       '@codemirror/view':
         specifier: ^6.43.13
         version: 6.43.13
+      '@sefer/text':
+        specifier: workspace:*
+        version: link:../text
       '@wycliffeassociates/scripture-kitchen':
         specifier: github:WycliffeAssociates/scripture-kitchen#v0.1.9
         version: https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/5fe3f72cee3b887f5e3aca55ea701832da361437
