@@ -37,6 +37,7 @@ import { borrowedStructure, structureAt, type DocStructure } from "../core/docSt
 import { renderRangeField } from "../core/render";
 import { span } from "../core/timing";
 import { fromCanonical, type Funnel } from "../funnel";
+import { handleFor, type EditorHandle } from "../handle";
 import { policyKey, policyView, type EditorPolicy } from "../views";
 import {
   clipped,
@@ -77,8 +78,7 @@ export interface ReaderOptions {
   readonly selectable?: boolean;
 }
 
-export interface ReaderMount {
-  readonly view: EditorView;
+export interface ReaderMount extends EditorHandle {
   setPolicy(policy: EditorPolicy): void;
   /** Shows another range of the same text; the view is kept, not rebuilt. */
   reclip(range: { readonly from: number; readonly to: number }): void;
@@ -188,14 +188,13 @@ export function mountReader(options: ReaderOptions): ReaderMount {
     idle = undefined;
   };
 
-  return {
-    view,
-    setPolicy: (next) => {
+  return handleFor(view, {
+    setPolicy: (next: EditorPolicy) => {
       if (policyKey(next) === policyKey(policy)) return;
       policy = next;
       view.dispatch({ effects: projection.reconfigure(policyView(next, options.surface)) });
     },
-    reclip: (range) => {
+    reclip: (range: { readonly from: number; readonly to: number }) => {
       // A range is in the canonical text's coordinates: catch up first.
       flush();
       const next = clipSpan(view.state.doc, range);
@@ -203,13 +202,13 @@ export function mountReader(options: ReaderOptions): ReaderMount {
       clip = next;
       reclip(view, next);
     },
-    remark: (next) => {
+    remark: (next: readonly MarkedRange[]) => {
       flush();
       if (next === marks || sameMarks(next, marks)) return;
       marks = next;
       remark(view, next);
     },
-    follow: (host) => {
+    follow: (host: Funnel | undefined) => {
       stop();
       if (host === undefined) return true;
       // The engine's hash and length, not a compare of the two texts: a whole
@@ -242,5 +241,5 @@ export function mountReader(options: ReaderOptions): ReaderMount {
       stop();
       giveBack(view);
     },
-  };
+  });
 }

@@ -10,7 +10,6 @@
  * `onEdit`, and the card swaps this view for a satellite with the caret there.
  */
 
-import { EditorView } from "@codemirror/view";
 import {
   mountReader,
   policyKey,
@@ -108,10 +107,7 @@ export function ExcerptReader(props: ExcerptReaderProps) {
     () => live(),
     (mount) => {
       if (mount === undefined) return;
-      const view = mount.view;
-      props.onReveal?.((at) => {
-        view.dispatch({ effects: EditorView.scrollIntoView(at, { y: "start" }) });
-      });
+      props.onReveal?.((at) => mount.reveal({ from: at }, { scroll: "start" }));
     },
   );
 
@@ -148,13 +144,7 @@ export function ExcerptReader(props: ExcerptReaderProps) {
     // edits — the editor answers the same point on its own fresh view
     // (`CardEditor`). A direct card's reader takes no mousedown at all
     // (`selectable: false`), so CodeMirror's own handler cannot throw first.
-    let at: number | null = null;
-    try {
-      at = mount === undefined ? null : mount.view.posAtCoords(point);
-    } catch {
-      at = null;
-    }
-    edit(at ?? undefined, point);
+    edit(mount?.offsetAt(point), point);
   };
 
   return (
