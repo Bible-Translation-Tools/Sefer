@@ -58,6 +58,13 @@ interface TargetFacts {
   readonly empty: boolean;
   readonly mergeTargetPolicy: OwnershipBit | null;
   readonly typable: PlanSpan | null;
+  /**
+   * Spans of free text inside the set that a range may edit without taking
+   * the set: an open note's body, where the policy lets it be written
+   * (`note.body` direct — the note editor's). A deletion wholly inside one is
+   * an edit of that text; one that reaches markup is judged as before.
+   */
+  readonly editable: readonly PlanSpan[];
   readonly delimiter: PlanSpan | null;
 }
 
@@ -129,6 +136,7 @@ export function buildOwnedIndex(s: DocStructure, plan: DocPlan, a: Assignment): 
     empty?: boolean;
     mergeTargetPolicy?: OwnershipBit | null;
     typable?: PlanSpan | null;
+    editable?: readonly PlanSpan[];
     delimiter?: PlanSpan | null;
   }
 
@@ -163,6 +171,7 @@ export function buildOwnedIndex(s: DocStructure, plan: DocPlan, a: Assignment): 
       empty: extra.empty === true,
       mergeTargetPolicy: extra.mergeTargetPolicy ?? null,
       typable: extra.typable ?? null,
+      editable: extra.editable ?? NONE,
       delimiter: extra.delimiter ?? null,
     };
     if (paintedSpans.length) out.push({ ...facts, form: "spans" });
@@ -201,7 +210,17 @@ export function buildOwnedIndex(s: DocStructure, plan: DocPlan, a: Assignment): 
     if (r.form === "collapsed")
       make(out, "note.caller", anchor, whole, r.point ? [r.point] : NONE, NONE);
     else if (r.form === "elided") make(out, "note.caller", anchor, whole, NONE, r.hidden);
-    else make(out, "note.caller", anchor, whole, complement(whole, r.hidden), r.hidden);
+    else
+      make(out, "note.caller", anchor, whole, complement(whole, r.hidden), r.hidden, {
+        // Without this the whole open note was one point-painted set, and a
+        // Backspace anywhere in its text took the note with it (2026-10-15).
+        editable:
+          rows["note.body"].cell.mutability === "direct"
+            ? r.parts
+                .filter((part) => part.kind === NOTE_PART.BODY && part.to > part.from)
+                .map((part) => ({ from: part.from, to: part.to }))
+            : NONE,
+      });
   };
 
   const wordTarget = (out: ResolvedOwnedTarget[], r: ResolvedWord): void => {

@@ -478,6 +478,7 @@ function rangePlan(ix: OwnedIndex, s: DocStructure, from: number, to: number): R
   const straddled = (sp: PlanSpan) => overlaps(sp) && (sp.from < lo || sp.to > hi);
   const wholeOrNothing = (t: ResolvedOwnedTarget): boolean => {
     if (t.typable && t.typable.from <= lo && t.typable.to >= hi) return false;
+    if (t.editable.some((span) => span.from <= lo && span.to >= hi)) return false;
     if (t.hiddenSpans.some(overlaps)) return true;
     if (t.paint === "point") return t.paintedSpans.some(straddled);
     if (t.paint === "boundary") return t.paintedSpans.some(overlaps);
