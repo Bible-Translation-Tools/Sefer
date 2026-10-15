@@ -1,0 +1,23 @@
+---
+id: a7ba559a-eaeb-4f1f-b045-462b891d733c
+title: "Desktop: e2e in CI, Linux, a real keychain test"
+kind: followup
+status: planned
+created: 2026-10-14
+updated: 2026-10-14
+sha: 50aa9cd
+priority: 2
+tags: [desktop]
+source: sefer-next-features doc, 2026-10-07 to 13
+---
+
+Agents now drive the real desktop app over WebDriver (`pnpm verify:desktop`, `pnpm test:desktop`,
+5 checks, debug builds only), on the stack. Not yet a gate.
+
+<Followup id="ci">Run the desktop e2e in CI, once the checks are stable enough to pin as real tests.</Followup>
+
+<Followup id="linux">Linux in CI.</Followup>
+
+<Followup id="keychain">One real keychain test on desktop: driven runs keep credentials in memory and never exercise it.</Followup>
+
+<Followup id="git-surface">Make sure the git surface is correct on desktop before anything ships to preview (from the Oct 7 priorities memo).</Followup>

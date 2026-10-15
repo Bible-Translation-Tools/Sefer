@@ -1,0 +1,30 @@
+---
+id: 858618e5-da52-4556-8734-d055729b7b8b
+title: "Editor sharp edges"
+kind: plan
+status: planned
+created: 2026-10-14
+updated: 2026-10-14
+sha: 50aa9cd
+priority: 1
+tags: [editor]
+related: [40d3076e-25ac-47fa-91fd-8482173a4162]
+source: sefer-next-features doc, 2026-10-07 to 13
+---
+
+From the Oct 7 memo: the editor works but has rough edges from the revision push, and its cursor
+code is the gnarliest in the app (binary searches, high cyclomatic complexity).
+
+<Followup id="headline-rule">State the headline rule at the top of `documentation/architecture/editor.md`: **a CodeMirror line is not a USFM line.** Newlines are drawn by context (a joined newline is a space), so never split on doc lines or use `doc.line` as a unit. (Added Oct 8; check it is committed.)</Followup>
+
+<Followup id="cursor">Refine cursor mechanics on the playground with the arrow keys. Cursor code is a first target for the [fallow pass](/items/2026-10-14-fallow-readability-pass).</Followup>
+
+<Followup id="tests">Put tests back around copy, paste and Enter.</Followup>
+
+<Followup id="formatter">Revisit the USFM formatter, written before the editor drew newlines by context. Consider format-on-save.</Followup>
+
+<Question id="enter">Keep taking over Enter (a line break means nothing, so Enter makes a paragraph), at the cost of no pressing Enter for blank space?</Question>
+
+<Tradeoff id="gutter" chose="a line-based gutter" cost="a project with no paragraphs has no real lines to number">Accepted as a known limit.</Tradeoff>
+
+<Followup id="markdown">Markdown mode: CodeMirror's own Markdown support, for glossaries and notes.</Followup>

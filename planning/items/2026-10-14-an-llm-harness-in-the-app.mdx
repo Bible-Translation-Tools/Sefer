@@ -1,0 +1,43 @@
+---
+id: 17f18766-58d3-4750-babf-8e9ce9c9bca9
+title: "An LLM harness in the app"
+kind: idea
+status: idea
+created: 2026-10-14
+updated: 2026-10-14
+sha: 50aa9cd
+priority: 4
+tags: [llm]
+related: [9cdeee6c-1747-4922-b2b8-84748a95839a]
+source: sefer-next-features doc, 2026-10-07 to 13
+---
+
+Last on the roadmap: it needs the step machine (built) and command schemas first.
+
+A small model on the user's own machine, reached through an OpenAI-shaped endpoint, calls Sefer's
+workflows as tools. Someone who doesn't know where to click says "help me fix my verses", and the
+harness calls the triage workflow; a finding could get an "explain this" icon. AI here is progressive
+enhancement for explanation, not translation: a model won't know the target language.
+
+**How it works.** The model never touches the DOM. Sefer runs the loop: send the conversation, the
+current state as text and the tool schemas; run any tool call against its own state, as the command
+palette would; send the result back; repeat.
+
+**Prerequisite: a tool registry.** Each workflow a typed function with a name, a parameter schema
+and a runner, in one registry feeding the palette, URLs, tours and the model. The commenting
+experiment's `find` cells (`experiment/commenting`, 2c8c706, `src/core/discussion/actions.ts`) are a
+registry entry in all but name.
+
+| Backend | Whose compute | Key | Model size | Catch |
+|---|---|---|---|---|
+| Local server: Ollama, LM Studio, `llama-server`, `mlx_lm.server` | The user's | No | 7–30B | User installs it; the web build needs Sefer's origin in `OLLAMA_ORIGINS` |
+| Bundled with desktop: llama.cpp as a Tauri sidecar | The user's | No | Whatever ships | Bigger installer; we maintain the build |
+| In the browser: WebLLM or Transformers.js | The user's | No | 1–3B | Tool calling is shaky at this size; WebGPU gaps in desktop webviews |
+| Hosted, user's own key | A provider's | Yes | Frontier | Scripture text leaves the device; a shipped key needs a proxy |
+
+The local server comes first. Not now: ACP or `claude -p` (the external agent owns the loop).
+WebMCP is the opposite direction, a cheap extra once the registry exists.
+
+<Followup id="spike">Spike: a small tool-calling model in Ollama (Qwen 3, Llama 3.2 3B); one dev-only page against `http://localhost:11434/v1`, the current book and one finding as context, one `triage` tool; then swap the base URL to LM Studio or `llama-server` (needs `--jinja`).</Followup>
+
+<Question id="feasible">Does a 7–8B local model call one tool reliably, and does the same page work against a second server?</Question>

@@ -290,7 +290,7 @@ export const diagnosticFixLabel = (finding: DiagnosticView): string | null =>
  * The rendered message. Kitchen's `message()` fills `{anchor}` and `{second}`
  * but not `{aux}` (the expected number, the numbering cap), so "expected
  * {aux}" reached the screen; it is filled here from the row's own aux until
- * kitchen does it (planning/00-ideas/scripture-kitchen-asks.md). A `version`
+ * kitchen does it (planning/items/2026-09-14-scripture-kitchen-asks.mdx). A `version`
  * aux is read as an index into `USFM_VERSIONS`, the encoding `usfmVersion`
  * uses; any other aux is a plain number.
  */

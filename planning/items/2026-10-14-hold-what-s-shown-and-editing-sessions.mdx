@@ -1,0 +1,37 @@
+---
+id: d6a2480e-4238-40d3-8d3a-f789914a4d7c
+title: "Hold what's shown, and editing sessions"
+kind: idea
+status: discussing
+created: 2026-10-14
+updated: 2026-10-14
+sha: 50aa9cd
+priority: 3
+tags: [review]
+related: [6c8936de-cbb7-450c-a5cc-ae6d62d13f65]
+source: sefer-next-features doc, 2026-10-07 to 13
+---
+
+**Decided direction (Oct 7): canonicalise, no new primitive.** A view keeps what it showed until the
+reader moves on, and marks a row settled or stale rather than removing it. The behaviour already
+exists in pieces, and is sometimes jumpy:
+
+- **Review:** the settled card keeps the diff on screen after the sides stop differing (`ReviewPanel.tsx`, `settled()`).
+- **Findings:** stale rows carry a badge instead of vanishing (`hideStale`, `src/core/findings/filter.ts`).
+- **The editor:** a finding fixed mid-keystroke drops its decoration and the text jumps. It should hold, marked fixed, until the cursor leaves the tile.
+
+<Followup id="one-rule">Write it down as one rule with one helper when the next caller arrives, probably key-term approvals, or when one of the three next gets jumpy.</Followup>
+
+## Editing sessions
+
+The designer's PR #5 (merged) added "Approve" and "Approve with edits" to key terms with an editing
+session per card. Two places want a per-card edit: key terms ("approved with edits" means changed
+since the card opened) and Review (take a side, then fix a punctuation mark). Undo history is
+global today: per-card undo would light up undo buttons on every other card of the same book.
+
+**Approve with edits needs no session:** it can mean "the verse differs from the saved file when you
+approve", the disk-vs-working baseline Review already uses.
+
+<Question id="history">Global undo with a prominent button, per-card history, or PR #5's buffer in front of the buffer?</Question>
+
+Persisting approvals is [project state](/items/2026-10-06-project-state-and-suppressions).

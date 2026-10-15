@@ -95,7 +95,7 @@ The name catalogue and the held books are memos over the project and its metadat
 
 ## Not built yet
 
-- **Anchor** and mapping an Anchor through edits: for comments. The mechanism is outlined in `planning/00-ideas/commenting-and-discussion.md`.
+- **Anchor** and mapping an Anchor through edits: for comments. The mechanism is outlined in `planning/items/2026-09-21-commenting-and-discussion.mdx`.
 - **Text identity across sessions.** In a session a Location carries the Source stamp (Revision + length). When one is persisted it will carry a Fingerprint — `{ alg: "xxh3-64", hash, length }` over the Source (LF-normalized UTF-8, no BOM), from Galley's `xxh3Text` — never over disk bytes, so a change of line endings does not detach a comment. A mismatch means re-resolve, not lost.
 - **A prose scanner** and "copy link to highlight" (`[Mat 1:14](sefer:MAT/1:14?at=…&fp=…)`), with comments.
 - **Verse `end`** (U23003's `MAT 2:5-end`): one union member, added when a consumer types one.

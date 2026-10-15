@@ -41,7 +41,7 @@ This folder holds durable project guidance for humans and agents. Root `AGENTS.m
 
 ## Scope and authority
 
-Active architecture discussions live under [`planning/01-discussing`](../planning/01-discussing/); they are discussion, not working guidance.
+Plans and active architecture discussions live in [`planning/items/`](../planning/items/) (status `discussing` for the active ones; `pnpm plans ls`); they are discussion, not working guidance.
 
 The broader product and architecture authority is the sibling repository's `plans/editor-v2-rewrite-vision.md` in `scripture-editor-proto-2`. It is a vision, not an implementation plan. Keep parser and proofreader internals owned by their supplying repositories.
 

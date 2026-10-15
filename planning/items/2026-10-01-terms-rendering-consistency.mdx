@@ -1,0 +1,88 @@
+---
+id: 2c73cc66-5d39-47a4-8f1b-9d7b906611fa
+title: "Spiritual terms as a consistency check: one control, an expected rendering (2026-10-01, experiment)"
+kind: idea
+status: discussing
+created: 2026-10-01
+updated: 2026-10-14
+tags: []
+source: planning/00-ideas/terms-rendering-consistency.md
+---
+
+Will's idea, filed to run as an experiment later.
+
+## Status (2026-10-14)
+
+The explicit half is built as **Expect** in Find's source-text scope, on the stack that carries
+r-links: `src/core/search/expect.ts` (3a5fb90), on Find with `expect=` and `show=` in the URL
+(157b710), hidden until wanted (95fedfd), and a tutorial on the Bisa Bible, Jesus → Yesu (282f669).
+See `documentation/architecture/search.md`, "Expect". A box on the Key terms screen is a playground
+for the PO on `design/terms-consistency` (815c0a0), not for master.
+
+The suggestion half changes: not LCS. Will (2026-10-14):
+
+> I want to go ship ibm model 2 with this instead of lcs in scripture kitchen
+
+So B is suggested from a word alignment (IBM Model 2) over the source and target the kitchen already
+pairs by verse, not from a shared letter sequence. The LCS notes below are kept as history.
+
+The alignment work runs in parallel in Kitchen with its own agent: the pairing crate, `scripture-kitchen/planning/ideas/pairing-plan.packed.html`. It feeds both this and Expect.
+
+<Followup id="ibm2">Build IBM Model 2 in scripture-kitchen as a door over the registered source and target, and have Expect pre-fill B from it, with its coverage shown.</Followup>
+
+<Question id="ibm2-units">IBM Model 2 aligns words. Is a word the right unit for an agglutinating target, or does B need to be a stem drawn from the aligned words?</Question>
+
+<Question id="key-terms">Should Expect also sit on Key terms, over a guide's verses? This waits on the PO, through the `design/terms-consistency` playground.</Question>
+
+What a translator is really doing on the Spiritual terms screen is checking
+CONSISTENCY: wherever the source says A, does the target say B?
+
+## The shape
+
+One control, not a screen of its own:
+
+- **Where:** the scope (the shared `BookScope`: This book, Whole project,
+  OT, NT, Custom).
+- **The term, in the source language:** A, typed or picked ("grace",
+  "gracia", whatever the source is in).
+- **The expected rendering in the target:** B.
+
+The result is every verse in scope whose source has A, split into those
+whose target has B and those that do not. The second list is the work.
+
+## The automatic part: suggest B (superseded: IBM Model 2, above)
+
+Given the verses where the source has A, suggest B from the target text of
+those verses: the letter sequence they share most. Longest common
+subsequence of letters, not a word match, so prefixes and endings
+(inflection, agglutination) do not hide the stem. To flesh out:
+
+- LCS over which units: letters within words, or across a short window?
+- Ranking: coverage (in how many of the verses it appears) against length.
+- Noise: frequent short sequences that appear everywhere ("the", articles,
+  common affixes) need a corpus baseline, much as Sous judges against the
+  project's own habits.
+- Where it runs: probably a kitchen door over the registered target and
+  source (the pairing and verse alignment already exist there), with Sefer
+  owning the control and the wording.
+
+## Relation to today
+
+The STET catalogue and guide fixture already map a term to its places; this
+generalises that to any term the translator types, with B as the thing being
+checked. The card list, scope and source pairing it would show are the ones
+Find and Findings already share.
+
+## Explicit first, LCS as a suggestion (2026-10-01)
+
+Will's worry: LCS may not work, given affixes and noise. So:
+
+- **Primary: explicit.** The translator says what B must contain — a stem
+  ("grac"), or a short pattern where inflection splits it. Predictable,
+  checkable by anyone, and Find's literal / whole-word / regex matching
+  already does it.
+- **Secondary: LCS pre-fills that box**, with its coverage shown ("in 41 of
+  46 verses"). Low coverage says "type your own". A wrong suggestion costs
+  one edit, never a wrong result — which is what makes it safe to try.
+
+Lower priority than History.

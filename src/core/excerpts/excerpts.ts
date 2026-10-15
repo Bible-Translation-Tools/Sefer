@@ -6,7 +6,7 @@
  * the book that the reader can open for editing. Find produces that list from
  * search hits, STET from a term's occurrences, Findings from diagnostics. All
  * of them arrive here as the same three fields (`bookId`, `from`, `to`), so the
- * card above is written once (`planning/00-ideas/excerpt-compound-component.md`).
+ * card above is written once (`git log -- planning/00-ideas/excerpt-compound-component.md`).
  *
  * Three decisions this module exists to hold:
  *

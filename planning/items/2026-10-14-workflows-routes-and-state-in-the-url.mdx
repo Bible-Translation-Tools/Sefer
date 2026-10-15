@@ -1,0 +1,43 @@
+---
+id: 9cdeee6c-1747-4922-b2b8-84748a95839a
+title: "Workflows, routes and state in the URL"
+kind: plan
+status: in-progress
+created: 2026-10-14
+updated: 2026-10-15
+sha: 50aa9cd
+tags: [workflows]
+related: [93ef04c5-0736-4189-84e6-beb753525288, 40d3076e-25ac-47fa-91fd-8482173a4162]
+source: sefer-next-features doc, 2026-10-07 to 13
+---
+
+A workflow joins state Sefer already holds to UI, driven in a set order. It is not an editor
+feature but a driver that points the reader's attention somewhere, so it can be reached from a
+command, a URL, a tour or an LLM tool.
+
+## Built (on the stack)
+
+- **The step machine**, shared by tours and workflows: go, ready, then a spotlight or a docked panel; fails open while the UI moves (`src/app/tour/`).
+- **Triage verse numbers**, the first workflow, with Renumber from `Finding.expected`; `?workflow=<id>` starts one; Settings has a Workflows tab.
+- **Share links** as `/r/<owner>/<repo>/<place>?at=&host=`, rather than the sketched `/{owner}/{repo}`; a link names its cloud.
+- **Tour handles** are a `data-tour` attribute; the rest of the app does not know tours exist.
+
+## Still to build
+
+<Followup id="empty-verses">Triage empty verses: tab through the empty-verse boxes in order.</Followup>
+
+<Followup id="chapter-labels">Triage chapter labels: query the trees for `\cl`, then visit each in order or show them grouped and replace in one pass. Wants Kitchen ask 4 (chapter labels in Onion).</Followup>
+
+<Followup id="hover-actions">Move the real triage actions into the editor's hover popup; the workflow is a demo of them.</Followup>
+
+<Question id="where">Where does workflow knowledge live: Galley or Onion as lint knowledge, or Sefer?</Question>
+
+<Question id="url-state">How much state goes in the URL? `find`, `findings`, `terms` and `review` keep some already.</Question>
+
+<Question id="local">A project with no remote (a zip import) needs a namespace a link can name, such as `~local`. Is that wanted, given share links already exist?</Question>
+
+<Question id="deep-link" answer="A sefer:// deep link onto the same /r/ path (2026-10-15): see the desktop deep links item.">Desktop: a web URL doesn't open the Tauri app. A `sefer://` deep link onto the same path, or an "open in desktop" offer on the web page?</Question>
+
+<Question id="schemas">Commands gain a description and an argument schema only when one needs it. The [LLM harness](/items/2026-10-14-an-llm-harness-in-the-app) is the first that would.</Question>
+
+<Question id="tutorials">Tours vs tutorials: is "explain an idea" (Expect, Gitea setup) the same component as "how to use this screen"? Built so far as one.</Question>

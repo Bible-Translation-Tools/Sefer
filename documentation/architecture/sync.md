@@ -443,7 +443,7 @@ title change never taken), a refused send, Review against the copy with Genesis 
 commit `2590981` pushed to the fork as a fast-forward from `f2c457e` (Gitea's feed shows an ordinary
 push of three commits), and the offer as `Will_Kelly/x-en-ulb` pull request #1, whose net change is
 Jude alone. The Web build shows the same receipt and review. The steps by hand are
-`planning/02-inProgress/diverged-copy-test-guide.md`.
+`planning/items/2026-10-13-diverged-copy-test-guide.mdx`.
 
 The sign-in token carries
 `write:issue` for the notes; one minted before that must sign in again. On the Web every suggestion

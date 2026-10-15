@@ -1,0 +1,17 @@
+---
+id: 49f5f375-3747-4795-b13b-33f79fcb0912
+title: "Fallow readability pass"
+kind: followup
+status: planned
+created: 2026-10-14
+updated: 2026-10-14
+sha: 50aa9cd
+priority: 2
+tags: [quality]
+related: [858618e5-da52-4556-8734-d055729b7b8b]
+source: sefer-next-features doc, 2026-10-07 to 13
+---
+
+After the stack merges: `pnpm exec fallow health` for length and cyclomatic complexity, report
+first, then fix the worst few. The editor's cursor code is a first target;
+`documentation/lint-results.md` lists the component-size refactors still to do.

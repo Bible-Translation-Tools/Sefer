@@ -1,0 +1,45 @@
+---
+id: 40d3076e-25ac-47fa-91fd-8482173a4162
+title: "Form mode"
+kind: idea
+status: discussing
+created: 2026-10-14
+updated: 2026-10-14
+sha: 50aa9cd
+priority: 2
+tags: [editor]
+related: [858618e5-da52-4556-8734-d055729b7b8b, 9cdeee6c-1747-4922-b2b8-84748a95839a]
+source: sefer-next-features doc, 2026-10-07 to 13
+---
+
+The product owner and designer want a structured surface that makes people think one verse at a
+time, for typing in or for copying verses from paper. The worry is teaching a second surface that
+differs from the editor. The answer is to build it from the editor's own pieces, so the text stays
+one string with the same offsets, and proofreading still works.
+
+Why keep CodeMirror at all: the document is a string, not an object tree (as in TipTap or Lexical).
+Parsing and proofreading point at offsets and don't clone strings or objects, which keeps memory
+low on field devices.
+
+## Option 1: a projection in the editor
+
+One CodeMirror compartment, turned on and off:
+
+- Each verse marker becomes a hidden, immutable block decoration that forces a new line, so each verse is its own line.
+- The verse number is locked and clipped, as today, with a click handler for increase, decrease, remove.
+- Enter is disabled; backslash is already blocked.
+- Paragraph and title markers are masked out; chapters perhaps stay, for scrolling.
+- The cursor can only sit in verse text, and a selection is clamped to its tile.
+- Proofreading decorations still map through, because offsets don't change.
+
+## Option 2: workflows over the normal editor
+
+No new mode, only drivers: tab through empty verses, or step through every duplicate or
+out-of-order verse ([workflows](/items/2026-10-14-workflows-routes-and-state-in-the-url)). Falls
+out of the step machine, which is now built.
+
+<Question id="which">Option 1, option 2, or both? The roadmap's lean: option 2 first, option 1 only if that isn't enough.</Question>
+
+<Question id="keys">How is key handling organised by mode: branch on mode inside each key, or one handler per key that checks the mode? Ideally a matrix, mode × behaviour = policy.</Question>
+
+<Followup id="spike">A spike with Will at the keyboard. `plan.ts` is the risk.</Followup>

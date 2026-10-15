@@ -1,0 +1,113 @@
+---
+id: 6c8936de-cbb7-450c-a5cc-ae6d62d13f65
+title: "Project state: suppressions, approvals, and where they live (2026-10-06)"
+kind: idea
+status: idea
+created: 2026-10-06
+updated: 2026-10-14
+tags: [project-state, findings, terms]
+source: planning/00-ideas/project-state-and-suppressions.md
+---
+
+## Audit, 2026-10-14
+
+Reference picks are built: per device, in `.sefer/project.json` (9bf6064). Key-term approvals
+(PR #5, merged) are held in memory for the session only. Nothing persists suppressions.
+
+Answered by the code: a zip or Burrito export does **not** carry `.sefer/`
+(`isPrivatePath`, `src/core/admin/projectAdmin.ts`), so local-only approvals and suppressions
+would not travel by zip.
+
+<Question id="where">Per device or committed? Note `src/core/project/projectState.ts` says team facts do NOT belong in `.sefer/project.json`, which the 2026-10-12 "local first" draft below contradicts.</Question>
+
+<Question id="one-or-two">One mechanism for approvals and suppressions, or two?</Question>
+
+<Question id="book-wide">How is a book-wide Sous finding, with no address, suppressed?</Question>
+
+<Followup id="persist-approvals">Persist key-term approvals, keyed by address plus a verse hash, with a "changed since approved" badge.</Followup>
+
+**Status:** idea, undecided. Parked by Will on 2026-10-06 so that the
+[Writer migration](/items/2026-10-02-consolidate-book-repos) gets built first. A draft
+direction from 2026-10-12 is at the end; Will is still thinking it over, so
+nothing here is agreed.
+
+## The need
+
+Several features want state that belongs to a project and outlives a
+session:
+
+- **Lint and proofreading suppressions.** "This onion or Sous finding is not a
+  problem here."
+- **Key-term approvals.** PR #5 ("Spiritual terms: edit tracking, locked verse
+  numbers, Save changes / Cancel") tracks "Approve" and "Approve with edits" on
+  `/terms`. Will does not plan to accept that PR as is, but the feature needs
+  this state.
+- **Reference picks** (decided 2026-10-06): which source text the reference
+  column shows for a project. These are per device, in `.sefer/project.json`.
+
+## The question to decide
+
+Is a suppression or an approval this person's state or the team's?
+
+- **Per device** (`.sefer/`, which intake keeps out of every commit):
+  - simple, and it never conflicts;
+  - but each teammate approves and suppresses again, alone.
+- **Shared and committed:**
+  - a teammate sees that Mary approved "love" at Jude 1:21;
+  - but it needs a committed home and a rule for sync conflicts, because
+    Review only judges scripture text.
+  - `.upstreams.json` (Writer migration) is the first committed file of this
+    kind. A second one is the moment to choose:
+    - one dotfile per concern;
+    - or one committed Sefer folder, separate from `.sefer/`.
+
+## Also open
+
+- **The key.** What identifies a suppression or an approval so that it
+  survives unrelated edits, but reopens when the verse changes? For example:
+  the verse address, the rule or term, and a hash of the verse text.
+- **Whether suppressions and approvals are one mechanism or two.**
+
+## Draft direction (2026-10-12, not ruled)
+
+Will's leaning after PR #5 merged with approvals held only in memory:
+probably simpler than this note made it.
+
+**Local first.** Both files live in `.sefer/`, which is per device and kept
+out of every commit, so there is no git diff to show. Sharing is a later
+question: moving the file to a committed path with the same schema, so the
+schema is written as if it may be shared. Still to check: whether a zip export
+carries `.sefer/`.
+
+**Two files, not one.** Key-term approvals and proofreading suppressions do
+not share a file. Each needs only the FileSystem and a fixed path, read lazily
+(approvals when `/terms` opens).
+
+### Key-term approvals
+
+- **Unit:** the verse a hit is in (its TOC tile), not the card's clip. Keyed by
+  address and term, because one verse can hold several terms.
+- **Hash:** Galley's `hash(text)` (XXH3-64, seed 0, what `sourceHash`
+  carries) over the verse's raw USFM, stored as hex. The file's header names
+  the algorithm and what was hashed (`"hash": "xxh3-64-seed0"`,
+  `"over": "verse-usfm"`) and a schema version. A header that no longer
+  matches marks every entry "needs re-check" rather than dropping it.
+- **Stored:** approved, the hash when the card opened, the hash at approval.
+- **Derived when read, never stored:**
+  - unapproved: no entry;
+  - approved with edits: hash at open differs from hash at approval;
+  - changed since approved: the verse's current hash differs from hash at
+    approval.
+- **Shown:** "changed since approved" as a badge on the term's row, and a count
+  at the top of the unit. A count of a derived state needs no notification
+  machinery.
+
+### Proofreading suppressions
+
+- Same shape, its own file. Key: rule code + address + verse hash.
+- Kitchen has **not** shipped an id per finding (checked 2026-10-12: master,
+  origin, branches). 0.1.10 shipped finding codes as exported unions, which is
+  an id per rule. Sefer's `Finding.id` (`producer:book:code:from-to`) is
+  offsets and moves with every edit.
+- **Open:** Sous findings about a character pattern across a book have no single
+  verse, so no address. How those are suppressed is the part to rule on.

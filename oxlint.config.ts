@@ -28,6 +28,8 @@ export default defineConfig({
     "src-tauri/gen",
     "**/*.gen.*",
     "pnpm-lock.yaml",
+    // The planning site has its own tooling (astro check); see planning/README.md.
+    "planning",
   ],
   settings: solidV2.settings,
   rules: {

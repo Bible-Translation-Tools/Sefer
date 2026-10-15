@@ -1,0 +1,88 @@
+---
+id: a33d5dfd-8a1d-4197-b40f-6aa75678fe0e
+title: "Desktop deep links (sefer:// opens a share link)"
+kind: plan
+status: planned
+created: 2026-10-15
+updated: 2026-10-15
+sha: 95fedfd
+tags: [desktop, links]
+related: [b2f80548-2cab-4c61-b4c7-8fda5840aa2b, a7ba559a-eaeb-4f1f-b045-462b891d733c, 9cdeee6c-1747-4922-b2b8-84748a95839a]
+source: conversation 2026-10-14/15
+---
+
+## What changes for a user
+
+A link such as `sefer://r/<owner>/<repo>` (with or without a place after it)
+opens the installed desktop app at that project, the same way
+`https://<sefer>/r/<owner>/<repo>` does on the Web. If the app is already running,
+the link opens in that window rather than starting a second copy.
+
+The point is an "Open in Sefer" button on WACS:
+
+> if wacs itself wanted an "open in sefer"
+
+## What already exists (the stack, 95fedfd)
+
+The share-link route does all the work: `src/routes/_app/r/$owner/$repo/$.tsx`
+→ `src/app/ui/landing/OpenByLink.tsx`. Checked on the r-links preview,
+2026-10-14:
+
+- **Only `/r/<owner>/<repo>` is needed.** The place after it (`/book/JHN`), `host=`
+  and `at=` are all optional.
+- **No `host=`:** the link is looked for on the configured cloud.
+- **No `at=`:** there is no version toast.
+
+On the dev channel, that cloud is `content.wacsdev.org`. So
+`reuben-catalog/merged-blo` (which is only on content.bibletranslationtools.org)
+needs `?host=content.bibletranslationtools.org` there. Without it, the app
+correctly says the project isn't there.
+
+Desktop has neither the deep-link plugin nor the single-instance plugin
+(`src-tauri/src/lib.rs:32-44`).
+
+## How
+
+- **Rust and config (about 15 lines).**
+  - Add `tauri-plugin-deep-link`, plus `tauri-plugin-single-instance` with its
+    `deep-link` feature, so a second launch hands its URL to the running window.
+  - Register `plugins.deep-link.desktop.schemes: ["sefer"]` in the Tauri config.
+  - Add `deep-link:default` to the capability.
+- **TypeScript (about 20–30 lines, desktop platform only).**
+  - Call `getCurrent()` at boot, for the link that launched the app, and
+    `onOpenUrl()` after that.
+  - Map `sefer://r/…` to a router navigation to `/r/…`. Anything else is
+    ignored.
+
+## Where a scheme gets registered
+
+The OS has to know that `sefer://` means this app:
+
+- **macOS:** the bundle's Info.plist declares the scheme, and LaunchServices
+  reads it once the `.app` is on disk. A local `pnpm tauri build` works: move the
+  `.app` to /Applications and open it once. It doesn't need to be signed for
+  this. `pnpm dev:tauri` doesn't work, because the dev binary isn't a bundle.
+- **Windows:** the scheme is a registry key (`HKCU\Software\Classes\sefer`)
+  pointing at the exe, written by the NSIS/MSI installer. A dev exe has no key
+  unless the app calls the plugin's `register()` at runtime.
+- **Linux:** the scheme comes from a `.desktop` file with
+  `MimeType=x-scheme-handler/sefer`. A .deb or .rpm install ships one. An
+  AppImage doesn't, so the app writes one at runtime with `register_all()`.
+
+<Question id="fallback">
+
+How does WACS offer it? Options:
+
+- Two links, Web and desktop.
+- One page that tries `sefer://` and falls back to the Web link.
+
+Opening the desktop app from `https://` links needs associated domains
+(macOS) and app links (Windows). That is a larger job, deferred.
+
+</Question>
+
+<Question id="scheme">Is `sefer` the scheme? Does preview get its own
+(`sefer-preview`), so both channels can be installed side by side?</Question>
+
+<Followup id="ci-check">Once desktop e2e runs in CI, add a case that launches the app
+with a `sefer://r/…` argument (Linux, `register_all`).</Followup>

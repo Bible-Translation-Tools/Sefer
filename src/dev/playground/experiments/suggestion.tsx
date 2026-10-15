@@ -2,7 +2,7 @@
  * Reviewing a SUGGESTION, on Review's own reader: the same editor-backed cards
  * `/review` draws, with three changes to judge against real text.
  *
- * From the demo on 2026-10-07 (`planning/00-ideas/cloud-git-followups-2026-10-06.md`,
+ * From the demo on 2026-10-07 (`planning/items/2026-10-06-cloud-git-followups.mdx`,
  * path item 5). A first pass redrew the cards as plain HTML — result first,
  * a Keep toggle — and read as a different editor rather than an adaptation of
  * this one. So this keeps the reader whole (one USFM string, painted) and

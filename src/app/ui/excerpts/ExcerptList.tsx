@@ -6,7 +6,7 @@
  * One component, three feeds. Find supplies groups built from search hits,
  * STET from a term's occurrences plus a `pairedOf` for the paired resource,
  * Findings from diagnostics; everything below this line is the same
- * (`planning/00-ideas/excerpt-compound-component.md`).
+ * (`git log -- planning/00-ideas/excerpt-compound-component.md`).
  *
  * The windowing itself lives in `primitives/VirtualList`, because `/findings`
  * needs the same thing. What is here is what is about EXCERPTS: the outline column, the height estimate for a card

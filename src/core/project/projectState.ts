@@ -14,7 +14,7 @@
  * they were: a newer build may have written them.
  *
  * A team fact (an approval, a suppression) does NOT belong here: this file
- * never reaches a teammate (`planning/00-ideas/project-state-and-suppressions.md`).
+ * never reaches a teammate (`planning/items/2026-10-06-project-state-and-suppressions.mdx`).
  */
 
 import { Effect, FileSystem, type PlatformError } from "effect";

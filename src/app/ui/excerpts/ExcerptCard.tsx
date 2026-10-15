@@ -7,7 +7,7 @@
  * an Address (where), the clip (how much of the book this card is), and the
  * TOC (what "more" means). Anything a screen needs that those cannot express is
  * a missing primitive, not a special case here
- * (`planning/00-ideas/excerpt-compound-component.md`).
+ * (`git log -- planning/00-ideas/excerpt-compound-component.md`).
  *
  * ## The parts
  *

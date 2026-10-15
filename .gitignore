@@ -36,3 +36,4 @@ src/dev/design/local/
 .vitest-attachments/
 .vitest/
 **/__screenshots__/
+spikes/

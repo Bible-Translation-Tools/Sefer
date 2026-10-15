@@ -1,8 +1,8 @@
 # Services at a glance
 
-One section per service: what it is in plain words, what is wrong or constrained about it today, and where it could go. Depth lives in [`architecture/`](architecture/); each section links to its chapter. This page replaces the v2 module DAG and the slice plans in `planning/00-ideas`. The graph below was redrawn from real `src/core` imports on 2026-09-23.
+One section per service: what it is in plain words, what is wrong or constrained about it today, and where it could go. Depth lives in [`architecture/`](architecture/); each section links to its chapter. This page replaces the v2 module DAG and the slice plans that lived in the old planning folders. The graph below was redrawn from real `src/core` imports on 2026-09-23.
 
-**Keep it short.** A section that grows past a screen is a sign its detail belongs in the architecture chapter. When an item is fixed, delete it; when an idea gets serious, give it a plan in `planning/01-discussing` and leave a one-line pointer here.
+**Keep it short.** A section that grows past a screen is a sign its detail belongs in the architecture chapter. When an item is fixed, delete it; when an idea gets serious, give it an item in `planning/items/` (status `discussing`) and leave a one-line pointer here.
 
 ## Where to focus (as of 2026-09-25)
 
@@ -280,7 +280,7 @@ CodeMirror over an EditorBook: the phases, registry, mapping and plan; one funne
   - choose the target writing systems and IMEs
   - record evidence per mode and per webview
   - make a touch decision
-- USFM-aware copy profiles, and the aligned-word tooltip (both in `planning/04-parked/parked.md`).
+- USFM-aware copy profiles, and the aligned-word tooltip (both in `planning/items/2026-09-23-parked.mdx`).
 - Chapter-scoped parse, plan and paint, the one way chapter view becomes a typing win; it needs the CST resolved across chapter boundaries. Not before the parse is what is left.
 
 ## Satellites
@@ -380,7 +380,7 @@ The multibuffer shared by Find, Key terms and Findings: occurrences grouped by T
 
 ### Constraints and known bugs
 
-- Grouping is O(all findings) up front, about 80 ms. Parked in `planning/04-parked/one-liners.md`; the loading behaviour itself may change.
+- Grouping is O(all findings) up front, about 80 ms. Parked in `planning/items/2026-09-23-one-liners.mdx`; the loading behaviour itself may change.
 - An excerpt's Address and `sid` come from Location (`unitAddress`), and its label from the caller's display rule; a bridge reads "Jude 1:1-2", a segment "Jude 1:4a". `refOccurrences` resolves Addresses with `resolve` and skips missing and ambiguous ones.
 - Every visible card is a CodeMirror view over its whole book (clipped). On en_ulb Psalms ("Yahweh", 691 hits), with the project's background analysis settled: first cards 187 ms (the whole Bible 279 ms), scrolling p50 17 ms and p95 25 ms a frame, about 2 ms of mounting per card. That needs the reader's three measures: a seeded render range (else a card decorates its whole book), views POOLED and handed a new state (the `EditorView` constructor forces a page style recalc through `document.fonts.ready`), and no-op updates skipped.
 - Cards follow the seat: while a book is seated (open in the editor, or a card editing it) every card of it applies the seat's published changes. Lazily: a card whose clip a change touches repaints on the next frame, the rest catch up 400 ms after typing pauses, so twenty followers cost a keystroke nothing measurable (they cost ~30 ms applied eagerly).
@@ -592,7 +592,7 @@ Every text this device can read beside a project, and which one a project reads.
 - Source texts are pulled on arrival (download, import, clone, assembly), not on open: a project that arrived before 2026-10-06 shows its declared text as missing until Download is pressed.
 - Gateway texts downloaded before 2026-10-06 stay in the projects folder (ruled: they are not moved).
 
-Open questions, each with what is chosen now and the cost to change: `planning/02-inProgress/resource-kinds-tn-questions.md`.
+Open questions, each with what is chosen now and the cost to change: `planning/items/2026-10-06-resource-kinds.mdx`, §16.
 
 ### Ideas / future
 
@@ -604,7 +604,7 @@ Open questions, each with what is chosen now and the cost to change: `planning/0
 
 ### Overview
 
-"Migrate from Writer" (`/migrate`, from Import) assembles one project from BTT Writer's single-book projects: a folder, a zip, or a language found in "Writer projects on WACS" (the WACS table's shape, searched on the server from two letters), combined in one run. Every candidate is opened, rendered through one template (txt2USFM's header, then chapters and chunks in order; the translator's text is never repaired) and measured as a Book census row. A book with rival copies is chosen up front from a table of who, status, updated, health and passages differing from the pick, with "Use the recommended one" for every book and "Compare" in Review's reader. Assemble first replays every Writer save that changed a book's text as a commit of that whole book file — its own author, date and zone, books interleaved by time, written as one pack (`writerHistory.ts`, `src/core/git/pack.ts`; a New Testament's 3,000 saves is about 2.7 MB and a few seconds) — then writes `metadata.json`, `manifest.yaml` and `.upstreams.json` as one assembly commit on top, crediting the Writer authors; a history that cannot be replayed or opened fails the assembly loudly (Will, 2026-10-09). Books → "Add a book…" brings more into a project as one commit that joins their replayed history as a side branch (a merge), so the project's own history is not rewritten. `src/core/migrate/`, `src/core/resources/writeMetadata.ts`, `src/app/migrate.ts`, `src/app/ui/migrate/`. → [landing](architecture/landing.md), plan in `planning/00-ideas/consolidate-book-repos.md`
+"Migrate from Writer" (`/migrate`, from Import) assembles one project from BTT Writer's single-book projects: a folder, a zip, or a language found in "Writer projects on WACS" (the WACS table's shape, searched on the server from two letters), combined in one run. Every candidate is opened, rendered through one template (txt2USFM's header, then chapters and chunks in order; the translator's text is never repaired) and measured as a Book census row. A book with rival copies is chosen up front from a table of who, status, updated, health and passages differing from the pick, with "Use the recommended one" for every book and "Compare" in Review's reader. Assemble first replays every Writer save that changed a book's text as a commit of that whole book file — its own author, date and zone, books interleaved by time, written as one pack (`writerHistory.ts`, `src/core/git/pack.ts`; a New Testament's 3,000 saves is about 2.7 MB and a few seconds) — then writes `metadata.json`, `manifest.yaml` and `.upstreams.json` as one assembly commit on top, crediting the Writer authors; a history that cannot be replayed or opened fails the assembly loudly (Will, 2026-10-09). Books → "Add a book…" brings more into a project as one commit that joins their replayed history as a side branch (a merge), so the project's own history is not rewritten. `src/core/migrate/`, `src/core/resources/writeMetadata.ts`, `src/app/migrate.ts`, `src/app/ui/migrate/`. → [landing](architecture/landing.md), plan in `planning/items/2026-10-02-consolidate-book-repos.mdx`
 
 ### Constraints and known bugs
 
@@ -710,7 +710,7 @@ Not built. `src/app/workflows/drafting.ts` is an unwired stub (`Effect.die`) ske
 
 ### Overview
 
-Not built. Threads anchored to scripture, shared through an outbox. Plan: `planning/01-discussing/commenting-and-discussion.md`.
+Not built. Threads anchored to scripture, shared through an outbox. Plan: `planning/items/2026-09-21-commenting-and-discussion.mdx`.
 
 ### Constraints and known bugs
 

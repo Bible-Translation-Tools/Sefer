@@ -46,8 +46,8 @@ The generated half looks after itself; the judgement half does not. When a gate 
 | --- | --- | --- |
 | oxlint errors | 0 | `pnpm lint`, every commit |
 | oxlint warnings | 0 | `pnpm lint` fails on any, every commit |
-| fallow dead code (`pnpm deadcode`) | 0 issue(s) | every deploy; advisory on branches |
-| fallow duplication | 1.7% in 66 clone group(s) | none — advisory |
+| fallow dead code (`pnpm deadcode`) | 79 issue(s) | every deploy; advisory on branches |
+| fallow duplication | 5.3% in 89 clone group(s) | none — advisory |
 | suppression comments | 15 | each listed below with its reason |
 
 ### Oxlint warnings, by rule and file

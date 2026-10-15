@@ -1,6 +1,6 @@
 # Adding a resource kind
 
-How to teach Sefer to hold something new — Translation Words, Macula, Translation Questions, a TSV edition of notes, a packed release — without the rest of the app learning about it. Translation Notes (TN, WA's `en_tn`) is the one kind built beside scripture, and it is the worked example throughout. What exists is described in [resources](resources.md), "Resource kinds"; the reasoning is in `planning/01-discussing/resource-kinds-2026-10-01.md` (§3–§5, §14, §15); open questions are in `planning/02-inProgress/resource-kinds-tn-questions.md`.
+How to teach Sefer to hold something new — Translation Words, Macula, Translation Questions, a TSV edition of notes, a packed release — without the rest of the app learning about it. Translation Notes (TN, WA's `en_tn`) is the one kind built beside scripture, and it is the worked example throughout. What exists is described in [resources](resources.md), "Resource kinds"; the reasoning is in `planning/items/2026-10-06-resource-kinds.mdx` (§3–§5, §14, §15); open questions are in `planning/items/2026-10-06-resource-kinds.mdx`, §16.
 
 ## The shape in one paragraph
 

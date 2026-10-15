@@ -296,7 +296,7 @@ Every event carries the correlation `<bookId>#<trace seq>`, so one keystroke's s
 
 ## What was not ported
 
-- **`attrs`/`attrResolve`** — the aligned-word popover needs two engine free functions the pinned wasm handle does not export. The half-ported popover threw a `TODO(seam)` and nothing installed it, so it is parked: [parked code](../../planning/04-parked/parked.md).
+- **`attrs`/`attrResolve`** — the aligned-word popover needs two engine free functions the pinned wasm handle does not export. The half-ported popover threw a `TODO(seam)` and nothing installed it, so it is parked: [parked code](../../planning/items/2026-09-23-parked.mdx).
 - **`formatEdits`** — the engine's normalisation is a [Galley](galley.md) door now, but it is not the editor's: nothing in `src/editor` references it. `Fixes.formatBook` (`src/core/fixes/fixes.ts`) calls it and applies the edits as one `book.apply`; see [findings](findings.md).
 - **`startEngine` / `runAnalyze`** — replaced by the `Galley` Layer and the analyzer facet.
 

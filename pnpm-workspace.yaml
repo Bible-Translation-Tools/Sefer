@@ -6,6 +6,9 @@
 # `--config` from the repository root.
 packages:
   - "workers/*"
+  # The planning site (Astro, MDX). Its own package so its dependencies stay
+  # out of the app; see planning/README.md.
+  - "planning"
 
 allowBuilds:
   edgedriver: false

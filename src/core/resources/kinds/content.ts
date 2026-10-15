@@ -1,7 +1,7 @@
 /**
  * What a resource HOLDS, and which reader parses it: the first of the two
  * places the closed union of content kinds is consulted
- * (`planning/01-discussing/resource-kinds-2026-10-01.md`, §3). The second is
+ * (`planning/items/2026-10-06-resource-kinds.mdx`, §3). The second is
  * the renderer registry (`src/app/ui/kinds/registry.tsx`). Between them
  * nothing narrows a `ContentKind`: a pane, a workflow or a screen asks whether
  * a handle HAS a slot (`handle.places`, `handle.documents`), never which kind

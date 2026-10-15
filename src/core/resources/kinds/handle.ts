@@ -4,7 +4,7 @@
  * renderer registry). Nobody between them asks which kind a handle is; they
  * ask whether it has a slot.
  *
- * Tier 2 (`planning/01-discussing/resource-kinds-2026-10-01.md`, §2): the
+ * Tier 2 (`planning/items/2026-10-06-resource-kinds.mdx`, §2): the
  * only vocabulary that crosses is `Address`. Not USFM — no marker, no Book,
  * no engine — so a kind with no text at all (Macula's blob) fills it as
  * readily as a folder of Markdown.

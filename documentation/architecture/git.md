@@ -339,7 +339,7 @@ Known and deferred (2026-10-06): a plain Decline only closes the pull request, s
 outside the shared project's history and ride along in the person's next offer. Recording a decline
 as a keep-ours decision commit would end that, but would reset the author's own copy when they next
 receive, which Will ruled out on 2026-10-07; remembering declines by content is the proposal
-(`planning/00-ideas/cloud-git-followups-2026-10-06.md`).
+(`planning/items/2026-10-06-cloud-git-followups.mdx`).
 
 On the AUTHOR's side the decision commit now does settle it (2026-10-13): when their copy holds
 versions this device lacks (an earlier offer never taken, or another device's work), a send or an
