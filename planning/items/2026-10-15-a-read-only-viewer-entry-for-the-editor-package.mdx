@@ -1,0 +1,43 @@
+---
+id: 75b62c1e-35da-4d75-90f0-d74981e19863
+title: "A read-only viewer entry for the editor package"
+kind: idea
+status: idea
+created: 2026-10-15
+updated: 2026-10-15
+sha: ebe13ad
+tags: [editor]
+related: [c8b63600-40a8-4937-bc03-e0264e9a13f0]
+---
+
+`mountBookEditor({ readOnly: true })` stops typing but not the download.
+Getting a Book means `seatBook`, which imports the whole editing layer up front:
+
+- the keystroke rules (insert, delete, caret)
+- the commands and undo history
+- the note editor
+
+So a viewer such as the hub's still ships code it never runs. A note left
+with the work puts that at about 263 KB. Nobody in Sefer has measured it yet.
+
+## The idea
+
+A separate entry, for example `@sefer/editor/viewer`, with a viewer mount
+built only from the reading parts:
+
+- the view and reading layers
+- the linter
+- location
+- diagnostics
+
+It must never import the editing modules, so a host that imports only the
+viewer ships none of them. The work is mostly splitting imports so the reading
+path no longer reaches `seat.ts`, the phases or the history.
+
+## Before building
+
+Measure the real saving with the hub-shaped test app (installed by git, a
+production Vite build), before and after the split.
+
+<Question id="worth">Is the saving worth a second entry point and keeping the
+two paths apart? Build only if the measured number matters for the hub.</Question>
