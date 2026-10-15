@@ -20,7 +20,7 @@ Above the list sits the [recovery](recovery.md) banner, rendered only when a pro
 
 ## No reference material here
 
-The projects page lists projects only. Translation Notes are not on it (Will, 2026-10-15): they are chosen, and downloaded the first time, in a book's reference column, under **Reference material** ([resources](resources.md), "Translation Notes"). The Notes section that stood between "Projects Loaded into Sefer" and the WACS table, with its search box and **Remove**, is gone; nothing else removes a held copy today.
+The projects page lists projects only. Translation Notes are not on it (Will, 2026-10-15): they are chosen, and downloaded the first time, in a book's reference column, under **Reference material** ([resources](resources.md), "Translation Notes"). The Notes section that stood between "Projects Loaded into Sefer" and the WACS table, with its search box and **Remove**, is gone; **Remove** now sits beside each held copy in that same menu section.
 
 ## Your projects
 

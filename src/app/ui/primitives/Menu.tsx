@@ -227,14 +227,22 @@ export function MenuCheckbox(
   );
 }
 
-export function MenuLabel(props: { readonly children: JSX.Element }) {
+export function MenuLabel(props: {
+  readonly children: JSX.Element;
+  /**
+   * The horizontal padding, when the rows under it set their own (`px-6`)
+   * rather than the menu size's: a label lines up with its rows.
+   */
+  readonly inset?: string;
+}) {
   const menu = useMenu();
   return (
     <p
       role="presentation"
       class={cx(
         "pb-1 font-semibold tracking-wide text-on-surface-tertiary uppercase",
-        menu.size() === "lg" ? "px-4 pt-2 text-small" : "px-3 pt-1 text-smallest",
+        menu.size() === "lg" ? "pt-2 text-small" : "pt-1 text-smallest",
+        props.inset ?? (menu.size() === "lg" ? "px-4" : "px-3"),
       )}
     >
       {props.children}

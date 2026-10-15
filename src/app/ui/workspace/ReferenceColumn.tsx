@@ -43,6 +43,7 @@ import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronUp from "lucide-solid/icons/chevron-up";
 import Download from "lucide-solid/icons/download";
 import PanelLeftClose from "lucide-solid/icons/panel-left-close";
+import Trash from "lucide-solid/icons/trash-2";
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 
 import { Observability } from "#core/observability";
@@ -55,10 +56,16 @@ import {
 } from "#core/resources/relationships";
 
 import { announceSourceTexts, libraryRevision, sourceTextCopy } from "../../arrival";
-import { catalogueFor, gatewayTexts, type CatalogueEntry, type HelpText } from "../../catalogue";
+import {
+  catalogueFor,
+  gatewayTexts,
+  listTranslationNotes,
+  type CatalogueEntry,
+  type HelpText,
+} from "../../catalogue";
 import { describe, remoteReasonOf } from "../../describe";
 import { t } from "../../i18n";
-import { downloadHelp, helpDownloads } from "../../kinds/download";
+import { downloadHelp, helpDownloads, removeHelp } from "../../kinds/download";
 import { KIND_ROLES, roleFor } from "../../kinds/table";
 import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
@@ -253,8 +260,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     const read = notes();
     if (read === undefined || read.state === "failed") {
       setNotes({ state: "loading" });
-      void catalogueFor(services.settings)
-        .translationNotes()
+      void listTranslationNotes()
         .then((rows) => setNotes({ state: "ready", rows }))
         .catch((cause: unknown) =>
           setNotes({
@@ -373,19 +379,39 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       });
   };
 
+  /** Reference material in the Library's own folder: what Remove may take off this device. */
+  const heldHelps = (): readonly Resource[] => copies().filter((resource) => !isBible(resource));
+
   /**
-   * The Translation Notes this device does not hold yet, by the URL each
-   * would be cloned from, A–Z by language as the catalogue gives them.
+   * The Translation Notes this device does not hold yet, A–Z by language as
+   * the catalogue gives them. Held means the same URL, or notes in the same
+   * language: a device with `WycliffeAssociates/en_tn` is not offered
+   * `WA-Catalog/en_tn` as a second English (Will, 2026-10-15; their book
+   * folders are the same git trees).
    */
   const helps = (): readonly HelpText[] => {
     const read = notes();
     if (read?.state !== "ready") return [];
-    const held = new Set(
-      copies().flatMap((resource) =>
+    const urls = new Set(
+      heldHelps().flatMap((resource) =>
         resource.upstream === undefined ? [] : [normaliseRepoUrl(resource.upstream.url)],
       ),
     );
-    return read.rows.filter((help) => !held.has(normaliseRepoUrl(help.url)));
+    const languages = new Set(
+      heldHelps().flatMap((resource) =>
+        resource.language === undefined ? [] : [resource.language.toLowerCase()],
+      ),
+    );
+    return read.rows.filter(
+      (help) =>
+        !urls.has(normaliseRepoUrl(help.url)) && !languages.has(help.language.toLowerCase()),
+    );
+  };
+
+  /** Takes downloaded notes off this device; the pickers re-read when the Library says so. */
+  const removeNotes = (resource: Resource): void => {
+    if (chosen() === resource.id) setChosen(undefined);
+    void removeHelp(services, resource);
   };
 
   /** Why the notes list could not be read, while that is the last word. */
@@ -576,12 +602,19 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
         </Show>
         {/* Shown while the list is read and when it could not be, so the
             group does not appear from nowhere, nor vanish without a word. */}
-        <Show when={notes() !== undefined && (notes()?.state !== "ready" || helps().length > 0)}>
+        <Show
+          when={
+            notes() !== undefined &&
+            (notes()?.state !== "ready" || helps().length > 0 || heldHelps().length > 0)
+          }
+        >
           <GroupToggle
             testId="reference-material"
             label={
               notes()?.state === "ready"
-                ? t("Reference material ({count})", { count: helps().length })
+                ? t("Reference material ({count})", {
+                    count: heldHelps().length + helps().length,
+                  })
                 : t("Reference material")
             }
             open={showHelps()}
@@ -589,7 +622,38 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
           />
           <Show when={showHelps()}>
             <div role="group" aria-label={t("Translation Notes")} data-testid="reference-notes">
-              <MenuLabel>{t("Translation Notes")}</MenuLabel>
+              <MenuLabel inset={ROW}>{t("Translation Notes")}</MenuLabel>
+              {/* On this device first, each with Remove. Not a MenuItem: the
+                  row itself does nothing (choosing it is in the list above),
+                  and Remove leaves the menu open so the row is seen to go. */}
+              <For each={heldHelps()}>
+                {(resource) => (
+                  <div
+                    class={`${ROW} flex min-h-12 items-center gap-3 text-small text-on-surface-primary`}
+                    data-testid="reference-held-notes"
+                    data-language={resource.language}
+                  >
+                    <RowText
+                      name={`${languageName(resource.language) ?? resource.title} (${resource.language ?? ""})`}
+                      detail={t("On this device")}
+                    />
+                    <button
+                      type="button"
+                      role="menuitem"
+                      tabindex={-1}
+                      data-testid="reference-remove-notes"
+                      title={t("Remove {title} from this device", {
+                        title: nameOf(resource),
+                      })}
+                      class="flex shrink-0 cursor-pointer items-center gap-1 rounded-md px-2 py-1 text-small text-on-surface-secondary outline-none hover:bg-surface-secondary focus-visible:bg-surface-secondary"
+                      onClick={() => removeNotes(resource)}
+                    >
+                      <Trash aria-hidden="true" class="size-4" />
+                      {t("Remove")}
+                    </button>
+                  </div>
+                )}
+              </For>
               <Show when={notes()?.state === "loading"}>
                 <p role="status" class={`${ROW} py-3 text-small text-on-surface-tertiary`}>
                   {t("Loading the list…")}
@@ -609,7 +673,6 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
                   <MenuItem
                     class={ROW}
                     data-testid={`pick-help-${help.repository}`}
-                    data-language={help.language}
                     title={t("Download {title} to read beside this project", {
                       title: t("Translation Notes · {language}", {
                         language: help.languageName || help.language,

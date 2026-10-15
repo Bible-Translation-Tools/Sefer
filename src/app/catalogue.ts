@@ -10,7 +10,9 @@
  * (`VITE_SEFER_CATALOGUE_URL`; see `src/app/env.ts`), prod and dev alike. A
  * build with no URL configured falls back to `SAMPLE_CATALOGUE` so the screen
  * is real in development instead of empty — `catalogueFor` is the one place
- * that decides which, and it says which one it gave you in `source`.
+ * that decides which, and it says which one it gave you in `source`. The one
+ * exception is the Translation Notes list (`listTranslationNotes`), which
+ * always reads the production API: see `TRANSLATION_NOTES_API`.
  *
  * A row's git URL names its own server, and that need not be this build's
  * content host: the dev catalogue lists repositories on the production host as
@@ -132,13 +134,11 @@ export interface CatalogueService {
    * thousands of rows, so the screen asks only once two letters are typed.
    */
   readonly writerLanguages: (search: string) => Promise<readonly WriterLanguage[]>;
-  /** The Translation Notes there are to download, one per language, A–Z by English name. */
-  readonly translationNotes: () => Promise<readonly HelpText[]>;
 }
 
 /**
  * Translation Notes Sefer can download, one row per language, as the Language
- * API lists them (`translationNotes`). Only TN, by product ruling
+ * API lists them (`listTranslationNotes`). Only TN, by product ruling
  * (2026-10-15): no other help kind is offered until it is asked for.
  */
 export interface HelpText {
@@ -497,33 +497,6 @@ const languageApiCatalogue = (origin: string): CatalogueService => ({
       };
     });
   },
-  translationNotes: async () => {
-    const decoded = decodeTranslationNotes(await graphql(origin, TRANSLATION_NOTES_QUERY));
-    if (Result.isFailure(decoded))
-      throw new CatalogueError(
-        `Language API payload not understood: ${decoded.failure.message}`,
-        "payload",
-      );
-    const rows = decoded.success.data.content.flatMap((row): HelpText[] => {
-      if (row.language === null || row.git_repo === null || row.git_repo.repo_url === "") return [];
-      const english = row.language.english_name ?? "";
-      const national = row.language.national_name ?? "";
-      return [
-        {
-          title: "Translation Notes",
-          language: row.language.ietf_code,
-          languageName: english === "" ? national : english,
-          nationalName: national,
-          direction: row.language.direction === "rtl" ? "rtl" : "ltr",
-          repository: `${row.git_repo.username}/${row.git_repo.repo_name}`,
-          url: row.git_repo.repo_url,
-        },
-      ];
-    });
-    return rows.sort((a, b) =>
-      (a.languageName || a.language).localeCompare(b.languageName || b.language),
-    );
-  },
   entries: async () => {
     const decoded = decodeRepos(await graphql(origin, REPOS_QUERY));
     if (Result.isFailure(decoded))
@@ -613,9 +586,47 @@ const sampleCatalogue = (): CatalogueService => ({
   // Sample rows clone nothing, so they offer no books either.
   writerBooks: () => Promise.resolve([]),
   writerLanguages: () => Promise.resolve([]),
-  // No sample notes: a sample row must not clone a repository.
-  translationNotes: () => Promise.resolve([]),
 });
+
+/**
+ * Where the Translation Notes list is read, on EVERY channel: the production
+ * Language API, named here rather than taken from the configured catalogue.
+ * The one hard-wired host in this file, by Will's ruling (2026-10-15): the
+ * dev API lists no English notes, and English is what a reader and the
+ * tutorial reach for. Every other query stays on `catalogueUrlFor`.
+ */
+const TRANSLATION_NOTES_API = "https://api.bibleineverylanguage.org/v1/graphql";
+
+/** The Translation Notes there are to download, one per language, A–Z by English name. */
+export const listTranslationNotes = async (): Promise<readonly HelpText[]> => {
+  const decoded = decodeTranslationNotes(
+    await graphql(TRANSLATION_NOTES_API, TRANSLATION_NOTES_QUERY),
+  );
+  if (Result.isFailure(decoded))
+    throw new CatalogueError(
+      `Language API payload not understood: ${decoded.failure.message}`,
+      "payload",
+    );
+  const rows = decoded.success.data.content.flatMap((row): HelpText[] => {
+    if (row.language === null || row.git_repo === null || row.git_repo.repo_url === "") return [];
+    const english = row.language.english_name ?? "";
+    const national = row.language.national_name ?? "";
+    return [
+      {
+        title: "Translation Notes",
+        language: row.language.ietf_code,
+        languageName: english === "" ? national : english,
+        nationalName: national,
+        direction: row.language.direction === "rtl" ? "rtl" : "ltr",
+        repository: `${row.git_repo.username}/${row.git_repo.repo_name}`,
+        url: row.git_repo.repo_url,
+      },
+    ];
+  });
+  return rows.sort((a, b) =>
+    (a.languageName || a.language).localeCompare(b.languageName || b.language),
+  );
+};
 
 /**
  * The flag: a build that was given a catalogue URL browses the real

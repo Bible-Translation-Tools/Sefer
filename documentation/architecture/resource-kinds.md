@@ -58,7 +58,7 @@ In order. TN's file is named at each step; a new kind copies its shape.
 
 **9. Find, if any.** Nothing to do for the default: a handle with `documents` is searched by `Search.findInDocuments` under Find's "Search {title}" switch (scope `helps`), each hit joined by its Addresses to the project's verse card. A kind with a better question than text (Macula's facets) needs its own slot and panel, not built (below).
 
-**10. Make it downloadable, if it is.** If the catalogue lists it, it arrives like any source text. If it is a help (TN today, and only TN by ruling), the catalogue lists it by `resource_type`: add a query beside `translationNotes` in `src/app/catalogue.ts` and a section under the reference column's **Reference material**; `downloadHelp` (`src/app/kinds/download.ts`) brings it through `arrival.referenceCopy` with a progress toast: newest-only clone, recognised, packed on the Web, registered with `Resource.upstream { url, commit }` ([resources](resources.md), "Provenance and updates").
+**10. Make it downloadable, if it is.** If the catalogue lists it, it arrives like any source text. If it is a help (TN today, and only TN by ruling), the catalogue lists it by `resource_type`: add a query beside `listTranslationNotes` in `src/app/catalogue.ts` and a section under the reference column's **Reference material**; `downloadHelp` (`src/app/kinds/download.ts`) brings it through `arrival.referenceCopy` with a progress toast: newest-only clone, recognised, packed on the Web, registered with `Resource.upstream { url, commit }` ([resources](resources.md), "Provenance and updates").
 
 **11. Document it.** A section in [resources](resources.md) for the kind, its row in [services](../services.md), and any measurement in [storage](storage.md).
 

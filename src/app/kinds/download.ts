@@ -1,5 +1,6 @@
 /**
- * Downloading reference material from the reference column's menu: one
+ * Downloading reference material from the reference column's menu (and
+ * removing it again, `removeHelp`): one
  * `import.remote` operation and one progress toast that moves the whole way —
  * git's own steps while the bytes arrive, then reading, then each book
  * packed — and ends saying what happened. A failure stays on screen.
@@ -12,7 +13,7 @@ import { Observability } from "#core/observability";
 import { remoteVerdict } from "#core/remote/remote";
 import type { Resource } from "#core/resources/library";
 
-import { describeCopy, referenceCopy } from "../arrival";
+import { describeCopy, noteLibraryChanged, referenceCopy } from "../arrival";
 import type { HelpText } from "../catalogue";
 import { describe, remoteReasonOf } from "../describe";
 import { t } from "../i18n";
@@ -99,3 +100,31 @@ const startDownload = (services: Services, help: HelpText): Promise<Resource> =>
       setDownloading((held) => new Set([...held].filter((each) => each !== help.repository)));
     });
 };
+
+/**
+ * Takes reference material off this device: the Library forgets it, and its
+ * folder goes when it is in the Library's own directory (a reference copy,
+ * nobody's work; a folder someone picked stays where it is). A project that
+ * had picked it simply shows nothing for it. Says how it went in a toast, as
+ * the projects page's Remove did before it moved here; no confirm, no undo —
+ * downloading it again is the undo.
+ */
+export const removeHelp = (services: Services, resource: Resource): Promise<void> =>
+  services
+    .run(
+      Effect.gen(function* () {
+        yield* services.library.remove(resource.id);
+        if (resource.root.startsWith(`${services.libraryRoot}/`))
+          yield* Effect.ignore(services.fileSystem.remove(resource.root, { recursive: true }));
+      }),
+    )
+    .then(() => {
+      noteLibraryChanged();
+      toasts.success({ title: t("Removed {title}", { title: resource.title }) });
+    })
+    .catch((cause: unknown) => {
+      toasts.error({
+        title: t("Could not remove {title}", { title: resource.title }),
+        message: describe(cause),
+      });
+    });
