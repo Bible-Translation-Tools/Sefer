@@ -185,6 +185,54 @@ export const checkCoreBoundary = (options: BoundaryOptions): BoundaryViolation[]
   return violations;
 };
 
+/**
+ * The hosts of the editor — everything under `src/` but core — talk to it
+ * through `@sefer/editor`'s front door and nothing else: no `@codemirror/*`,
+ * and no path (relative or aliased) into either package's sources, where the
+ * view behind every handle is. A test may drive the editor's recipes with
+ * CodeMirror itself, so tests are exempt from the CodeMirror half.
+ */
+export const checkHostUse = (options: {
+  readonly from: string;
+  readonly except: readonly string[];
+  readonly packages: readonly string[];
+  readonly paths?: Readonly<Record<string, readonly string[]>>;
+  readonly pathsBase?: string;
+}): BoundaryViolation[] => {
+  const from = path.resolve(options.from);
+  const except = options.except.map((directory) => path.resolve(directory));
+  const packages = options.packages.map((directory) => path.resolve(directory));
+  const paths = options.paths ?? {};
+  const pathsBase = path.resolve(options.pathsBase ?? from);
+  const violations: BoundaryViolation[] = [];
+  for (const file of listSourceFiles(from)) {
+    if (except.some((directory) => isInside(directory, file))) continue;
+    const isTest = TEST_FILE.test(file);
+    const source = readFileSync(file, "utf8");
+    const positionOf = lineIndex(source);
+    for (const specifier of collectSpecifiers(file, source)) {
+      const { line, column } = positionOf(specifier.position);
+      const report = (reason: string): void => {
+        violations.push({
+          file,
+          line,
+          column,
+          specifier: specifier.value,
+          reason: `${reason} (${specifier.kind})`,
+        });
+      };
+      if (!isTest && specifier.value.startsWith("@codemirror/"))
+        report("an editor host uses CodeMirror only through @sefer/editor");
+      const resolved = isRelative(specifier.value)
+        ? path.resolve(path.dirname(file), withoutQuery(specifier.value))
+        : resolveAlias(specifier.value, paths, pathsBase);
+      if (resolved !== null && packages.some((directory) => isInside(directory, resolved)))
+        report("reaches into a package's sources; import it by name");
+    }
+  }
+  return violations;
+};
+
 export const formatViolation = (violation: BoundaryViolation, root: string): string =>
   `${path.relative(root, violation.file)}:${violation.line}:${violation.column} ${violation.specifier} — ${violation.reason}`;
 
@@ -357,6 +405,13 @@ const main = (): void => {
     // the same sentence. Solid is on the forbidden list, which is the whole
     // point: the overlay is a DOM tool, and the day it imports `solid-js` is
     // the day it stops being droppable into anything that is not this app.
+    ...checkHostUse({
+      from: source,
+      except: [path.join(source, "core")],
+      packages: [path.join(root, "packages", "text"), path.join(root, "packages", "editor")],
+      paths,
+      pathsBase: base,
+    }),
     // The workspace packages other apps install. `@sefer/text` gets core's
     // rule set and one more: it is BELOW the editor, so it may not import it.
     ...checkCoreBoundary({

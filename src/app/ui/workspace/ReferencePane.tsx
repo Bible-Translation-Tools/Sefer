@@ -9,7 +9,7 @@
  * string read off another resource's disk — nothing writes it, nothing
  * publishes it, and no Book in this process describes it — so the rule it has
  * to keep is simply that it can never be edited, which
- * `src/editor/recipes/reference.ts` says twice.
+ * `packages/editor/src/recipes/reference.ts` says twice.
  *
  * What the pane adds over the recipe is the shell's half of the wiring:
  *

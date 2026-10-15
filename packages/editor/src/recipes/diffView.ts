@@ -44,7 +44,7 @@ import { readingLayer, viewLayer } from "../core/compose";
 import { borrowedStructure, structureAt, type DocStructure } from "../core/docStructure";
 import { renderRangeField } from "../core/render";
 import { span } from "../core/timing";
-import { handleFor, type EditorHandle } from "../handle";
+import { handleFor, markMoved, type EditorHandle } from "../handle";
 import { modeView, type ProjectionName } from "../views";
 import { clipSpanOf, clipped, wholeLinesOf } from "./satellite";
 import { giveBack, takeView } from "./viewPool";
@@ -612,6 +612,7 @@ export function mountDiffView(options: DiffViewOptions): DiffViewMount {
     setMode: (mode: ProjectionName) =>
       view.dispatch({ effects: projection.reconfigure(modeView(mode, surface)) }),
     showAt: (at: number, y: "start" | "center" = "start") => {
+      markMoved(view);
       view.dispatch({
         effects: EditorView.scrollIntoView(Math.min(at, view.state.doc.length), { y }),
       });

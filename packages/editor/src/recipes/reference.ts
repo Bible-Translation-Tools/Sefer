@@ -46,7 +46,7 @@ import { anchorFrom } from "../core/clip";
 import { readingLayer, viewLayer } from "../core/compose";
 import { structureAt, type ChapterRow } from "../core/docStructure";
 import { span } from "../core/timing";
-import { handleFor, type EditorHandle } from "../handle";
+import { handleFor, markMoved, type EditorHandle } from "../handle";
 import { modeView, pickChapter, type ProjectionName } from "../views";
 import { revealInBand } from "./align";
 import { pairingThere, showBlockPairs, showPaired, type PairedRange } from "./pairing";
@@ -152,6 +152,7 @@ export function mountReference(options: ReferenceOptions): ReferenceMount {
     showChapter: (chapter: number) => {
       const row = chapterNumbered(view.state, chapter);
       if (row === undefined) return false;
+      markMoved(view);
       view.dispatch({ effects: EditorView.scrollIntoView(anchorFrom(row), { y: "start" }) });
       return true;
     },

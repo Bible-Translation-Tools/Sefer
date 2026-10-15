@@ -68,7 +68,7 @@ import { renderRangeAt, renderRangeField } from "../core/render";
 /**
  * How a marker is SAID, for a reader.
  *
- * A facet and not an import, for the reason `analyzer` is a facet: `src/editor`
+ * A facet and not an import, for the reason `analyzer` is a facet: `@sefer/editor`
  * may not reach into the app, and the names are interface copy that will be
  * translated. The shell supplies the localized function; a state that supplies
  * nothing shows the marker itself, which is wrong for a translator and exactly

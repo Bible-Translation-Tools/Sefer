@@ -644,7 +644,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
   });
 
   // The scripture size. Applied to the document rather than held for a
-  // component to read: `src/editor/editor.css` reads `--editor-font-size` for
+  // component to read: `packages/editor/src/editor.css` reads `--editor-font-size` for
   // every `.cm-mode-regular` surface, so one write resizes the open book, the
   // reference column and every excerpt satellite at once. The fiber is what
   // makes the stepper on `/settings` move the text under it.
@@ -1199,7 +1199,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
    * reader scrolls.
    *
    * The shell does not measure it and could not: it is a fact about a
-   * VIEWPORT, and `watchLocation` (src/editor/recipes/whereAmI.ts) already
+   * VIEWPORT, and `watchLocation` (packages/editor/src/recipes/whereAmI.ts) already
    * reads it for the location bar. All that is added here is writing it down,
    * so the next open can land on it. The write is the same debounced one every
    * other location change uses, and a scroll is already coalesced into one

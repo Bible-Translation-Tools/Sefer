@@ -28,7 +28,7 @@
 
 @layer components {
   /* The CodeMirror frame: a white card the view fills. `.cm-host` (in
-     `src/editor/editor.css`) owns what happens inside it.
+     `packages/editor/src/editor.css`) owns what happens inside it.
 
      A column of two, not one box: the location bar is pinned at the top of the
      card and the view scrolls under it (`src/app/ui/workspace/LocationBar.tsx`).

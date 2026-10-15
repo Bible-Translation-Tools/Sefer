@@ -111,6 +111,58 @@ export const decode = (bytes: Uint8Array): Result.Result<Source, SourceDecodeErr
   );
 };
 
+/**
+ * Offsets between a text as a file holds it and the canonical text `decode`
+ * makes of it.
+ *
+ * A host that computed offsets on the RAW text — a server's findings, counted
+ * in UTF-16 into the file with its `\r\n` and maybe its byte order mark — has
+ * offsets that drift by one per line from what the editor shows. Every API
+ * offset in the editor is canonical (LF, no mark), so a raw offset goes
+ * through `toCanonical` first, and a canonical one through `toRaw` on its way
+ * back. A lone `\r` becomes `\n` in place and moves nothing; a dropped `\r`
+ * of `\r\n`, or the mark, is a character the canonical text does not have.
+ */
+export interface OffsetMap {
+  /** The canonical offset for a raw one. A raw offset on a dropped `\r` lands on its `\n`. */
+  toCanonical(raw: number): number;
+  /** The raw offset for a canonical one: on the `\n` of a `\r\n`, never on its `\r`. */
+  toRaw(canonical: number): number;
+}
+
+export const offsetMap = (raw: string): OffsetMap => {
+  // Where each dropped character sits in the raw text, in order.
+  const dropped: number[] = [];
+  if (raw.charCodeAt(0) === 0xfeff) dropped.push(0);
+  for (let at = raw.indexOf("\r\n"); at !== -1; at = raw.indexOf("\r\n", at + 2)) dropped.push(at);
+  /** How many dropped characters sit before `raw`. */
+  const before = (offset: number): number => {
+    let lo = 0;
+    let hi = dropped.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if ((dropped[mid] ?? 0) < offset) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  };
+  return {
+    toCanonical: (offset) => offset - before(offset),
+    toRaw: (offset) => {
+      // The k-th dropped character shifts every canonical offset at or past
+      // `dropped[k] - k` by one more; that sequence never decreases.
+      let lo = 0;
+      let hi = dropped.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if ((dropped[mid] ?? 0) - mid <= offset) lo = mid + 1;
+        else hi = mid;
+      }
+      return offset + lo;
+    },
+  };
+};
+
 /** Canonical LF text written back in the form the file arrived in. */
 export const encode = (source: Source): Uint8Array => {
   const text = source.form.eol === "crlf" ? source.text.replace(/\n/g, "\r\n") : source.text;

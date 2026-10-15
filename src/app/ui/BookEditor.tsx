@@ -23,6 +23,7 @@
 import {
   annotateRepaint,
   gestureTrace,
+  editorPolicy,
   mountBookEditor,
   type BookEditorMount,
   type CorpusFinding,
@@ -252,13 +253,13 @@ export function BookEditor(props: BookEditorProps) {
   );
 
   // The view choices: which classes paint how, and which chapter is editable.
-  // Flipping Regular/USFM keeps the reader where they were (`setMode`); a clip
+  // Flipping Regular/USFM keeps the reader where they were (`setPolicy`); a clip
   // does not re-anchor, which would fight the deliberate jump just asked for.
   createRenderEffect(
     () => ({ editor: bound(), mode: shell.mode(), chapter: shell.chapter() }),
     ({ editor, mode, chapter }) => {
       if (editor === undefined) return;
-      editor.setMode(mode);
+      editor.setPolicy(editorPolicy(mode === "usfm" ? "usfm" : "regular"));
       editor.setChapter(chapter);
     },
   );

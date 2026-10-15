@@ -295,7 +295,7 @@
  * Colours are `inline` so a utility compiles straight to `var(--surface-primary)`
  * — one hop, and the dark swap above is the only place a colour is decided.
  * Everything else is a plain `@theme`, which both mints the utility and emits
- * the variable onto `:root`, so hand-written CSS (`src/editor/editor.css`) can
+ * the variable onto `:root`, so hand-written CSS (`packages/editor/src/editor.css`) can
  * keep saying `var(--radius-lg)`.
  */
 @theme inline {

@@ -1,5 +1,5 @@
 /**
- * The editor-backed Book: a `Book` (src/core/book/book.ts) whose canonical
+ * The editor-backed Book: a `Book` (packages/text/src/book.ts) whose canonical
  * text is a CodeMirror `EditorState` (`documentation/architecture/editor.md`).
  *
  * This is the Plain → Instantiated transition made real. A plain Book holds a

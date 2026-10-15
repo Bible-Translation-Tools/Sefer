@@ -34,7 +34,7 @@ export const DEFAULT_OPTS = DEFAULT_BUILD_OPTS;
 export { annotateEmptyBlocks, blockNamer, emptyBlocks } from "../recipes/emptyBlocks";
 
 export interface SurfaceOptions {
-  /** The engine, per state. See `src/editor/core/analyzer.ts`. */
+  /** The engine, per state. See `packages/editor/src/core/analyzer.ts`. */
   analyze: Analyze;
   mode?: Mode;
   opts?: Partial<BuildOpts>;

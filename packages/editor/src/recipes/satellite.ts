@@ -366,7 +366,7 @@ const CONTEXT_CLASS = "cm-excerpt-context";
 /**
  * Paints `ranges` — the matches this excerpt was opened for — inside a
  * satellite, and maps them through every edit like any other decoration. The
- * class is `src/editor/editor.css`'s, so the highlight is the one the
+ * class is `packages/editor/src/editor.css`'s, so the highlight is the one the
  * read-only card shows and the reader does not lose the match by clicking
  * Edit.
  */

@@ -22,7 +22,7 @@
 // Once registered, the engine treats the marker as its category (a
 // `standalone` is a bare point that leaves its paragraph open), and the
 // editor paints and guards it by that category through its registry
-// (`src/editor/core/registry.ts`, the `standalone` class). No rule in Sefer
+// (`packages/editor/src/core/registry.ts`, the `standalone` class). No rule in Sefer
 // branches on the name `s5`; this table is the only place it is written.
 //
 // The registration is PROCESS-WIDE (`GalleyService.setExtensions`): every

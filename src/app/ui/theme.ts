@@ -22,7 +22,7 @@ const THEMES = ["system", "light", "dark"] as const;
 export type Theme = (typeof THEMES)[number];
 
 /**
- * The diff's hues and its removed-word mark (`src/editor/editor.css`, the
+ * The diff's hues and its removed-word mark (`packages/editor/src/editor.css`, the
  * `--diff-*` tokens). A fact about the document for the same reason the theme
  * is: every diff surface reads them by existing, and the settings sample shows
  * the one in force.
@@ -100,7 +100,7 @@ const asEditorFontSize = (value: number): number =>
   clamp(value, EDITOR_FONT_SIZE_RANGE.min, EDITOR_FONT_SIZE_RANGE.max);
 
 /**
- * Writes `--editor-font-size` onto `<html>`, where `src/editor/editor.css`
+ * Writes `--editor-font-size` onto `<html>`, where `packages/editor/src/editor.css`
  * reads it for `.cm-mode-regular .cm-content`.
  *
  * A custom property rather than a root font size: the scripture column is the

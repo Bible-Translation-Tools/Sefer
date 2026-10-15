@@ -89,6 +89,8 @@ export function CardEditor(props: CardEditorProps) {
       // The caret starts where the reader double-clicked; from the Edit
       // button, on the first match — what they clicked Edit about, not the top
       // of the context above it.
+      // Read once: a prop is an expression, and Review's paint is computed in it.
+      const diff = untrack(() => props.diff);
       const card = untrack(() =>
         mountCard({
           parent,
@@ -98,7 +100,7 @@ export function CardEditor(props: CardEditorProps) {
           surface: props.surface ?? "cm-excerpt",
           analyze: props.analyze,
           marks: props.marks ?? [],
-          ...(props.diff === undefined ? {} : { diff: props.diff }),
+          ...(diff === undefined ? {} : { diff }),
           session: props.session === true,
           caret: { at: props.at, point: props.point, select: props.select },
           onEscape: () => props.onDone(),

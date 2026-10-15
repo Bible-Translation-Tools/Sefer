@@ -5,7 +5,7 @@
  * Deliberately not Effect and deliberately not Observability: these spans wrap
  * work inside `changeFilter` and `transactionFilter`, thousands of times per
  * paragraph typed. `armed()` is false outside a metered gesture, and then a span is
- * two `performance.now()` calls and no allocation. `src/editor/observability.ts`
+ * two `performance.now()` calls and no allocation. `packages/editor/src/observability.ts`
  * is the one bridge to Sefer's ring, and it forwards verdicts, not spans.
  *
  * `onDerived` is how these spans reach the transaction trace

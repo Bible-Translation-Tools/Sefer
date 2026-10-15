@@ -27,7 +27,7 @@
  *   - `makeTracer(emit)` is the single implementation. The pluggable half is
  *     emission: `null` records only the refusal slot, `sinkTracer` feeds the
  *     legacy `TraceSink` (the harness), `observabilityTracer`
- *     (src/editor/observability.ts) writes Sefer's ring.
+ *     (packages/editor/src/observability.ts) writes Sefer's ring.
  *
  * The cost when nobody is watching: `tracing(state)` is one facet read and
  * every call site guards on it. When the facet is null NOTHING is allocated.
@@ -407,7 +407,7 @@ export const onOrphanDerived = (
  *
  * `failed` is our bug — a paint or an analysis that threw; `declined` is the
  * editor choosing not to act. One handler, registered by the ring bridge
- * (`src/editor/observability.ts`) the way `onOrphanDerived` is, because the
+ * (`packages/editor/src/observability.ts`) the way `onOrphanDerived` is, because the
  * places that report have a state, not an `ObservabilityService`.
  */
 export type EditorOutcome = (

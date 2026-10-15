@@ -33,15 +33,14 @@ import { frontMatterCard } from "./core/frontmatter";
 import { annotateOpen } from "./core/instrument";
 import { keystrokeMeter } from "./core/meter";
 import { span } from "./core/timing";
-import { handleFor, type EditorHandle } from "./handle";
+import { handleFor, markMoved, type EditorHandle } from "./handle";
 import { annotateRepaint } from "./observability";
 import { annotateEmptyBlocks, blockNamer, showEmptyBlocks } from "./recipes/emptyBlocks";
 import { flash, flashing } from "./recipes/flash";
 import { showCorpusFindings, type CorpusFinding } from "./recipes/lint";
 import { noteBookIs } from "./recipes/noteEditor";
 import { pairingHere, showBlockPairs } from "./recipes/pairing";
-import { watchLocation, type Where } from "./recipes/whereAmI";
-import { modeView, pickChapter, type ProjectionName } from "./views";
+import { pickChapter, policyKey, policyView, type EditorPolicy } from "./views";
 
 /**
  * A remembered place, by what the document SAYS: a chapter label, a verse
@@ -79,20 +78,15 @@ export interface DrawnDiagnostic {
   readonly source?: string;
 }
 
-/**
- * Why the viewport moved: the reader scrolled, or the editor was told to go
- * somewhere (`reveal`, `jump`, `resume`, a mode flip). A host that pins a
- * chapter after a jump keeps the pin until the reader scrolls.
- */
-export type ViewportSource = "user" | "reveal";
-
 export interface BookEditorMount extends EditorHandle {
   /**
-   * Regular or USFM. Flipping must not move the reader: both modes are the
-   * SAME DOCUMENT, so the selection survives, but hidden markup collapses
-   * lines, so the top of the viewport is re-anchored in the same transaction.
+   * How the book is drawn and guarded: a mode (Regular or USFM) and presets
+   * over it (`editorPolicy`). Changing it must not move the reader: every
+   * policy shows the SAME DOCUMENT, so the selection survives, but hidden
+   * markup collapses lines, so the top of the viewport is re-anchored in the
+   * same transaction. The same policy again does nothing.
    */
-  setMode(mode: ProjectionName): void;
+  setPolicy(policy: EditorPolicy): void;
   /** Clips to the chapter with this ordinal, or shows the whole book with `null`. */
   setChapter(ordinal: number | null): void;
   setEmptyBlocks(on: boolean): void;
@@ -115,8 +109,6 @@ export interface BookEditorMount extends EditorHandle {
    * the book has no such place (a verse it lacks), and moves nothing then.
    */
   revealAddress(address: Address, at?: "top" | "center"): boolean;
-  /** `onViewport`, with why it moved. Returns the detach. */
-  onViewportSource(report: (where: Where | null, source: ViewportSource) => void): () => void;
   /**
    * Puts the reader back at a remembered place, caret and scroll. Answers the
    * offset it landed on, or undefined when the place no longer resolves (or
@@ -298,8 +290,18 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
   const unname = noteBookIs(created, book);
 
   const heard = listenersOf(caretListeners, book);
-  const onCaret = options.onCaret;
-  if (onCaret !== undefined) heard.add(onCaret);
+  /** This mount's caret listeners, wrapped so two mounts passing one function stay two. */
+  const mineCaret = new Set<(head: number) => void>();
+  const listen = (listener: (head: number) => void): (() => void) => {
+    const own = (head: number): void => listener(head);
+    heard.add(own);
+    mineCaret.add(own);
+    return () => {
+      heard.delete(own);
+      mineCaret.delete(own);
+    };
+  };
+  if (options.onCaret !== undefined) listen(options.onCaret);
   const drawnHeard = listenersOf(drawnListeners, book);
   /** This mount's own listeners, so `destroy` takes back only what it added. */
   const mine = new Set<() => void>();
@@ -343,16 +345,11 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
   const { projection: compartment, readOnly: readOnlyCompartment } = config;
   const readOnlyOf = (on: boolean) =>
     on ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : [];
-  if (options.readOnly === true)
-    created.dispatch({ effects: readOnlyCompartment.reconfigure(readOnlyOf(true)) });
-
-  /** When the editor last moved the viewport itself, so a scroll can say why it happened. */
-  let movedAt = Number.NEGATIVE_INFINITY;
-  const moved = (): void => {
-    movedAt = performance.now();
-  };
-  /** A scroll this long after the editor moved is the editor's, landing. */
-  const LANDING_MS = 400;
+  // Always set, never inherited: the compartment lives in the Book's state,
+  // and an earlier viewer over this book may have left it read-only.
+  created.dispatch({
+    effects: readOnlyCompartment.reconfigure(readOnlyOf(options.readOnly === true)),
+  });
 
   const toc = () => {
     const analysis = book.structure().analysis;
@@ -368,7 +365,7 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
     const length = created.state.doc.length;
     const from = Math.min(range.from, length);
     const to = Math.min(range.to ?? from, length);
-    moved();
+    markMoved(created);
     // The caret goes where the reader was sent, not only the scroll: every
     // command that asks "which chapter" or "where am I" reads the caret.
     created.dispatch({
@@ -379,20 +376,22 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
   };
 
   /** The mode the view is configured for, so a flip can be told from a first set. */
-  let showing: ProjectionName | undefined;
+  let showing: string | undefined;
 
   return handleFor(created, {
-    setMode: (mode: ProjectionName) => {
-      const flipped = showing !== undefined && showing !== mode;
-      showing = mode;
+    setPolicy: (policy: EditorPolicy) => {
+      const key = policyKey(policy);
+      if (key === showing) return;
+      const flipped = showing !== undefined;
+      showing = key;
       const anchor = flipped ? topOfViewport(created) : undefined;
-      if (flipped) moved();
+      if (flipped) markMoved(created);
       // The mode class rides the compartment as an editor attribute, not a
       // hand-added class: CodeMirror rewrites `view.dom`'s class attribute
       // from its facets whenever focus changes.
       created.dispatch({
         effects: [
-          compartment.reconfigure(modeView(mode)),
+          compartment.reconfigure(policyView(policy)),
           // In the SAME transaction as the reconfigure: a separate dispatch
           // measures the old layout, and the reader is thrown to the top.
           ...(anchor === undefined ? [] : [EditorView.scrollIntoView(anchor, { y: "start" })]),
@@ -409,7 +408,7 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
     resume: (place: RememberedPlace) => {
       const at = placeOf(created.state, place);
       if (at === undefined || at <= 0) return undefined;
-      moved();
+      markMoved(created);
       // The CARET goes with the scroll: a fresh view puts it at offset 0, and
       // the first thing typed would land at the top of the book.
       created.dispatch({
@@ -448,9 +447,7 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
     addressAt: (offset: number) => addressOf(offset),
     where: () => addressOf(created.state.selection.main.head),
     onWhere: (listener: (where: Address | undefined) => void) => {
-      const report = (head: number): void => listener(addressOf(head));
-      heard.add(report);
-      return () => heard.delete(report);
+      return listen((head) => listener(addressOf(head)));
     },
     revealAddress: (address: Address, at: "top" | "center" = "center") => {
       const view = toc();
@@ -460,12 +457,11 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
       jumpTo({ from: found.from, to: found.to }, at);
       return true;
     },
-    onViewportSource: (report: (where: Where | null, source: ViewportSource) => void) =>
-      watchLocation(created, (where) =>
-        report(where, performance.now() - movedAt < LANDING_MS ? "reveal" : "user"),
-      ),
     destroy: () => {
-      if (onCaret !== undefined) heard.delete(onCaret);
+      for (const own of mineCaret) heard.delete(own);
+      // Read-only belongs to this mount, not to the Book whose state carries
+      // the compartment: the next editor over this book starts editable.
+      created.dispatch({ effects: readOnlyCompartment.reconfigure(readOnlyOf(false)) });
       for (const check of mine) drawnHeard.delete(check);
       unname();
       unbind();

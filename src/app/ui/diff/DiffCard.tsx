@@ -83,7 +83,7 @@ export const wasBlock =
 
 interface Pane {
   /** A read-only diff view, or the card's editor while it is edited. */
-  readonly mount: { repaint(paint: DiffPaint): void; text(): string };
+  readonly mount: { repaint(paint: DiffPaint): void; text(): string; length(): number };
   readonly paint: () => DiffPaint;
   readonly live: boolean;
 }
@@ -313,7 +313,11 @@ export function DiffCard(props: {
       untrack(() => props.split),
     );
     panes.set("current", {
-      mount: { repaint: (next) => card.setDiff(next), text: () => card.text() },
+      mount: {
+        repaint: (next) => card.setDiff(next),
+        text: () => card.text(),
+        length: () => card.length(),
+      },
       paint,
       live: true,
     });
@@ -335,7 +339,7 @@ export function DiffCard(props: {
         // holds: one taken a keystroke earlier puts marks at offsets the typing
         // has moved. Length alone is not enough — a same-length edit passes it.
         if (pane.live) {
-          if (pane.mount.text() !== text) continue;
+          if (pane.mount.length() !== text.length || pane.mount.text() !== text) continue;
         }
         // A snapshot of the decisions: the compute above is what tracks them.
         // The decisions are the compute's; painting — and the gutter widgets

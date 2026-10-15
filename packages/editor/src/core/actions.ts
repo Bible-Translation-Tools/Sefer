@@ -1,7 +1,7 @@
 /**
  * The named editor gestures, as one lookup.
  *
- * The shell has a `Book`, not an `EditorView` — nothing above `src/editor`
+ * The shell has a `Book`, not an `EditorView` — nothing above `@sefer/editor`
  * imports CodeMirror — so a command in `src/app/commands.ts` asks for a gesture
  * BY NAME and `EditorBook.perform` runs it against whichever seat is canonical
  * (the bound view when there is one, the held state when there is not). That is

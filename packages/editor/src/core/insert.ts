@@ -32,7 +32,7 @@ import { note } from "./trace";
 
 /**
  * The named gestures the shell may ask a book to perform. Strings rather than
- * `StateCommand`s because this crosses `src/editor`'s front door, and nothing
+ * `StateCommand`s because this crosses `@sefer/editor`'s front door, and nothing
  * above it imports CodeMirror.
  */
 export type EditorAction =

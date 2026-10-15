@@ -160,7 +160,7 @@ export interface LibraryService {
   ) => Effect.Effect<readonly { readonly role: Role; readonly resource: Resource }[]>;
   /**
    * The WHOLE canonical text of one book of a registered resource — the bytes
-   * of its `.usfm` file, decoded the one way `src/core/source/source.ts`
+   * of its `.usfm` file, decoded the one way `packages/text/src/source.ts`
    * decodes anything.
    *
    * There is no door that answers a verse: the engine parses a book and not

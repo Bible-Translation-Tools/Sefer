@@ -132,7 +132,7 @@ export type {
 // RENAMED at the seam, deliberately. Upstream calls this buffer a "census" and
 // its rows `ChapterRow`/`VerseRow`; those names are already spent in Sefer.
 // "Census" is the glyph inventory (`/inventory`) and the book-list page, and
-// `ChapterRow` is the editor's own row in `src/editor/core/docStructure.ts`.
+// `ChapterRow` is the editor's own row in `packages/editor/src/core/docStructure.ts`.
 // TOC is what `search.md` and `resources.md` have called this thing since
 // before the door existed, so that is what it is called here.
 export type { BookCensus as BookToc } from "@wycliffeassociates/scripture-kitchen/toc-reader";

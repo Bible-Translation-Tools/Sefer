@@ -1055,7 +1055,7 @@
   border-color: var(--brand-base);
 }
 
-/* Blocks a translator still has to fill (`src/editor/recipes/emptyBlocks.ts`).
+/* Blocks a translator still has to fill (`packages/editor/src/recipes/emptyBlocks.ts`).
    A widget, so it is not in the document and cannot be typed over, selected,
    copied or saved — it is drawn AT the offset where the words go, and the
    caret sits in front of it. Quiet on purpose: it marks a place to work, not

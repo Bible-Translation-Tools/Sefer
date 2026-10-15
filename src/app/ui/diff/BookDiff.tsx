@@ -314,7 +314,8 @@ export function BookDiff(props: {
       for (const entry of mounts) {
         if (entry.live) {
           // Painted only over EXACTLY the text compared, as a card is.
-          if (entry.mount.editor.text() !== text) continue;
+          const editor = entry.mount.editor;
+          if (editor.length() !== text.length || editor.text() !== text) continue;
         }
         // A snapshot of the decisions: the compute above is what tracks them.
         entry.mount.repaint(untrack(entry.paint));

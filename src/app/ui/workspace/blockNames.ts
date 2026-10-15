@@ -1,8 +1,8 @@
 /**
  * What a block marker is CALLED, for a translator.
  *
- * The shell's half of `blockNamer` (`src/editor/recipes/emptyBlocks.ts`). It
- * lives here and not in the editor because `src/editor` may not reach into the
+ * The shell's half of `blockNamer` (`packages/editor/src/recipes/emptyBlocks.ts`). It
+ * lives here and not in the editor because `@sefer/editor` may not reach into the
  * app — its front door says it imports Galley's `Analysis` and core's
  * `Book`/`Source` vocabulary and nothing else — and these are interface copy.
  * Handed in as a facet for the same reason `analyzer` is: a capability the

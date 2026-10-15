@@ -42,7 +42,7 @@ import type { Address } from "@sefer/text/location/address";
 import { addressAt, resolve, type TocView } from "@sefer/text/location/locate";
 
 import { structureAt } from "../core/docStructure";
-import { viewOf, type EditorHandle } from "../handle";
+import { markMoved, viewOf, type EditorHandle } from "../handle";
 
 export type AlignMode = "reveal" | "exact";
 
@@ -92,6 +92,7 @@ export const revealInBand = (view: EditorView, at: number): boolean => {
   const height = view.scrollDOM.clientHeight;
   const now = pixelsBelowTop(view, at);
   if (now >= height * BAND.from && now <= height * BAND.to) return false;
+  markMoved(view);
   view.dispatch({ effects: EditorView.scrollIntoView(at, { y: "center" }) });
   // Once more if it landed off: the blocks above a far verse (a chapter's
   // number, a psalm's title) get their real height only once they are drawn.
@@ -99,7 +100,8 @@ export const revealInBand = (view: EditorView, at: number): boolean => {
     requestAnimationFrame(() => {
       const landed = pixelsBelowTop(view, at);
       if (Math.abs(landed - (height - view.defaultLineHeight) / 2) > view.defaultLineHeight)
-        view.dispatch({ effects: EditorView.scrollIntoView(at, { y: "center" }) });
+        markMoved(view);
+      view.dispatch({ effects: EditorView.scrollIntoView(at, { y: "center" }) });
     }),
   );
   return true;
@@ -174,6 +176,7 @@ const alignTo = (
   // (it measures lines it had only estimated).
   const margin = Math.max(0, anchor.below);
   if (Math.abs(pixelsBelowTop(view, at) - margin) < 1) return false;
+  markMoved(view);
   view.dispatch({ effects: EditorView.scrollIntoView(at, { y: "start", yMargin: margin }) });
   return true;
 };

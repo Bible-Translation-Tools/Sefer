@@ -461,6 +461,9 @@ export function ExcerptCard(props: ExcerptCardProps) {
             session={direct()}
             onEditor={(card) => {
               editCard = card;
+              // Seeded from the session, not carried over from the last one:
+              // a card closed without Save or Cancel left the flag as it was.
+              setDirty(card?.session?.dirty() ?? false);
               card?.session?.onDirty(setDirty);
             }}
             onDone={direct() ? cancel : done}

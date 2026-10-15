@@ -10,7 +10,12 @@
  */
 
 // What a host holds for any mount: methods, never the view.
-export { type EditorHandle, type RevealOptions, type RevealScroll } from "./handle";
+export {
+  type EditorHandle,
+  type RevealOptions,
+  type RevealScroll,
+  type ViewportSource,
+} from "./handle";
 export { type Where } from "./recipes/whereAmI";
 
 // The editor-backed Book: seated once per book, and the port a satellite
@@ -27,7 +32,6 @@ export {
   type BookEditorOptions,
   type DrawnDiagnostic,
   type RememberedPlace,
-  type ViewportSource,
 } from "./bookEditor";
 export {
   mountCard,
