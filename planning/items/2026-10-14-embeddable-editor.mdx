@@ -411,7 +411,60 @@ the last reach-in goes.</Question>
    - Move location in.
    - Add a `pnpm boundaries` rule: no `#app` and no framework imports.
    - Set up its vitest project and fallow entries.
-3. **Replace the reach-ins (4–5 days, revised up after the audits).** The
+3. **Replace the reach-ins. Done 2026-10-15 on `editor-package` (8ccf257…bcde7b4).**
+   No app code imports CodeMirror now; only one app test does, which drives
+   recipes with the real engine.
+   - **Every mount returns a handle** (`EditorHandle`: `text`, `focus`,
+     `offsetAt`, `reveal`, `onViewport`, `centerOffset`). The view stays in the
+     package.
+   - **`mountCard`** is what `CardEditor` and Review's live pane used to build
+     by hand. It covers:
+     - the policy and the clip
+     - marks
+     - a live diff (`setDiff`)
+     - Escape
+     - where the caret starts
+     - the Book hold
+     - the excerpt's undo session (`session()`: `dirty`, `onDirty`, `cancel`)
+   - **`mountBookEditor`** is everything `BookEditor` did with CodeMirror:
+     - the once-per-book configuration
+     - Regular/USFM with the flip anchor
+     - the chapter clip
+     - the remembered-place ladder
+     - `jump` with its flash
+     - host diagnostics
+
+     It also has what the hub needs:
+     - `readOnly` / `setReadOnly`
+     - `diagnostics()` / `onDiagnostics`
+     - `addressAt` / `where` / `onWhere` / `revealAddress`
+     - `onViewportSource` (`"user"` or `"reveal"`)
+   - **`seatBook`** brings the whole canonical feature set, so `services.ts`
+     composes nothing.
+   - **The public types carry no CodeMirror.** `EditorBook` holds only what a
+     host may ask; the rest is the package's `SeatedBook`. A funnel is an
+     opaque `Following`.
+   - **Narrower exports.** `exports` is `"."`, `"./editor.css"` and
+     `"./testing/*"`.
+   - **The hub's viewer** is now
+     `mountBookEditor({ parent, book: seatBook(makeBook(path, source), { analyze }), readOnly: true })`.
+
+   Driven on the fixture:
+   - the book: typing, undo, a chapter jump with flash, USFM and back, Find
+     prefill, the remembered place
+   - Find cards: double-click, typing, Escape
+   - Key terms: Cancel restores the text
+   - a reader following the seated book
+
+   A throwaway browser test checked the viewer methods against the real
+   engine.
+
+   **Not driven:**
+   - Review's live pane, because the fixture has no history
+   - the reference pane's following, because there's no reference text
+   - footnote editing, because there's no well-formed note
+
+   The original plan for this step: The
    contract above is about 25 methods, not the 8 first proposed. Go one host
    file per commit, smallest first, and drive the app between commits:
    `YoursRow`, then `ExcerptReader`, the diff cards, `ReferencePane`,
@@ -468,7 +521,7 @@ one. Until then, the package documents one marker config per page.
 
 </Followup>
 
-<Followup id="exports-narrow">
+<Followup id="exports-narrow" done>
 
 Both packages export `"./*"`, so every file is public. That also hides dead
 code inside them from fallow, because every file is an entry. Narrow the exports
@@ -496,5 +549,29 @@ USFM mode has no light theme yet. Later, after the boundaries are clean
 
 > we need a light mode for usfm mode, but we can do that later. I jut want to get
 > these architecturally boundaries clean first.
+
+</Followup>
+
+<Followup id="step3-left">
+
+Left from the contract after step 3:
+
+- **`onViewport` source on other mounts.** Only the book editor tags its
+  reports, and a reader's scroll within 400 ms of a reveal reads as the reveal
+  landing.
+- **Smooth scrolling.** `reveal` has no smooth option, because CodeMirror's
+  `scrollIntoView` has none. A host that wants it animates on its own side.
+- **Book editor policies.** `setMode` takes a projection name, not an
+  `EditorPolicy` with presets: there is no `setPolicy` on the book editor yet.
+- **The annotator's key question.** No `isEditing()` / `onFocus` yet; it still
+  guesses whether a bare letter types into the editor.
+- **Effect** is still a peer dependency: `Result` and `Data` in the Book,
+  `fixes`, and `Source.decode`.
+- **The CRLF raw-offset map** (agreed) is not built. `decode` is in
+  `@sefer/text/source`.
+- **Drive the surfaces not driven yet:**
+  - Review's live pane, on a project with history
+  - the reference pane's following
+  - footnote editing
 
 </Followup>
