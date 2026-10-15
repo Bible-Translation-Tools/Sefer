@@ -13,7 +13,7 @@ source: planning/00-ideas/scripture-kitchen-asks.md
 
 At the audit Sefer pinned `v0.1.9`; kitchen has tagged **v0.1.10**, which delivers asks 9
 (`message()` fills `{aux}`, fc468e4) and 10 (`DiagnosticName`, `FindingName`, `SousCode`, d648e07).
-Ask 8 is delivered (v0.1.8, f8dd7e8) and Sefer uses it. Still open upstream: 2, 4, 6, 7.
+Ask 8 is delivered (v0.1.8, f8dd7e8) and Sefer uses it. Still open upstream: 2, 4, 6, 7, and 11 (filed 2026-10-15).
 
 <Followup id="bump-0-1-10" done>**Done 2026-10-15 on branch `editor-package`.** Checked on `99-BAD.usfm`: "verse 2 repeats the verse at 2; expected 3". Bump to v0.1.10: delete the `aux` fill in `diagnosticMessage` (now `packages/text/src/engine/analysis.ts`) and key `src/app/ui/panels/findingLabels.ts` by `SousCode` and `DiagnosticName`.</Followup>
 
@@ -127,3 +127,48 @@ Diffing a book against itself still takes 8.6 ms and returns 992 KB. With identi
 We can put in a scripture kitchen ask about the potential logic of tiling backward however so that stuff like a \p end up reading as part the one they attach too instead of previous as trailing info:
 
 sssssssssssssssssssssssere -> not trigger an error. Only 3 exactly.
+
+## 11. `OnionBook::locate` walks the whole mask on every call
+
+**Asked 2026-10-15**, for the WACS hub; found 2026-10-14 by profiling the hub's
+proofreading of `wa-catalog/hbo_uhb` with samply. The code is unchanged in
+v0.1.10: `galley/src/sous/onion_book.rs`, `locate` and `SourceSpans`.
+
+There are two problems:
+
+- `locate` starts its `SourceSpans` at mask range 0, not at the first range
+  that can overlap.
+- `next()` never stops early: after the last overlapping range it scans to the
+  end of `mask.ranges`.
+
+So draining one `locate` costs O(mask ranges), and a host that locates every
+finding pays O(findings × ranges).
+
+On hbo_uhb that was 90% of a 4 s proofread, with 163,284 findings; the analysis
+itself took about 0.2 s. The hub now keeps its own copy of the mask
+(`OnionBook::from_parts`, `Mask::to_source`), and the output is byte-identical
+on en_ulb, hbo_uhb, km_ulb and ru_ulb with its source. hbo_uhb then proofreads
+in 237 ms.
+
+**Change.** Any one of these fixes it for every caller:
+
+1. **Start where the range starts, and stop where it ends.** Begin at
+   `mask.starts.partition_point(|&s| s <= range.from()) - 1`, and return `None`
+   once a projected start is at or past `range.to()`. This is a pure fix: the
+   cost becomes O(log ranges + runs).
+2. **`raw_bounds(range) -> Option<Range<u32>>`.** It answers what most callers
+   ask: from `to_source(from)` to `to_source(to - 1) + 1`.
+3. **`pub fn mask(&self) -> &Mask`**, so a host need not rebuild the mask beside
+   the book.
+
+**Check.** A book of thousands of short verses: locate a range near the end and
+drain `spans`. Assert the same runs as today, and that `next()` touches only the
+ranges it returns plus one. Or time the hub's
+`cargo run --release -p hub-proof --example proofread_repo -- <hbo_uhb.git>`
+before and after.
+
+**Sefer side:** none. Galley's own paths (Sous siting and pairing, overlay)
+build an `OnionBook` but map through the mask directly and never call
+`locate`, so Sefer's in-browser proofreading does not pay this. The hub drops
+its mask copy (`parse_book` in `crates/proof/src/lib.rs`) once (1), (2) or (3)
+ships.
