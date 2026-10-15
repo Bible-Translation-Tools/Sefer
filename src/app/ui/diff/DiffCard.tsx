@@ -7,7 +7,7 @@
  * It wears the frame every card wears (`multibuffer/CardFrame`) and edits the
  * way every card edits: read-only until Edit or a double-click, then the
  * current side is the Book itself (`multibuffer/CardEditor`) with the diff as
- * a plugin on it (`liveDiff`), repainted as the review compares again; Done or
+ * a live diff on it (`CardEditor`'s `diff`), repainted as the review compares again; Done or
  * Escape ends it. The list it sits in owns the edit session and the pin
  * (`multibuffer/CardList`).
  *
@@ -17,14 +17,11 @@
  * only when they ask for it.
  */
 
-import type { EditorView } from "@codemirror/view";
 import {
-  liveDiff,
   mountDiffView,
   mountStamp,
-  repaintDiff,
+  type CardMount,
   type DiffPaint,
-  type DiffViewMount,
   type EditorBook,
 } from "@sefer/editor";
 import type { JSX } from "@solidjs/web";
@@ -85,7 +82,8 @@ export const wasBlock =
   };
 
 interface Pane {
-  readonly mount: DiffViewMount;
+  /** A read-only diff view, or the card's editor while it is edited. */
+  readonly mount: { repaint(paint: DiffPaint): void; text(): string };
   readonly paint: () => DiffPaint;
   readonly live: boolean;
 }
@@ -305,8 +303,8 @@ export function DiffCard(props: {
   );
 
   /** The editor, registered as the live current pane so a comparison repaints it. */
-  const editorView = (view: EditorView | undefined): void => {
-    if (view === undefined) {
+  const editorCard = (card: CardMount | undefined): void => {
+    if (card === undefined) {
       panes.delete("current");
       return;
     }
@@ -315,17 +313,11 @@ export function DiffCard(props: {
       untrack(() => props.split),
     );
     panes.set("current", {
-      mount: {
-        view,
-        repaint: (next) => repaintDiff(view, next),
-        setMode: () => {},
-        showAt: () => {},
-        destroy: () => {},
-      },
+      mount: { repaint: (next) => card.setDiff(next), text: () => card.text() },
       paint,
       live: true,
     });
-    untrack(() => repaintDiff(view, paint()));
+    untrack(() => card.setDiff(paint()));
   };
 
   // A decision, or a new comparison, repaints in place. A live pane whose text
@@ -343,8 +335,7 @@ export function DiffCard(props: {
         // holds: one taken a keystroke earlier puts marks at offsets the typing
         // has moved. Length alone is not enough — a same-length edit passes it.
         if (pane.live) {
-          const doc = pane.mount.view.state.doc;
-          if (doc.length !== text.length || doc.toString() !== text) continue;
+          if (pane.mount.text() !== text) continue;
         }
         // A snapshot of the decisions: the compute above is what tracks them.
         // The decisions are the compute's; painting — and the gutter widgets
@@ -538,15 +529,13 @@ export function DiffCard(props: {
                   policy={cardPolicy(usfm() ? "usfm" : "regular")}
                   surface="cm-diff cm-diff-card"
                   analyze={props.analyze ?? (() => props.sides.current)}
-                  extensions={liveDiff(
-                    currentPaint(
-                      untrack(usfm),
-                      untrack(() => props.split),
-                    )(),
-                  )}
+                  diff={currentPaint(
+                    untrack(usfm),
+                    untrack(() => props.split),
+                  )()}
                   label={`review:${props.hunk.key}`}
                   reclip={false}
-                  onView={editorView}
+                  onEditor={editorCard}
                   onDone={() => props.onDone?.()}
                 />
               )}

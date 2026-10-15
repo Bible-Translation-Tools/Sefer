@@ -12,6 +12,8 @@
 import { EditorSelection } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
+import { watchLocation, type Where } from "./recipes/whereAmI";
+
 /** Where a revealed range lands in the pane, or `"none"` to leave the scroll alone. */
 export type RevealScroll = "start" | "center" | "nearest" | "none";
 
@@ -33,6 +35,13 @@ export interface EditorHandle {
   offsetAt(point: { readonly x: number; readonly y: number }): number | undefined;
   /** Brings an offset range into view, and selects it when asked. */
   reveal(range: { readonly from: number; readonly to?: number }, options?: RevealOptions): void;
+  /**
+   * What is on screen, reported on scroll (coalesced to a frame) and once at
+   * once. Returns the detach. `null` while there is nothing to read.
+   */
+  onViewport(report: (where: Where | null) => void): () => void;
+  /** The offset at the middle of the pane: where the reader is looking. */
+  centerOffset(): number;
 }
 
 const views = new WeakMap<EditorHandle, EditorView>();
@@ -49,8 +58,7 @@ export const handleFor = <Rest extends object>(
   view: EditorView,
   rest: Rest,
 ): Rest & EditorHandle => {
-  const handle: Rest & EditorHandle = {
-    ...rest,
+  const shared: EditorHandle = {
     text: () => view.state.doc.toString(),
     focus: () => view.focus(),
     offsetAt: (point) => {
@@ -70,7 +78,30 @@ export const handleFor = <Rest extends object>(
         ...(scroll === "none" ? {} : { effects: EditorView.scrollIntoView(from, { y: scroll }) }),
       });
     },
+    onViewport: (report) => watchLocation(view, report),
+    centerOffset: () => {
+      const box = view.scrollDOM.getBoundingClientRect();
+      const y = box.top + box.height / 2;
+      return (
+        view.posAtCoords({ x: box.left + box.width / 2, y }, false) ??
+        view.lineBlockAtHeight(y - view.documentTop).from
+      );
+    },
   };
+  // Descriptors, not a spread: a mount's own getters (a satellite's `range`)
+  // must stay getters.
+  // SAFETY: `defineProperties` copies every own property of `rest` onto
+  // `shared`, which already holds every `EditorHandle` member, so the result
+  // has both; TypeScript types it as `EditorHandle` alone.
+  const handle = Object.defineProperties(shared, Object.getOwnPropertyDescriptors(rest)) as Rest &
+    EditorHandle;
   views.set(handle, view);
   return handle;
 };
+
+/**
+ * TRANSITIONAL. A handle over a view the host built itself — only `BookEditor`
+ * still does, until it mounts through the package (the planning item
+ * "embeddable editor", step 3, last). Delete with that.
+ */
+export const handleOfView = (view: EditorView): EditorHandle => handleFor(view, {});

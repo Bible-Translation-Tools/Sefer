@@ -46,6 +46,7 @@ import { anchorFrom } from "../core/clip";
 import { readingLayer, viewLayer } from "../core/compose";
 import { structureAt, type ChapterRow } from "../core/docStructure";
 import { span } from "../core/timing";
+import { handleFor, type EditorHandle } from "../handle";
 import { modeView, pickChapter, type ProjectionName } from "../views";
 import { revealInBand } from "./align";
 import { pairingThere, showBlockPairs, showPaired, type PairedRange } from "./pairing";
@@ -63,8 +64,7 @@ export interface ReferenceOptions {
   readonly pairBlocks?: boolean;
 }
 
-export interface ReferenceMount {
-  readonly view: EditorView;
+export interface ReferenceMount extends EditorHandle {
   /** Follows the main editor's projection. Idempotent. */
   setMode(mode: ProjectionName): void;
   /**
@@ -131,14 +131,12 @@ export function mountReference(options: ReferenceOptions): ReferenceMount {
   const view = new EditorView({ state, parent: options.parent });
   done();
 
-  const mount: ReferenceMount = {
-    view,
-
-    setMode: (mode) => {
+  const mount = handleFor(view, {
+    setMode: (mode: ProjectionName) => {
       view.dispatch({ effects: projection.reconfigure(modeView(mode)) });
     },
 
-    clipTo: (chapter) => {
+    clipTo: (chapter: number | null) => {
       if (chapter === null) {
         view.dispatch(pickChapter(view.state, null));
         return true;
@@ -151,14 +149,14 @@ export function mountReference(options: ReferenceOptions): ReferenceMount {
       return row !== undefined;
     },
 
-    showChapter: (chapter) => {
+    showChapter: (chapter: number) => {
       const row = chapterNumbered(view.state, chapter);
       if (row === undefined) return false;
       view.dispatch({ effects: EditorView.scrollIntoView(anchorFrom(row), { y: "start" }) });
       return true;
     },
 
-    showPair: (range, reveal = true) => {
+    showPair: (range: PairedRange | null, reveal = true) => {
       showPaired(view, range);
       if (range === null || !reveal) return;
       // The aligned group's reveal: still while the pair stays in the middle
@@ -167,13 +165,13 @@ export function mountReference(options: ReferenceOptions): ReferenceMount {
       revealInBand(view, range.from);
     },
 
-    pairBlocks: (on) => {
+    pairBlocks: (on: boolean) => {
       showBlockPairs(view, on);
     },
 
     destroy: () => {
       view.destroy();
     },
-  };
+  });
   return mount;
 }

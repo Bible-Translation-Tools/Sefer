@@ -11,11 +11,8 @@
  * diagnostics, instruments, and the test harness.
  */
 
-// The engine seam: how a state reaches Galley (see core/analyzer.ts).
-export { analyzer } from "./core/analyzer";
-
 // The assembled editor.
-export { commandsLayer, readingLayer, viewLayer } from "./core/compose";
+export { commandsLayer, viewLayer } from "./core/compose";
 
 // Structured entry: the named insert gestures, and the front matter card.
 export { type EditorAction } from "./core/actions";
@@ -28,25 +25,26 @@ export { type ChapterRow } from "./core/docStructure";
 
 // The editor-backed Book and the port other surfaces submit through.
 export { editorBook, type EditorBook } from "./book";
-export { fromCanonical, ownEcho, type Funnel } from "./funnel";
+export { type Funnel } from "./funnel";
 
-// Satellites, and the read-only reader an excerpt shows until it is edited.
-export {
-  clippedToScope,
-  markedRanges,
-  reclip,
-  remark,
-  mountSatellite,
-  clipSpan,
-  type MarkedRange,
-  type Satellite,
-} from "./recipes/satellite";
+// A card's editor over a stretch of the book, and the read-only reader an
+// excerpt shows until it is edited.
+export { type MarkedRange } from "./recipes/satellite";
 export { mountReader, type ReaderMount } from "./recipes/reader";
+export {
+  mountCard,
+  type CardCaret,
+  type CardMount,
+  type CardOptions,
+  type CardSession,
+} from "./recipes/card";
+
+// What a host holds for any mount: methods, never the view.
+export { handleOfView, type EditorHandle, type RevealOptions, type RevealScroll } from "./handle";
+export { type Where } from "./recipes/whereAmI";
 export { mountStamp } from "./recipes/stamp";
 export {
-  liveDiff,
   mountDiffView,
-  repaintDiff,
   type DiffHunk,
   type DiffPaint,
   type DiffViewMount,
@@ -69,7 +67,6 @@ export {
   modeView,
   pickChapter,
   policyKey,
-  policyView,
   type EditorPolicy,
   type ProjectionName,
 } from "./views";

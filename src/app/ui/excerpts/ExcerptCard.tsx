@@ -35,11 +35,8 @@
  * flipped per card. The width is the CARD's (a ResizeObserver), not the
  * window's, because the same card lives in a full-width list and a side panel.
  */
-import { ChangeSet, StateField } from "@codemirror/state";
-import { EditorView } from "@codemirror/view";
 import {
-  fromCanonical,
-  ownEcho,
+  type CardMount,
   type EditorBook,
   type EditorPolicy,
   type Funnel,
@@ -307,42 +304,20 @@ export function ExcerptCard(props: ExcerptCardProps) {
   };
 
   /**
-   * A direct card's edit is a SESSION with a way back. Everything typed lands
-   * in the book as it is typed (that is how the editor works); the session
-   * holds the INVERSE of this card's own changes (`sessionUndo`), so Cancel
-   * hands the book exactly that and Save only has to stop. A satellite's own
-   * typing comes back from the Book as `fromCanonical` too, marked `ownEcho`;
-   * a change from anywhere else is mapped over, never composed, so Cancel
-   * cannot undo someone else's edit. `dirty` turns the buttons into Save
-   * changes / Cancel.
+   * A direct card's edit is a SESSION with a way back (`CardMount.session`).
+   * Everything typed lands in the book as it is typed (that is how the editor
+   * works); the session holds the inverse of this card's own changes, so
+   * Cancel hands the book exactly that and Save only has to stop. `dirty`
+   * turns the buttons into Save changes / Cancel.
    */
   const [dirty, setDirty] = createSignal(false, { name: "excerptDirty" });
-  let editView: EditorView | undefined;
-  const sessionUndo = StateField.define<ChangeSet>({
-    create: (state) => ChangeSet.empty(state.doc.length),
-    update: (held, transaction) => {
-      if (!transaction.docChanged) return held;
-      const others =
-        transaction.annotation(fromCanonical) === true && transaction.annotation(ownEcho) !== true;
-      if (others) return held.map(transaction.changes);
-      return transaction.changes.invert(transaction.startState.doc).compose(held);
-    },
-  });
-  const sessionWatch = EditorView.updateListener.of((update) => {
-    if (update.docChanged) setDirty(!update.state.field(sessionUndo).empty);
-  });
+  let editCard: CardMount | undefined;
   const save = (): void => {
     setDirty(false);
     done();
   };
   const cancel = (): void => {
-    const view = editView;
-    if (view !== undefined && dirty()) {
-      const undo = view.state.field(sessionUndo, false);
-      // Past the card's own filters (a revert may span a verse number the
-      // card policy makes immortal); the Book still judges it as an edit.
-      if (undo !== undefined && !undo.empty) view.dispatch({ changes: undo, filter: false });
-    }
+    if (dirty()) editCard?.session?.cancel();
     setDirty(false);
     done();
   };
@@ -429,8 +404,8 @@ export function ExcerptCard(props: ExcerptCardProps) {
       // Whichever is showing: the reading, or — opened mid-edit — the editor.
       const timer = setTimeout(() => {
         const at = props.excerpt.own.from;
-        if (props.editing && editView !== undefined)
-          editView.dispatch({ effects: EditorView.scrollIntoView(at, { y: "start" }) });
+        if (props.editing && editCard !== undefined)
+          editCard.reveal({ from: at }, { scroll: "start" });
         else reveal?.(at);
       }, 300);
       return () => clearTimeout(timer);
@@ -483,9 +458,10 @@ export function ExcerptCard(props: ExcerptCardProps) {
             select={props.excerpt.hits[0]}
             analyze={props.analyze}
             label={`excerpt:${props.excerpt.sid}`}
-            extensions={direct() ? [sessionUndo, sessionWatch] : undefined}
-            onView={(view) => {
-              editView = view;
+            session={direct()}
+            onEditor={(card) => {
+              editCard = card;
+              card?.session?.onDirty(setDirty);
             }}
             onDone={direct() ? cancel : done}
           />

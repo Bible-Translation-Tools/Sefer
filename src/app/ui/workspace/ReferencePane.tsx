@@ -308,7 +308,7 @@ export function ReferencePane(props: ReferencePaneProps) {
     (view) => {
       if (view === undefined || aligned === undefined) return;
       return aligned.join({
-        view: view.view,
+        editor: view,
         book: props.bookId,
         leads: () => untrack(following),
         follows: () => untrack(following),
@@ -318,7 +318,7 @@ export function ReferencePane(props: ReferencePaneProps) {
   createEffect(
     () => ({ view: mounted(), follow: following() }),
     ({ view, follow }) => {
-      if (view !== undefined && follow) aligned?.sync(view.view);
+      if (view !== undefined && follow) aligned?.sync(view);
     },
   );
 

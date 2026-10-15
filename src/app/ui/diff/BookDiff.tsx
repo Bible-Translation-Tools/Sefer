@@ -15,20 +15,14 @@
  * the unit at the top of the current pane, so a counter can say where you are.
  */
 
-import { EditorView } from "@codemirror/view";
 import {
-  analyzer,
   createAlignedGroup,
-  liveDiff,
-  modeView,
+  editorPolicy,
+  mountCard,
   mountDiffView,
-  mountSatellite,
-  readingLayer,
-  repaintDiff,
-  watchLocation,
   type DiffPaint,
-  type DiffViewMount,
   type EditorBook,
+  type EditorHandle,
 } from "@sefer/editor";
 import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
 
@@ -104,9 +98,17 @@ export function BookDiff(props: {
     name: "bookRight",
   });
 
+  /** One pane, read-only or live, as this view drives it. */
+  interface Pane {
+    readonly editor: EditorHandle;
+    repaint(paint: DiffPaint): void;
+    showAt(at: number, y?: "start" | "center"): void;
+    destroy(): void;
+  }
+
   let mounts: {
     side: Side | "unified";
-    mount: DiffViewMount;
+    mount: Pane;
     paint: () => DiffPaint;
     live: boolean;
   }[] = [];
@@ -136,14 +138,7 @@ export function BookDiff(props: {
   /** The offset at the middle of your pane, where the reader is. */
   const middle = (): number | undefined => {
     const entry = mounts.find((held) => held.side !== "baseline");
-    if (entry === undefined) return undefined;
-    const view = entry.mount.view;
-    const box = view.scrollDOM.getBoundingClientRect();
-    const y = box.top + box.height / 2;
-    return (
-      view.posAtCoords({ x: box.left + box.width / 2, y }, false) ??
-      view.lineBlockAtHeight(y - view.documentTop).from
-    );
+    return entry?.mount.editor.centerOffset();
   };
   createEffect(
     () => props.ref,
@@ -199,15 +194,15 @@ export function BookDiff(props: {
 
       // Each pane only REPORTS its place: the counter follows the current
       // pane. Neither pane moves the other.
-      const follow = (side: Side, mount: DiffViewMount): void => {
+      const follow = (side: Side, mount: Pane): void => {
         if (split && side !== "current") return;
         releases.push(
-          watchLocation(mount.view, (where) => {
+          mount.editor.onViewport((where) => {
             if (where === null) return;
             // The END of the line at the top, not its start: a visual line in
             // regular mode opens with the bare `\q1` that belongs to the unit
             // BEFORE, and reporting that would name the verse above.
-            const probe = Math.max(where.top, mount.view.lineBlockAt(where.top).to - 1);
+            const probe = Math.max(where.top, where.topLineEnd - 1);
             report(unitAt(now().units, side, probe));
           }),
         );
@@ -218,49 +213,42 @@ export function BookDiff(props: {
         parent: HTMLElement,
         text: string,
         paint: () => DiffPaint,
-      ): DiffViewMount => {
+      ): Pane => {
         if (side !== "baseline" && live !== undefined) {
-          const release = live.book.hold();
-          const satellite = mountSatellite({
+          const card = mountCard({
             parent,
-            host: live.book.funnel(),
-            range: { from: 0, to: live.book.state.doc.length },
-            editable: true,
+            book: live.book,
+            range: { from: 0, to: live.book.source().text.length },
+            clip: false,
+            policy: editorPolicy(mode === "usfm" ? "usfm" : "regular"),
+            surface: "cm-diff",
+            analyze: live.analyze,
+            diff: paint(),
             label: `review:${sides.bookId}`,
-            extensions: [
-              modeView(mode, "cm-diff"),
-              analyzer.of(live.analyze),
-              readingLayer,
-              ...liveDiff(paint()),
-            ],
           });
-          const mount: DiffViewMount = {
-            view: satellite.view,
-            repaint: (next) => repaintDiff(satellite.view, next),
-            setMode: () => {},
-            showAt: (at, y = "start") => {
-              satellite.view.dispatch({
-                effects: EditorView.scrollIntoView(Math.min(at, satellite.view.state.doc.length), {
-                  y,
-                }),
-              });
-            },
-            destroy: () => {
-              satellite.destroy();
-              release();
-            },
+          const mount: Pane = {
+            editor: card,
+            repaint: (next) => card.setDiff(next),
+            showAt: (at, y = "start") => card.reveal({ from: at }, { scroll: y }),
+            destroy: () => card.destroy(),
           };
           held.push({ side, mount, paint, live: true });
           return mount;
         }
         const analysis = side === "baseline" ? sides.baseline : sides.current;
-        const mount = mountDiffView({
+        const view = mountDiffView({
           parent,
           text,
           analyze: () => analysis,
           mode,
           paint: paint(),
         });
+        const mount: Pane = {
+          editor: view,
+          repaint: (next) => view.repaint(next),
+          showAt: (at, y) => view.showAt(at, y),
+          destroy: () => view.destroy(),
+        };
         held.push({ side, mount, paint, live: false });
         return mount;
       };
@@ -279,8 +267,13 @@ export function BookDiff(props: {
         const group = createAlignedGroup("reveal");
         const linked = (): boolean => untrack(() => props.linked?.() ?? true);
         releases.push(
-          group.join({ view: was.view, book: sides.bookId, leads: linked, follows: linked }),
-          group.join({ view: current.view, book: sides.bookId, leads: linked, follows: linked }),
+          group.join({ editor: was.editor, book: sides.bookId, leads: linked, follows: linked }),
+          group.join({
+            editor: current.editor,
+            book: sides.bookId,
+            leads: linked,
+            follows: linked,
+          }),
         );
       } else {
         const current = add("unified", r, sides.currentText, () =>
@@ -321,8 +314,7 @@ export function BookDiff(props: {
       for (const entry of mounts) {
         if (entry.live) {
           // Painted only over EXACTLY the text compared, as a card is.
-          const doc = entry.mount.view.state.doc;
-          if (doc.length !== text.length || doc.toString() !== text) continue;
+          if (entry.mount.editor.text() !== text) continue;
         }
         // A snapshot of the decisions: the compute above is what tracks them.
         entry.mount.repaint(untrack(entry.paint));

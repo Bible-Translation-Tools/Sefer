@@ -33,28 +33,30 @@
 import { Compartment, StateEffect, type EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import {
+  annotateEmptyBlocks,
   annotateOpen,
   annotateRepaint,
-  gestureTrace,
-  annotateEmptyBlocks,
   blockNamer,
   flash,
   flashing,
   frontMatterCard,
-  showCorpusFindings,
-  type CorpusFinding,
-  modeView,
-  pickChapter,
-  structureAt,
-  type EditorBook,
-  type ProjectionName,
+  gestureTrace,
+  handleOfView,
   keystrokeMeter,
+  modeView,
   noteBookIs,
   pairingHere,
+  pickChapter,
   showBlockPairs,
+  showCorpusFindings,
   showEmptyBlocks,
   span,
+  structureAt,
   watchLocation,
+  type CorpusFinding,
+  type EditorBook,
+  type EditorHandle,
+  type ProjectionName,
 } from "@sefer/editor";
 import type { SourceStamp } from "@sefer/text/source";
 import { Effect, Fiber, Stream } from "effect";
@@ -147,6 +149,7 @@ const placeOf = (
 interface Bound {
   readonly view: EditorView;
   readonly projection: Compartment;
+  readonly handle: EditorHandle;
 }
 
 export function BookEditor(props: BookEditorProps) {
@@ -471,10 +474,13 @@ export function BookEditor(props: BookEditorProps) {
         });
       }
 
-      setBound({ view: created, projection });
+      // The group knows the editor by its handle (until this component mounts
+      // through the package, it is made over the view built above).
+      const handle = handleOfView(created);
+      setBound({ view: created, projection, handle });
 
       // Beside the references, the editor leads them and follows them.
-      const leave = aligned?.join({ view: created, book: bookId });
+      const leave = aligned?.join({ editor: handle, book: bookId });
 
       // RETURNED, not `onCleanup`. A Solid 2 effect's cleanup is its return
       // value; `onCleanup` inside an effect callback is called outside any
@@ -585,7 +591,7 @@ export function BookEditor(props: BookEditorProps) {
       });
       // A jump on purpose leads the references beside it, as a scroll would;
       // the group does not hear it otherwise, since nobody scrolled.
-      aligned?.lead(held.view);
+      aligned?.lead(held.handle);
       const cancel = flash(held.view, { from: at, to: end });
       return cancel;
     },

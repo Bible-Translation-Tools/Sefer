@@ -42,6 +42,7 @@ import type { Address } from "@sefer/text/location/address";
 import { addressAt, resolve, type TocView } from "@sefer/text/location/locate";
 
 import { structureAt } from "../core/docStructure";
+import { viewOf, type EditorHandle } from "../handle";
 
 export type AlignMode = "reveal" | "exact";
 
@@ -237,7 +238,7 @@ function watchAnchor(view: EditorView, book: BookId, report: (anchor: Anchor) =>
 
 /** One editor in an aligned group, and what it does there. */
 export interface AlignedMember {
-  readonly view: EditorView;
+  readonly editor: EditorHandle;
   readonly book: BookId;
   /** Its scroll moves the others. Read on each scroll, so a toggle takes effect at once. */
   readonly leads?: () => boolean;
@@ -248,14 +249,14 @@ export interface AlignedMember {
 export interface AlignedGroup {
   /** Join the group; returns leave. A follower is brought to the current lead on joining. */
   join(member: AlignedMember): () => void;
-  /** Bring `view` to the current lead now — after its text arrives, or its Follow is turned on. */
-  sync(view: EditorView): void;
+  /** Bring `editor` to the current lead now — after its text arrives, or its Follow is turned on. */
+  sync(editor: EditorHandle): void;
   /**
-   * `view` was moved on purpose — a chapter picked, a search hit opened — and
+   * `editor` was moved on purpose — a chapter picked, a search hit opened — and
    * the others should follow it, as if the reader had scrolled there. Read
    * once the move has landed.
    */
-  lead(view: EditorView): void;
+  lead(editor: EditorHandle): void;
 }
 
 /**
@@ -270,40 +271,42 @@ export interface AlignedGroup {
  */
 export const createAlignedGroup = (mode: AlignMode = "reveal"): AlignedGroup => {
   const members = new Set<AlignedMember>();
-  let lead: { readonly from: EditorView; readonly anchor: Anchor } | undefined;
+  let lead: { readonly from: EditorHandle; readonly anchor: Anchor } | undefined;
 
   const place = (member: AlignedMember, anchor: Anchor): void => {
     if (member.follows?.() === false) return;
-    alignTo(member.view, member.book, anchor, mode);
+    alignTo(viewOf(member.editor), member.book, anchor, mode);
   };
   const from = (member: AlignedMember, anchor: Anchor): void => {
     if (member.leads?.() === false) return;
-    lead = { from: member.view, anchor };
+    lead = { from: member.editor, anchor };
     for (const other of members) if (other !== member) place(other, anchor);
   };
 
   return {
     join(member) {
       members.add(member);
-      const unwatch = watchAnchor(member.view, member.book, (anchor) => from(member, anchor));
-      if (lead !== undefined && lead.from !== member.view) place(member, lead.anchor);
+      const unwatch = watchAnchor(viewOf(member.editor), member.book, (anchor) =>
+        from(member, anchor),
+      );
+      if (lead !== undefined && lead.from !== member.editor) place(member, lead.anchor);
       return () => {
         unwatch();
         members.delete(member);
-        if (lead?.from === member.view) lead = undefined;
+        if (lead?.from === member.editor) lead = undefined;
       };
     },
-    sync(view) {
-      if (lead === undefined || lead.from === view) return;
-      for (const member of members) if (member.view === view) place(member, lead.anchor);
+    sync(editor) {
+      if (lead === undefined || lead.from === editor) return;
+      for (const member of members) if (member.editor === editor) place(member, lead.anchor);
     },
-    lead(view) {
+    lead(editor) {
       // Two frames: the move is CodeMirror's, and it lands in its next measure.
       requestAnimationFrame(() =>
         requestAnimationFrame(() => {
           for (const member of members) {
-            if (member.view !== view) continue;
-            const anchor = anchorAt(view, member.book);
+            if (member.editor !== editor) continue;
+            const anchor = anchorAt(viewOf(editor), member.book);
             if (anchor !== undefined) from(member, anchor);
           }
         }),

@@ -50,6 +50,12 @@ export interface Where extends ChapterName {
   /** The document offset at the very top of the viewport. */
   readonly top: number;
   /**
+   * Where the line holding `top` ends. In Regular a visual line can open with
+   * a bare `\q1` that belongs to the unit BEFORE, so "which unit is at the
+   * top" reads the end of the line, not its start (Review's counter).
+   */
+  readonly topLineEnd: number;
+  /**
    * The content hash of the document `top` was read from, as a string.
    *
    * `Analysis.sourceHash`, taken off the parse this view had already done —
@@ -157,6 +163,7 @@ function chapterInView(view: EditorView): Where | null {
     ordinal: found.ordinal,
     label: found.label,
     top,
+    topLineEnd: view.lineBlockAt(top).to,
     length: view.state.doc.length,
     ...(hash === undefined ? {} : { hash: String(hash) }),
     ...(holder === undefined ? {} : { topChapter: holder.label }),

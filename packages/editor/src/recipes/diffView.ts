@@ -44,6 +44,7 @@ import { readingLayer, viewLayer } from "../core/compose";
 import { borrowedStructure, structureAt, type DocStructure } from "../core/docStructure";
 import { renderRangeField } from "../core/render";
 import { span } from "../core/timing";
+import { handleFor, type EditorHandle } from "../handle";
 import { modeView, type ProjectionName } from "../views";
 import { clipSpanOf, clipped, wholeLinesOf } from "./satellite";
 import { giveBack, takeView } from "./viewPool";
@@ -110,8 +111,7 @@ export interface DiffViewOptions {
   readonly surface?: string;
 }
 
-export interface DiffViewMount {
-  readonly view: EditorView;
+export interface DiffViewMount extends EditorHandle {
   repaint(paint: DiffPaint): void;
   setMode(mode: ProjectionName): void;
   /**
@@ -607,11 +607,11 @@ export function mountDiffView(options: DiffViewOptions): DiffViewMount {
   if (clip !== undefined) options.parent.appendChild(view.dom);
   done();
 
-  return {
-    view,
-    repaint: (paint) => view.dispatch({ effects: setPaint.of(paint) }),
-    setMode: (mode) => view.dispatch({ effects: projection.reconfigure(modeView(mode, surface)) }),
-    showAt: (at, y = "start") => {
+  return handleFor(view, {
+    repaint: (paint: DiffPaint) => view.dispatch({ effects: setPaint.of(paint) }),
+    setMode: (mode: ProjectionName) =>
+      view.dispatch({ effects: projection.reconfigure(modeView(mode, surface)) }),
+    showAt: (at: number, y: "start" | "center" = "start") => {
       view.dispatch({
         effects: EditorView.scrollIntoView(Math.min(at, view.state.doc.length), { y }),
       });
@@ -620,5 +620,5 @@ export function mountDiffView(options: DiffViewOptions): DiffViewMount {
       if (clip === undefined) view.destroy();
       else giveBack(view);
     },
-  };
+  });
 }
