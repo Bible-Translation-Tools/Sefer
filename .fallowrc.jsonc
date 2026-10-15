@@ -13,7 +13,9 @@
     "e2e-desktop/wdio.conf.ts",
     "e2e-desktop/**/*.desktop.ts",
   ],
-  "ignorePatterns": ["src/routeTree.gen.ts"],
+  // The planning site (planning/) is its own workspace with its own checks
+  // (astro check, pnpm plans check), as it is for oxlint and oxfmt.
+  "ignorePatterns": ["src/routeTree.gen.ts", "planning/**"],
   "ignoreDependencies": [
     // Spawned as a binary by tools/tauri/run.ts (`pnpm exec tauri`).
     "@tauri-apps/cli",
