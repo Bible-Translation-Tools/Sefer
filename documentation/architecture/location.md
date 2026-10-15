@@ -2,7 +2,7 @@
 
 Every question of the form "where in scripture" goes through one set of pieces. What somebody typed is a **Citation**; the place it means is an **Address**; where that place is in one particular text is a **Location**. Nothing in Sefer keeps its own copy of any of those answers, and nothing reads a USFM designator (`\c 12`, `\v 3a`) itself: the engine does, and Sefer reads its TOC. The one allowed regex over markup is `src/app/legacyMarkers.ts`'s "does this project's text contain `\s5` alone on a line", because its answer configures the engine before the engine may parse ([galley](galley.md#the-marker-table-setextensions)).
 
-`src/core/location` holds the pure pieces; `src/app/location.ts` is the per-project door the shell exposes as `shell.location`. The decisions below were made with Will on 2026-09-24 and 2026-09-25; the planning discussion they came from is in git history (`planning/01-discussing/editor-primitives-consistency.md`, retired 2026-09-25 when the work landed).
+`packages/text/src/location` holds the pure pieces; `src/app/location.ts` is the per-project door the shell exposes as `shell.location`. The decisions below were made with Will on 2026-09-24 and 2026-09-25; the planning discussion they came from is in git history (`planning/01-discussing/editor-primitives-consistency.md`, retired 2026-09-25 when the work landed).
 
 ## Four words, one job each
 
@@ -17,12 +17,12 @@ Every question of the form "where in scripture" goes through one set of pieces. 
 
 ## Three directions, one answer each
 
-| Question                                                            | Who answers                                                                                                              |
-| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| What does `\v 3a` or `\c 12` mean?                                  | **Onion**, surfaced through the Galley TOC (`tocViewOf`, `src/core/galley/location.ts`). Sefer never reads a designator. |
-| What did this person write?                                         | **The Citation parser** (`citation.ts`): text + name catalogue → `Address[]` or invalid. Pure.                           |
-| Where is this Address in this text? What Address is at this offset? | **Location** (`locate.ts`): `resolve` and `addressAt`, pure functions over one text's TOC.                               |
-| Which names, which text, how to display                             | **The application's location service** (`src/app/location.ts`). Wiring and policy; no parsing or searching of its own.   |
+| Question                                                            | Who answers                                                                                                                       |
+| ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| What does `\v 3a` or `\c 12` mean?                                  | **Onion**, surfaced through the Galley TOC (`tocViewOf`, `packages/text/src/engine/location.ts`). Sefer never reads a designator. |
+| What did this person write?                                         | **The Citation parser** (`citation.ts`): text + name catalogue → `Address[]` or invalid. Pure.                                    |
+| Where is this Address in this text? What Address is at this offset? | **Location** (`locate.ts`): `resolve` and `addressAt`, pure functions over one text's TOC.                                        |
+| Which names, which text, how to display                             | **The application's location service** (`src/app/location.ts`). Wiring and policy; no parsing or searching of its own.            |
 
 ## Address
 
@@ -70,7 +70,7 @@ The rules, with the engine's facts (Kitchen v0.1.7) underneath them:
 - **A chapter is its designator, not its position.** A TOC's verse rows carry the POSITION of their chapter row; a chapter row carries its `number`. An Address means the designator, so the resolver goes through chapter rows by number, never by index.
 - **Offsets are UTF-16 source offsets.** Projected editor offsets are converted at the editor boundary before Location sees them.
 
-The TOC comes from the engine. `tocViewOf(analysis)` (`src/core/galley/location.ts`) adapts an analysis's dish into a `TocView` (chapters, verses with their label end, and members only where the hull does not say what a verse covers), cached per dish. A label is only as current as the analysis it came from: `shell.location.addressAt` refuses when the analysis no longer describes the text the offset was measured in.
+The TOC comes from the engine. `tocViewOf(analysis)` (`packages/text/src/engine/location.ts`) adapts an analysis's dish into a `TocView` (chapters, verses with their label end, and members only where the hull does not say what a verse covers), cached per dish. A label is only as current as the analysis it came from: `shell.location.addressAt` refuses when the analysis no longer describes the text the offset was measured in.
 
 ## The application's location service
 

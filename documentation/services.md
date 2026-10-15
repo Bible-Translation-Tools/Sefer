@@ -46,7 +46,7 @@ flowchart TB
   host[host] --> fileSystem
 ```
 
-Above core: `src/editor` (CodeMirror; Book → EditorBook, the funnel, recipes) and `src/platform/{web,tauri,node}` (one Layer per host capability). Above those sits `src/app` (composition, commands, ProjectContext, stores, workflows, UI) with `src/routes`. `src/dev` is the design surface and never ships. [Boundaries](architecture/boundaries.md) is the enforced version of this.
+Above core: `packages/editor` (CodeMirror; Book → EditorBook, the funnel, recipes) and `src/platform/{web,tauri,node}` (one Layer per host capability). Above those sits `src/app` (composition, commands, ProjectContext, stores, workflows, UI) with `src/routes`. `src/dev` is the design surface and never ships. [Boundaries](architecture/boundaries.md) is the enforced version of this.
 
 Save ↔ Recovery is one two-way pair: recovery reads the Baseline type, and save optionally asks for Recovery to clear a journal. Resources ↔ Project is the other: the Library describes a folder through `discovery.ts`'s `readProjectMetadata` (so a Resource Container's `manifest.yaml` names it), and discovery decodes through the resources schemas. No file imports back into itself; `pnpm deadcode` checks the cycles.
 
@@ -146,7 +146,7 @@ Desktop self-update: `core/host/updater.ts` (port), `platform/tauri/updater.ts`,
 
 ### Overview
 
-A bounded ring of events, spans and verdicts, and a second ring of 200 for `failed`/`unavailable`/`refused` that ordinary work cannot evict. Every event is also written to a log directory on the device (OPFS on the Web, the app log directory on desktop): 256 KB JSONL parts, each opening with a session header, kept seven days and 5 MB. Settings → Advanced → Export diagnostics hands over one file: header and a project snapshot, the failure ring, the main ring and every part on disk, with string fields allowlisted and paths cut to their last segment. `failed` is the one alarm — a dev build prints each as a `console.error` — and `unavailable` is the world saying no. The dev surface is `__sefer.observability` (`traces.recent/print`, `logs.recent`, `errors`, `failures`, `export`, `level`, `setLevel`, `stream`). There is a dev-only OTLP bridge, and a keystroke meter in the editor. Client failures are `client.error` notes in every build. `src/core/observability.ts`, `src/core/diagnostics/`, `src/app/diagnostics.ts`, `src/platform/observability.ts`, `src/editor/observability.ts`. → [observability](architecture/observability.md)
+A bounded ring of events, spans and verdicts, and a second ring of 200 for `failed`/`unavailable`/`refused` that ordinary work cannot evict. Every event is also written to a log directory on the device (OPFS on the Web, the app log directory on desktop): 256 KB JSONL parts, each opening with a session header, kept seven days and 5 MB. Settings → Advanced → Export diagnostics hands over one file: header and a project snapshot, the failure ring, the main ring and every part on disk, with string fields allowlisted and paths cut to their last segment. `failed` is the one alarm — a dev build prints each as a `console.error` — and `unavailable` is the world saying no. The dev surface is `__sefer.observability` (`traces.recent/print`, `logs.recent`, `errors`, `failures`, `export`, `level`, `setLevel`, `stream`). There is a dev-only OTLP bridge, and a keystroke meter in the editor. Client failures are `client.error` notes in every build. `src/core/observability.ts`, `src/core/diagnostics/`, `src/app/diagnostics.ts`, `src/platform/observability.ts`, `packages/editor/src/observability.ts`. → [observability](architecture/observability.md)
 
 ### Constraints and known bugs
 
@@ -209,7 +209,7 @@ Sefer's whole-project consumer of Galley. It analyses every book when a project 
 
 ### Overview
 
-Canonical UTF-8 text per book with a `SourceStamp {revision, length}`. Invalid UTF-8 is refused, and the dominant EOL/BOM is written back. A plain Book applies changes and returns a Receipt or a Refusal; the editor-backed Book continues the same revision. `src/core/source`, `src/core/book`. → [source](architecture/source.md)
+Canonical UTF-8 text per book with a `SourceStamp {revision, length}`. Invalid UTF-8 is refused, and the dominant EOL/BOM is written back. A plain Book applies changes and returns a Receipt or a Refusal; the editor-backed Book continues the same revision. `packages/text/src/source.ts`, `packages/text/src/book.ts` (opening from disk: `src/core/book/open.ts`). → [source](architecture/source.md)
 
 ### Constraints and known bugs
 
@@ -239,7 +239,7 @@ A folder of books, with discovery (including RC `manifest.yaml` and Burrito meta
 
 ### Overview
 
-What a typed place means and where a place is in one text. `src/core/location`: `address.ts` (the Address union: book, intro, chapters, verses; U23003 spelling), `names.ts` (the name catalogue: canon, project names, abbreviations, intro words), `citation.ts` (the Citation parser, navigation and prose grammars; the one Sefer file with a test), `locate.ts` (`resolve` and `addressAt` over a `TocView`), `canon.ts`. `src/core/galley/location.ts` adapts the engine's dish TOC into a `TocView`. `src/app/location.ts` is the per-project piece the shell exposes as `shell.location`: the catalogue memo, the held books, and the display rule (the project's own book name, English otherwise). → [location](architecture/location.md)
+What a typed place means and where a place is in one text. `packages/text/src/location`: `address.ts` (the Address union: book, intro, chapters, verses; U23003 spelling), `names.ts` (the name catalogue: canon, project names, abbreviations, intro words), `citation.ts` (the Citation parser, navigation and prose grammars; the one Sefer file with a test), `locate.ts` (`resolve` and `addressAt` over a `TocView`), `canon.ts`. `packages/text/src/engine/location.ts` adapts the engine's dish TOC into a `TocView`. `src/app/location.ts` is the per-project piece the shell exposes as `shell.location`: the catalogue memo, the held books, and the display rule (the project's own book name, English otherwise). → [location](architecture/location.md)
 
 On it today: the palette, the sidebar's filter (`shell.location.books` for every book the words could mean, `read` for the chapter) and its chapter tiles (the engine's TOC from the held analysis, never a scan of the text), `showReference` (found / missing with its chapter / ambiguous, each reported), the inventory's site labels, the Key terms source card (Library's text through the engine), the sync plan's chapter rows, Search's hit Addresses (`addressAt` over an analysis the caller supplies), and Excerpts: each card's Address and label, and Key terms' and Find-in-references' mapping onto the project (`refOccurrences`, through `resolve`).
 
@@ -263,7 +263,7 @@ On it today: the palette, the sidebar's filter (`shell.location.books` for every
 
 ### Overview
 
-CodeMirror over an EditorBook: the phases, registry, mapping and plan; one funnel for every write (`src/editor/funnel.ts`); undo; regular and USFM modes; chapter and book views; clip. A projection on a surface is one extension, `modeView(name, surface?)` (`views.ts`). Decoration covers a window round the viewport that moves at most once a frame (`render.ts`), through one windowed loop for both modes; two editors side by side align by verse through a group their container holds (`recipes/align.ts`). `src/editor`, mounted by `app/ui/BookEditor.tsx`. → [editor](architecture/editor.md), [solid](architecture/solid.md)
+CodeMirror over an EditorBook: the phases, registry, mapping and plan; one funnel for every write (`packages/editor/src/funnel.ts`); undo; regular and USFM modes; chapter and book views; clip. A projection on a surface is one extension, `modeView(name, surface?)` (`views.ts`). Decoration covers a window round the viewport that moves at most once a frame (`render.ts`), through one windowed loop for both modes; two editors side by side align by verse through a group their container holds (`recipes/align.ts`). `packages/editor`, mounted by `app/ui/BookEditor.tsx`. → [editor](architecture/editor.md), [solid](architecture/solid.md)
 
 ### Constraints and known bugs
 
@@ -376,7 +376,7 @@ Project find over the reading text, in JavaScript over the engine's mask map (`f
 
 ### Overview
 
-The multibuffer shared by Find, Key terms and Findings: occurrences grouped by TOC unit into cards, each a read-only view of the book in the editor's own projection that becomes a satellite on Edit or double-click. `src/core/excerpts`, `src/app/ui/excerpts`, `src/editor/recipes/reader.ts`. → [search](architecture/search.md#excerpts) The card being edited is PINNED where it stood (`multibuffer/CardList`, shared with Review; the frame and the editor are `CardFrame` and `CardEditor`): the screen re-takes its results at each pause in typing, a card whose result ended stays with "Resolved" / "No longer matches" until Done, and then leaves as one dismissable line. Review's cards pin the same way ("No longer a change"). The re-take is per book: Find searches only the edited book, against a reading cut from its text as it stands (`createFreshReadings`, `find.retake`, 2–4 ms), and splices its hits in; the feed regroups a book only when its hits change, so the other cards map their marks through the edit instead of being rebuilt from stale offsets. Every book's disk baseline is recorded when the project opens, so an edit made in any card reads as unsaved.
+The multibuffer shared by Find, Key terms and Findings: occurrences grouped by TOC unit into cards, each a read-only view of the book in the editor's own projection that becomes a satellite on Edit or double-click. `src/core/excerpts`, `src/app/ui/excerpts`, `packages/editor/src/recipes/reader.ts`. → [search](architecture/search.md#excerpts) The card being edited is PINNED where it stood (`multibuffer/CardList`, shared with Review; the frame and the editor are `CardFrame` and `CardEditor`): the screen re-takes its results at each pause in typing, a card whose result ended stays with "Resolved" / "No longer matches" until Done, and then leaves as one dismissable line. Review's cards pin the same way ("No longer a change"). The re-take is per book: Find searches only the edited book, against a reading cut from its text as it stands (`createFreshReadings`, `find.retake`, 2–4 ms), and splices its hits in; the feed regroups a book only when its hits change, so the other cards map their marks through the edit instead of being rebuilt from stale offsets. Every book's disk baseline is recorded when the project opens, so an edit made in any card reads as unsaved.
 
 ### Constraints and known bugs
 

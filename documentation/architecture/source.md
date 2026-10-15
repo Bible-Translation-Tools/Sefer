@@ -2,7 +2,7 @@
 
 A **Source** is one book's canonical text, the stamp that identifies it, and the form the file arrived in: `{ text, stamp, form }`, where `SourceStamp` is `{ revision, length }` and `SourceForm` is `{ eol: "lf" | "crlf"; bom: boolean }`. It is a plain value — synchronous, immutable, and owning no lifetime.
 
-`src/core/source/source.ts` is the whole of it. `decode(bytes)` returns a `Result<Source, SourceDecodeError>` whose only refusal is `InvalidUtf8`: bytes that are not valid UTF-8 are refused rather than replaced with U+FFFD. Everything else is read and remembered. `encode(source)` writes the canonical text back as UTF-8 **in the source's own form**. `applyChange(source, change)` returns a `Result<Source, SourceChangeError>` — see the admission rules below.
+`packages/text/src/source.ts` is the whole of it. `decode(bytes)` returns a `Result<Source, SourceDecodeError>` whose only refusal is `InvalidUtf8`: bytes that are not valid UTF-8 are refused rather than replaced with U+FFFD. Everything else is read and remembered. `encode(source)` writes the canonical text back as UTF-8 **in the source's own form**. `applyChange(source, change)` returns a `Result<Source, SourceChangeError>` — see the admission rules below.
 
 ## Canonical text, and the form it came in
 
@@ -35,7 +35,7 @@ No derived product — analysis, findings, fixes, search hits, diffs, save basel
 
 ## Book
 
-`src/core/book/book.ts` is the port: one addressable USFM document and the **one write path** into its canonical text. A `Book` has an `id` (the `\id` marker's code when the text starts with `\id`, otherwise the file stem), a `path`, and four operations:
+`packages/text/src/book.ts` is the port: one addressable USFM document and the **one write path** into its canonical text. A `Book` has an `id` (the `\id` marker's code when the text starts with `\id`, otherwise the file stem), a `path`, and four operations:
 
 - `source()` — canonical text and stamp, from whichever seat holds it.
 - `apply(changes, origin, trust?) → Result<Receipt, Refusal>` — the write path. `changes` is a `Change` or a list of them, in the coordinates of the text **before** the edit (CodeMirror's change-set convention), and must not overlap. Synchronous: it returns after every subscriber has run.
@@ -51,7 +51,7 @@ A `Receipt` is `{ before, after, origin }`: the stamp on each side of the edit a
 ### Two implementations, one port
 
 - **The plain Book** (`makeBook(path, source, observability?)`, and `openBook(path)` which reads through the `FileSystem` service and decodes): text held as a `Source`, no admission rules beyond Source's own, no history. It serves the census, project analysis, search and multi-book operations over books nobody is editing. `openBook` fails with `PlatformError` or `SourceDecodeError` (which now means invalid UTF-8 and nothing else), and captures `Observability` through `Effect.serviceOption` at open time, which is what keeps `applyChange` synchronous: each accepted apply emits one `book.apply` note when the Layer was in context, and nothing when it was not.
-- **The editor-backed Book** (`editorBook(plain, { analyze, extensions?, observability? })` in `src/editor/book.ts`): the canonical text is a CodeMirror `EditorState`, and `applyChange` runs the editing phases before accepting. It continues the plain book's revision rather than restarting it, so a Save baseline or a Recovery journal taken while the book was plain still compares against what the seat reports, and it carries the plain book's `form` beside the state — CodeMirror holds canonical text only, and Save must still write the file back the way it was read. It adds what only a state can answer — `state`, `structure()`, `bindView(view)`/`fromView(view, trs)`, `attached()`/`hold()`, `attach(receive)`, `funnel()`, `perform(action)`, `close()` — and its `history()` is real.
+- **The editor-backed Book** (`editorBook(plain, { analyze, extensions?, observability? })` in `packages/editor/src/book.ts`): the canonical text is a CodeMirror `EditorState`, and `applyChange` runs the editing phases before accepting. It continues the plain book's revision rather than restarting it, so a Save baseline or a Recovery journal taken while the book was plain still compares against what the seat reports, and it carries the plain book's `form` beside the state — CodeMirror holds canonical text only, and Save must still write the file back the way it was read. It adds what only a state can answer — `state`, `structure()`, `bindView(view)`/`fromView(view, trs)`, `attached()`/`hold()`, `attach(receive)`, `funnel()`, `perform(action)`, `close()` — and its `history()` is real.
 
 Readers cannot tell the two apart, which is the point: Save, Recovery, ProjectAnalysis and the UI subscribe once, through the port, and trust that they saw every edit. A view bound with `bindView` **must** route its transactions through `fromView`; a view that dispatched on its own would make publication silently incomplete, so `applyChange` throws rather than report a receipt nobody heard.
 

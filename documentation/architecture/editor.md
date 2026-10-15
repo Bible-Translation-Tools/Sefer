@@ -1,8 +1,8 @@
 # Editor
 
-**The editor** is `src/editor/`: the CodeMirror area, and the `Book` implementation whose canonical text is a CodeMirror `EditorState`. It was ported property by property from the `onion-2-spike` prototype, which had a large Node and browser test suite behind it — behaviour there is the specification, and a difference from it is a bug here, not a design choice.
+**The editor** is `packages/editor/src/`: the CodeMirror area, and the `Book` implementation whose canonical text is a CodeMirror `EditorState`. It was ported property by property from the `onion-2-spike` prototype, which had a large Node and browser test suite behind it — behaviour there is the specification, and a difference from it is a bug here, not a design choice.
 
-Nothing above the editor imports CodeMirror. The editor imports [Galley](galley.md)'s `Analysis` and core's `Book`/`Source` vocabulary, and nothing else from the application. Import from `src/editor` (the barrel).
+Nothing above the editor imports CodeMirror. The editor imports [Galley](galley.md)'s `Analysis` and core's `Book`/`Source` vocabulary, and nothing else from the application. Import from `packages/editor` (the barrel).
 
 **A CodeMirror line is not a USFM line.** In regular mode a newline means whatever its context draws: a paragraph break before a block marker, a space where it only joins text (`newline.inside`, "a joined newline IS a space", [Deleting at a join](#deleting-at-a-join)), nothing at all inside a held gap. So `doc.line`, `lineAt` and `split("\n")` say nothing about verses, paragraphs or what the reader sees; ask the structure instead (the TOC tile, the concrete syntax tree's nodes). Lines are only a unit where the editor says so: render windows (`wholeLinesOf`), the gutter — which is why a book with no paragraph markers has almost nothing to number — and USFM mode. Splitting on lines is the most common way new code gets this wrong.
 
@@ -125,7 +125,7 @@ The footnote chord is `Mod-Shift-n`, for **n**ote. It used to be `Mod-Shift-f`, 
 
 In regular mode a note is drawn twice — as a superscript CALLER where it is
 anchored, and as a ROW in the apparatus block at the foot of its chapter.
-`src/editor/recipes/noteEditor.ts` is what makes both live; before it,
+`packages/editor/src/recipes/noteEditor.ts` is what makes both live; before it,
 `toggleNote` was a stub nothing installed, so a caller was a letter you could
 not follow and the rows were a picture of the notes rather than the notes.
 
@@ -297,7 +297,7 @@ Every event carries the correlation `<bookId>#<trace seq>`, so one keystroke's s
 ## What was not ported
 
 - **`attrs`/`attrResolve`** — the aligned-word popover needs two engine free functions the pinned wasm handle does not export. The half-ported popover threw a `TODO(seam)` and nothing installed it, so it is parked: [parked code](../../planning/items/2026-09-23-parked.mdx).
-- **`formatEdits`** — the engine's normalisation is a [Galley](galley.md) door now, but it is not the editor's: nothing in `src/editor` references it. `Fixes.formatBook` (`src/core/fixes/fixes.ts`) calls it and applies the edits as one `book.apply`; see [findings](findings.md).
+- **`formatEdits`** — the engine's normalisation is a [Galley](galley.md) door now, but it is not the editor's: nothing in `packages/editor` references it. `Fixes.formatBook` (`src/core/fixes/fixes.ts`) calls it and applies the edits as one `book.apply`; see [findings](findings.md).
 - **`startEngine` / `runAnalyze`** — replaced by the `Galley` Layer and the analyzer facet.
 
 ## The file map, by responsibility

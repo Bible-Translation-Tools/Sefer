@@ -83,7 +83,7 @@ A git checkpoint, another local project or a remote is a NEW FILE in
 `compare.ts`, `decisions.ts` or the screen changes. It must:
 
 1. answer `books()` in its own canonical order, and `read(bookId)` with the
-   canonical text (LF, no BOM — decode through `src/core/source`);
+   canonical text (LF, no BOM — decode through `@sefer/text/source`);
 2. fail `Absent` for a book it does not hold, and never for one it does;
 3. say `canApply: false` unless it can really be written, and supply `apply` if
    it says `true`;
@@ -325,7 +325,7 @@ context steps are faint until the pointer or focus is on the card, and
   Genesis editors on entering Whole book.
 
 The differences are drawn ON the two texts, as the editor reads them — the
-diff view recipe (`#editor` `mountDiffView`) paints units and word runs on each
+diff view recipe (`@sefer/editor` `mountDiffView`) paints units and word runs on each
 side's own document, in regular mode or USFM (the header's **Show USFM
 markup** switch). `src/app/ui/review/ReviewReader.tsx` holds it together, over
 `src/app/ui/diff/`. Three layers, and each can change without the others:
@@ -419,7 +419,7 @@ edits for that unit over the live text, `galley.mergeSplices`, applied
 through `book.apply` as one Undo step; nothing else moves). Every
 card's current side, and the whole book's, edits the real Book on a
 double-click or Edit, with the diff as a plugin on it (`liveDiff` in
-`src/editor/recipes/diffView.ts`). So "take theirs, then fix the comma" is a
+`packages/editor/src/recipes/diffView.ts`). So "take theirs, then fix the comma" is a
 click and some typing, the way a Find card is. A taken unit keeps its card,
 washed, its button pressed and reading "Taken from the file"; pressing it
 again puts it back, which merges the ORIGINAL's unit into the live text,

@@ -79,7 +79,7 @@ excerpt's marks (the read-only reader and the satellite Edit opens), and
 component: the scripture column's own size, applied by `src/app/ui/theme.ts`
 from the `editor.fontSize` preference, read by `.cm-mode-regular .cm-content`.
 
-`src/editor/editor.css` is a separate, hand-written CodeMirror theme owned by
+`packages/editor/src/editor.css` is a separate, hand-written CodeMirror theme owned by
 the editor module. It is not part of this layer, but it is the same palette:
 the REGULAR projection derives every colour from the semantic tokens — paper
 is `--surface-primary`, ink `--on-surface-primary`, verse and chapter numbers

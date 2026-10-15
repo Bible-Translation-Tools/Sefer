@@ -18,7 +18,7 @@ Read only the guidance relevant to the task:
 - [Agent verification](documentation/agents/verification.md): explore the running app, capture evidence, decide what earns a regression test, and measure on a 4× throttled CPU when something feels slow.
 - [Lint results](documentation/lint-results.md): read before adding a suppression comment, changing a gate or a linter's config, or when a gate reports something new; what is gated where, what is deliberately left, and the process for keeping that record true.
 - [Observability](documentation/architecture/observability.md): logs, spans, bounded editor evidence, and platform sinks.
-- [Boundaries](documentation/architecture/boundaries.md): what `src/core` may depend on, and the checks that enforce it.
+- [Boundaries](documentation/architecture/boundaries.md): what `src/core` may depend on, the two framework-free workspace packages (`@sefer/text`, the scripture text model; `@sefer/editor`, the editor) and which way dependencies point, and the checks that enforce it.
 - [Storage](documentation/architecture/storage.md): the `effect/FileSystem` port, its Node and in-memory layers, atomic writes, root scoping, and the contract suite.
 - [Source and Book](documentation/architecture/source.md): canonical UTF-8 text, the `SourceStamp` freshness rule, and the plain in-memory Book.
 - [Application shell](documentation/architecture/shell.md): read before touching `src/app`, `src/routes`, or the design tokens; covers the one services composition, the command registry, the routes, and the single Solid/Book subscription rule.
@@ -48,7 +48,7 @@ Check `package.json` and runner configuration for executable commands. Distingui
 - `pnpm typecheck` checks TypeScript without emitting files.
 - `pnpm lint` runs Oxlint over the repository.
 - `pnpm format:check` verifies Oxfmt without rewriting files.
-- `pnpm test:unit` runs the Node `core` Vitest project — every `src/**/*.test.ts` except `*.browser.test.*`, plus `tools/**/*.test.ts`. There is no jsdom project.
+- `pnpm test:unit` runs the Node `core` Vitest project — every `src/**/*.test.ts` and `packages/*/src/**/*.test.ts` except `*.browser.test.*`, plus `tools/**/*.test.ts`. There is no jsdom project.
 - `pnpm test:browser` runs the real Chromium Browser Mode project — today four files: the composition's dev observability surface, the fixture page, the OPFS `fileSystemContract` suite, and web git. It is for real browser APIs at module level; the built artifact belongs to `pnpm test:e2e`.
 - `pnpm test:e2e` builds the app, serves `dist/client` through `vite preview`, and drives it with Playwright (`e2e/`). Three smoke assertions: it mounts, a deep link resolves through the SPA fallback, and a production build carries no design surface. Deliberately says nothing about how a screen looks — behaviour is still moving, and a suite that breaks on every redesign is one people delete.
 - `pnpm test:desktop` builds the debug desktop binary with the `webdriver` cargo feature, starts a Vite dev server, and runs `e2e-desktop/` through WebdriverIO's embedded driver (`@wdio/tauri-service`) against the real Tauri app, its data under a scratch `HOME` in the temp folder. One smoke spec: it launches, a folder imports onto the native disk and opens, a book shows text, an edit and Undo round-trip, and only Record a version writes the file (the edit sits in the backup journal till then). Driven runs keep credentials in memory, so the keychain is untested. Not in CI or `pnpm check`; [testing](documentation/architecture/testing.md), "Desktop".

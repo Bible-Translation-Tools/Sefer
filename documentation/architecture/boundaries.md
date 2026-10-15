@@ -31,8 +31,41 @@ Effect's own `FileSystem` service, which core may use because it comes from
 `effect`, while every native implementation stays outside core. See
 [storage](storage.md).
 
-CodeMirror belongs to the editor layer in `src/editor/`. It is not a core
-dependency at any depth.
+CodeMirror belongs to the editor, which is its own workspace package,
+`@sefer/editor` (`packages/editor/`). It is not a core dependency at any depth.
+
+## The packages
+
+Two framework-free workspace packages sit under the app, so that other apps
+(the WACS hub first) install them instead of forking:
+
+- **`@sefer/text`** (`packages/text/`) is the scripture text model:
+  - canonical `Source` and `Change`
+  - the Book port (opening a file from disk stays in core, `src/core/book/open.ts`)
+  - addresses and the citation parser
+  - localized names
+  - the engine's analysis vocabulary (`engine/analysis.ts`, which
+    `src/core/galley` re-exports)
+
+  It has core's rule set, and it may not import the editor.
+
+- **`@sefer/editor`** (`packages/editor/`) is the editor. It has core's rule set
+  with CodeMirror allowed, as a peer dependency so host and editor share one
+  copy of its state. It brings no engine and no tracing of its own:
+  - The host passes an `Analyze` and serves the wasm.
+  - Tracing goes through `EditorObservability`, a structural port that the app's
+    `ObservabilityService` satisfies.
+
+Dependencies only point down the stack:
+
+| Layer           | May use                         |
+| --------------- | ------------------------------- |
+| `@sefer/editor` | `@sefer/text`                   |
+| `src/core`      | `@sefer/text`, never the editor |
+| `src/app`       | both                            |
+
+Each package's `package.json` `exports` is its public surface. Narrowing it is
+part of the planning item "embeddable editor".
 
 `src/app` composes core policy with the shared Solid UI; `src/platform` detects
 and supplies host capabilities. Both may depend inward on core contracts. Core
@@ -41,7 +74,8 @@ never depends outward.
 ## Imports across a layer
 
 Each top-level layer has one alias, declared once as `tsconfig.json` `paths`:
-`#core/*`, `#app/*`, `#editor/*`, `#platform/*`, `#dev/*`. An import that
+`#core/*`, `#app/*`, `#platform/*`, `#dev/*`. The packages are imported by
+name (`@sefer/text/…`, `@sefer/editor`), never by path. An import that
 crosses from one layer into another uses it (`import { … } from
 "#core/book/book"`); an import within a layer stays relative. Vite reads the
 same `paths` (`resolve.tsconfigPaths` in `vite.config.ts`), so there is no
@@ -50,7 +84,7 @@ because the checker's raw-asset exception is written for them.
 
 An alias is not a way around the rules: `pnpm boundaries` resolves it to the
 file it names and applies the same checks as to a relative path, and the Oxlint
-override lists `#app/**`, `#editor/**`, `#dev/**` and `#platform/**` for core
+override lists `#app/**`, `@sefer/editor`, `#dev/**` and `#platform/**` for core
 (a core test may still reach `#platform/node/…`, as it may by relative path).
 
 `src/dev` is sealed from the other side. Nothing outside it may statically
@@ -65,7 +99,7 @@ Two checks enforce this:
 - Oxlint's `src/core` override (`no-restricted-imports`, `no-restricted-globals`)
   is the fast first line inside the editor and `pnpm lint`.
 - `pnpm boundaries` (`tools/boundaries/check.ts`) is authoritative. It parses
-  every file under `src/core` with oxc-parser (`tools/boundaries/specifiers.ts`) and resolves
+  every file under `src/core`, `packages/text/src` and `packages/editor/src` with oxc-parser (`tools/boundaries/specifiers.ts`) and resolves
   every specifier — `import`, `import type`, `export … from`, `import()`,
   `require()`, `import = require()`, and `import.meta.glob` — including deep
   relative paths and `tsconfig.json` path aliases. It reports file, line,
