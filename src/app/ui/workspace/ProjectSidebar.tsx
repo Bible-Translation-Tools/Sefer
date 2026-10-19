@@ -254,7 +254,10 @@ export function ProjectSidebar() {
     const chapters = createMemo(
       (): readonly Chapter[] => {
         if (!open()) return [];
-        const all = chaptersOf(rowProps.row.id);
+        // The panels layout (a design tweak) starts the grid at chapter 1: no
+        // Intro tile. Open question for the developer — see
+        // planning/items/2026-10-19-intro-tile-in-the-chapter-grid.mdx.
+        const all = chaptersOf(rowProps.row.id).filter((chapter) => !(panels() && chapter.intro));
         const wanted = search()?.chapter ?? "";
         return wanted === "" ? all : all.filter((chapter) => chapter.label.startsWith(wanted));
       },
