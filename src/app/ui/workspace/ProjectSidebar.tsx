@@ -320,9 +320,7 @@ export function ProjectSidebar() {
       class="flex h-full flex-col border-e border-sidebar-border bg-sidebar-surface"
       data-testid="sidebar"
     >
-      <Show when={!panels() || shell.project() === undefined}>
-        <ProjectControl />
-      </Show>
+      <ProjectControl />
 
       <Show
         when={shell.project()}
@@ -342,7 +340,7 @@ export function ProjectSidebar() {
             field below, and closes again from Escape or an empty blur. */}
         <Show when={panels()}>
           {/* Always open, pinned above the list: the list scrolls under it. */}
-          <div class="flex items-center gap-controls px-4 pt-4 pb-2">
+          <div class="flex items-center gap-controls px-4 py-2">
             <Input
               wrapperClass="min-w-0 flex-1"
               type="search"
@@ -527,16 +525,32 @@ export function ProjectControl() {
           class="flex h-16 w-full cursor-pointer items-center gap-2 rounded-2xl border bg-surface-primary px-4 text-start transition-colors hover:bg-sidebar-surface-hover data-current:border-brand data-current:bg-brand-light not-data-current:border-surface-border"
           onClick={() => void navigate({ to: "/projects" })}
         >
-          <span class="min-w-0 flex-1">
-            <span class="block truncate text-small font-bold text-on-surface-primary">
-              {projectName(shell.project())}
-            </span>
-            <Show when={projectLanguage(shell.project()) !== ""}>
-              <span class="block truncate text-small text-on-surface-primary">
-                {projectLanguage(shell.project())}
+          <Show
+            when={layout() === "panels"}
+            fallback={
+              <span class="min-w-0 flex-1">
+                <span class="block truncate text-small font-bold text-on-surface-primary">
+                  {projectName(shell.project())}
+                </span>
+                <Show when={projectLanguage(shell.project()) !== ""}>
+                  <span class="block truncate text-small text-on-surface-primary">
+                    {projectLanguage(shell.project())}
+                  </span>
+                </Show>
               </span>
-            </Show>
-          </span>
+            }
+          >
+            {/* The panels layout (a design tweak): "Project:" over the
+                project's language and tag. */}
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-smallest text-on-surface-secondary">
+                {t("Project:")}
+              </span>
+              <span class="block truncate text-small font-semibold text-on-surface-primary">
+                {projectLanguage(shell.project()) || projectName(shell.project())}
+              </span>
+            </span>
+          </Show>
           <ChevronDown aria-hidden="true" class="size-5 shrink-0 text-on-surface-primary" />
         </button>
       </Show>

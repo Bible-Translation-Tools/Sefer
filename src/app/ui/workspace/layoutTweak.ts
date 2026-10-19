@@ -7,9 +7,9 @@
  *    as TABS in one panel (the gateways read-only, the heart language last
  *    and the only one editable), which can split so the gateways get a panel
  *    of their own (`shell.referenceSplit`, remembered);
- *  - the app bar: the open project in place of Sefer's mark;
- *  - the project panel: no project card and no testament switch — both
- *    testaments listed under their headings, the search always open above.
+ *  - the project panel: its card reads "Project:" over the language; no
+ *    testament switch — both testaments listed under their headings, the
+ *    search always open above.
  *
  * Builds without the design surface are always `split`. Registered once, by
  * the workspace (`useLayoutTweak`), and read anywhere through `layout()`.
