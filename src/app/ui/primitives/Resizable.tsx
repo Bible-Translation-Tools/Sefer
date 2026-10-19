@@ -300,6 +300,12 @@ interface ResizableHandleProps {
    * edge. Without it the handle is a gutter with a hairline down the middle.
    */
   readonly edge?: boolean;
+  /**
+   * Nothing at rest: the hairline and a grip appear only on hover, focus or
+   * drag. For a split whose two sides sit on one surface with no border
+   * between them (Refine's language panels).
+   */
+  readonly quiet?: boolean;
   readonly class?: ClassValue;
 }
 
@@ -377,10 +383,25 @@ function Handle(props: ResizableHandleProps) {
                   ? "inset-x-0 top-1/2 h-0.5 -translate-y-1/2"
                   : "inset-y-0 start-1/2 w-0.5 -translate-x-1/2",
               )
-            : cx("bg-surface-border", vertical ? "h-px w-full" : "w-px"),
+            : cx(
+                props.quiet === true ? "bg-transparent" : "bg-surface-border",
+                vertical ? "h-px w-full" : "w-px",
+              ),
           "group-hover:bg-brand group-focus-visible:bg-brand group-data-dragging:bg-brand",
         )}
       />
+      {props.quiet === true && (
+        <span
+          aria-hidden="true"
+          class={cx(
+            "absolute rounded-full border border-brand bg-surface-primary opacity-0 transition-opacity",
+            "group-hover:opacity-100 group-focus-visible:opacity-100 group-data-dragging:opacity-100",
+            vertical
+              ? "start-1/2 top-1/2 h-2 w-8 -translate-1/2"
+              : "start-1/2 top-1/2 h-8 w-2 -translate-1/2",
+          )}
+        />
+      )}
     </div>
   );
 }

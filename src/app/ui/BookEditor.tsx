@@ -30,9 +30,8 @@ import {
   type EditorBook,
 } from "@sefer/editor";
 import type { SourceStamp } from "@sefer/text/source";
-import type { JSX } from "@solidjs/web";
 import { Effect, Fiber, Stream } from "effect";
-import { Show, createEffect, createRenderEffect, createSignal, untrack } from "solid-js";
+import { createEffect, createRenderEffect, createSignal, untrack } from "solid-js";
 
 import { stale } from "#core/findings/finding";
 
@@ -51,11 +50,8 @@ import "@sefer/editor/editor.css";
 
 export interface BookEditorProps {
   readonly book: EditorBook;
-  /**
-   * Drawn in place of the location bar, when the screen has its own top
-   * strip for the card (Refine's tabbed layout, a design tweak).
-   */
-  readonly header?: JSX.Element;
+  /** Straight on the page, no card: Refine's language panels (a design tweak). */
+  readonly bare?: boolean;
 }
 
 export function BookEditor(props: BookEditorProps) {
@@ -302,14 +298,13 @@ export function BookEditor(props: BookEditorProps) {
   // and were one before.
   return (
     <div
-      class="editor-host shadow-small"
+      class={props.bare === true ? "editor-host" : "editor-host shadow-small"}
+      data-bare={props.bare === true ? "" : undefined}
       data-testid="editor-card"
       data-mode={shell.mode()}
       data-revision={(stamp() ?? props.book.source().stamp).revision}
     >
-      <Show when={props.header === undefined} fallback={props.header}>
-        <LocationBar ordinal={atTop()} />
-      </Show>
+      <LocationBar ordinal={atTop()} />
       {/* The PROJECT's direction, not the application's. A translator working
           in Arabic reads Sefer's own chrome in whatever interface language
           they chose and their scripture right-to-left; the two are separate

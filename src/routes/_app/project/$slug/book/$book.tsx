@@ -1,16 +1,20 @@
 import { createAlignedGroup } from "@sefer/editor";
 import { createFileRoute } from "@tanstack/solid-router";
+import BookIcon from "lucide-solid/icons/book";
 import Columns2 from "lucide-solid/icons/columns-2";
+import Combine from "lucide-solid/icons/combine";
 import { Show, createEffect, createSignal, onCleanup, untrack } from "solid-js";
 
 import { t } from "#app/i18n";
+import { languageName, languageTag } from "#app/language";
 import { useShell } from "#app/ProjectContext";
 import { REFERENCE_WIDTH } from "#app/settings";
 import { BookEditor } from "#app/ui/BookEditor";
-import { DelayedSpinner, IconButton, Resizable, SegmentedControl, cx } from "#app/ui/primitives";
+import { DelayedSpinner, IconButton, Resizable, cx } from "#app/ui/primitives";
 import { RecoveryBanner } from "#app/ui/recovery/RecoveryBanner";
 import { AlignedProvider } from "#app/ui/workspace/aligned";
-import { ReferenceColumn } from "#app/ui/workspace/ReferenceColumn";
+import { metadataOf, projectName } from "#app/ui/workspace/project";
+import { LanguageTab, ReferenceColumn } from "#app/ui/workspace/ReferenceColumn";
 import { Toolbar } from "#app/ui/workspace/Toolbar";
 
 /**
@@ -82,14 +86,16 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
   /**
    * How the reference text and the editor relate — a DESIGN TWEAK, scaffolding
    * until the question is settled (`pnpm design:scaffolding` lists it):
-   * `split`, the two side by side (what ships), or `tabs`, one card with a
-   * Reference / Translation switch where its location bar was. The Split and
-   * Combine buttons move between them; builds without the design surface are
-   * always `split` and show neither button.
+   * `split`, the reference column beside the editor card (what ships), or
+   * `panels`: everything straight on one white surface, the languages as TABS
+   * in one panel — the gateways read-only, the heart language last and the
+   * only one editable — which can split so the gateways get a panel of their
+   * own (`shell.referenceSplit`, remembered), and the project panel folds to
+   * a book button. Builds without the design surface are always `split`.
    */
   // `ownedWrite`: the panel calls `onChange` once as the tweak registers,
   // which is while this page is being built.
-  const [layout, setLayoutSignal] = createSignal<"split" | "tabs">("split", {
+  const [layout, setLayoutSignal] = createSignal<"split" | "panels">("split", {
     name: "refineLayout",
     ownedWrite: true,
   });
@@ -111,49 +117,34 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
         readonly set?: (key: string, value: string) => void;
       }
     | undefined;
-  /** The buttons set the tweak itself, so the panel and the URL agree. */
-  const setLayout = (next: "split" | "tabs"): void => {
-    if (design?.set !== undefined) design.set("refine.layout", next);
-    else setLayoutSignal(next);
-  };
   if (__SEFER_DESIGN__) {
     const release = design?.register?.({
       namespace: "refine",
-      tweaks: [{ key: "layout", label: "Layout", kind: "choice", options: ["split", "tabs"] }],
+      tweaks: [{ key: "layout", label: "Layout", kind: "choice", options: ["split", "panels"] }],
       onChange: (values) => {
-        setLayoutSignal(values["refine.layout"] === "tabs" ? "tabs" : "split");
+        setLayoutSignal(values["refine.layout"] === "panels" ? "panels" : "split");
       },
     });
     if (release !== undefined) onCleanup(release);
   }
-  /** Which side the tabbed card shows. */
-  const [tab, setTab] = createSignal<"reference" | "translation">("translation", {
-    name: "refineTab",
-  });
-  /** The tabbed card's top strip: the two tabs, and the way to split them apart. */
-  const Tabs = () => (
-    <div class="flex items-center gap-controls border-b border-surface-border p-3">
-      <SegmentedControl<"reference" | "translation">
-        label={t("Show")}
-        items={[
-          { value: "reference", label: t("Reference") },
-          { value: "translation", label: t("Translation") },
-        ]}
-        value={tab()}
-        onChange={setTab}
-      />
-      <IconButton
-        class="ms-auto"
-        data-testid="refine-split"
-        label={t("Show side by side")}
-        icon={<Columns2 />}
-        onClick={() => setLayout("split")}
-      />
-    </div>
-  );
+  /** The joined panel's heart-language tab is the one on show, not a gateway. */
+  const [heartActive, setHeartActive] = createSignal(true, { name: "refineHeartActive" });
+  /** The heart language: the project's own, by name and by tag. */
+  const heart = () => {
+    const metadata = metadataOf(shell.project());
+    const code = languageTag(metadata);
+    return {
+      name: languageName(metadata) || projectName(shell.project()),
+      code: code || projectName(shell.project()),
+    };
+  };
+  const panels = (): boolean => layout() === "panels";
 
   return (
-    <main class="flex h-full min-h-0 min-w-0 flex-col gap-3 p-6">
+    <main
+      class={cx("flex h-full min-h-0 min-w-0 flex-col gap-3 p-6", panels() && "bg-surface-primary")}
+      data-refine={layout()}
+    >
       {/* Above everything, and on THIS route as well as the project page:
           unsaved work found on open is the first thing to answer, and opening
           a project now lands on the book rather than on the census, so a
@@ -177,25 +168,105 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
             <Show
               when={layout() === "split"}
               fallback={
-                // The tabbed layout (a design tweak): ONE card, its top strip
-                // the Reference / Translation tabs. Both stay mounted and the
-                // other is hidden, so switching keeps each one's place.
+                // The language panels (a design tweak): one white surface, no
+                // cards. Joined, every language is a tab of ONE panel; split,
+                // the gateways have a panel of their own beside the heart
+                // language. Each panel keeps its tabs' places by hiding the
+                // ones not on show rather than unmounting them.
                 <AlignedProvider value={aligned}>
-                  <div class="flex min-h-0 flex-1 flex-col">
-                    <div
-                      class={cx(
-                        "flex min-h-0 flex-1 flex-col",
-                        tab() !== "translation" && "hidden",
-                      )}
+                  <div class="flex min-h-0 flex-1 gap-6">
+                    {/* The project panel, folded: a book button that opens it
+                        again, as it was. */}
+                    <Show when={!shell.sidebarShowing()}>
+                      <button
+                        type="button"
+                        data-testid="book-fab"
+                        aria-label={t("Show the books")}
+                        title={t("Show the books")}
+                        class="flex size-14 shrink-0 cursor-pointer items-center justify-center rounded-2xl bg-surface-primary text-on-surface-primary shadow-medium transition-colors hover:bg-surface-secondary"
+                        onClick={() => shell.setSidebarOpen(true)}
+                      >
+                        <BookIcon aria-hidden="true" class="size-6" />
+                      </button>
+                    </Show>
+                    <Show
+                      when={shell.referenceSplit()}
+                      fallback={
+                        <ReferenceColumn
+                          variant="panel"
+                          onBound={setReferences}
+                          heart={{ ...heart(), active: heartActive(), onActivate: setHeartActive }}
+                          editor={
+                            <Show when={book().id} keyed>
+                              <BookEditor book={book()} bare />
+                            </Show>
+                          }
+                          trailing={
+                            <IconButton
+                              variant="quiet"
+                              data-testid="refine-split"
+                              label={t("Move the gateway languages to their own panel")}
+                              icon={<Columns2 />}
+                              onClick={() => shell.setReferenceSplit(true)}
+                            />
+                          }
+                        />
+                      }
                     >
-                      <Show when={book().id} keyed>
-                        <BookEditor book={book()} header={<Tabs />} />
-                      </Show>
-                    </div>
-                    <div class={cx("editor-host shadow-small", tab() !== "reference" && "hidden")}>
-                      <Tabs />
-                      <ReferenceColumn variant="tab" onBound={setReferences} />
-                    </div>
+                      <Resizable.Root
+                        class="min-h-0 min-w-0 flex-1"
+                        onSizesChange={(sizes) => {
+                          const first = sizes[0];
+                          if (first !== undefined) shell.setReferenceWidth(first);
+                        }}
+                      >
+                        <Resizable.Panel
+                          initialSize={referenceInitial}
+                          minSize={referenceMin}
+                          maxSize={referenceMax}
+                          class="flex min-w-0 flex-col"
+                        >
+                          <ReferenceColumn variant="panel" onBound={setReferences} />
+                        </Resizable.Panel>
+                        {/* Nothing between the panels at rest; the line and
+                            its grip come up under the pointer. 24px wide, the
+                            page's own margin. */}
+                        <Resizable.Handle
+                          quiet
+                          class="px-3"
+                          label={t("Resize the gateway languages panel")}
+                        />
+                        <Resizable.Panel class="flex min-w-0 flex-col gap-3">
+                          <div
+                            role="tablist"
+                            aria-label={t("Languages")}
+                            class="@container flex shrink-0 items-center gap-controls border-b border-surface-border"
+                          >
+                            <div class="flex min-w-0 flex-1 items-end">
+                              <LanguageTab
+                                testId="language-tab-heart"
+                                name={heart().name}
+                                code={heart().code}
+                                refining
+                                active
+                              />
+                            </div>
+                            <IconButton
+                              variant="quiet"
+                              data-testid="refine-join"
+                              label={t("Join the gateway languages back into this panel")}
+                              icon={<Combine />}
+                              onClick={() => shell.setReferenceSplit(false)}
+                            />
+                          </div>
+                          <div class="flex min-h-0 flex-1 flex-col">
+                            <Show when={book().id} keyed>
+                              <BookEditor book={book()} bare />
+                            </Show>
+                          </div>
+                        </Resizable.Panel>
+                      </Resizable.Root>
+                    </Show>
                   </div>
                 </AlignedProvider>
               }
@@ -219,11 +290,7 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
                     {/* Unmounted while shut, the panel kept: its panes are
                         editors, and nothing reads them while they are hidden. */}
                     <Show when={!shut()}>
-                      <ReferenceColumn
-                        onBound={setReferences}
-                        onFolded={setFolded}
-                        onCombine={__SEFER_DESIGN__ ? () => setLayout("tabs") : undefined}
-                      />
+                      <ReferenceColumn onBound={setReferences} onFolded={setFolded} />
                     </Show>
                   </Resizable.Panel>
                   {/* Hidden rather than unmounted, same reason as the panel. */}

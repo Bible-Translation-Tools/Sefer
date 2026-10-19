@@ -392,6 +392,9 @@ export interface Shell {
    */
   readonly referenceOpen: Accessor<boolean>;
   readonly setReferenceOpen: (open: boolean) => void;
+  /** Refine's language panels split in two, or joined; see `referenceSplit` in settings. */
+  readonly referenceSplit: Accessor<boolean>;
+  readonly setReferenceSplit: (split: boolean) => void;
   /**
    * The project roots this device has opened, newest first — `shell.recentProjects`
    * read as a list. The landing screen writes the key as it opens a project;
@@ -733,6 +736,10 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
   const [referenceOpen, setReferenceOpen] = createSignal(
     services.settings.get(keys.referenceOpen),
     { name: "referenceOpen" },
+  );
+  const [referenceSplit, setReferenceSplit] = createSignal(
+    services.settings.get(keys.referenceSplit),
+    { name: "referenceSplit" },
   );
 
   // Where the reader was in each project. Same discipline as the two above —
@@ -1521,6 +1528,11 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     setReferenceOpen: (open) => {
       setReferenceOpen(open);
       persist(keys.referenceOpen, open);
+    },
+    referenceSplit,
+    setReferenceSplit: (split) => {
+      setReferenceSplit(split);
+      persist(keys.referenceSplit, split);
     },
     recentProjects,
     slugFor,

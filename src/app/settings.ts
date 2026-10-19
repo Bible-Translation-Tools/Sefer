@@ -335,6 +335,12 @@ export interface ShellKeys {
   /** Is the reference column beside the editor open (the crumb strip's split toggle). */
   readonly referenceOpen: SettingKey<boolean>;
   /**
+   * Refine's language panels split in two — the gateways beside the heart
+   * language — or joined as one card of tabs. Read only by the `panels`
+   * layout, a design tweak on the book route.
+   */
+  readonly referenceSplit: SettingKey<boolean>;
+  /**
    * How wide the project sidebar is, as a FRACTION of the workspace row, because that is the unit `Resizable` speaks: a split conserves
    * fractions, so a pixel width would have to be converted against a root that
    * has not been measured when the panel first renders. Clamped by the panel's
@@ -442,6 +448,7 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
     sousSettings: settings.register("sous.settings", SousOverrides, {}),
     sidebarOpen: settings.register("workspace.sidebarOpen", Schema.Boolean, true),
     referenceOpen: settings.register("workspace.referenceOpen", Schema.Boolean, true),
+    referenceSplit: settings.register("workspace.referenceSplit", Schema.Boolean, false),
     sidebarWidth: settings.register("workspace.sidebarWidth", Schema.Number, SIDEBAR_WIDTH.default),
     fontSize: settings.register("shell.fontSize", Schema.Number, 16),
     zoom: settings.register("shell.zoom", Schema.Number, 100),

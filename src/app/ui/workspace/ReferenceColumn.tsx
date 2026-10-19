@@ -36,14 +36,15 @@
  * is an editor over one book's text, and a new text is a new document.
  */
 
+import type { JSX } from "@solidjs/web";
 import { Effect, Option, Result } from "effect";
 import BookMarked from "lucide-solid/icons/book-marked";
 import Check from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronUp from "lucide-solid/icons/chevron-up";
-import Combine from "lucide-solid/icons/combine";
 import Download from "lucide-solid/icons/download";
 import PanelLeftClose from "lucide-solid/icons/panel-left-close";
+import Plus from "lucide-solid/icons/plus";
 import Trash from "lucide-solid/icons/trash-2";
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 
@@ -121,12 +122,62 @@ export interface ReferenceColumnProps {
    */
   readonly onFolded?: (folded: boolean) => void;
   /**
-   * `tab`: drawn inside the editor's card under Refine's Reference/Translation
-   * tabs — no collapse, no column padding. A design tweak; `column` otherwise.
+   * `panel`: Refine's language panels, a design tweak. Every text the project
+   * shows is a TAB, one on show at a time, and "+" is the language menu; no
+   * fold, no column padding. `column` otherwise.
    */
-  readonly variant?: "column" | "tab";
-  /** Puts the reference back into the editor's card (the tabbed layout). Design builds only. */
-  readonly onCombine?: () => void;
+  readonly variant?: "column" | "panel";
+  /**
+   * The heart language, as one more tab after the gateways (the joined panel).
+   * The column does not draw the editor; it shows `editor` under the strip
+   * while this tab is the active one, and its own pane otherwise.
+   */
+  readonly heart?: {
+    readonly name: string;
+    readonly code: string;
+    readonly active: boolean;
+    /** `true`: the heart tab was chosen; `false`: a gateway tab was. */
+    readonly onActivate: (heart: boolean) => void;
+  };
+  readonly editor?: JSX.Element;
+  /** Drawn at the end of the tab strip: the panel's split or join button. */
+  readonly trailing?: JSX.Element;
+}
+
+/**
+ * One language tab: the full name while the strip has room, the bare code
+ * when it does not — a container query on the strip, so a narrow split panel
+ * shortens its tabs and a wide joined one does not.
+ */
+export function LanguageTab(props: {
+  readonly name: string;
+  readonly code: string;
+  readonly active: boolean;
+  /** The heart language: the one being refined, and the one that is editable. */
+  readonly refining?: boolean;
+  readonly testId?: string;
+  readonly onSelect?: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={props.active ? "true" : "false"}
+      data-testid={props.testId}
+      data-current={props.active ? "" : undefined}
+      title={props.name}
+      class="-mb-px flex h-12 min-w-0 flex-1 cursor-pointer items-center justify-center gap-2 border-b-2 px-3 text-small font-semibold transition-colors data-current:border-brand data-current:text-brand not-data-current:border-transparent not-data-current:text-on-surface-primary not-data-current:hover:bg-surface-secondary"
+      onClick={() => props.onSelect?.()}
+    >
+      <span class="hidden truncate @lg:inline">{props.name}</span>
+      <span class="truncate @lg:hidden">{props.code}</span>
+      <Show when={props.refining === true}>
+        <span class="shrink-0 rounded-full bg-brand-light px-2 py-0.5 text-smallest font-medium text-brand">
+          {t("Refinement")}
+        </span>
+      </Show>
+    </button>
+  );
 }
 
 export function ReferenceColumn(props: ReferenceColumnProps) {
@@ -324,6 +375,8 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     const project = shell.project();
     if (project === undefined) return;
     setChosen(resource.id);
+    // The joined panel: what was just chosen is what goes on show.
+    props.heart?.onActivate(false);
     if (entries().some((entry) => entry.resource.id === resource.id)) return;
     void services
       .run(services.library.pick(project.root, roleFor(resource), resource.id))
@@ -542,7 +595,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
    * The reference language: what is on this device, and below it, folded
    * away, the reader's other projects and the gateway languages to download.
    */
-  const LanguagePicker = () => (
+  const LanguagePicker = (pickerProps: { readonly trigger?: JSX.Element }) => (
     <Menu
       label={t("Reference language")}
       // Folded again each time it opens: the texts on this device come first.
@@ -558,22 +611,24 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       class="w-80"
       fitViewport
       trigger={
-        <button
-          type="button"
-          data-testid="reference-language"
-          disabled={busy()}
-          class="flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-2xl bg-surface-primary p-3 text-start transition-colors hover:bg-surface-secondary disabled:cursor-wait"
-        >
-          <span class="flex min-w-0 flex-1 flex-col">
-            <span class="text-small text-on-surface-secondary">{t("Reference language")}</span>
-            <span class="truncate text-small font-semibold text-on-surface-primary">
-              {fetching() === ""
-                ? nameOf(shown()?.entry.resource) || t("None yet")
-                : t("Getting {language}…", { language: fetching() })}
+        pickerProps.trigger ?? (
+          <button
+            type="button"
+            data-testid="reference-language"
+            disabled={busy()}
+            class="flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-2xl bg-surface-primary p-3 text-start transition-colors hover:bg-surface-secondary disabled:cursor-wait"
+          >
+            <span class="flex min-w-0 flex-1 flex-col">
+              <span class="text-small text-on-surface-secondary">{t("Reference language")}</span>
+              <span class="truncate text-small font-semibold text-on-surface-primary">
+                {fetching() === ""
+                  ? nameOf(shown()?.entry.resource) || t("None yet")
+                  : t("Getting {language}…", { language: fetching() })}
+              </span>
             </span>
-          </span>
-          <ChevronDown aria-hidden="true" class="size-5 shrink-0 text-on-surface-primary" />
-        </button>
+            <ChevronDown aria-hidden="true" class="size-5 shrink-0 text-on-surface-primary" />
+          </button>
+        )
       }
     >
       <div class="scrollbar-padded max-h-[min(60vh,25.5rem)] overflow-y-auto py-1">
@@ -754,8 +809,8 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     <aside
       aria-label={t("Reference texts")}
       class={
-        props.variant === "tab"
-          ? "flex min-h-0 min-w-0 flex-1 flex-col gap-3 px-3 pt-3"
+        props.variant === "panel"
+          ? "flex h-full min-h-0 min-w-0 flex-1 flex-col gap-3"
           : "flex h-full min-w-0 flex-col gap-3 py-4 pe-[7.5px]"
       }
       data-references={entries().length}
@@ -782,31 +837,82 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
           </div>
         }
       >
-        <div class="flex items-center gap-controls">
-          <div class="min-w-0 flex-1">
-            <LanguagePicker />
-          </div>
-          <Show when={props.onCombine}>
-            {(combine) => (
+        <Show
+          when={props.variant === "panel"}
+          fallback={
+            <div class="flex items-center gap-controls">
+              <div class="min-w-0 flex-1">
+                <LanguagePicker />
+              </div>
               <IconButton
                 variant="subtle"
-                data-testid="reference-combine"
-                label={t("Combine with the editor")}
-                icon={<Combine />}
-                onClick={() => combine()()}
+                data-testid="reference-fold"
+                label={t("Collapse the reference text")}
+                icon={<PanelLeftClose />}
+                onClick={() => fold(true)}
               />
-            )}
-          </Show>
-          <Show when={props.variant !== "tab"}>
-            <IconButton
-              variant="subtle"
-              data-testid="reference-fold"
-              label={t("Collapse the reference text")}
-              icon={<PanelLeftClose />}
-              onClick={() => fold(true)}
+            </div>
+          }
+        >
+          <div
+            role="tablist"
+            aria-label={t("Languages")}
+            class="@container flex shrink-0 items-center gap-controls border-b border-surface-border"
+          >
+            <div class="flex min-w-0 flex-1 items-end">
+              <For each={entries()}>
+                {(entry) => (
+                  <LanguageTab
+                    testId={`language-tab-${entry.resource.language ?? entry.resource.id}`}
+                    name={
+                      isBible(entry.resource)
+                        ? (languageName(entry.resource.language) ?? entry.resource.title)
+                        : entry.resource.title
+                    }
+                    code={entry.resource.language ?? entry.resource.title}
+                    active={
+                      props.heart?.active !== true &&
+                      shown()?.entry.resource.id === entry.resource.id
+                    }
+                    onSelect={() => {
+                      setChosen(entry.resource.id);
+                      props.heart?.onActivate(false);
+                    }}
+                  />
+                )}
+              </For>
+              <Show when={props.heart}>
+                {(heart) => (
+                  <LanguageTab
+                    testId="language-tab-heart"
+                    name={heart().name}
+                    code={heart().code}
+                    refining
+                    active={heart().active}
+                    onSelect={() => heart().onActivate(true)}
+                  />
+                )}
+              </Show>
+            </div>
+            <LanguagePicker
+              trigger={
+                <IconButton
+                  variant="quiet"
+                  data-testid="reference-add"
+                  disabled={busy()}
+                  label={t("Add a gateway language")}
+                  icon={<Plus />}
+                />
+              }
             />
+            {props.trailing}
+          </div>
+          <Show when={fetching() !== ""}>
+            <p role="status" class="text-small text-on-surface-secondary">
+              {t("Getting {language}…", { language: fetching() })}
+            </p>
           </Show>
-        </div>
+        </Show>
 
         {/* Only while nothing is picked: a person who chose a text has
             answered the question this row asks. */}
@@ -839,7 +945,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
           when={shown()}
           keyed
           fallback={
-            <Show when={!loading()}>
+            <Show when={!loading() && props.heart?.active !== true}>
               <EmptyState
                 icon={<BookMarked size={22} />}
                 title={
@@ -857,7 +963,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
           }
         >
           {(held) => (
-            <div class="flex min-h-0 flex-1 flex-col">
+            <div class={props.heart?.active === true ? "hidden" : "flex min-h-0 flex-1 flex-col"}>
               <ResourcePane
                 resource={held.entry.resource}
                 role={held.entry.role}
@@ -866,6 +972,13 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
               />
             </div>
           )}
+        </Show>
+        <Show when={props.editor !== undefined}>
+          {/* Hidden rather than unmounted, so switching tabs keeps the
+              editor's place; the reference pane above does the same. */}
+          <div class={props.heart?.active === true ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
+            {props.editor}
+          </div>
         </Show>
       </Show>
     </aside>
