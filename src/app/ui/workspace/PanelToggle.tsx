@@ -60,8 +60,8 @@ export function usePanelToggleLeading(): () => JSX.Element | undefined {
  *
  * Panel showing: the toggle in a 48px gutter of its own just outside the
  * panel, as tall as the project card (64px) and 16px from the top, so the two
- * line up. Panel hidden: a floating book button of the same height, 24px from
- * the window's edge and level with where the card was, that opens it again.
+ * line up. Panel hidden: a floating 48px book button, 24px from the window's
+ * edge and centred on the card's row, that opens it again.
  */
 export function PanelGutter(props: { readonly showing: boolean }) {
   const shell = useShell();
@@ -75,8 +75,8 @@ export function PanelGutter(props: { readonly showing: boolean }) {
             data-testid="book-fab"
             aria-label={t("Show the books")}
             title={t("Show the books")}
-            // 72px app bar + 16px: level with the project card's top.
-            class="fixed start-6 top-[88px] z-30 flex size-16 cursor-pointer items-center justify-center rounded-2xl bg-surface-primary text-on-surface-primary shadow-medium transition-colors hover:bg-surface-secondary"
+            // 72px app bar + 24px: centred on the project card's 64px row.
+            class="fixed start-6 top-24 z-30 flex size-12 cursor-pointer items-center justify-center rounded-2xl bg-surface-primary text-on-surface-primary shadow-medium transition-colors hover:bg-surface-secondary"
             onClick={() => shell.setSidebarOpen(true)}
           >
             <BookIcon aria-hidden="true" class="size-6" />
