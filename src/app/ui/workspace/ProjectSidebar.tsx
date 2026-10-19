@@ -209,12 +209,16 @@ export function ProjectSidebar() {
   };
 
   /**
-   * Keeps the open book's current chapter in sight in the list: when the
-   * editor opens a book, moves to a chapter, or the panel comes back. The
-   * tile if the book is unfolded, its row otherwise; `nearest`, so nothing
-   * moves while it is already on screen.
+   * Keeps the open book in sight in the list. When the editor opens a book or
+   * the panel comes back, the book's row goes near the TOP, with about two
+   * rows above it, so the neighbouring books still show. A chapter move inside
+   * the same book only brings its tile into view if it has left it
+   * (`nearest`), so reading down a book does not keep jerking the list.
    */
   const [list, setList] = createSignal<HTMLElement>();
+  /** Rows above the open book: two 48px rows. */
+  const LEAD_IN = 96;
+  let placed: string | undefined;
   createEffect(
     () => ({
       nav: list(),
@@ -224,13 +228,23 @@ export function ProjectSidebar() {
       all: panels(),
     }),
     ({ nav, book, showing }) => {
-      if (nav === undefined || book === undefined || !showing) return;
+      if (nav === undefined || book === undefined || !showing) {
+        placed = undefined;
+        return;
+      }
       // After the frame that draws the unfolded book's tiles.
       requestAnimationFrame(() => {
-        const target =
-          nav.querySelector<HTMLElement>(`[data-book="${book}"] ~ ol [data-current]`) ??
-          nav.querySelector<HTMLElement>(`[data-book="${book}"]`);
-        target?.scrollIntoView({ block: "nearest" });
+        const row = nav.querySelector<HTMLElement>(`[data-book="${book}"]`);
+        if (row === null) return;
+        if (placed !== book) {
+          placed = book;
+          const offset = row.getBoundingClientRect().top - nav.getBoundingClientRect().top;
+          nav.scrollTop = Math.max(0, nav.scrollTop + offset - LEAD_IN);
+          return;
+        }
+        nav
+          .querySelector<HTMLElement>(`[data-book="${book}"] ~ ol [data-current]`)
+          ?.scrollIntoView({ block: "nearest" });
       });
     },
   );
