@@ -145,9 +145,10 @@ export interface ReferenceColumnProps {
 }
 
 /**
- * One language tab: the full name while the strip has room, the bare code
- * when it does not — a container query on the strip, so a narrow split panel
- * shortens its tabs and a wide joined one does not.
+ * One language tab: the full name, and the bare code only when the name would
+ * not fit — shortening is how a tab truncates. Measured, not a breakpoint: the
+ * name's own width (an invisible copy of it) against the room the tab has
+ * after its padding and badge, re-checked whenever the tab is resized.
  */
 export function LanguageTab(props: {
   readonly name: string;
@@ -158,21 +159,49 @@ export function LanguageTab(props: {
   readonly testId?: string;
   readonly onSelect?: () => void;
 }) {
+  const [tab, setTab] = createSignal<HTMLButtonElement>();
+  const [ghost, setGhost] = createSignal<HTMLSpanElement>();
+  const [badge, setBadge] = createSignal<HTMLSpanElement>();
+  const [fits, setFits] = createSignal(true, { name: "languageTabFits" });
+  createEffect(
+    () => ({ button: tab(), copy: ghost(), mark: badge(), name: props.name }),
+    ({ button, copy }) => {
+      if (button === undefined || copy === undefined) return;
+      const measure = (): void => {
+        const style = getComputedStyle(button);
+        const padding = Number.parseFloat(style.paddingInlineStart) * 2;
+        const gap = Number.parseFloat(style.columnGap) || 0;
+        const held = badge();
+        const taken = held === undefined ? 0 : held.offsetWidth + gap;
+        setFits(copy.offsetWidth <= button.clientWidth - padding - taken);
+      };
+      const observer = new ResizeObserver(measure);
+      observer.observe(button);
+      measure();
+      return () => observer.disconnect();
+    },
+  );
   return (
     <button
+      ref={setTab}
       type="button"
       role="tab"
       aria-selected={props.active ? "true" : "false"}
       data-testid={props.testId}
       data-current={props.active ? "" : undefined}
       title={props.name}
-      class="-mb-px flex h-12 min-w-0 flex-1 cursor-pointer items-center justify-center gap-2 border-b-2 px-3 text-small font-semibold transition-colors data-current:border-brand data-current:text-brand not-data-current:border-transparent not-data-current:text-on-surface-primary not-data-current:hover:bg-surface-secondary"
+      class="relative -mb-px flex h-12 min-w-0 flex-1 cursor-pointer items-center justify-center gap-2 border-b-2 px-3 text-small font-semibold transition-colors data-current:border-brand data-current:text-brand not-data-current:border-transparent not-data-current:text-on-surface-primary not-data-current:hover:bg-surface-secondary"
       onClick={() => props.onSelect?.()}
     >
-      <span class="hidden truncate @lg:inline">{props.name}</span>
-      <span class="truncate @lg:hidden">{props.code}</span>
+      <span ref={setGhost} aria-hidden="true" class="invisible absolute whitespace-nowrap">
+        {props.name}
+      </span>
+      <span class="truncate">{fits() ? props.name : props.code}</span>
       <Show when={props.refining === true}>
-        <span class="shrink-0 rounded-full bg-brand-light px-2 py-0.5 text-smallest font-medium text-brand">
+        <span
+          ref={setBadge}
+          class="shrink-0 rounded-full bg-brand-light px-2 py-0.5 text-smallest font-medium text-brand"
+        >
           {t("Refinement")}
         </span>
       </Show>
@@ -857,7 +886,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
           <div
             role="tablist"
             aria-label={t("Languages")}
-            class="@container flex shrink-0 items-center gap-controls border-b border-surface-border"
+            class="flex shrink-0 items-center gap-controls border-b border-surface-border"
           >
             <div class="flex min-w-0 flex-1 items-end">
               <For each={entries()}>

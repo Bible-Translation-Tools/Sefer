@@ -245,7 +245,7 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
                           <div
                             role="tablist"
                             aria-label={t("Languages")}
-                            class="@container flex shrink-0 items-center gap-controls border-b border-surface-border"
+                            class="flex shrink-0 items-center gap-controls border-b border-surface-border"
                           >
                             <div class="flex min-w-0 flex-1 items-end">
                               <LanguageTab
