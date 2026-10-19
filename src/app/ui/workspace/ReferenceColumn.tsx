@@ -46,6 +46,7 @@ import Download from "lucide-solid/icons/download";
 import PanelLeftClose from "lucide-solid/icons/panel-left-close";
 import Plus from "lucide-solid/icons/plus";
 import Trash from "lucide-solid/icons/trash-2";
+import X from "lucide-solid/icons/x";
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 
 import { Observability } from "#core/observability";
@@ -584,6 +585,28 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
   const [showProjects, setShowProjects] = createSignal(false, { name: "referenceShowProjects" });
   const [showOthers, setShowOthers] = createSignal(false, { name: "referenceShowOthers" });
   const [showHelps, setShowHelps] = createSignal(false, { name: "referenceShowHelps" });
+  /**
+   * The panel variant's "+": the panel shows its language list in place of
+   * the text — what is on this device, to add as a tab or take off the tabs,
+   * then what can be downloaded.
+   */
+  const [managing, setManaging] = createSignal(false, { name: "referenceManaging" });
+  const manage = (open: boolean): void => {
+    setManaging(open);
+    if (open) offer();
+  };
+  /** The entry a resource is a tab as, if it is one. */
+  const tabOf = (resource: Resource): Entry | undefined =>
+    entries().find((entry) => entry.resource.id === resource.id);
+  /** Takes a picked text off the tabs. It stays on this device, and in every other project. */
+  const unpick = (entry: Entry): void => {
+    const project = shell.project();
+    if (project === undefined) return;
+    if (chosen() === entry.resource.id) setChosen(undefined);
+    void services
+      .run(services.library.unpick(project.root, entry.role, entry.resource.id))
+      .then(() => setBound((held) => held + 1));
+  };
   /** Rows: 48px, 24px sides; the menu's own 8px plus 4px here is 12px above and below. */
   const ROW = "px-6";
 
@@ -836,6 +859,173 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     </Menu>
   );
 
+  /** A section heading in the language list. */
+  const ListHeading = (headingProps: { readonly children: JSX.Element }) => (
+    <h3 class="pt-3 text-small font-semibold text-on-surface-secondary">{headingProps.children}</h3>
+  );
+
+  /** One row of the language list: what it is, and the one thing to do with it. */
+  const ListRow = (rowProps: {
+    readonly testId?: string;
+    readonly name: string;
+    readonly detail?: string;
+    readonly children: JSX.Element;
+  }) => (
+    <li
+      data-testid={rowProps.testId}
+      class="flex min-h-12 items-center gap-3 border-b border-surface-border py-1.5 text-small text-on-surface-primary"
+    >
+      <RowText name={rowProps.name} detail={rowProps.detail} />
+      {rowProps.children}
+    </li>
+  );
+
+  /**
+   * The panel's language list (the panel variant's "+"): the texts on this
+   * device, each added as a tab or taken off the tabs, the reader's other
+   * projects, then the gateway languages and Translation Notes to download.
+   * Taking a text off the tabs leaves it on this device; a text the project
+   * DECLARES cannot be taken off — it is what shows when nothing is picked.
+   */
+  const LanguageList = () => (
+    <div
+      data-testid="language-list"
+      class="scrollbar-padded flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pb-6"
+    >
+      <ListHeading>{t("On this device")}</ListHeading>
+      <Show when={installed().length === 0}>
+        <p class="py-3 text-small text-on-surface-tertiary">
+          {t("No gateway languages yet. Download one below.")}
+        </p>
+      </Show>
+      <ul>
+        <For each={installed()}>
+          {(resource) => (
+            <ListRow
+              testId={`language-row-${resource.language ?? resource.id}`}
+              name={nameOf(resource)}
+              detail={resource.title}
+            >
+              <Show
+                when={tabOf(resource)}
+                fallback={
+                  <Button disabled={busy()} onClick={() => show(resource)}>
+                    <Plus aria-hidden="true" />
+                    {t("Add")}
+                  </Button>
+                }
+              >
+                {(entry) => (
+                  <Show
+                    when={!entry().declared}
+                    fallback={
+                      <span class="text-small text-on-surface-tertiary">{t("Project source")}</span>
+                    }
+                  >
+                    <Button variant="tertiary" onClick={() => unpick(entry())}>
+                      <Trash aria-hidden="true" />
+                      {t("Remove")}
+                    </Button>
+                  </Show>
+                )}
+              </Show>
+            </ListRow>
+          )}
+        </For>
+      </ul>
+
+      <Show when={otherProjects().length > 0}>
+        <ListHeading>{t("Your other projects")}</ListHeading>
+        <ul>
+          <For each={otherProjects()}>
+            {(row) => (
+              <ListRow
+                testId={`pick-${row.folder}`}
+                name={row.name}
+                detail={languageName(row.language) ?? row.language}
+              >
+                <Button disabled={busy()} onClick={() => showProject(row)}>
+                  <Plus aria-hidden="true" />
+                  {t("Add")}
+                </Button>
+              </ListRow>
+            )}
+          </For>
+        </ul>
+      </Show>
+
+      <ListHeading>{t("Available to download")}</ListHeading>
+      <Show
+        when={gateways() !== undefined}
+        fallback={<p class="py-3 text-small text-on-surface-tertiary">{t("Loading the list…")}</p>}
+      >
+        <ul>
+          <For each={downloadable()}>
+            {(entry) => (
+              <ListRow
+                testId={`pick-${entry.code}`}
+                name={entry.anglicizedName || entry.naturalName}
+                detail={entry.naturalName}
+              >
+                <Button disabled={busy()} onClick={() => fetchText(entry)}>
+                  <Download aria-hidden="true" />
+                  {t("Download")}
+                </Button>
+              </ListRow>
+            )}
+          </For>
+        </ul>
+      </Show>
+
+      <ListHeading>{t("Translation Notes")}</ListHeading>
+      <Show when={notesFailure()}>
+        {(failure) => (
+          <p role="status" class="py-3 text-small text-on-surface-tertiary">
+            {failure().offline
+              ? t("You are offline. Open this list again to retry.")
+              : t("Could not read the list. Open this list again to retry.")}
+          </p>
+        )}
+      </Show>
+      <Show when={notes()?.state === "loading"}>
+        <p class="py-3 text-small text-on-surface-tertiary">{t("Loading the list…")}</p>
+      </Show>
+      <ul>
+        <For each={heldHelps()}>
+          {(resource) => (
+            <ListRow
+              testId="reference-held-notes"
+              name={`${languageName(resource.language) ?? resource.title} (${resource.language ?? ""})`}
+              detail={t("On this device")}
+            >
+              <Button variant="tertiary" onClick={() => removeNotes(resource)}>
+                <Trash aria-hidden="true" />
+                {t("Remove from device")}
+              </Button>
+            </ListRow>
+          )}
+        </For>
+        <For each={helps()}>
+          {(help) => (
+            <ListRow
+              testId={`pick-help-${help.repository}`}
+              name={`${help.languageName || help.language} (${help.language})`}
+              detail={help.nationalName}
+            >
+              <Button
+                disabled={busy() || helpDownloads().has(help.repository)}
+                onClick={() => fetchHelp(help)}
+              >
+                <Download aria-hidden="true" />
+                {helpDownloads().has(help.repository) ? t("Downloading…") : t("Download")}
+              </Button>
+            </ListRow>
+          )}
+        </For>
+      </ul>
+    </div>
+  );
+
   return (
     <aside
       aria-label={t("Reference texts")}
@@ -902,11 +1092,13 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
                     }
                     code={entry.resource.language ?? entry.resource.title}
                     active={
+                      !managing() &&
                       props.heart?.active !== true &&
                       shown()?.entry.resource.id === entry.resource.id
                     }
                     onSelect={() => {
                       setChosen(entry.resource.id);
+                      setManaging(false);
                       props.heart?.onActivate(false);
                     }}
                   />
@@ -919,22 +1111,22 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
                     name={heart().name}
                     code={heart().code}
                     refining
-                    active={heart().active}
-                    onSelect={() => heart().onActivate(true)}
+                    active={heart().active && !managing()}
+                    onSelect={() => {
+                      setManaging(false);
+                      heart().onActivate(true);
+                    }}
                   />
                 )}
               </Show>
             </div>
-            <LanguagePicker
-              trigger={
-                <IconButton
-                  variant="quiet"
-                  data-testid="reference-add"
-                  disabled={busy()}
-                  label={t("Add a gateway language")}
-                  icon={<Plus />}
-                />
-              }
+            <IconButton
+              variant={managing() ? "outlined" : "quiet"}
+              data-testid="reference-add"
+              aria-pressed={managing() ? "true" : "false"}
+              label={managing() ? t("Close the language list") : t("Add a gateway language")}
+              icon={managing() ? <X /> : <Plus />}
+              onClick={() => manage(!managing())}
             />
             {props.trailing}
           </div>
@@ -942,6 +1134,9 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
             <p role="status" class="text-small text-on-surface-secondary">
               {t("Getting {language}…", { language: fetching() })}
             </p>
+          </Show>
+          <Show when={managing()}>
+            <LanguageList />
           </Show>
         </Show>
 
@@ -976,7 +1171,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
           when={shown()}
           keyed
           fallback={
-            <Show when={!loading() && props.heart?.active !== true}>
+            <Show when={!loading() && props.heart?.active !== true && !managing()}>
               <EmptyState
                 icon={<BookMarked size={22} />}
                 title={
@@ -994,7 +1189,13 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
           }
         >
           {(held) => (
-            <div class={props.heart?.active === true ? "hidden" : "flex min-h-0 flex-1 flex-col"}>
+            <div
+              class={
+                props.heart?.active === true || managing()
+                  ? "hidden"
+                  : "flex min-h-0 flex-1 flex-col"
+              }
+            >
               <ResourcePane
                 resource={held.entry.resource}
                 role={held.entry.role}
@@ -1008,7 +1209,13 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
         <Show when={props.editor !== undefined}>
           {/* Hidden rather than unmounted, so switching tabs keeps the
               editor's place; the reference pane above does the same. */}
-          <div class={props.heart?.active === true ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
+          <div
+            class={
+              props.heart?.active === true && !managing()
+                ? "flex min-h-0 flex-1 flex-col"
+                : "hidden"
+            }
+          >
             {props.editor}
           </div>
         </Show>
