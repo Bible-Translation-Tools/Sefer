@@ -142,17 +142,21 @@ export function Toolbar(props: {
       {/* The project panel's show/hide, then the title: the toggle sits on
           the side nearest the panel it opens and closes. */}
       <div class="flex min-w-0 shrink items-center gap-2">
-        <Show when={props.bookFab === true && !shell.sidebarShowing()} fallback={<PanelToggle />}>
-          <button
-            type="button"
-            data-testid="book-fab"
-            aria-label={t("Show the books")}
-            title={t("Show the books")}
-            class="flex size-14 shrink-0 cursor-pointer items-center justify-center rounded-2xl bg-surface-primary text-on-surface-primary shadow-medium transition-colors hover:bg-surface-secondary"
-            onClick={() => shell.setSidebarOpen(true)}
-          >
-            <BookIcon aria-hidden="true" class="size-6" />
-          </button>
+        {/* With `bookFab` the hide control is beside the panel's own search,
+            and this is only the way back once the panel is hidden. */}
+        <Show when={props.bookFab === true} fallback={<PanelToggle />}>
+          <Show when={!shell.sidebarShowing()}>
+            <button
+              type="button"
+              data-testid="book-fab"
+              aria-label={t("Show the books")}
+              title={t("Show the books")}
+              class="flex size-14 shrink-0 cursor-pointer items-center justify-center rounded-2xl bg-surface-primary text-on-surface-primary shadow-medium transition-colors hover:bg-surface-secondary"
+              onClick={() => shell.setSidebarOpen(true)}
+            >
+              <BookIcon aria-hidden="true" class="size-6" />
+            </button>
+          </Show>
         </Show>
         <strong
           class="min-w-0 truncate text-h4 font-semibold text-on-surface-primary"

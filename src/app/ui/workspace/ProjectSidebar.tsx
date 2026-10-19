@@ -33,6 +33,7 @@ import { useShell } from "../../ProjectContext";
 import { Badge, Button, IconButton, Input, SegmentedControl } from "../primitives";
 import { bookName, testamentOf, type Testament } from "./books";
 import { layout } from "./layoutTweak";
+import { PanelToggle } from "./PanelToggle";
 import { metadataOf, projectLanguage, projectName } from "./project";
 import { chapterOf, typedChapter } from "./typedPlace";
 
@@ -300,8 +301,9 @@ export function ProjectSidebar() {
             field below, and closes again from Escape or an empty blur. */}
         <Show when={panels()}>
           {/* Always open, pinned above the list: the list scrolls under it. */}
-          <div class="px-4 pt-4 pb-2">
+          <div class="flex items-center gap-controls px-4 pt-4 pb-2">
             <Input
+              wrapperClass="min-w-0 flex-1"
               type="search"
               data-testid="sidebar-search"
               icon={<SearchIcon />}
@@ -314,6 +316,7 @@ export function ProjectSidebar() {
                 if (event.key === "Enter") takeSearch();
               }}
             />
+            <PanelToggle />
           </div>
         </Show>
         <div class={panels() ? "hidden" : "flex flex-col gap-2 px-4 pb-2"}>
