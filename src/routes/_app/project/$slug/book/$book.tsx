@@ -1,6 +1,5 @@
 import { createAlignedGroup } from "@sefer/editor";
 import { createFileRoute } from "@tanstack/solid-router";
-import BookIcon from "lucide-solid/icons/book";
 import Columns2 from "lucide-solid/icons/columns-2";
 import Combine from "lucide-solid/icons/combine";
 import { Show, createEffect, createSignal, onCleanup, untrack } from "solid-js";
@@ -163,7 +162,7 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
       >
         {(book) => (
           <>
-            <Toolbar usfm={panels()} />
+            <Toolbar usfm={panels()} bookFab={panels()} />
 
             <Show
               when={layout() === "split"}
@@ -180,20 +179,6 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
                 // Provided as `null`: none, said explicitly.
                 <AlignedProvider value={null}>
                   <div class="flex min-h-0 flex-1 gap-6">
-                    {/* The project panel, folded: a book button that opens it
-                        again, as it was. */}
-                    <Show when={!shell.sidebarShowing()}>
-                      <button
-                        type="button"
-                        data-testid="book-fab"
-                        aria-label={t("Show the books")}
-                        title={t("Show the books")}
-                        class="flex size-14 shrink-0 cursor-pointer items-center justify-center rounded-2xl bg-surface-primary text-on-surface-primary shadow-medium transition-colors hover:bg-surface-secondary"
-                        onClick={() => shell.setSidebarOpen(true)}
-                      >
-                        <BookIcon aria-hidden="true" class="size-6" />
-                      </button>
-                    </Show>
                     <Show
                       when={shell.referenceSplit()}
                       fallback={
