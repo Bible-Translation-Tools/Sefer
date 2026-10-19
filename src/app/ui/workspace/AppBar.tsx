@@ -25,6 +25,7 @@
 import type { JSX } from "@solidjs/web";
 import { useNavigate, useRouterState } from "@tanstack/solid-router";
 import Bell from "lucide-solid/icons/bell";
+import ChevronDown from "lucide-solid/icons/chevron-down";
 import Download from "lucide-solid/icons/download";
 import Ellipsis from "lucide-solid/icons/ellipsis";
 import FileText from "lucide-solid/icons/file-text";
@@ -34,13 +35,15 @@ import ListChecks from "lucide-solid/icons/list-checks";
 import SettingsIcon from "lucide-solid/icons/settings";
 import TypeIcon from "lucide-solid/icons/type";
 import UserIcon from "lucide-solid/icons/user";
-import { createSignal, For } from "solid-js";
+import { createSignal, For, Show } from "solid-js";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { SyncButton } from "../cloud/SyncButton";
 import { ImportHub } from "../landing/ImportHub";
 import { IconButton, Menu, MenuItem, SegmentedControl } from "../primitives";
+import { layout } from "./layoutTweak";
+import { projectLanguage, projectName } from "./project";
 
 /**
  * A bar button: the shared `IconButton` at its default (`md`, `subtle`), so
@@ -183,6 +186,24 @@ export function AppBar() {
       class="scrollbar-subtle flex h-18 w-full shrink-0 items-center gap-4 overflow-x-auto overflow-y-hidden border-b border-surface-border bg-surface-primary px-4 py-2"
     >
       <div class="flex shrink-0 items-center gap-2">
+        {/* The `panels` layout (a design tweak): the open project in the
+            mark's place, and the way to the project list. */}
+        <Show when={layout() === "panels" && shell.project() !== undefined}>
+          <button
+            type="button"
+            data-testid="app-bar-project"
+            class="flex h-12 min-w-0 shrink-0 cursor-pointer items-center gap-3 rounded-lg px-3 text-start transition-colors hover:bg-surface-secondary"
+            onClick={() => void navigate({ to: "/projects" })}
+          >
+            <span class="flex min-w-0 flex-col leading-tight">
+              <span class="text-smallest text-on-surface-secondary">{t("Project:")}</span>
+              <span class="max-w-64 truncate text-small font-semibold text-on-surface-primary">
+                {projectLanguage(shell.project()) || projectName(shell.project())}
+              </span>
+            </span>
+            <ChevronDown aria-hidden="true" class="size-5 shrink-0 text-on-surface-primary" />
+          </button>
+        </Show>
         {/* The mark and the name: the way home (see `goHome`). The mark is
             `public/sefer.svg`, the tab's icon, used as a MASK so it takes the
             theme's text colour in light and dark alike. */}
@@ -191,7 +212,11 @@ export function AppBar() {
           data-testid="app-bar-home"
           aria-label={t("Home")}
           title={t("Home")}
-          class="flex h-12 shrink-0 cursor-pointer items-center gap-3 rounded-lg px-2 transition-colors hover:bg-surface-secondary"
+          class={
+            layout() === "panels" && shell.project() !== undefined
+              ? "hidden"
+              : "flex h-12 shrink-0 cursor-pointer items-center gap-3 rounded-lg px-2 transition-colors hover:bg-surface-secondary"
+          }
           onClick={goHome}
         >
           <span

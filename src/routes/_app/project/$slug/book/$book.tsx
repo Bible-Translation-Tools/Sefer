@@ -2,7 +2,7 @@ import { createAlignedGroup } from "@sefer/editor";
 import { createFileRoute } from "@tanstack/solid-router";
 import Columns2 from "lucide-solid/icons/columns-2";
 import Combine from "lucide-solid/icons/combine";
-import { Show, createEffect, createSignal, onCleanup, untrack } from "solid-js";
+import { Show, createEffect, createSignal, untrack } from "solid-js";
 
 import { t } from "#app/i18n";
 import { languageName, languageTag } from "#app/language";
@@ -12,6 +12,7 @@ import { BookEditor } from "#app/ui/BookEditor";
 import { DelayedSpinner, IconButton, Resizable, cx } from "#app/ui/primitives";
 import { RecoveryBanner } from "#app/ui/recovery/RecoveryBanner";
 import { AlignedProvider } from "#app/ui/workspace/aligned";
+import { layout } from "#app/ui/workspace/layoutTweak";
 import { metadataOf, projectName } from "#app/ui/workspace/project";
 import { LanguageTab, ReferenceColumn } from "#app/ui/workspace/ReferenceColumn";
 import { Toolbar } from "#app/ui/workspace/Toolbar";
@@ -82,50 +83,6 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
     },
   );
 
-  /**
-   * How the reference text and the editor relate — a DESIGN TWEAK, scaffolding
-   * until the question is settled (`pnpm design:scaffolding` lists it):
-   * `split`, the reference column beside the editor card (what ships), or
-   * `panels`: everything straight on one white surface, the languages as TABS
-   * in one panel — the gateways read-only, the heart language last and the
-   * only one editable — which can split so the gateways get a panel of their
-   * own (`shell.referenceSplit`, remembered), and the project panel folds to
-   * a book button. Builds without the design surface are always `split`.
-   */
-  // `ownedWrite`: the panel calls `onChange` once as the tweak registers,
-  // which is while this page is being built.
-  const [layout, setLayoutSignal] = createSignal<"split" | "panels">("split", {
-    name: "refineLayout",
-    ownedWrite: true,
-  });
-  // SAFETY: under `__SEFER_DESIGN__` the design surface installs this handle
-  // (`src/dev/designSurface.ts`) with `register` and `set` of these shapes;
-  // `unknown` in the global's type only because platform may not import a dev tool.
-  const design = (__SEFER_DESIGN__ ? globalThis.__sefer?.design : undefined) as
-    | {
-        readonly register?: (registration: {
-          readonly namespace: string;
-          readonly tweaks: readonly {
-            readonly key: string;
-            readonly label: string;
-            readonly kind: "choice";
-            readonly options: readonly string[];
-          }[];
-          readonly onChange: (values: Readonly<Record<string, string>>) => void;
-        }) => () => void;
-        readonly set?: (key: string, value: string) => void;
-      }
-    | undefined;
-  if (__SEFER_DESIGN__) {
-    const release = design?.register?.({
-      namespace: "refine",
-      tweaks: [{ key: "layout", label: "Layout", kind: "choice", options: ["split", "panels"] }],
-      onChange: (values) => {
-        setLayoutSignal(values["refine.layout"] === "panels" ? "panels" : "split");
-      },
-    });
-    if (release !== undefined) onCleanup(release);
-  }
   /** The joined panel's heart-language tab is the one on show, not a gateway. */
   const [heartActive, setHeartActive] = createSignal(true, { name: "refineHeartActive" });
   /** The heart language: the project's own, by name and by tag. */

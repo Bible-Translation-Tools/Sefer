@@ -32,6 +32,7 @@ import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { Badge, Button, IconButton, Input, SegmentedControl } from "../primitives";
 import { bookName, testamentOf, type Testament } from "./books";
+import { layout } from "./layoutTweak";
 import { metadataOf, projectLanguage, projectName } from "./project";
 import { chapterOf, typedChapter } from "./typedPlace";
 
@@ -50,6 +51,11 @@ interface Chapter {
 
 export function ProjectSidebar() {
   const shell = useShell();
+  /**
+   * The `panels` layout (a design tweak): the project is in the app bar, both
+   * testaments are listed under their headings, and the search is always open.
+   */
+  const panels = (): boolean => layout() === "panels";
   const navigate = useNavigate();
   const [query, setQuery] = createSignal("", { name: "sidebarQuery" });
   const [searchOpen, setSearchOpen] = createSignal(false, { name: "sidebarSearchOpen" });
@@ -124,7 +130,8 @@ export function ProjectSidebar() {
   const shown = createMemo(
     (): readonly Row[] => {
       const found = search();
-      if (found === undefined) return rows().filter((row) => row.testament === testament());
+      if (found === undefined)
+        return panels() ? rows() : rows().filter((row) => row.testament === testament());
       return rows().filter((row) => found.books.has(row.id));
     },
     { name: "sidebarShown" },
@@ -271,7 +278,9 @@ export function ProjectSidebar() {
       class="flex h-full flex-col border-e border-sidebar-border bg-sidebar-surface"
       data-testid="sidebar"
     >
-      <ProjectControl />
+      <Show when={!panels() || shell.project() === undefined}>
+        <ProjectControl />
+      </Show>
 
       <Show
         when={shell.project()}
@@ -289,7 +298,25 @@ export function ProjectSidebar() {
       >
         {/* The search is an icon beside the testament switch; it opens the
             field below, and closes again from Escape or an empty blur. */}
-        <div class="flex flex-col gap-2 px-4 pb-2">
+        <Show when={panels()}>
+          {/* Always open, pinned above the list: the list scrolls under it. */}
+          <div class="px-4 pt-4 pb-2">
+            <Input
+              type="search"
+              data-testid="sidebar-search"
+              icon={<SearchIcon />}
+              aria-label={t("Search for book and chapter")}
+              placeholder={t("Search…")}
+              value={query()}
+              onInput={(event) => setQuery(event.currentTarget.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") setQuery("");
+                if (event.key === "Enter") takeSearch();
+              }}
+            />
+          </div>
+        </Show>
+        <div class={panels() ? "hidden" : "flex flex-col gap-2 px-4 pb-2"}>
           <div class="flex items-center gap-controls">
             <SegmentedControl
               label={t("Testament")}
@@ -348,9 +375,41 @@ export function ProjectSidebar() {
               </p>
             }
           >
-            <ul>
-              <For each={shown()}>{(row) => <BookRow row={row} />}</For>
-            </ul>
+            <Show
+              when={panels()}
+              fallback={
+                <ul>
+                  <For each={shown()}>{(row) => <BookRow row={row} />}</For>
+                </ul>
+              }
+            >
+              {/* Both testaments, each under its heading, 24px apart. */}
+              <div class="flex flex-col gap-6">
+                <For
+                  each={
+                    [
+                      { testament: "ot", label: t("Old Testament") },
+                      { testament: "nt", label: t("New Testament") },
+                    ] as const
+                  }
+                >
+                  {(section) => (
+                    <Show when={shown().some((row) => row.testament === section.testament)}>
+                      <section data-testid={`sidebar-testament-${section.testament}`}>
+                        <h3 class="flex h-12 items-center px-3 text-small font-semibold text-on-surface-secondary">
+                          {section.label}
+                        </h3>
+                        <ul>
+                          <For each={shown().filter((row) => row.testament === section.testament)}>
+                            {(row) => <BookRow row={row} />}
+                          </For>
+                        </ul>
+                      </section>
+                    </Show>
+                  )}
+                </For>
+              </div>
+            </Show>
           </Show>
           {/* Writer books this project does not have yet: the migration's
               own screen, filtered to this project (`/migrate?into=`). */}

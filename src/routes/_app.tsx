@@ -11,6 +11,7 @@ import { PageDoor, PageLeading, Resizable, Toaster } from "#app/ui/primitives";
 import { AppBar } from "#app/ui/workspace/AppBar";
 import { BackToEditor } from "#app/ui/workspace/BackToEditor";
 import { VersionTabs } from "#app/ui/workspace/ChangesHistorySidebar";
+import { useLayoutTweak } from "#app/ui/workspace/layoutTweak";
 import { usePanelToggleLeading } from "#app/ui/workspace/PanelToggle";
 import { ProjectSidebar } from "#app/ui/workspace/ProjectSidebar";
 import { useScreen } from "#app/ui/workspace/screen";
@@ -59,6 +60,7 @@ import { sidebarClaim } from "#app/ui/workspace/sidebarSlot";
 
 function Workspace() {
   const shell = useShell();
+  useLayoutTweak();
   const path = useRouterState({ select: (state) => state.location.pathname });
   // Never on `/`, `/projects` or `/migrate`. `/` is home: it forwards to the
   // last project, or draws `EmptyWorkspace` — a skeleton that draws its own
