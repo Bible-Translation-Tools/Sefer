@@ -969,6 +969,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
                 role={held.entry.role}
                 bookId={held.book}
                 clip={clip}
+                followControl={props.variant !== "panel"}
               />
             </div>
           )}

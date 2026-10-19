@@ -91,6 +91,8 @@ export interface ResourcePaneProps {
   readonly bookId: string;
   /** The chapter NUMBER the editor is clipped to, or `null`. */
   readonly clip: () => number | null;
+  /** `false`: no Follow button (Refine's language panels, a design tweak). */
+  readonly followControl?: boolean;
 }
 
 /** The pane the reference column shows for one resource, whatever it holds. */
@@ -116,6 +118,7 @@ export function ResourcePane(props: ResourcePaneProps) {
           role={props.role}
           bookId={props.bookId}
           clip={props.clip}
+          followControl={props.followControl}
         />
       ),
       tn: (handle) => <NotesPane resource={props.resource} handle={handle} />,

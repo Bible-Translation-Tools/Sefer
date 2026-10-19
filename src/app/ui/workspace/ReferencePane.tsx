@@ -110,6 +110,12 @@ export interface ReferencePaneProps {
    * Follow stays, as the one control in its place (Will, 2026-10-08).
    */
   readonly bare?: boolean;
+  /**
+   * `false`: no Follow button. Refine's language panels (a design tweak) have
+   * no scroll linkage to switch — scrolling either side moves only that side,
+   * and a click in the editor brings the pair here (the caret's reveal below).
+   */
+  readonly followControl?: boolean;
 }
 
 /** What the pane is showing, once the read has answered. */
@@ -528,15 +534,17 @@ export function ReferencePane(props: ReferencePaneProps) {
       <Show
         when={props.bare !== true}
         fallback={
-          <div class="flex justify-end">
-            <FollowToggle
-              testId={`follow-${props.resource.id}`}
-              following={following()}
-              stopLabel={t("Stop {title} following the book", { title: props.resource.title })}
-              startLabel={t("Let {title} follow the book", { title: props.resource.title })}
-              onToggle={() => setFollowing((on) => !on)}
-            />
-          </div>
+          <Show when={props.followControl !== false}>
+            <div class="flex justify-end">
+              <FollowToggle
+                testId={`follow-${props.resource.id}`}
+                following={following()}
+                stopLabel={t("Stop {title} following the book", { title: props.resource.title })}
+                startLabel={t("Let {title} follow the book", { title: props.resource.title })}
+                onToggle={() => setFollowing((on) => !on)}
+              />
+            </div>
+          </Show>
         }
       >
         <div class="flex items-center gap-2 border-b border-surface-border px-3 py-1.5">

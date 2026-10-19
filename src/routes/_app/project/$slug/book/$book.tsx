@@ -173,7 +173,12 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
                 // the gateways have a panel of their own beside the heart
                 // language. Each panel keeps its tabs' places by hiding the
                 // ones not on show rather than unmounting them.
-                <AlignedProvider value={aligned}>
+                //
+                // NO aligned group: each side scrolls on its own, and the
+                // gateways catch up when the reader clicks in the heart
+                // language — the caret's paired-verse reveal in each pane.
+                // Provided as `null`: none, said explicitly.
+                <AlignedProvider value={null}>
                   <div class="flex min-h-0 flex-1 gap-6">
                     {/* The project panel, folded: a book button that opens it
                         again, as it was. */}
