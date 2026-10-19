@@ -159,49 +159,51 @@ export function LanguageTab(props: {
   readonly testId?: string;
   readonly onSelect?: () => void;
 }) {
-  const [tab, setTab] = createSignal<HTMLButtonElement>();
+  // The label is two layers in one grid cell: an invisible copy of the full
+  // name, which gives the tab its natural width and shrinks when the strip is
+  // short of room, and the visible text over it. The name shows while the copy
+  // has room for all of it (`scrollWidth` is its whole width, `clientWidth`
+  // what it was given); otherwise the code.
   const [ghost, setGhost] = createSignal<HTMLSpanElement>();
-  const [badge, setBadge] = createSignal<HTMLSpanElement>();
   const [fits, setFits] = createSignal(true, { name: "languageTabFits" });
   createEffect(
-    () => ({ button: tab(), copy: ghost(), mark: badge(), name: props.name }),
-    ({ button, copy }) => {
-      if (button === undefined || copy === undefined) return;
+    () => ({ copy: ghost(), name: props.name }),
+    ({ copy }) => {
+      if (copy === undefined) return;
       const measure = (): void => {
-        const style = getComputedStyle(button);
-        const padding = Number.parseFloat(style.paddingInlineStart) * 2;
-        const gap = Number.parseFloat(style.columnGap) || 0;
-        const held = badge();
-        const taken = held === undefined ? 0 : held.offsetWidth + gap;
-        setFits(copy.offsetWidth <= button.clientWidth - padding - taken);
+        setFits(copy.scrollWidth <= copy.clientWidth);
       };
       const observer = new ResizeObserver(measure);
-      observer.observe(button);
+      observer.observe(copy);
       measure();
       return () => observer.disconnect();
     },
   );
   return (
     <button
-      ref={setTab}
       type="button"
       role="tab"
       aria-selected={props.active ? "true" : "false"}
       data-testid={props.testId}
       data-current={props.active ? "" : undefined}
       title={props.name}
-      class="relative -mb-px flex h-12 min-w-0 flex-1 cursor-pointer items-center justify-center gap-2 border-b-2 px-3 text-small font-semibold transition-colors data-current:border-brand data-current:text-brand not-data-current:border-transparent not-data-current:text-on-surface-primary not-data-current:hover:bg-surface-secondary"
+      class="-mb-px flex h-12 min-w-0 shrink cursor-pointer items-center gap-2 border-b-2 px-6 text-small font-semibold transition-colors data-current:border-brand data-current:text-brand not-data-current:border-transparent not-data-current:text-on-surface-primary not-data-current:hover:bg-surface-secondary"
       onClick={() => props.onSelect?.()}
     >
-      <span ref={setGhost} aria-hidden="true" class="invisible absolute whitespace-nowrap">
-        {props.name}
-      </span>
-      <span class="truncate">{fits() ? props.name : props.code}</span>
-      <Show when={props.refining === true}>
+      <span class="grid min-w-0">
         <span
-          ref={setBadge}
-          class="shrink-0 rounded-full bg-brand-light px-2 py-0.5 text-smallest font-medium text-brand"
+          ref={setGhost}
+          aria-hidden="true"
+          class="invisible col-start-1 row-start-1 min-w-0 overflow-hidden whitespace-nowrap"
         >
+          {props.name}
+        </span>
+        <span class="col-start-1 row-start-1 truncate text-center">
+          {fits() ? props.name : props.code}
+        </span>
+      </span>
+      <Show when={props.refining === true}>
+        <span class="shrink-0 rounded-full bg-brand-light px-2 py-0.5 text-smallest font-medium text-brand">
           {t("Refinement")}
         </span>
       </Show>
