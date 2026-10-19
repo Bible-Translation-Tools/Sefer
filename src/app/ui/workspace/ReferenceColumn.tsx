@@ -43,6 +43,7 @@ import Check from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronUp from "lucide-solid/icons/chevron-up";
 import Download from "lucide-solid/icons/download";
+import Minus from "lucide-solid/icons/minus";
 import PanelLeftClose from "lucide-solid/icons/panel-left-close";
 import Plus from "lucide-solid/icons/plus";
 import Trash from "lucide-solid/icons/trash-2";
@@ -864,20 +865,36 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     <h3 class="pt-3 text-small font-semibold text-on-surface-secondary">{headingProps.children}</h3>
   );
 
-  /** One row of the language list: what it is, and the one thing to do with it. */
+  /** One row of the language list, on one line: "Name (code)", then the one thing to do. */
   const ListRow = (rowProps: {
     readonly testId?: string;
     readonly name: string;
-    readonly detail?: string;
     readonly children: JSX.Element;
   }) => (
     <li
       data-testid={rowProps.testId}
       class="flex min-h-12 items-center gap-3 border-b border-surface-border py-1.5 text-small text-on-surface-primary"
     >
-      <RowText name={rowProps.name} detail={rowProps.detail} />
+      <span class="min-w-0 flex-1 truncate" title={rowProps.name}>
+        {rowProps.name}
+      </span>
       {rowProps.children}
     </li>
+  );
+
+  /** On the tabs or off them: one button that flips. */
+  const TabToggle = (toggleProps: { readonly inTabs: boolean; readonly onToggle: () => void }) => (
+    <Button
+      variant={toggleProps.inTabs ? "tertiary" : "secondary"}
+      aria-pressed={toggleProps.inTabs ? "true" : "false"}
+      disabled={busy()}
+      onClick={() => toggleProps.onToggle()}
+    >
+      <Show when={toggleProps.inTabs} fallback={<Plus aria-hidden="true" />}>
+        <Minus aria-hidden="true" />
+      </Show>
+      {toggleProps.inTabs ? t("Remove") : t("Add")}
+    </Button>
   );
 
   /**
@@ -892,8 +909,10 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       data-testid="language-list"
       class="scrollbar-padded flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pb-6"
     >
-      <ListHeading>{t("On this device")}</ListHeading>
-      <Show when={installed().length === 0}>
+      {/* Everything on this device, and the reader's other projects, as one
+          list: each is on this project's tabs or not. */}
+      <ListHeading>{t("Your languages")}</ListHeading>
+      <Show when={installed().length === 0 && otherProjects().length === 0}>
         <p class="py-3 text-small text-on-surface-tertiary">
           {t("No gateway languages yet. Download one below.")}
         </p>
@@ -904,55 +923,40 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
             <ListRow
               testId={`language-row-${resource.language ?? resource.id}`}
               name={nameOf(resource)}
-              detail={resource.title}
             >
               <Show
-                when={tabOf(resource)}
+                when={tabOf(resource)?.declared !== true}
                 fallback={
-                  <Button disabled={busy()} onClick={() => show(resource)}>
-                    <Plus aria-hidden="true" />
-                    {t("Add")}
-                  </Button>
+                  <span class="text-small text-on-surface-tertiary">{t("Project source")}</span>
                 }
               >
-                {(entry) => (
-                  <Show
-                    when={!entry().declared}
-                    fallback={
-                      <span class="text-small text-on-surface-tertiary">{t("Project source")}</span>
-                    }
-                  >
-                    <Button variant="tertiary" onClick={() => unpick(entry())}>
-                      <Trash aria-hidden="true" />
-                      {t("Remove")}
-                    </Button>
-                  </Show>
-                )}
+                <TabToggle
+                  inTabs={tabOf(resource) !== undefined}
+                  onToggle={() => {
+                    const entry = tabOf(resource);
+                    if (entry === undefined) show(resource);
+                    else unpick(entry);
+                  }}
+                />
               </Show>
             </ListRow>
           )}
         </For>
+        <For each={otherProjects()}>
+          {(row) => (
+            <ListRow
+              testId={`pick-${row.folder}`}
+              name={
+                row.languageTag === ""
+                  ? row.name
+                  : `${row.language || row.name} (${row.languageTag})`
+              }
+            >
+              <TabToggle inTabs={false} onToggle={() => showProject(row)} />
+            </ListRow>
+          )}
+        </For>
       </ul>
-
-      <Show when={otherProjects().length > 0}>
-        <ListHeading>{t("Your other projects")}</ListHeading>
-        <ul>
-          <For each={otherProjects()}>
-            {(row) => (
-              <ListRow
-                testId={`pick-${row.folder}`}
-                name={row.name}
-                detail={languageName(row.language) ?? row.language}
-              >
-                <Button disabled={busy()} onClick={() => showProject(row)}>
-                  <Plus aria-hidden="true" />
-                  {t("Add")}
-                </Button>
-              </ListRow>
-            )}
-          </For>
-        </ul>
-      </Show>
 
       <ListHeading>{t("Available to download")}</ListHeading>
       <Show
@@ -964,8 +968,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
             {(entry) => (
               <ListRow
                 testId={`pick-${entry.code}`}
-                name={entry.anglicizedName || entry.naturalName}
-                detail={entry.naturalName}
+                name={`${entry.anglicizedName || entry.naturalName} (${entry.code})`}
               >
                 <Button disabled={busy()} onClick={() => fetchText(entry)}>
                   <Download aria-hidden="true" />
@@ -996,7 +999,6 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
             <ListRow
               testId="reference-held-notes"
               name={`${languageName(resource.language) ?? resource.title} (${resource.language ?? ""})`}
-              detail={t("On this device")}
             >
               <Button variant="tertiary" onClick={() => removeNotes(resource)}>
                 <Trash aria-hidden="true" />
@@ -1010,7 +1012,6 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
             <ListRow
               testId={`pick-help-${help.repository}`}
               name={`${help.languageName || help.language} (${help.language})`}
-              detail={help.nationalName}
             >
               <Button
                 disabled={busy() || helpDownloads().has(help.repository)}
