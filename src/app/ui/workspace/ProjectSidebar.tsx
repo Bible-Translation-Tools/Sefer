@@ -33,7 +33,6 @@ import { useShell } from "../../ProjectContext";
 import { Badge, Button, IconButton, Input, SegmentedControl } from "../primitives";
 import { bookName, testamentOf, type Testament } from "./books";
 import { layout } from "./layoutTweak";
-import { PanelToggle } from "./PanelToggle";
 import { metadataOf, projectLanguage, projectName } from "./project";
 import { chapterOf, typedChapter } from "./typedPlace";
 
@@ -493,7 +492,7 @@ export function ProjectControl() {
   const choosing = (): boolean => path() === "/" || path().startsWith("/start");
 
   return (
-    <div class="flex items-center gap-controls px-4 pt-4 pb-2">
+    <div class="px-4 pt-4 pb-2">
       {/* With no project open the button is an invitation rather than a
         label: two lines of brand text and an arrow. Same destination. */}
       <Show
@@ -521,7 +520,7 @@ export function ProjectControl() {
           type="button"
           data-testid="sidebar-project"
           data-current={choosing() ? "" : undefined}
-          class="flex h-16 w-full min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-2xl border bg-surface-primary px-4 text-start transition-colors hover:bg-sidebar-surface-hover data-current:border-brand data-current:bg-brand-light not-data-current:border-surface-border"
+          class="flex h-16 w-full cursor-pointer items-center gap-2 rounded-2xl border bg-surface-primary px-4 text-start transition-colors hover:bg-sidebar-surface-hover data-current:border-brand data-current:bg-brand-light not-data-current:border-surface-border"
           onClick={() => void navigate({ to: "/projects" })}
         >
           <Show
@@ -552,11 +551,6 @@ export function ProjectControl() {
           </Show>
           <ChevronDown aria-hidden="true" class="size-5 shrink-0 text-on-surface-primary" />
         </button>
-      </Show>
-      {/* The panels layout (a design tweak): the panel's hide control, beside
-          the project it belongs to. */}
-      <Show when={layout() === "panels" && shell.project() !== undefined}>
-        <PanelToggle />
       </Show>
     </div>
   );
