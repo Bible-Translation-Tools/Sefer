@@ -24,7 +24,7 @@ import ChevronRight from "lucide-solid/icons/chevron-right";
 import Library from "lucide-solid/icons/library";
 import Plus from "lucide-solid/icons/plus";
 import SearchIcon from "lucide-solid/icons/search";
-import { For, Show, createMemo, createSignal } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 
 import { tocViewOf } from "#core/galley";
 
@@ -208,6 +208,33 @@ export function ProjectSidebar() {
     return held?.bookId === book.id ? held.at : undefined;
   };
 
+  /**
+   * Keeps the open book's current chapter in sight in the list: when the
+   * editor opens a book, moves to a chapter, or the panel comes back. The
+   * tile if the book is unfolded, its row otherwise; `nearest`, so nothing
+   * moves while it is already on screen.
+   */
+  const [list, setList] = createSignal<HTMLElement>();
+  createEffect(
+    () => ({
+      nav: list(),
+      book: shell.focused()?.id,
+      chapter: currentChapter(),
+      showing: shell.sidebarShowing(),
+      all: panels(),
+    }),
+    ({ nav, book, showing }) => {
+      if (nav === undefined || book === undefined || !showing) return;
+      // After the frame that draws the unfolded book's tiles.
+      requestAnimationFrame(() => {
+        const target =
+          nav.querySelector<HTMLElement>(`[data-book="${book}"] ~ ol [data-current]`) ??
+          nav.querySelector<HTMLElement>(`[data-book="${book}"]`);
+        target?.scrollIntoView({ block: "nearest" });
+      });
+    },
+  );
+
   const BookRow = (rowProps: { readonly row: Row }) => {
     const focused = (): boolean => shell.focused()?.id === rowProps.row.id;
     const open = (): boolean => isOpen(rowProps.row.id);
@@ -365,7 +392,7 @@ export function ProjectSidebar() {
           </Show>
         </div>
 
-        <nav aria-label={t("Books")} class="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+        <nav ref={setList} aria-label={t("Books")} class="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
           <Show
             when={shown().length > 0}
             fallback={
