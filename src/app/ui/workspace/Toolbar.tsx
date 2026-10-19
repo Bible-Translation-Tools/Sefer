@@ -151,7 +151,9 @@ export function Toolbar(props: {
               data-testid="book-fab"
               aria-label={t("Show the books")}
               title={t("Show the books")}
-              class="flex size-14 shrink-0 cursor-pointer items-center justify-center rounded-2xl bg-surface-primary text-on-surface-primary shadow-medium transition-colors hover:bg-surface-secondary"
+              // Floating, 24px from the window's left edge and 24px below the
+              // app bar (72px): not part of the title's row.
+              class="fixed start-6 top-24 z-30 flex size-14 cursor-pointer items-center justify-center rounded-2xl bg-surface-primary text-on-surface-primary shadow-medium transition-colors hover:bg-surface-secondary"
               onClick={() => shell.setSidebarOpen(true)}
             >
               <BookIcon aria-hidden="true" class="size-6" />
