@@ -226,33 +226,36 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
                           class="px-3"
                           label={t("Resize the gateway languages panel")}
                         />
-                        <Resizable.Panel class="flex min-w-0 flex-col gap-3">
-                          <div
-                            role="tablist"
-                            aria-label={t("Languages")}
-                            class="flex shrink-0 items-center gap-controls border-b border-surface-border"
-                          >
-                            <div class="flex min-w-0 flex-1 items-end">
-                              <LanguageTab
-                                testId="language-tab-heart"
-                                name={heart().name}
-                                code={heart().code}
-                                refining
-                                active
+                        <Resizable.Panel class="flex min-w-0 flex-col">
+                          {/* At most 800px, centred, as the gateways' panel is. */}
+                          <div class="mx-auto flex min-h-0 w-full max-w-[800px] flex-1 flex-col gap-3">
+                            <div
+                              role="tablist"
+                              aria-label={t("Languages")}
+                              class="flex shrink-0 items-center gap-controls border-b border-surface-border"
+                            >
+                              <div class="flex min-w-0 flex-1 items-end">
+                                <LanguageTab
+                                  testId="language-tab-heart"
+                                  name={heart().name}
+                                  code={heart().code}
+                                  refining
+                                  active
+                                />
+                              </div>
+                              <IconButton
+                                variant="quiet"
+                                data-testid="refine-join"
+                                label={t("Join the gateway languages back into this panel")}
+                                icon={<Combine />}
+                                onClick={() => shell.setReferenceSplit(false)}
                               />
                             </div>
-                            <IconButton
-                              variant="quiet"
-                              data-testid="refine-join"
-                              label={t("Join the gateway languages back into this panel")}
-                              icon={<Combine />}
-                              onClick={() => shell.setReferenceSplit(false)}
-                            />
-                          </div>
-                          <div class="flex min-h-0 flex-1 flex-col">
-                            <Show when={book().id} keyed>
-                              <BookEditor book={book()} bare />
-                            </Show>
+                            <div class="flex min-h-0 flex-1 flex-col">
+                              <Show when={book().id} keyed>
+                                <BookEditor book={book()} bare />
+                              </Show>
+                            </div>
                           </div>
                         </Resizable.Panel>
                       </Resizable.Root>
