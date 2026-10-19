@@ -163,7 +163,7 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
       >
         {(book) => (
           <>
-            <Toolbar />
+            <Toolbar usfm={panels()} />
 
             <Show
               when={layout() === "split"}

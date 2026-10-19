@@ -41,14 +41,20 @@ import { Show, createEffect, createSignal } from "solid-js";
 import { findCommand, runCommand } from "../../commands";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import { Card, IconButton, Input, Popover } from "../primitives";
+import { Card, IconButton, Input, Popover, Switch } from "../primitives";
 import { bookName } from "./books";
 import { PanelToggle } from "./PanelToggle";
 import { metadataOf, projectName } from "./project";
 
 /** The two segments, as literal strings so Tailwind and the reader agree. */
 
-export function Toolbar() {
+export function Toolbar(props: {
+  /**
+   * The USFM switch, here rather than in the editor's location bar: Refine's
+   * language panels draw no location bar (a design tweak).
+   */
+  readonly usfm?: boolean;
+}) {
   const navigate = useNavigate();
   const [query, setQuery] = createSignal("", { name: "toolbarQuery" });
   const [menuOpen, setMenuOpen] = createSignal(false, { name: "toolbarMenu" });
@@ -140,6 +146,14 @@ export function Toolbar() {
       </div>
 
       <Card class="ms-auto flex items-center gap-controls p-1.5" padded={false}>
+        <Show when={props.usfm === true}>
+          <Switch
+            class="px-3"
+            label={t("USFM")}
+            checked={shell.mode() === "usfm"}
+            onChange={(on) => shell.setMode(on ? "usfm" : "default")}
+          />
+        </Show>
         <Input
           type="search"
           data-testid="toolbar-search"

@@ -31,7 +31,7 @@ import {
 } from "@sefer/editor";
 import type { SourceStamp } from "@sefer/text/source";
 import { Effect, Fiber, Stream } from "effect";
-import { createEffect, createRenderEffect, createSignal, untrack } from "solid-js";
+import { Show, createEffect, createRenderEffect, createSignal, untrack } from "solid-js";
 
 import { stale } from "#core/findings/finding";
 
@@ -50,7 +50,10 @@ import "@sefer/editor/editor.css";
 
 export interface BookEditorProps {
   readonly book: EditorBook;
-  /** Straight on the page, no card: Refine's language panels (a design tweak). */
+  /**
+   * Straight on the page, with no card and no location bar: Refine's language
+   * panels (a design tweak), where the USFM switch is in the toolbar instead.
+   */
   readonly bare?: boolean;
 }
 
@@ -304,7 +307,9 @@ export function BookEditor(props: BookEditorProps) {
       data-mode={shell.mode()}
       data-revision={(stamp() ?? props.book.source().stamp).revision}
     >
-      <LocationBar ordinal={atTop()} />
+      <Show when={props.bare !== true}>
+        <LocationBar ordinal={atTop()} />
+      </Show>
       {/* The PROJECT's direction, not the application's. A translator working
           in Arabic reads Sefer's own chrome in whatever interface language
           they chose and their scripture right-to-left; the two are separate
