@@ -201,7 +201,7 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
                               aria-label={t("Languages")}
                               class="flex shrink-0 items-center gap-controls border-b border-surface-border"
                             >
-                              <div class="flex min-w-0 flex-1 items-end">
+                              <div class="flex min-w-0 items-end">
                                 <LanguageTab
                                   testId="language-tab-heart"
                                   name={heart().name}

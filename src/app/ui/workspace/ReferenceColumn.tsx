@@ -1089,7 +1089,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
             aria-label={t("Languages")}
             class="flex shrink-0 items-center gap-controls border-b border-surface-border"
           >
-            <div class="flex min-w-0 flex-1 items-end">
+            <div class="flex min-w-0 items-end">
               <For each={entries()}>
                 {(entry) => (
                   <LanguageTab
