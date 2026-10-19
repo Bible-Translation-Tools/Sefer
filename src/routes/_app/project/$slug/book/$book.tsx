@@ -95,6 +95,15 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
     };
   };
   const panels = (): boolean => layout() === "panels";
+  /**
+   * The panels layout's measure, shared by the toolbar and the panels under it
+   * so their edges line up: one 800px column joined; split, 1624px for the two
+   * panels and the 24px handle between them, shared as the handle sets.
+   */
+  const measure = (): string | undefined =>
+    panels()
+      ? cx("mx-auto w-full", shell.referenceSplit() ? "max-w-[1624px]" : "max-w-[800px]")
+      : undefined;
 
   return (
     <main
@@ -119,7 +128,9 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
       >
         {(book) => (
           <>
-            <Toolbar usfm={panels()} bookFab={panels()} />
+            <div class={measure()}>
+              <Toolbar usfm={panels()} bookFab={panels()} />
+            </div>
 
             <Show
               when={layout() === "split"}
@@ -135,7 +146,7 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
                 // language — the caret's paired-verse reveal in each pane.
                 // Provided as `null`: none, said explicitly.
                 <AlignedProvider value={null}>
-                  <div class="flex min-h-0 flex-1 gap-6">
+                  <div class={cx("flex min-h-0 flex-1 gap-6", measure())}>
                     <Show
                       when={shell.referenceSplit()}
                       fallback={
@@ -184,8 +195,7 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
                           label={t("Resize the gateway languages panel")}
                         />
                         <Resizable.Panel class="flex min-w-0 flex-col">
-                          {/* At most 800px, centred, as the gateways' panel is. */}
-                          <div class="mx-auto flex min-h-0 w-full max-w-[800px] flex-1 flex-col gap-3">
+                          <div class="flex min-h-0 flex-1 flex-col gap-3">
                             <div
                               role="tablist"
                               aria-label={t("Languages")}

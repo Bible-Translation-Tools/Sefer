@@ -1040,7 +1040,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       aria-label={t("Reference texts")}
       class={
         props.variant === "panel"
-          ? "mx-auto flex h-full min-h-0 w-full max-w-[800px] min-w-0 flex-1 flex-col gap-3"
+          ? "flex h-full min-h-0 min-w-0 flex-1 flex-col gap-3"
           : "flex h-full min-w-0 flex-col gap-3 py-4 pe-[7.5px]"
       }
       data-references={entries().length}
