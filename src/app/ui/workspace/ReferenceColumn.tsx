@@ -862,7 +862,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
 
   /** A section heading in the language list. */
   const ListHeading = (headingProps: { readonly children: JSX.Element }) => (
-    <h3 class="pt-3 text-small font-semibold text-on-surface-secondary">{headingProps.children}</h3>
+    <h3 class="py-3 text-h4 font-semibold text-on-surface-primary">{headingProps.children}</h3>
   );
 
   /** One row of the language list, on one line: "Name (code)", then the one thing to do. */
@@ -873,7 +873,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
   }) => (
     <li
       data-testid={rowProps.testId}
-      class="flex min-h-12 items-center gap-3 border-b border-surface-border py-1.5 text-small text-on-surface-primary"
+      class="flex min-h-12 items-center gap-3 py-1.5 text-small text-on-surface-primary"
     >
       <span class="min-w-0 flex-1 truncate" title={rowProps.name}>
         {rowProps.name}
@@ -907,123 +907,131 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
   const LanguageList = () => (
     <div
       data-testid="language-list"
-      class="scrollbar-padded flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pb-6"
+      class="scrollbar-padded flex min-h-0 flex-1 flex-col gap-12 overflow-y-auto pb-6"
     >
-      {/* Everything on this device, and the reader's other projects, as one
+      <section class="flex flex-col">
+        {/* Everything on this device, and the reader's other projects, as one
           list: each is on this project's tabs or not. */}
-      <ListHeading>{t("Your languages")}</ListHeading>
-      <Show when={installed().length === 0 && otherProjects().length === 0}>
-        <p class="py-3 text-small text-on-surface-tertiary">
-          {t("No gateway languages yet. Download one below.")}
-        </p>
-      </Show>
-      <ul>
-        <For each={installed()}>
-          {(resource) => (
-            <ListRow
-              testId={`language-row-${resource.language ?? resource.id}`}
-              name={nameOf(resource)}
-            >
-              <Show
-                when={tabOf(resource)?.declared !== true}
-                fallback={
-                  <span class="text-small text-on-surface-tertiary">{t("Project source")}</span>
+        <ListHeading>{t("Your languages")}</ListHeading>
+        <Show when={installed().length === 0 && otherProjects().length === 0}>
+          <p class="py-3 text-small text-on-surface-tertiary">
+            {t("No gateway languages yet. Download one below.")}
+          </p>
+        </Show>
+        <ul>
+          <For each={installed()}>
+            {(resource) => (
+              <ListRow
+                testId={`language-row-${resource.language ?? resource.id}`}
+                name={nameOf(resource)}
+              >
+                <Show
+                  when={tabOf(resource)?.declared !== true}
+                  fallback={
+                    <span class="text-small text-on-surface-tertiary">{t("Project source")}</span>
+                  }
+                >
+                  <TabToggle
+                    inTabs={tabOf(resource) !== undefined}
+                    onToggle={() => {
+                      const entry = tabOf(resource);
+                      if (entry === undefined) show(resource);
+                      else unpick(entry);
+                    }}
+                  />
+                </Show>
+              </ListRow>
+            )}
+          </For>
+          <For each={otherProjects()}>
+            {(row) => (
+              <ListRow
+                testId={`pick-${row.folder}`}
+                name={
+                  row.languageTag === ""
+                    ? row.name
+                    : `${row.language || row.name} (${row.languageTag})`
                 }
               >
-                <TabToggle
-                  inTabs={tabOf(resource) !== undefined}
-                  onToggle={() => {
-                    const entry = tabOf(resource);
-                    if (entry === undefined) show(resource);
-                    else unpick(entry);
-                  }}
-                />
-              </Show>
-            </ListRow>
-          )}
-        </For>
-        <For each={otherProjects()}>
-          {(row) => (
-            <ListRow
-              testId={`pick-${row.folder}`}
-              name={
-                row.languageTag === ""
-                  ? row.name
-                  : `${row.language || row.name} (${row.languageTag})`
-              }
-            >
-              <TabToggle inTabs={false} onToggle={() => showProject(row)} />
-            </ListRow>
-          )}
-        </For>
-      </ul>
+                <TabToggle inTabs={false} onToggle={() => showProject(row)} />
+              </ListRow>
+            )}
+          </For>
+        </ul>
+      </section>
 
-      <ListHeading>{t("Available to download")}</ListHeading>
-      <Show
-        when={gateways() !== undefined}
-        fallback={<p class="py-3 text-small text-on-surface-tertiary">{t("Loading the list…")}</p>}
-      >
+      <section class="flex flex-col">
+        <ListHeading>{t("Available to download")}</ListHeading>
+        <Show
+          when={gateways() !== undefined}
+          fallback={
+            <p class="py-3 text-small text-on-surface-tertiary">{t("Loading the list…")}</p>
+          }
+        >
+          <ul>
+            <For each={downloadable()}>
+              {(entry) => (
+                <ListRow
+                  testId={`pick-${entry.code}`}
+                  name={`${entry.anglicizedName || entry.naturalName} (${entry.code})`}
+                >
+                  <Button disabled={busy()} onClick={() => fetchText(entry)}>
+                    <Download aria-hidden="true" />
+                    {t("Download")}
+                  </Button>
+                </ListRow>
+              )}
+            </For>
+          </ul>
+        </Show>
+      </section>
+
+      <section class="flex flex-col">
+        <ListHeading>{t("Translation Notes")}</ListHeading>
+        <Show when={notesFailure()}>
+          {(failure) => (
+            <p role="status" class="py-3 text-small text-on-surface-tertiary">
+              {failure().offline
+                ? t("You are offline. Open this list again to retry.")
+                : t("Could not read the list. Open this list again to retry.")}
+            </p>
+          )}
+        </Show>
+        <Show when={notes()?.state === "loading"}>
+          <p class="py-3 text-small text-on-surface-tertiary">{t("Loading the list…")}</p>
+        </Show>
         <ul>
-          <For each={downloadable()}>
-            {(entry) => (
+          <For each={heldHelps()}>
+            {(resource) => (
               <ListRow
-                testId={`pick-${entry.code}`}
-                name={`${entry.anglicizedName || entry.naturalName} (${entry.code})`}
+                testId="reference-held-notes"
+                name={`${languageName(resource.language) ?? resource.title} (${resource.language ?? ""})`}
               >
-                <Button disabled={busy()} onClick={() => fetchText(entry)}>
+                <Button variant="tertiary" onClick={() => removeNotes(resource)}>
+                  <Trash aria-hidden="true" />
+                  {t("Remove from device")}
+                </Button>
+              </ListRow>
+            )}
+          </For>
+          <For each={helps()}>
+            {(help) => (
+              <ListRow
+                testId={`pick-help-${help.repository}`}
+                name={`${help.languageName || help.language} (${help.language})`}
+              >
+                <Button
+                  disabled={busy() || helpDownloads().has(help.repository)}
+                  onClick={() => fetchHelp(help)}
+                >
                   <Download aria-hidden="true" />
-                  {t("Download")}
+                  {helpDownloads().has(help.repository) ? t("Downloading…") : t("Download")}
                 </Button>
               </ListRow>
             )}
           </For>
         </ul>
-      </Show>
-
-      <ListHeading>{t("Translation Notes")}</ListHeading>
-      <Show when={notesFailure()}>
-        {(failure) => (
-          <p role="status" class="py-3 text-small text-on-surface-tertiary">
-            {failure().offline
-              ? t("You are offline. Open this list again to retry.")
-              : t("Could not read the list. Open this list again to retry.")}
-          </p>
-        )}
-      </Show>
-      <Show when={notes()?.state === "loading"}>
-        <p class="py-3 text-small text-on-surface-tertiary">{t("Loading the list…")}</p>
-      </Show>
-      <ul>
-        <For each={heldHelps()}>
-          {(resource) => (
-            <ListRow
-              testId="reference-held-notes"
-              name={`${languageName(resource.language) ?? resource.title} (${resource.language ?? ""})`}
-            >
-              <Button variant="tertiary" onClick={() => removeNotes(resource)}>
-                <Trash aria-hidden="true" />
-                {t("Remove from device")}
-              </Button>
-            </ListRow>
-          )}
-        </For>
-        <For each={helps()}>
-          {(help) => (
-            <ListRow
-              testId={`pick-help-${help.repository}`}
-              name={`${help.languageName || help.language} (${help.language})`}
-            >
-              <Button
-                disabled={busy() || helpDownloads().has(help.repository)}
-                onClick={() => fetchHelp(help)}
-              >
-                <Download aria-hidden="true" />
-                {helpDownloads().has(help.repository) ? t("Downloading…") : t("Download")}
-              </Button>
-            </ListRow>
-          )}
-        </For>
-      </ul>
+      </section>
     </div>
   );
 
