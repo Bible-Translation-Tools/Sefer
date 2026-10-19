@@ -32,7 +32,6 @@
 import { useNavigate } from "@tanstack/solid-router";
 import ArrowLeftRight from "lucide-solid/icons/arrow-left-right";
 import Bell from "lucide-solid/icons/bell";
-import BookIcon from "lucide-solid/icons/book";
 import MoreVertical from "lucide-solid/icons/more-vertical";
 import Redo2 from "lucide-solid/icons/redo-2";
 import SearchIcon from "lucide-solid/icons/search";
@@ -56,10 +55,10 @@ export function Toolbar(props: {
    */
   readonly usfm?: boolean;
   /**
-   * With the project panel hidden, a book button in the toggle's place opens
-   * it again (Refine's language panels, a design tweak).
+   * `false`: no show/hide here — the panels layout (a design tweak) keeps it
+   * in the workspace's own gutter (`PanelGutter`).
    */
-  readonly bookFab?: boolean;
+  readonly panelToggle?: boolean;
 }) {
   const navigate = useNavigate();
   const [query, setQuery] = createSignal("", { name: "toolbarQuery" });
@@ -142,23 +141,8 @@ export function Toolbar(props: {
       {/* The project panel's show/hide, then the title: the toggle sits on
           the side nearest the panel it opens and closes. */}
       <div class="flex min-w-0 shrink items-center gap-2">
-        {/* With `bookFab` the hide control is beside the panel's own search,
-            and this is only the way back once the panel is hidden. */}
-        <Show when={props.bookFab === true} fallback={<PanelToggle />}>
-          <Show when={!shell.sidebarShowing()}>
-            <button
-              type="button"
-              data-testid="book-fab"
-              aria-label={t("Show the books")}
-              title={t("Show the books")}
-              // Floating, 24px from the window's left edge and 24px below the
-              // app bar (72px): not part of the title's row.
-              class="fixed start-6 top-24 z-30 flex size-14 cursor-pointer items-center justify-center rounded-2xl bg-surface-primary text-on-surface-primary shadow-medium transition-colors hover:bg-surface-secondary"
-              onClick={() => shell.setSidebarOpen(true)}
-            >
-              <BookIcon aria-hidden="true" class="size-6" />
-            </button>
-          </Show>
+        <Show when={props.panelToggle !== false}>
+          <PanelToggle />
         </Show>
         <strong
           class="min-w-0 truncate text-h4 font-semibold text-on-surface-primary"

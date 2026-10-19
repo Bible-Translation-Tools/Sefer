@@ -13,7 +13,6 @@ import { DelayedSpinner, IconButton, Resizable, cx } from "#app/ui/primitives";
 import { RecoveryBanner } from "#app/ui/recovery/RecoveryBanner";
 import { AlignedProvider } from "#app/ui/workspace/aligned";
 import { layout } from "#app/ui/workspace/layoutTweak";
-import { PanelToggle } from "#app/ui/workspace/PanelToggle";
 import { metadataOf, projectName } from "#app/ui/workspace/project";
 import { LanguageTab, ReferenceColumn } from "#app/ui/workspace/ReferenceColumn";
 import { Toolbar } from "#app/ui/workspace/Toolbar";
@@ -108,21 +107,9 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
 
   return (
     <main
-      class={cx(
-        "flex h-full min-h-0 min-w-0 flex-col gap-3 p-6",
-        panels() && "relative bg-surface-primary",
-        panels() && shell.sidebarShowing() && "ps-12",
-      )}
+      class={cx("flex h-full min-h-0 min-w-0 flex-col gap-3 p-6", panels() && "bg-surface-primary")}
       data-refine={layout()}
     >
-      {/* The panels layout (a design tweak): the project panel's hide control
-          in a 48px gutter of its own between the panel and the page, outside
-          both. Hidden with the panel; the book button brings it back. */}
-      <Show when={panels() && shell.sidebarShowing()}>
-        <div class="absolute start-0 top-4 flex w-12 justify-center">
-          <PanelToggle />
-        </div>
-      </Show>
       {/* Above everything, and on THIS route as well as the project page:
           unsaved work found on open is the first thing to answer, and opening
           a project now lands on the book rather than on the census, so a
@@ -142,7 +129,7 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
         {(book) => (
           <>
             <div class={measure()}>
-              <Toolbar usfm={panels()} bookFab={panels()} />
+              <Toolbar usfm={panels()} panelToggle={!panels()} />
             </div>
 
             <Show

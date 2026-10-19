@@ -7,12 +7,12 @@ import { readyShell, useShell, useShellState } from "#app/ProjectContext";
 import { SIDEBAR_WIDTH } from "#app/settings";
 import { TourOutlet } from "#app/tour/TourOutlet";
 import { CommandPalette } from "#app/ui/CommandPalette";
-import { PageDoor, PageLeading, Resizable, Toaster } from "#app/ui/primitives";
+import { PageDoor, PageLeading, Resizable, Toaster, cx } from "#app/ui/primitives";
 import { AppBar } from "#app/ui/workspace/AppBar";
 import { BackToEditor } from "#app/ui/workspace/BackToEditor";
 import { VersionTabs } from "#app/ui/workspace/ChangesHistorySidebar";
-import { useLayoutTweak } from "#app/ui/workspace/layoutTweak";
-import { usePanelToggleLeading } from "#app/ui/workspace/PanelToggle";
+import { layout, useLayoutTweak } from "#app/ui/workspace/layoutTweak";
+import { PanelGutter, usePanelToggleLeading } from "#app/ui/workspace/PanelToggle";
 import { ProjectSidebar } from "#app/ui/workspace/ProjectSidebar";
 import { useScreen } from "#app/ui/workspace/screen";
 import { sidebarClaim } from "#app/ui/workspace/sidebarSlot";
@@ -124,13 +124,24 @@ function Workspace() {
       {/* The `!` is load-bearing: `Resizable.Panel` writes its share as an
           inline `flex-basis`, and with the sidebar hidden the routed content
           has to take the whole row back. */}
-      <Resizable.Panel class={showing() ? "min-w-0" : "min-w-0 [flex-basis:100%]!"}>
+      <Resizable.Panel
+        class={showing() ? "relative min-w-0" : "relative min-w-0 [flex-basis:100%]!"}
+      >
+        <PanelGutter showing={showing()} />
         {/* The panel toggle for project screens without the editor's
             toolbar leads each screen's page header, inline with its title,
             and the way back to the book ends it (`BackToEditor`). */}
         <PageLeading value={panelToggle}>
           <PageDoor value={() => <BackToEditor />}>
-            <div class="flex h-full min-w-0 flex-col">
+            <div
+              class={cx(
+                "flex h-full min-w-0 flex-col",
+                // The panels layout's gutter for the panel's toggle.
+                layout() === "panels" && showing() && shell.project() !== undefined && "ps-12",
+                // …on the panels layout's one white surface.
+                layout() === "panels" && "bg-surface-primary",
+              )}
+            >
               <Show when={pageTabs()}>
                 {(active) => (
                   <div class="shrink-0 border-b border-surface-border px-4">
