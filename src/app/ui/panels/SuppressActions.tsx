@@ -11,115 +11,30 @@
  * Each says so in a toast with Undo.
  */
 
-import { Effect } from "effect";
 import CheckCheck from "lucide-solid/icons/check-check";
 import Ellipsis from "lucide-solid/icons/ellipsis";
 import { Show } from "solid-js";
 
 import type { Finding } from "#core/findings/finding";
-import { SOUS_SETTINGS } from "#core/galley";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import { shellKeys } from "../../settings";
-import { checkSwitchOf, withSetting } from "../../sousSettings";
-import { Button, IconButton, Menu, MenuItem, toasts } from "../primitives";
-
-/** Long enough to recognise a word pair; a whole verse quoted in a menu is noise. */
-const QUOTE_MAX = 32;
-
-/** The file could not be read when the project opened, so nothing is saved over it. */
-const unsaved = (): void => {
-  toasts.error({
-    title: t("Could not save that"),
-    message: t(
-      "This project's list of findings marked fine could not be read, so Sefer leaves it alone rather than replace it.",
-    ),
-  });
-};
+import { checkSwitchOf } from "../../sousSettings";
+import {
+  allow,
+  bringBack,
+  checkLabel,
+  fineHere,
+  flaggedText,
+  turnOff,
+} from "../../suppressAnswers";
+import { Button, IconButton, Menu, MenuItem } from "../primitives";
 
 export function SuppressActions(props: { readonly finding: Finding }) {
   const shell = useShell();
-  const services = shell.services;
 
-  /** The flagged text, from the book as it is now; quoted in "Always allow". */
-  const flagged = (): string => {
-    const text = shell.project()?.book(props.finding.bookId)?.source().text ?? "";
-    const site = text.slice(props.finding.from, props.finding.to).trim();
-    return site.length > QUOTE_MAX ? `${site.slice(0, QUOTE_MAX)}…` : site;
-  };
-
-  const check = (): string => SOUS_SETTINGS[checkSwitchOf(props.finding.code) ?? "presence"].label;
-
-  const fineHere = (): void => {
-    const id = props.finding.suppression?.here;
-    if (id === undefined) return;
-    void shell.suppress(props.finding, "here").then((saved) =>
-      !saved
-        ? unsaved()
-        : toasts.info({
-            title: t("Marked fine here"),
-            message: t("Hidden on this device. It comes back if this text changes."),
-            action: { label: t("Undo"), onPress: () => void shell.unsuppress(id) },
-          }),
-    );
-  };
-
-  const allow = (): void => {
-    const id = props.finding.suppression?.everywhere;
-    if (id === undefined) return;
-    const quoted = flagged();
-    void shell.suppress(props.finding, "everywhere").then((saved) =>
-      !saved
-        ? unsaved()
-        : toasts.info({
-            title: t("Always allowing “{text}”", { text: quoted }),
-            message: t("In this project, on this device."),
-            action: { label: t("Undo"), onPress: () => void shell.unsuppress(id) },
-          }),
-    );
-  };
-
-  const turnOff = (): void => {
-    const setting = checkSwitchOf(props.finding.code);
-    if (setting === undefined) return;
-    const key = shellKeys(services.settings).sousSettings;
-    const before = services.settings.get(key);
-    const label = SOUS_SETTINGS[setting].label;
-    void services.run(
-      Effect.ignore(services.settings.set(key, withSetting(before, setting, false))),
-    );
-    toasts.info({
-      title: t("Turned off “{check}”", { check: label }),
-      message: t("For every project. Turn it back on in the proofreading settings."),
-      action: {
-        label: t("Undo"),
-        onPress: () => void services.run(Effect.ignore(services.settings.set(key, before))),
-      },
-    });
-  };
-
-  const bringBack = (): void => {
-    const keys = props.finding.suppression;
-    const rung = shell.suppressedBy(props.finding);
-    if (keys === undefined || rung === undefined) return;
-    // Both rungs: one hidden here AND allowed everywhere comes back only when
-    // neither holds it.
-    const ids = [keys.here, ...(keys.everywhere === undefined ? [] : [keys.everywhere])];
-    void ids
-      .reduce<Promise<boolean>>(
-        (done, id) => done.then((ok) => (ok ? shell.unsuppress(id) : false)),
-        Promise.resolve(true),
-      )
-      .then((saved) =>
-        !saved
-          ? unsaved()
-          : toasts.info({
-              title: rung === "here" ? t("Shown again") : t("No longer always allowed"),
-              action: { label: t("Undo"), onPress: () => void shell.suppress(props.finding, rung) },
-            }),
-      );
-  };
+  const flagged = (): string => flaggedText(shell, props.finding);
+  const check = (): string => checkLabel(props.finding) ?? "";
 
   /** On a finding the reader already hid: one door back, saying what it undoes. */
   const hidden = () => shell.suppressedBy(props.finding);
@@ -136,7 +51,7 @@ export function SuppressActions(props: { readonly finding: Finding }) {
               ? t("Allowed everywhere in this project: bringing it back shows every one.")
               : t("Marked fine here.")
           }
-          onClick={bringBack}
+          onClick={() => bringBack(shell, props.finding)}
         >
           {hidden() === "everywhere" ? t("Stop allowing") : t("Show again")}
         </Button>
@@ -151,7 +66,7 @@ export function SuppressActions(props: { readonly finding: Finding }) {
               icon={<CheckCheck />}
               data-tour="fine-here"
               title={t("Hide this one. It comes back if this text changes.")}
-              onClick={fineHere}
+              onClick={() => fineHere(shell, props.finding)}
             >
               {t("Fine here")}
             </Button>
@@ -175,7 +90,10 @@ export function SuppressActions(props: { readonly finding: Finding }) {
                 }
               >
                 <Show when={keys().everywhere !== undefined}>
-                  <MenuItem onSelect={allow}>
+                  <MenuItem
+                    onSelect={() => allow(shell, props.finding)}
+                    data-testid="suppress-allow"
+                  >
                     <span class="flex flex-col gap-0.5">
                       <span>{t("Always allow “{text}”", { text: flagged() })}</span>
                       <span class="text-smallest font-normal text-on-surface-tertiary">
@@ -190,7 +108,10 @@ export function SuppressActions(props: { readonly finding: Finding }) {
                   </MenuItem>
                 </Show>
                 <Show when={checkSwitchOf(props.finding.code) !== undefined}>
-                  <MenuItem onSelect={turnOff}>
+                  <MenuItem
+                    onSelect={() => turnOff(shell, props.finding)}
+                    data-testid="suppress-turn-off"
+                  >
                     <span class="flex flex-col gap-0.5">
                       <span>{t("Turn off “{check}”", { check: check() })}</span>
                       <span class="text-smallest font-normal text-on-surface-tertiary">

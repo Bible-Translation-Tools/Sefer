@@ -651,20 +651,21 @@ export function FindingsPanel() {
             <span class="text-small text-on-surface-tertiary" data-findings-count={summary().shown}>
               {t("{shown} of {total} shown", { shown: summary().shown, total: summary().total })}
             </span>
-            <Show when={hiddenCount() > 0 || showingSuppressed()}>
-              <Button
-                size="sm"
-                variant={showingSuppressed() ? "secondary" : "tertiary"}
-                aria-pressed={showingSuppressed() ? "true" : "false"}
-                data-findings-hidden={hiddenCount()}
-                title={t("Findings you marked fine, on this device")}
-                onClick={() => setShowingSuppressed((on) => !on)}
-              >
-                {showingSuppressed()
-                  ? t("Back to findings")
-                  : t("{count} marked fine", { count: hiddenCount() })}
-              </Button>
-            </Show>
+            {/* Always there, "0 marked fine" included: where hidden findings go is
+                worth knowing before the first one is hidden. */}
+            <Button
+              size="sm"
+              variant={showingSuppressed() ? "secondary" : "tertiary"}
+              aria-pressed={showingSuppressed() ? "true" : "false"}
+              data-findings-hidden={hiddenCount()}
+              disabled={hiddenCount() === 0 && !showingSuppressed()}
+              title={t("Findings you marked fine, on this device")}
+              onClick={() => setShowingSuppressed((on) => !on)}
+            >
+              {showingSuppressed()
+                ? t("Back to findings")
+                : t("{count} marked fine", { count: hiddenCount() })}
+            </Button>
             <SegmentedControl<FindingsView>
               label={t("Group findings by")}
               items={VIEWS.map((view) => ({ value: view.value, label: t(view.label) }))}

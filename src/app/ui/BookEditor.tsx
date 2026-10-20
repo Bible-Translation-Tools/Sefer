@@ -26,6 +26,7 @@ import {
   editorPolicy,
   mountBookEditor,
   type BookEditorMount,
+  type CorpusAction,
   type CorpusFinding,
   type EditorBook,
 } from "@sefer/editor";
@@ -33,12 +34,14 @@ import type { SourceStamp } from "@sefer/text/source";
 import { Effect, Fiber, Stream } from "effect";
 import { createEffect, createRenderEffect, createSignal, untrack } from "solid-js";
 
-import { stale } from "#core/findings/finding";
+import { stale, type Finding } from "#core/findings/finding";
 
 import { reportEdits } from "../editReports";
+import { t } from "../i18n";
 import { textDirection } from "../language";
 import { useShell } from "../ProjectContext";
 import { shellKeys } from "../settings";
+import { allow, checkLabel, fineHere, flaggedText, turnOff } from "../suppressAnswers";
 import { useAlignedGroup } from "./workspace/aligned";
 import { nameBlock } from "./workspace/blockNames";
 import { LocationBar } from "./workspace/LocationBar";
@@ -139,12 +142,33 @@ export function BookEditor(props: BookEditorProps) {
       // the publication still describes the text the reader is looking at —
       // `stale` is the one freshness question, and a stale finding is dropped
       // silently rather than shifted onto an offset nobody measured.
+      // A proofreading finding's answers, in its popup: the same three a
+      // Findings card offers (`suppressAnswers.ts`). Plain buttons here,
+      // since a popup has no room for a menu; Fine here first.
+      const answersTo = (finding: Finding): readonly CorpusAction[] | undefined => {
+        if (finding.producer !== "sous") return undefined;
+        const check = checkLabel(finding);
+        return [
+          { name: t("Fine here"), run: () => fineHere(shell, finding) },
+          ...(finding.pattern === undefined
+            ? []
+            : [
+                {
+                  name: t("Always allow “{text}”", { text: flaggedText(shell, finding) }),
+                  run: () => allow(shell, finding),
+                },
+              ]),
+          ...(check === undefined
+            ? []
+            : [{ name: t("Turn off “{check}”", { check }), run: () => turnOff(shell, finding) }]),
+        ];
+      };
       const corpus = (): void => {
         const list: CorpusFinding[] = [];
         // This book's share only — converted on its own, not by converting the
         // whole project's list to filter it.
         for (const finding of shell.services.projectAnalysis.crossBookOf(book.id))
-          if (!stale(finding, book)) list.push(finding);
+          if (!stale(finding, book)) list.push({ ...finding, actions: answersTo(finding) });
         editor.setHostDiagnostics(list);
         // Counts and ids only — a finding's message quotes the document and
         // never reaches the ring.

@@ -237,6 +237,17 @@ export interface CorpusFinding {
   readonly from: number;
   readonly to: number;
   readonly stamp: SourceStamp;
+  /**
+   * Buttons in the finding's popup, the host's own: a suppression's "Fine
+   * here", say. The package draws them and calls `run`; what they do is the
+   * host's business.
+   */
+  readonly actions?: readonly CorpusAction[];
+}
+
+export interface CorpusAction {
+  readonly name: string;
+  readonly run: () => void;
 }
 
 const NO_CORPUS: readonly CorpusFinding[] = [];
@@ -352,7 +363,11 @@ export function usfmLinter(
             markClass: SEVERITY_CLASS[f.severity] ?? "usfm-lint-info",
             message: f.message,
             // Sous measures; it never offers an edit (`fixes.preview` refuses
-            // it `NotEngineFix`), so there is no action to offer here either.
+            // it `NotEngineFix`). Its buttons are the host's answers to it.
+            actions: f.actions?.map((action) => ({
+              name: action.name,
+              apply: () => action.run(),
+            })),
           });
         }
         return out;

@@ -63,7 +63,7 @@ export { anchorFrom } from "./core/clip";
 export { type ChapterRow } from "./core/docStructure";
 
 // The host's own findings, drawn with the engine's.
-export { type CorpusFinding } from "./recipes/lint";
+export { type CorpusAction, type CorpusFinding } from "./recipes/lint";
 
 // Doing something to the book without moving the page (core/scroll.ts).
 export { withoutScrolling } from "./core/scroll";

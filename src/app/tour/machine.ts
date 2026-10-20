@@ -60,11 +60,25 @@ export interface PanelAction {
 }
 
 /** A ring around an element and a card of explanation beside it. */
+export interface SpotlightNote {
+  readonly label: string;
+  readonly text: string;
+}
+
 export interface Spotlight {
   /** A CSS selector; the first match is the anchor. Prefer `[data-tour=…]`. */
   readonly anchor: string;
   readonly title: string;
+  /** What this stop is, in a sentence or two. */
   readonly body: string;
+  /** What to do now, set apart so it is not lost in the explanation: "Press Fine here on any card." */
+  readonly try?: string;
+  /**
+   * The rest, in labelled parts rather than one paragraph ("Why this UI",
+   * "Could change"), for a tutorial that explains a decision as well as a
+   * screen.
+   */
+  readonly notes?: readonly SpotlightNote[];
   /**
    * Where the card goes: below the anchor (above when there is no room) by
    * default; `right` beside it, for a step that asks the person to open a
@@ -292,7 +306,8 @@ const enter = (context: TourContext, tour: Tour, steps: readonly Step[], index: 
   }, POLL_MS);
 };
 
-export const startTour = (context: TourContext, tour: Tour): void => {
+/** `at` is the step to open on, 0-based: a link or a reload names one (`?step=`). */
+export const startTour = (context: TourContext, tour: Tour, at = 0): void => {
   stopPolling();
   const startable = tour.startable;
   if (startable !== undefined) {
@@ -312,16 +327,16 @@ export const startTour = (context: TourContext, tour: Tour): void => {
       poll = setInterval(() => {
         if (ready() || Date.now() - started > READY_TIMEOUT_MS) {
           stopPolling();
-          build(context, tour);
+          build(context, tour, at);
         }
       }, POLL_MS);
       return;
     }
   }
-  build(context, tour);
+  build(context, tour, at);
 };
 
-const build = (context: TourContext, tour: Tour): void => {
+const build = (context: TourContext, tour: Tour, at = 0): void => {
   // Built once, at the start: a workflow's steps are the state it found.
   // Building them fails open like any step.
   let steps: readonly Step[] = [];
@@ -335,7 +350,14 @@ const build = (context: TourContext, tour: Tour): void => {
       { "tour.id": tour.id },
     );
   }
-  enter(context, tour, steps, 0);
+  enter(context, tour, steps, Math.min(Math.max(0, at), Math.max(0, steps.length - 1)));
+};
+
+/** Straight to step `index` (0-based) of the running tour: the card's step menu. */
+export const jumpTour = (context: TourContext, index: number): void => {
+  const now = running();
+  if (now === undefined) return;
+  enter(context, now.tour, now.steps, Math.min(Math.max(0, index), now.steps.length - 1));
 };
 
 export const stepTour = (context: TourContext, delta: 1 | -1): void => {

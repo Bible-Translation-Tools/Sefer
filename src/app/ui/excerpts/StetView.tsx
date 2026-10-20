@@ -313,7 +313,7 @@ export function StetView(props: StetViewProps) {
       fallback={
         <CircleAlert
           size={statusProps.size}
-          aria-label={t("Changed since approved")}
+          aria-label={t("Text changed since last approved")}
           class="shrink-0 text-on-surface-warning"
         />
       }
@@ -449,7 +449,7 @@ export function StetView(props: StetViewProps) {
           kind: "button",
           id: "approve",
           label: isChanged(excerpt.sid)
-            ? t("Approve again")
+            ? t("Text changed since last approved")
             : isApproved(excerpt.sid)
               ? isEdited(excerpt.sid)
                 ? t("Approved with edits")
@@ -458,9 +458,9 @@ export function StetView(props: StetViewProps) {
                 ? t("Approve with edits")
                 : t("Approve"),
           icon: isApproved(excerpt.sid) ? CheckIcon : ThumbsUpIcon,
-          // As wide as its longest words ("Approved with edits"), whatever it
+          // As wide as its longest words, whatever it
           // says now, so approving never shifts the row.
-          class: "w-52 justify-center",
+          class: "w-72 justify-center",
           pressed: isApproved(excerpt.sid),
           // The card's call to action until it is done; approved, the pressed
           // toggle (the light brand fill), pressed in rather than shouting.

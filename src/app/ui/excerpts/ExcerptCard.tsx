@@ -593,7 +593,11 @@ export function ExcerptCard(props: ExcerptCardProps) {
     <div>
       {props.spec.before?.(props.excerpt, props.rowKey)}
       <CardFrame
-        data={{ "data-sid": props.excerpt.sid, "data-mode": mode() }}
+        data={{
+          "data-sid": props.excerpt.sid,
+          "data-mode": mode(),
+          "data-condensed": condensed() ? "" : undefined,
+        }}
         current={current()}
         condensed={condensed()}
         onActivate={() => props.spec.onActivate?.(props.excerpt, props.rowKey)}
