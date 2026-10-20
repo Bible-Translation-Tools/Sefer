@@ -106,6 +106,76 @@ function MoreMenu() {
   );
 }
 
+function HomeButton() {
+  const navigate = useNavigate();
+  const shell = useShell();
+  const goHome = (): void => {
+    if (shell.project() !== undefined)
+      void navigate({ to: "/project/$slug", params: { slug: shell.slug() } });
+    else void navigate({ to: "/" });
+  };
+
+  return (
+    <div class="flex shrink-0 items-center gap-2">
+      <button
+        type="button"
+        data-testid="app-bar-home"
+        aria-label={t("Home")}
+        title={t("Home")}
+        class="flex h-12 shrink-0 cursor-pointer items-center gap-3 rounded-lg px-2 transition-colors hover:bg-surface-secondary"
+        onClick={goHome}
+      >
+        <span
+          aria-hidden="true"
+          class="size-8 bg-on-surface-primary"
+          style={{
+            "mask-image": "url(/sefer.svg)",
+            "mask-size": "contain",
+            "mask-repeat": "no-repeat",
+            "mask-position": "center",
+          }}
+        />
+        <span
+          aria-hidden="true"
+          class="text-h4 font-semibold text-on-surface-primary max-md:sr-only"
+        >
+          {t("Sefer")}
+        </span>
+      </button>
+    </div>
+  );
+}
+
+function ModeControl(props: {
+  mode: Mode | undefined;
+  open: boolean;
+  onChange: (next: Mode) => void;
+}) {
+  return (
+    <SegmentedControl<Mode>
+      label={t("Mode")}
+      iconsWhenNarrow
+      class="mx-auto w-full max-w-[20.75rem] max-md:w-auto"
+      value={props.mode}
+      onChange={props.onChange}
+      items={[
+        {
+          value: "refine",
+          label: t("Refine"),
+          icon: <FileText aria-hidden="true" />,
+          disabled: !props.open,
+        },
+        {
+          value: "terms",
+          label: t("Spiritual terms"),
+          icon: <ListChecks aria-hidden="true" />,
+          disabled: !props.open,
+        },
+      ]}
+    />
+  );
+}
+
 export function AppBar() {
   const navigate = useNavigate();
   const shell = useShell();
@@ -118,11 +188,6 @@ export function AppBar() {
   const refining = (): "true" | "false" =>
     path().startsWith("/project/") && !within().startsWith("/terms") ? "true" : "false";
   const terms = (): "true" | "false" => at("/terms");
-  const goHome = (): void => {
-    if (shell.project() !== undefined)
-      void navigate({ to: "/project/$slug", params: { slug: shell.slug() } });
-    else void navigate({ to: "/" });
-  };
 
   const mode = (): Mode | undefined => {
     if (terms() === "true") return "terms";
@@ -140,55 +205,9 @@ export function AppBar() {
       aria-label={t("Sefer")}
       class="scrollbar-subtle flex h-18 w-full shrink-0 items-center gap-4 overflow-x-auto overflow-y-hidden border-b border-surface-border bg-surface-primary px-4 py-2"
     >
-      <div class="flex shrink-0 items-center gap-2">
-        <button
-          type="button"
-          data-testid="app-bar-home"
-          aria-label={t("Home")}
-          title={t("Home")}
-          class="flex h-12 shrink-0 cursor-pointer items-center gap-3 rounded-lg px-2 transition-colors hover:bg-surface-secondary"
-          onClick={goHome}
-        >
-          <span
-            aria-hidden="true"
-            class="size-8 bg-on-surface-primary"
-            style={{
-              "mask-image": "url(/sefer.svg)",
-              "mask-size": "contain",
-              "mask-repeat": "no-repeat",
-              "mask-position": "center",
-            }}
-          />
-          <span
-            aria-hidden="true"
-            class="text-h4 font-semibold text-on-surface-primary max-md:sr-only"
-          >
-            {t("Sefer")}
-          </span>
-        </button>
-      </div>
+      <HomeButton />
 
-      <SegmentedControl<Mode>
-        label={t("Mode")}
-        iconsWhenNarrow
-        class="mx-auto w-full max-w-[20.75rem] max-md:w-auto"
-        value={mode()}
-        onChange={goTo}
-        items={[
-          {
-            value: "refine",
-            label: t("Refine"),
-            icon: <FileText aria-hidden="true" />,
-            disabled: !open(),
-          },
-          {
-            value: "terms",
-            label: t("Spiritual terms"),
-            icon: <ListChecks aria-hidden="true" />,
-            disabled: !open(),
-          },
-        ]}
-      />
+      <ModeControl mode={mode()} open={open()} onChange={goTo} />
 
       <div class="flex shrink-0 items-center gap-2">
         <SyncButton />

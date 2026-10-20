@@ -24,8 +24,56 @@ const lastTouched = (journals: readonly Restorable[]): string => {
   });
 };
 
-export function RecoveryBanner() {
-  const shell = useShell();
+type Shell = ReturnType<typeof useShell>;
+
+const restoreProgram = (
+  shell: Shell,
+  project: NonNullable<ReturnType<Shell["project"]>>,
+  journals: readonly Restorable[],
+) =>
+  Effect.forEach(
+    journals,
+    (journal) =>
+      Effect.result(
+        Effect.gen(function* () {
+          const book = yield* project.instantiate(journal.bookId);
+          yield* shell.services.save.adopt(book);
+          return yield* shell.services.recovery.restore(journal.id, (bookId) =>
+            shell.services.seated(bookId),
+          );
+        }),
+      ),
+    { concurrency: 1 },
+  );
+
+const reportRestore = (
+  notice: ReturnType<typeof toasts.progress>,
+  results: readonly Result.Result<unknown, unknown>[],
+): void => {
+  const refused = results.filter(Result.isFailure);
+  const restored = results.length - refused.length;
+  if (refused.length > 0) {
+    toasts.update(notice, {
+      tone: "error",
+      autoClose: false,
+      title: t("Restored {restored} of {total} book(s)", {
+        restored,
+        total: results.length,
+      }),
+      message: describe(refused[0]?.failure),
+    });
+    return;
+  }
+  toasts.update(notice, {
+    tone: "success",
+    title: t("Restored {count} book(s)", { count: restored }),
+    message: t(
+      "The work is in the editor, unsaved. Save & Review shows every changed book against the file on disk.",
+    ),
+  });
+};
+
+function createRecoveryActions(shell: Shell) {
   const offered = (): readonly Restorable[] => shell.recoveryOffer() ?? [];
   const setOffered = (
     next: readonly Restorable[] | ((was: readonly Restorable[]) => readonly Restorable[]),
@@ -46,22 +94,7 @@ export function RecoveryBanner() {
       title: t("Restoring {count} book(s)…", { count: journals.length }),
     });
     void shell.services
-      .run(
-        Effect.forEach(
-          journals,
-          (journal) =>
-            Effect.result(
-              Effect.gen(function* () {
-                const book = yield* project.instantiate(journal.bookId);
-                yield* shell.services.save.adopt(book);
-                return yield* shell.services.recovery.restore(journal.id, (bookId) =>
-                  shell.services.seated(bookId),
-                );
-              }),
-            ),
-          { concurrency: 1 },
-        ),
-      )
+      .run(restoreProgram(shell, project, journals))
       .then((results) => {
         setBusy(false);
         setOffered((was) => was.filter((journal) => journal.stale === true));
@@ -77,25 +110,7 @@ export function RecoveryBanner() {
           return Result.isSuccess(result) && journal !== undefined ? [journal.bookId] : [];
         });
         shell.changed({ kind: "journal.restore", books });
-        if (refused.length > 0) {
-          toasts.update(notice, {
-            tone: "error",
-            autoClose: false,
-            title: t("Restored {restored} of {total} book(s)", {
-              restored,
-              total: results.length,
-            }),
-            message: describe(refused[0]?.failure),
-          });
-          return;
-        }
-        toasts.update(notice, {
-          tone: "success",
-          title: t("Restored {count} book(s)", { count: restored }),
-          message: t(
-            "The work is in the editor, unsaved. Save & Review shows every changed book against the file on disk.",
-          ),
-        });
+        reportRestore(notice, results);
       })
       .catch(() => {
         setBusy(false);
@@ -151,6 +166,12 @@ export function RecoveryBanner() {
         toasts.error({ title: t("Could not discard the unsaved work") });
       });
   };
+  return { offered, busy, books, restoreAll, discardAll };
+}
+
+export function RecoveryBanner() {
+  const shell = useShell();
+  const { offered, busy, books, restoreAll, discardAll } = createRecoveryActions(shell);
 
   return (
     <Show when={books() > 0}>

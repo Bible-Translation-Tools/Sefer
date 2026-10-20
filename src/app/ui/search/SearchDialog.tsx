@@ -160,6 +160,59 @@ function Results(props: { readonly columns: readonly ColumnOf[]; readonly onGo: 
   );
 }
 
+const findHits = (
+  shell: ReturnType<typeof useShell>,
+  props: { readonly query: FindingQuery; readonly readings: Readings },
+): readonly Search.Hit[] => {
+  const analysisOf = (id: string) =>
+    Option.getOrUndefined(shell.services.projectAnalysis.analysis(id))?.analysis;
+  const project = shell.project();
+  if (project === undefined) return [];
+  const options = { analysisOf, previewWidth: PREVIEW_WIDTH };
+  const query = props.query;
+  if (query.kind === "literal") {
+    const found = shell.services.galley.findAll(
+      { text: query.needle, caseSensitive: query.caseSensitive, wholeWord: query.wholeWord },
+      "targets",
+    );
+    return Search.fromEngine(props.readings, project.books, found, options);
+  }
+  const held = Search.findInReading(
+    props.readings,
+    project.books,
+    { text: query.source, regex: true, unicode: query.flags === "u", caseSensitive: true },
+    options,
+  );
+  return Result.isSuccess(held) ? held.success : [];
+};
+
+interface HitRowProps {
+  readonly hit: Search.Hit;
+  readonly place: string;
+  readonly onGo: () => void;
+}
+
+function HitRow(props: HitRowProps) {
+  return (
+    <li>
+      <button
+        type="button"
+        class="grid w-full cursor-pointer grid-cols-[7rem_1fr] gap-3 rounded-md px-2 py-1.5 text-start hover:bg-surface-secondary"
+        onClick={() => props.onGo()}
+      >
+        <span class="text-smallest font-medium text-on-surface-secondary">{props.place}</span>
+        <span class="min-w-0 text-small break-words">
+          {props.hit.preview.slice(0, props.hit.previewMatch.from)}
+          <mark class="rounded-xs bg-surface-highlight px-0.5 text-on-surface-highlight">
+            {props.hit.preview.slice(props.hit.previewMatch.from, props.hit.previewMatch.to)}
+          </mark>
+          {props.hit.preview.slice(props.hit.previewMatch.to)}
+        </span>
+      </button>
+    </li>
+  );
+}
+
 function Hits(props: {
   readonly query: FindingQuery;
   readonly share: number;
@@ -169,32 +222,9 @@ function Hits(props: {
   const shell = useShell();
   const navigate = useNavigate();
 
-  const analysisOf = (id: string) =>
-    Option.getOrUndefined(shell.services.projectAnalysis.analysis(id))?.analysis;
-
-  const hits = createMemo(
-    (): readonly Search.Hit[] => {
-      const project = shell.project();
-      if (project === undefined) return [];
-      const options = { analysisOf, previewWidth: PREVIEW_WIDTH };
-      const query = props.query;
-      if (query.kind === "literal") {
-        const found = shell.services.galley.findAll(
-          { text: query.needle, caseSensitive: query.caseSensitive, wholeWord: query.wholeWord },
-          "targets",
-        );
-        return Search.fromEngine(props.readings, project.books, found, options);
-      }
-      const held = Search.findInReading(
-        props.readings,
-        project.books,
-        { text: query.source, regex: true, unicode: query.flags === "u", caseSensitive: true },
-        options,
-      );
-      return Result.isSuccess(held) ? held.success : [];
-    },
-    { name: "searchDialogHits" },
-  );
+  const hits = createMemo((): readonly Search.Hit[] => findHits(shell, props), {
+    name: "searchDialogHits",
+  });
 
   const place = (hit: Search.Hit): string =>
     hit.address === undefined ? hit.bookId : shell.location.label(hit.address);
@@ -230,26 +260,7 @@ function Hits(props: {
           style={{ "max-height": `calc(62vh / ${props.share})` }}
         >
           <For each={hits().slice(0, SHOWN)}>
-            {(hit) => (
-              <li>
-                <button
-                  type="button"
-                  class="grid w-full cursor-pointer grid-cols-[7rem_1fr] gap-3 rounded-md px-2 py-1.5 text-start hover:bg-surface-secondary"
-                  onClick={() => go(hit)}
-                >
-                  <span class="text-smallest font-medium text-on-surface-secondary">
-                    {place(hit)}
-                  </span>
-                  <span class="min-w-0 text-small break-words">
-                    {hit.preview.slice(0, hit.previewMatch.from)}
-                    <mark class="rounded-xs bg-surface-highlight px-0.5 text-on-surface-highlight">
-                      {hit.preview.slice(hit.previewMatch.from, hit.previewMatch.to)}
-                    </mark>
-                    {hit.preview.slice(hit.previewMatch.to)}
-                  </span>
-                </button>
-              </li>
-            )}
+            {(hit) => <HitRow hit={hit} place={place(hit)} onGo={() => go(hit)} />}
           </For>
         </ul>
         <Show when={hits().length > SHOWN}>

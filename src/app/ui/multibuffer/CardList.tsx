@@ -49,6 +49,75 @@ interface Pin<T> {
 const LINE = "line:";
 const PAUSE_MS = 400;
 
+const insertRow = <T,>(
+  list: VirtualSection<T>[],
+  at: Pin<T>,
+  row: VirtualSection<T>["rows"][number],
+): void => {
+  const index = list.findIndex((section) => section.key === at.section);
+  if (index < 0) {
+    list.splice(Math.min(at.sectionIndex, list.length), 0, { key: at.section, rows: [row] });
+    return;
+  }
+  const section = list[index];
+  if (section === undefined) return;
+  const rows = [...section.rows];
+  const before = at.after === undefined ? -1 : rows.findIndex((entry) => entry.key === at.after);
+  rows.splice(before + 1, 0, row);
+  list[index] = { key: section.key, rows };
+};
+
+function createRetakeWatch<T>(props: CardListProps<T>) {
+  let stopWatching: (() => void) | undefined;
+  const watch = (bookId: BookId): void => {
+    stopWatching?.();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let stop: (() => void) | undefined;
+    let live = true;
+    void props.seat(bookId).then((book) => {
+      if (!live || book === undefined) return;
+      stop = book.changes(() => {
+        if (timer !== undefined) clearTimeout(timer);
+        timer = setTimeout(() => props.onRetake?.(bookId), PAUSE_MS);
+      });
+    });
+    stopWatching = () => {
+      live = false;
+      if (timer !== undefined) clearTimeout(timer);
+      stop?.();
+      stopWatching = undefined;
+    };
+  };
+  onCleanup(() => stopWatching?.());
+  return { watch, stopWatching: () => stopWatching?.() };
+}
+
+interface GoneLineProps {
+  readonly id: string;
+  readonly label: string;
+  readonly goneLabel: string;
+  readonly onDismiss: () => void;
+}
+
+function GoneLine(props: GoneLineProps) {
+  return (
+    <div class="pt-3" data-card-line={props.id}>
+      <div class="flex items-center gap-2 rounded-md border border-dashed border-surface-border px-3 py-1.5 text-small text-on-surface-tertiary">
+        <strong class="font-medium text-on-surface-secondary">{props.label}</strong>
+        <span>{props.goneLabel}</span>
+        <button
+          type="button"
+          class="ms-auto cursor-pointer text-smallest hover:text-on-surface-primary"
+          aria-label={t("Dismiss")}
+          onClick={() => props.onDismiss()}
+        >
+          ×
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function CardList<T>(props: CardListProps<T>) {
   const [editing, setEditing] = createSignal<string | undefined>(undefined, {
     name: "cardEditing",
@@ -66,24 +135,6 @@ export function CardList<T>(props: CardListProps<T>) {
   };
   const goneLabel = (): string => props.goneLabel ?? t("No longer in the results");
 
-  const insert = (
-    list: VirtualSection<T>[],
-    at: Pin<T>,
-    row: VirtualSection<T>["rows"][number],
-  ): void => {
-    const index = list.findIndex((section) => section.key === at.section);
-    if (index < 0) {
-      list.splice(Math.min(at.sectionIndex, list.length), 0, { key: at.section, rows: [row] });
-      return;
-    }
-    const section = list[index];
-    if (section === undefined) return;
-    const rows = [...section.rows];
-    const before = at.after === undefined ? -1 : rows.findIndex((entry) => entry.key === at.after);
-    rows.splice(before + 1, 0, row);
-    list[index] = { key: section.key, rows };
-  };
-
   const shown = createMemo(
     (): readonly VirtualSection<T>[] => {
       const held = pin();
@@ -94,9 +145,9 @@ export function CardList<T>(props: CardListProps<T>) {
       const present = keys();
       for (const line of left)
         if (!present.has(line.key))
-          insert(list, line, { key: `${LINE}${line.key}`, item: line.item, estimate: 40 });
+          insertRow(list, line, { key: `${LINE}${line.key}`, item: line.item, estimate: 40 });
       if (gone)
-        insert(list, held, {
+        insertRow(list, held, {
           key: held.key,
           item: props.whenGone?.(held.item) ?? held.item,
           estimate: held.estimate,
@@ -120,27 +171,7 @@ export function CardList<T>(props: CardListProps<T>) {
     },
   );
 
-  let stopWatching: (() => void) | undefined;
-  const watch = (bookId: BookId): void => {
-    stopWatching?.();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let stop: (() => void) | undefined;
-    let live = true;
-    void props.seat(bookId).then((book) => {
-      if (!live || book === undefined) return;
-      stop = book.changes(() => {
-        if (timer !== undefined) clearTimeout(timer);
-        timer = setTimeout(() => props.onRetake?.(bookId), PAUSE_MS);
-      });
-    });
-    stopWatching = () => {
-      live = false;
-      if (timer !== undefined) clearTimeout(timer);
-      stop?.();
-      stopWatching = undefined;
-    };
-  };
-  onCleanup(() => stopWatching?.());
+  const { watch, stopWatching } = createRetakeWatch(props);
 
   const start = (key: string, item: T): void => {
     if (untrack(editing) === key) return;
@@ -165,7 +196,7 @@ export function CardList<T>(props: CardListProps<T>) {
   const done = (): void => {
     const held = untrack(pin);
     if (held !== undefined) setLines((was) => [...was, held]);
-    stopWatching?.();
+    stopWatching();
     setPin(undefined);
     setEditing(undefined);
     if (held !== undefined) props.onRetake?.(props.bookOf(held.item));
@@ -180,24 +211,12 @@ export function CardList<T>(props: CardListProps<T>) {
       empty={props.empty}
       row={(item, key) =>
         key.startsWith(LINE) ? (
-          <div class="pt-3" data-card-line={key.slice(LINE.length)}>
-            <div class="flex items-center gap-2 rounded-md border border-dashed border-surface-border px-3 py-1.5 text-small text-on-surface-tertiary">
-              <strong class="font-medium text-on-surface-secondary">
-                {props.lineLabel(item())}
-              </strong>
-              <span>{goneLabel()}</span>
-              <button
-                type="button"
-                class="ms-auto cursor-pointer text-smallest hover:text-on-surface-primary"
-                aria-label={t("Dismiss")}
-                onClick={() =>
-                  setLines((was) => was.filter((line) => `${LINE}${line.key}` !== key))
-                }
-              >
-                ×
-              </button>
-            </div>
-          </div>
+          <GoneLine
+            id={key.slice(LINE.length)}
+            label={props.lineLabel(item())}
+            goneLabel={goneLabel()}
+            onDismiss={() => setLines((was) => was.filter((line) => `${LINE}${line.key}` !== key))}
+          />
         ) : (
           <div class="pt-3">
             {props.card(item, key, {

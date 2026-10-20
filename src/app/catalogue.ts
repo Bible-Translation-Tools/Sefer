@@ -308,105 +308,111 @@ const toEntry = (
   gitUrl: repo.repo_url,
 });
 
+const writerBooksOf = async (origin: string, language: string) => {
+  const decoded = decodeWriterBooks(
+    await graphql(origin, WRITER_BOOKS_QUERY, { lang: language.trim() }),
+  );
+  if (Result.isFailure(decoded))
+    throw new CatalogueError(
+      `Language API payload not understood: ${decoded.failure.message}`,
+      "payload",
+    );
+  return decoded.success.data.content.flatMap((row): BookCandidate[] => {
+    if (row.git_repo === null) return [];
+    const url = row.git_repo.repo_url;
+    const repo = url.replace(/\/+$/, "").split("/").at(-1) ?? "";
+    const status = STATUSES.find((each) => each === row.wa_content_metadata?.status);
+    return row.rendered_contents.flatMap((rendering) => {
+      const book = rendering.scriptural_rendering_metadata?.book_slug?.toUpperCase();
+      if (book === undefined || book === "") return [];
+      return [
+        {
+          id: `remote:${url}:${book}`,
+          book,
+          language: language.trim().toLowerCase(),
+          resource: resourceOf(repo, row.resource_type),
+          origin: { kind: "remote", owner: row.git_repo?.username ?? "", repo, url },
+          hints: {
+            ...(status === undefined ? {} : { status }),
+            ...(row.modified_on === null ? {} : { modified: row.modified_on }),
+          },
+        },
+      ];
+    });
+  });
+};
+
+const writerLanguagesOf = async (origin: string, search: string) => {
+  const decoded = decodeWriterLanguages(
+    await graphql(origin, WRITER_LANGUAGES_QUERY, { s: `%${search.trim()}%` }),
+  );
+  if (Result.isFailure(decoded))
+    throw new CatalogueError(
+      `Language API payload not understood: ${decoded.failure.message}`,
+      "payload",
+    );
+  const languages = decoded.success.data.language;
+  const regions = await graphql(origin, REGIONS_QUERY, {
+    codes: languages.map((language) => language.ietf_code),
+  })
+    .then((body) => decodeRegions(body))
+    .catch(() => undefined);
+  const regionOf = new Map(
+    regions !== undefined && Result.isSuccess(regions)
+      ? regions.success.data.vw_langnames.map((row) => [row.lc.toLowerCase(), row.lr])
+      : [],
+  );
+  return languages.map((language) => {
+    const english = language.english_name ?? "";
+    const natural = language.national_name ?? "";
+    return {
+      code: language.ietf_code,
+      naturalName: natural === "" ? english : natural,
+      anglicizedName: english === "" ? natural : english,
+      region: blankToUndefined(regionOf.get(language.ietf_code.toLowerCase())),
+      projects: language.contents_aggregate.aggregate?.count ?? 0,
+      updated: blankToUndefined(language.contents_aggregate.aggregate?.max?.modified_on),
+    };
+  });
+};
+
+const entriesOf = async (origin: string) => {
+  const decoded = decodeRepos(await graphql(origin, REPOS_QUERY));
+  if (Result.isFailure(decoded))
+    throw new CatalogueError(
+      `Language API payload not understood: ${decoded.failure.message}`,
+      "payload",
+    );
+  const repos = decoded.success.data.vw_consolidated_repos;
+
+  const facts = await graphql(origin, FACTS_QUERY, {
+    codes: [...new Set(repos.map((repo) => repo.language_ietf))],
+    ids: repos.flatMap((repo) => (repo.content_id === null ? [] : [repo.content_id])),
+  })
+    .then((body) => decodeFacts(body))
+    .catch(() => undefined);
+  const known = facts !== undefined && Result.isSuccess(facts) ? facts.success.data : undefined;
+  const names = new Map(known?.vw_langnames.map((row) => [row.lc.toLowerCase(), row]));
+  const dates = new Map(known?.content.map((row) => [row.id, row.modified_on]));
+
+  return {
+    rows: repos.map((repo) =>
+      toEntry(
+        repo,
+        names.get(repo.language_ietf.toLowerCase()),
+        blankToUndefined(repo.content_id === null ? undefined : dates.get(repo.content_id)),
+      ),
+    ),
+    enriched: known !== undefined,
+  };
+};
+
 const languageApiCatalogue = (origin: string): CatalogueService => ({
   source: "live",
   origin,
-  writerBooks: async (language) => {
-    const decoded = decodeWriterBooks(
-      await graphql(origin, WRITER_BOOKS_QUERY, { lang: language.trim() }),
-    );
-    if (Result.isFailure(decoded))
-      throw new CatalogueError(
-        `Language API payload not understood: ${decoded.failure.message}`,
-        "payload",
-      );
-    return decoded.success.data.content.flatMap((row): BookCandidate[] => {
-      if (row.git_repo === null) return [];
-      const url = row.git_repo.repo_url;
-      const repo = url.replace(/\/+$/, "").split("/").at(-1) ?? "";
-      const status = STATUSES.find((each) => each === row.wa_content_metadata?.status);
-      return row.rendered_contents.flatMap((rendering) => {
-        const book = rendering.scriptural_rendering_metadata?.book_slug?.toUpperCase();
-        if (book === undefined || book === "") return [];
-        return [
-          {
-            id: `remote:${url}:${book}`,
-            book,
-            language: language.trim().toLowerCase(),
-            resource: resourceOf(repo, row.resource_type),
-            origin: { kind: "remote", owner: row.git_repo?.username ?? "", repo, url },
-            hints: {
-              ...(status === undefined ? {} : { status }),
-              ...(row.modified_on === null ? {} : { modified: row.modified_on }),
-            },
-          },
-        ];
-      });
-    });
-  },
-  writerLanguages: async (search) => {
-    const decoded = decodeWriterLanguages(
-      await graphql(origin, WRITER_LANGUAGES_QUERY, { s: `%${search.trim()}%` }),
-    );
-    if (Result.isFailure(decoded))
-      throw new CatalogueError(
-        `Language API payload not understood: ${decoded.failure.message}`,
-        "payload",
-      );
-    const languages = decoded.success.data.language;
-    const regions = await graphql(origin, REGIONS_QUERY, {
-      codes: languages.map((language) => language.ietf_code),
-    })
-      .then((body) => decodeRegions(body))
-      .catch(() => undefined);
-    const regionOf = new Map(
-      regions !== undefined && Result.isSuccess(regions)
-        ? regions.success.data.vw_langnames.map((row) => [row.lc.toLowerCase(), row.lr])
-        : [],
-    );
-    return languages.map((language) => {
-      const english = language.english_name ?? "";
-      const natural = language.national_name ?? "";
-      return {
-        code: language.ietf_code,
-        naturalName: natural === "" ? english : natural,
-        anglicizedName: english === "" ? natural : english,
-        region: blankToUndefined(regionOf.get(language.ietf_code.toLowerCase())),
-        projects: language.contents_aggregate.aggregate?.count ?? 0,
-        updated: blankToUndefined(language.contents_aggregate.aggregate?.max?.modified_on),
-      };
-    });
-  },
-  entries: async () => {
-    const decoded = decodeRepos(await graphql(origin, REPOS_QUERY));
-    if (Result.isFailure(decoded))
-      throw new CatalogueError(
-        `Language API payload not understood: ${decoded.failure.message}`,
-        "payload",
-      );
-    const repos = decoded.success.data.vw_consolidated_repos;
-
-    const facts = await graphql(origin, FACTS_QUERY, {
-      codes: [...new Set(repos.map((repo) => repo.language_ietf))],
-      ids: repos.flatMap((repo) => (repo.content_id === null ? [] : [repo.content_id])),
-    })
-      .then((body) => decodeFacts(body))
-      .catch(() => undefined);
-    const known = facts !== undefined && Result.isSuccess(facts) ? facts.success.data : undefined;
-    const names = new Map(known?.vw_langnames.map((row) => [row.lc.toLowerCase(), row]));
-    const dates = new Map(known?.content.map((row) => [row.id, row.modified_on]));
-
-    return {
-      rows: repos.map((repo) =>
-        toEntry(
-          repo,
-          names.get(repo.language_ietf.toLowerCase()),
-          blankToUndefined(repo.content_id === null ? undefined : dates.get(repo.content_id)),
-        ),
-      ),
-      enriched: known !== undefined,
-    };
-  },
+  writerBooks: (language) => writerBooksOf(origin, language),
+  writerLanguages: (search) => writerLanguagesOf(origin, search),
+  entries: () => entriesOf(origin),
 });
 
 const SAMPLE_CATALOGUE: readonly CatalogueEntry[] = [

@@ -178,49 +178,28 @@ const saveLayer: Layer.Layer<
   }),
 );
 
-const domainLayer = (
-  build: string,
-  fixture: FixtureHost | undefined,
-  paths: HostPaths,
-  tauri: TauriHost | undefined,
-): Layer.Layer<Exclude<Domain, Observability>, EngineFailure> => {
-  const hostInfo = tauri === undefined ? WebHostInfoLive(build) : tauri.TauriHostInfoLive(build);
+const webFetch =
+  (appId: string): HttpFetch =>
+  (input, init) =>
+    globalThis.fetch(through(bootTransport(), input), {
+      ...init,
+      headers: { ...init?.headers, "X-Requested-With": appId },
+    });
 
-  const platformFileSystem = tauri === undefined ? OpfsFileSystemLive : tauri.TauriFileSystemLive;
-  const fileSystem = fixture !== undefined ? fixture.FixtureFileSystemLive : platformFileSystem;
-
-  const webFetch =
-    (appId: string): HttpFetch =>
-    (input, init) =>
-      globalThis.fetch(through(bootTransport(), input), {
-        ...init,
-        headers: { ...init?.headers, "X-Requested-With": appId },
-      });
-
+const accountLayer = (build: string, tauri: TauriHost | undefined) => {
   const accountFetch =
     tauri === undefined ? webFetch(appIdFor(build)) : globalThis.fetch.bind(globalThis);
-  const account = Layer.provideMerge(
+  return Layer.provideMerge(
     Layer.provideMerge(
       SuggestionsLive({ fetch: accountFetch }),
       GiteaLive({ fetch: accountFetch, platform: tauri === undefined ? "web" : "desktop" }),
     ),
     tauri === undefined ? WebCredentialsLive : tauri.TauriCredentialsLive,
   );
+};
 
-  const engine = WebGalleyLive;
-
-  const host = Layer.mergeAll(
-    engine,
-    tauri === undefined ? WebDialogsLive : tauri.TauriDialogsLive,
-    account,
-    hostInfo,
-    tauri === undefined
-      ? NoUpdaterLive(build)
-      : tauri.TauriUpdaterLive({ updaterHost: env.updaterHost }),
-    tauri === undefined ? Layer.empty : tauri.TauriFolderTreeLive,
-  );
-
-  const saveAndRecovery = Layer.provideMerge(
+const saveAndRecoveryLayer = (paths: HostPaths) =>
+  Layer.provideMerge(
     saveLayer,
     Layer.merge(
       Layer.unwrap(
@@ -236,7 +215,8 @@ const domainLayer = (
     ),
   );
 
-  const modules = Layer.provideMerge(
+const modulesLayer = (build: string, paths: HostPaths, tauri: TauriHost | undefined) =>
+  Layer.provideMerge(
     Layer.unwrap(
       Effect.map(Settings, (settings) => {
         const endpoints = resolveEndpoints(settings);
@@ -254,12 +234,40 @@ const domainLayer = (
                 })
               : tauri.TauriRemoteLive({ endpoint: endpoints.contentHost }),
           ),
-          saveAndRecovery,
+          saveAndRecoveryLayer(paths),
         );
       }),
     ),
     SettingsLive,
   );
+
+const domainLayer = (
+  build: string,
+  fixture: FixtureHost | undefined,
+  paths: HostPaths,
+  tauri: TauriHost | undefined,
+): Layer.Layer<Exclude<Domain, Observability>, EngineFailure> => {
+  const hostInfo = tauri === undefined ? WebHostInfoLive(build) : tauri.TauriHostInfoLive(build);
+
+  const platformFileSystem = tauri === undefined ? OpfsFileSystemLive : tauri.TauriFileSystemLive;
+  const fileSystem = fixture !== undefined ? fixture.FixtureFileSystemLive : platformFileSystem;
+
+  const account = accountLayer(build, tauri);
+
+  const engine = WebGalleyLive;
+
+  const host = Layer.mergeAll(
+    engine,
+    tauri === undefined ? WebDialogsLive : tauri.TauriDialogsLive,
+    account,
+    hostInfo,
+    tauri === undefined
+      ? NoUpdaterLive(build)
+      : tauri.TauriUpdaterLive({ updaterHost: env.updaterHost }),
+    tauri === undefined ? Layer.empty : tauri.TauriFolderTreeLive,
+  );
+
+  const modules = modulesLayer(build, paths, tauri);
 
   return Layer.provideMerge(modules, Layer.merge(host, fileSystem));
 };
@@ -287,6 +295,70 @@ const laned = <EG, RG, ER, RR>(
 const buildIdentity = (composition: Composition): string =>
   Result.isSuccess(composition.boot) ? composition.boot.success.build : "unknown";
 
+const inMemoryTransferFor =
+  (settings: Services["settings"], build: string): NonNullable<Services["inMemoryTransfer"]> =>
+  (held) =>
+    Layer.provideMerge(
+      Layer.merge(
+        Layer.fresh(WebGitLive),
+        WebRemoteLive({
+          contentHost: resolveEndpoints(settings).contentHost,
+          transport: bootTransport(),
+          appId: appIdFor(build),
+        }),
+      ),
+      held === undefined ? MemoryFileSystemLive() : Layer.succeed(FileSystem.FileSystem, held),
+    );
+
+const createSeats = (galley: Services["galley"], observability: Composition["observability"]) => {
+  const seats = new Map<BookId, EditorBook>();
+  const seat: Seat = (plain) => {
+    const seated = seatBook(plain, {
+      analyze: galley.memoize(plain.id),
+      observability,
+    });
+    seats.set(plain.id, seated);
+    return seated;
+  };
+  return { seat, seated: (id: BookId) => seats.get(id) };
+};
+
+const resolveDomain = () =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const galley = yield* Galley;
+    const hostInfo = yield* HostInfo;
+    const settings = yield* Settings;
+    const credentials = yield* Credentials;
+    const dialogs = yield* Dialogs;
+    const updater = yield* Updater;
+    const save = yield* SaveCoordinator;
+    const recovery = yield* Recovery;
+    const projectAnalysis = yield* ProjectAnalysis;
+    const library = yield* Library;
+    const git = yield* Git;
+    const gitea = yield* Gitea;
+    const remote = yield* Remote;
+    const admin = yield* ProjectAdmin;
+    return {
+      fileSystem,
+      galley,
+      hostInfo,
+      settings,
+      credentials,
+      dialogs,
+      updater,
+      save,
+      recovery,
+      projectAnalysis,
+      library,
+      git,
+      gitea,
+      remote,
+      admin,
+    };
+  });
+
 export const composeServices = async (
   composition: Composition,
   options: ServicesOptions = {},
@@ -304,42 +376,7 @@ export const composeServices = async (
   const run = <A, E>(effect: Effect.Effect<A, E, Domain | Scope.Scope>): Promise<A> =>
     runtime.runPromise(Effect.provideService(effect, Scope.Scope, runtime.scope));
 
-  const resolved = await run(
-    Effect.gen(function* () {
-      const fileSystem = yield* FileSystem.FileSystem;
-      const galley = yield* Galley;
-      const hostInfo = yield* HostInfo;
-      const settings = yield* Settings;
-      const credentials = yield* Credentials;
-      const dialogs = yield* Dialogs;
-      const updater = yield* Updater;
-      const save = yield* SaveCoordinator;
-      const recovery = yield* Recovery;
-      const projectAnalysis = yield* ProjectAnalysis;
-      const library = yield* Library;
-      const git = yield* Git;
-      const gitea = yield* Gitea;
-      const remote = yield* Remote;
-      const admin = yield* ProjectAdmin;
-      return {
-        fileSystem,
-        galley,
-        hostInfo,
-        settings,
-        credentials,
-        dialogs,
-        updater,
-        save,
-        recovery,
-        projectAnalysis,
-        library,
-        git,
-        gitea,
-        remote,
-        admin,
-      };
-    }),
-  );
+  const resolved = await run(resolveDomain());
 
   const { galley } = resolved;
   const version = galley.version();
@@ -351,15 +388,7 @@ export const composeServices = async (
     `${storageKind} galley ${version.engine} ${version.tag}`,
   );
 
-  const seats = new Map<BookId, EditorBook>();
-  const seat: Seat = (plain) => {
-    const seated = seatBook(plain, {
-      analyze: galley.memoize(plain.id),
-      observability: composition.observability,
-    });
-    seats.set(plain.id, seated);
-    return seated;
-  };
+  const { seat, seated } = createSeats(galley, composition.observability);
 
   const browser = browserFacts(resolved.hostInfo.kind());
   const hostFacts = tauri === undefined ? browser : await tauri.tauriFacts(browser);
@@ -377,27 +406,12 @@ export const composeServices = async (
     run,
     ...resolved,
     seat,
-    seated: (id) => seats.get(id),
+    seated,
     storage: storageKind,
     projectsRoot: tauri === undefined ? PROJECTS_ROOT : `${paths.appData}/projects`,
     libraryRoot: libraryRootIn(paths.appData),
     inMemoryTransfer:
-      tauri === undefined
-        ? (held) =>
-            Layer.provideMerge(
-              Layer.merge(
-                Layer.fresh(WebGitLive),
-                WebRemoteLive({
-                  contentHost: resolveEndpoints(resolved.settings).contentHost,
-                  transport: bootTransport(),
-                  appId: appIdFor(build),
-                }),
-              ),
-              held === undefined
-                ? MemoryFileSystemLive()
-                : Layer.succeed(FileSystem.FileSystem, held),
-            )
-        : undefined,
+      tauri === undefined ? inMemoryTransferFor(resolved.settings, build) : undefined,
     fixtureProject: fixture?.SMALL_NT_ROOT,
     hostFacts,
     logFiles,

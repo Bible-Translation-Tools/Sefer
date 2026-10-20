@@ -17,11 +17,49 @@ import {
 } from "../../suppressAnswers";
 import { Button, IconButton, Menu, MenuItem } from "../primitives";
 
-export function SuppressActions(props: { readonly finding: Finding }) {
+function MoreMenu(props: { readonly finding: Finding; readonly everywhere: boolean }) {
   const shell = useShell();
-
   const flagged = (): string => flaggedText(shell, props.finding);
   const check = (): string => checkLabel(props.finding) ?? "";
+
+  return (
+    <Menu
+      label={t("More ways to answer this finding")}
+      side="bottom"
+      align="end"
+      class="w-80"
+      trigger={
+        <IconButton label={t("More")} size="sm" icon={<Ellipsis />} data-tour="finding-more" />
+      }
+    >
+      <Show when={props.everywhere}>
+        <MenuItem onSelect={() => allow(shell, props.finding)} data-testid="suppress-allow">
+          <span class="flex flex-col gap-0.5">
+            <span>{t("Always allow “{text}”", { text: flagged() })}</span>
+            <span class="text-smallest font-normal text-on-surface-tertiary">
+              {t("Never flag this in this project. Other “{check}” findings still show.", {
+                check: check(),
+              })}
+            </span>
+          </span>
+        </MenuItem>
+      </Show>
+      <Show when={checkSwitchOf(props.finding.code) !== undefined}>
+        <MenuItem onSelect={() => turnOff(shell, props.finding)} data-testid="suppress-turn-off">
+          <span class="flex flex-col gap-0.5">
+            <span>{t("Turn off “{check}”", { check: check() })}</span>
+            <span class="text-smallest font-normal text-on-surface-tertiary">
+              {t("Stop this check in every project. Turn it back on in the proofreading settings.")}
+            </span>
+          </span>
+        </MenuItem>
+      </Show>
+    </Menu>
+  );
+}
+
+export function SuppressActions(props: { readonly finding: Finding }) {
+  const shell = useShell();
 
   const hidden = () => shell.suppressedBy(props.finding);
 
@@ -61,54 +99,7 @@ export function SuppressActions(props: { readonly finding: Finding }) {
                 keys().everywhere !== undefined || checkSwitchOf(props.finding.code) !== undefined
               }
             >
-              <Menu
-                label={t("More ways to answer this finding")}
-                side="bottom"
-                align="end"
-                class="w-80"
-                trigger={
-                  <IconButton
-                    label={t("More")}
-                    size="sm"
-                    icon={<Ellipsis />}
-                    data-tour="finding-more"
-                  />
-                }
-              >
-                <Show when={keys().everywhere !== undefined}>
-                  <MenuItem
-                    onSelect={() => allow(shell, props.finding)}
-                    data-testid="suppress-allow"
-                  >
-                    <span class="flex flex-col gap-0.5">
-                      <span>{t("Always allow “{text}”", { text: flagged() })}</span>
-                      <span class="text-smallest font-normal text-on-surface-tertiary">
-                        {t(
-                          "Never flag this in this project. Other “{check}” findings still show.",
-                          {
-                            check: check(),
-                          },
-                        )}
-                      </span>
-                    </span>
-                  </MenuItem>
-                </Show>
-                <Show when={checkSwitchOf(props.finding.code) !== undefined}>
-                  <MenuItem
-                    onSelect={() => turnOff(shell, props.finding)}
-                    data-testid="suppress-turn-off"
-                  >
-                    <span class="flex flex-col gap-0.5">
-                      <span>{t("Turn off “{check}”", { check: check() })}</span>
-                      <span class="text-smallest font-normal text-on-surface-tertiary">
-                        {t(
-                          "Stop this check in every project. Turn it back on in the proofreading settings.",
-                        )}
-                      </span>
-                    </span>
-                  </MenuItem>
-                </Show>
-              </Menu>
+              <MoreMenu finding={props.finding} everywhere={keys().everywhere !== undefined} />
             </Show>
           </>
         )}

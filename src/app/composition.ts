@@ -68,17 +68,76 @@ const nanos = (ms: number): bigint => BigInt(Math.round(ms * 1e6));
 
 const OTLP_PROXY_PATH = "/__otlp";
 
-const telemetryBridge = async (): Promise<Telemetry | undefined> => {
-  if (!import.meta.env.DEV || env.otlpUrl === null || typeof location !== "object")
-    return undefined;
-  const [tracer, logger, metrics, serialization, http] = await Promise.all([
-    import("effect/unstable/observability/OtlpTracer"),
-    import("effect/unstable/observability/OtlpLogger"),
-    import("effect/unstable/observability/OtlpMetrics"),
-    import("effect/unstable/observability/OtlpSerialization"),
-    import("effect/unstable/http/FetchHttpClient"),
-  ]);
+const attributesOf = (
+  of: {
+    readonly attrs?: Record<string, unknown>;
+    readonly verdict?: string;
+    readonly detail?: string;
+  },
+  kind: string,
+): Record<string, unknown> => ({
+  "sefer.kind": kind,
+  ...of.attrs,
+  ...(of.detail === undefined ? {} : { "sefer.detail": of.detail }),
+  ...(of.verdict === undefined ? {} : { "sefer.verdict": of.verdict }),
+});
 
+const exportSpan = (assembled: AssembledSpan, root: boolean): Effect.Effect<Tracer.Span> =>
+  Effect.gen(function* () {
+    const span = yield* Effect.makeSpan(assembled.name, {
+      ...(root ? { root: true } : {}),
+      attributes: {
+        ...attributesOf(assembled, root ? "operation" : "span"),
+        ...(assembled.self === undefined ? {} : { "sefer.self_ms": assembled.self }),
+      },
+    });
+    for (const one of assembled.events)
+      span.event(one.name, nanos(one.t), attributesOf(one, "note"));
+    span.end(span.status.startTime + nanos(assembled.ms ?? 0), Exit.succeed(undefined));
+    return span;
+  });
+
+const exportOperation = (assembled: AssembledSpan): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    const parent = yield* exportSpan(assembled, true);
+    yield* Effect.withParentSpan(
+      Effect.forEach(assembled.children, (child) => exportSpan(child, false), { discard: true }),
+      parent,
+    );
+  });
+
+const exportLoose = (event: ObservabilityEvent): Effect.Effect<void> => {
+  if (event.kind === "span" || event.kind === "operation")
+    return Effect.asVoid(
+      exportSpan(
+        {
+          name: event.name,
+          trace: "",
+          id: "",
+          t: event.t,
+          ...(event.ms === undefined ? {} : { ms: event.ms }),
+          ...(event.verdict === undefined ? {} : { verdict: event.verdict }),
+          ...(event.attrs === undefined ? {} : { attrs: event.attrs }),
+          events: [],
+          children: [],
+        },
+        true,
+      ),
+    );
+  const line = `${event.name}${event.verdict === undefined ? "" : ` ${event.verdict}`}`;
+  const said = event.verdict === "failed" ? Effect.logError(line) : Effect.log(line);
+  return Effect.annotateLogs(said, attributesOf(event, event.kind));
+};
+
+type OtlpModules = readonly [
+  typeof import("effect/unstable/observability/OtlpTracer"),
+  typeof import("effect/unstable/observability/OtlpLogger"),
+  typeof import("effect/unstable/observability/OtlpMetrics"),
+  typeof import("effect/unstable/observability/OtlpSerialization"),
+  typeof import("effect/unstable/http/FetchHttpClient"),
+];
+
+const otlpExporters = ([tracer, logger, metrics, serialization, http]: OtlpModules) => {
   const resource = { serviceName: "sefer" };
   const transport = () =>
     Layer.merge(
@@ -99,69 +158,23 @@ const telemetryBridge = async (): Promise<Telemetry | undefined> => {
         )
       : Layer.empty,
   );
+  return exporters;
+};
 
-  const runtime = ManagedRuntime.make(exporters);
+const telemetryBridge = async (): Promise<Telemetry | undefined> => {
+  if (!import.meta.env.DEV || env.otlpUrl === null || typeof location !== "object")
+    return undefined;
+  const [tracer, logger, metrics, serialization, http] = await Promise.all([
+    import("effect/unstable/observability/OtlpTracer"),
+    import("effect/unstable/observability/OtlpLogger"),
+    import("effect/unstable/observability/OtlpMetrics"),
+    import("effect/unstable/observability/OtlpSerialization"),
+    import("effect/unstable/http/FetchHttpClient"),
+  ]);
 
-  const attributesOf = (
-    of: {
-      readonly attrs?: Record<string, unknown>;
-      readonly verdict?: string;
-      readonly detail?: string;
-    },
-    kind: string,
-  ): Record<string, unknown> => ({
-    "sefer.kind": kind,
-    ...of.attrs,
-    ...(of.detail === undefined ? {} : { "sefer.detail": of.detail }),
-    ...(of.verdict === undefined ? {} : { "sefer.verdict": of.verdict }),
-  });
-
-  const exportSpan = (assembled: AssembledSpan, root: boolean): Effect.Effect<Tracer.Span> =>
-    Effect.gen(function* () {
-      const span = yield* Effect.makeSpan(assembled.name, {
-        ...(root ? { root: true } : {}),
-        attributes: {
-          ...attributesOf(assembled, root ? "operation" : "span"),
-          ...(assembled.self === undefined ? {} : { "sefer.self_ms": assembled.self }),
-        },
-      });
-      for (const one of assembled.events)
-        span.event(one.name, nanos(one.t), attributesOf(one, "note"));
-      span.end(span.status.startTime + nanos(assembled.ms ?? 0), Exit.succeed(undefined));
-      return span;
-    });
-
-  const exportOperation = (assembled: AssembledSpan): Effect.Effect<void> =>
-    Effect.gen(function* () {
-      const parent = yield* exportSpan(assembled, true);
-      yield* Effect.withParentSpan(
-        Effect.forEach(assembled.children, (child) => exportSpan(child, false), { discard: true }),
-        parent,
-      );
-    });
-
-  const exportLoose = (event: ObservabilityEvent): Effect.Effect<void> => {
-    if (event.kind === "span" || event.kind === "operation")
-      return Effect.asVoid(
-        exportSpan(
-          {
-            name: event.name,
-            trace: "",
-            id: "",
-            t: event.t,
-            ...(event.ms === undefined ? {} : { ms: event.ms }),
-            ...(event.verdict === undefined ? {} : { verdict: event.verdict }),
-            ...(event.attrs === undefined ? {} : { attrs: event.attrs }),
-            events: [],
-            children: [],
-          },
-          true,
-        ),
-      );
-    const line = `${event.name}${event.verdict === undefined ? "" : ` ${event.verdict}`}`;
-    const said = event.verdict === "failed" ? Effect.logError(line) : Effect.log(line);
-    return Effect.annotateLogs(said, attributesOf(event, event.kind));
-  };
+  const runtime = ManagedRuntime.make(
+    otlpExporters([tracer, logger, metrics, serialization, http]),
+  );
 
   return {
     operation: (assembled) => {

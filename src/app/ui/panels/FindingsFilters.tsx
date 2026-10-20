@@ -33,11 +33,86 @@ export interface FindingsFiltersProps {
   readonly class?: string;
 }
 
-export function FindingsFilters(props: FindingsFiltersProps) {
-  const filter = (): FindingsFilter => props.state.filter();
-  const shell = useShell();
-  const nameOf = (bookId: BookId): string => bookName(bookId, metadataOf(shell.project()));
+const some = (kept: number, total: number): string =>
+  kept >= total ? t("all") : t("{kept} of {total}", { kept, total });
 
+const narrowedSummary = (held: readonly string[] | null, total: number): string =>
+  held === null ? t("all") : t("{kept} of {total}", { kept: held.length, total });
+
+const byText = (value: string, query: string): boolean =>
+  value.toLowerCase().includes(query.toLowerCase());
+
+function SeverityToggle(props: FindingsFiltersProps) {
+  return (
+    <ToggleGroup
+      label={t("Severity")}
+      items={props.facets.severities.map((facet: Facet<Severity>) => ({
+        value: facet.value,
+        label: t(facet.value),
+        adornment: <Badge tone={severityTone(facet.value)}>{facet.count}</Badge>,
+      }))}
+      pressed={(value) => props.state.filter().severities.includes(value)}
+      onToggle={(value) =>
+        props.state.update({ severities: toggled(props.state.filter().severities, value) })
+      }
+    />
+  );
+}
+
+function ProducerSelect(props: FindingsFiltersProps) {
+  const filter = (): FindingsFilter => props.state.filter();
+  return (
+    <MultiSelect
+      id="producer"
+      label={t("Producer")}
+      summary={some(filter().producers.length, props.facets.producers.length)}
+      narrowed={filter().producers.length < props.facets.producers.length}
+      items={props.facets.producers}
+      key={(facet: Facet<Producer>) => facet.value}
+      selected={(facet) => filter().producers.includes(facet.value)}
+      onToggle={(facet) =>
+        props.state.update({ producers: toggled(filter().producers, facet.value) })
+      }
+    >
+      {(facet) => (
+        <>
+          <span class="flex-1">{producerLabel(facet.value)}</span>
+          <Badge>{facet.count}</Badge>
+        </>
+      )}
+    </MultiSelect>
+  );
+}
+
+function CodeSelect(props: FindingsFiltersProps) {
+  const filter = (): FindingsFilter => props.state.filter();
+  return (
+    <MultiSelect
+      id="code"
+      label={t("Codes")}
+      summary={narrowedSummary(filter().codes, props.facets.codes.length)}
+      narrowed={filter().codes !== null}
+      items={props.facets.codes}
+      key={(facet: Facet<string>) => facet.value}
+      match={(facet, query) => byText(codeLabel(facet.value), query) || byText(facet.value, query)}
+      selected={(facet) => chosen(filter().codes, facet.value)}
+      onToggle={(facet) => props.state.update({ codes: narrowed(filter().codes, facet.value) })}
+      clear={{ label: t("All codes"), onClear: () => props.state.update({ codes: null }) }}
+    >
+      {(facet) => (
+        <>
+          <span class="flex-1 truncate" title={facet.value}>
+            {codeLabel(facet.value)}
+          </span>
+          <Badge>{facet.count}</Badge>
+        </>
+      )}
+    </MultiSelect>
+  );
+}
+
+const createScope = (props: FindingsFiltersProps, filter: () => FindingsFilter) => {
+  const shell = useShell();
   const [kind, setKind] = createSignal<BookScopeKind>(
     untrack(() => (filter().books === null ? "project" : "custom")),
     { name: "findingsScope" },
@@ -63,14 +138,15 @@ export function FindingsFilters(props: FindingsFiltersProps) {
     },
   );
 
-  const some = (kept: number, total: number): string =>
-    kept >= total ? t("all") : t("{kept} of {total}", { kept, total });
+  return { kind, setKind, custom, setCustom, thisBook };
+};
 
-  const narrowedSummary = (held: readonly string[] | null, total: number): string =>
-    held === null ? t("all") : t("{kept} of {total}", { kept: held.length, total });
+export function FindingsFilters(props: FindingsFiltersProps) {
+  const filter = (): FindingsFilter => props.state.filter();
+  const shell = useShell();
+  const nameOf = (bookId: BookId): string => bookName(bookId, metadataOf(shell.project()));
 
-  const byText = (value: string, query: string): boolean =>
-    value.toLowerCase().includes(query.toLowerCase());
+  const { kind, setKind, custom, setCustom, thisBook } = createScope(props, filter);
 
   return (
     <div
@@ -78,38 +154,9 @@ export function FindingsFilters(props: FindingsFiltersProps) {
       aria-label={t("Filters")}
       data-findings-filters
     >
-      <ToggleGroup
-        label={t("Severity")}
-        items={props.facets.severities.map((facet: Facet<Severity>) => ({
-          value: facet.value,
-          label: t(facet.value),
-          adornment: <Badge tone={severityTone(facet.value)}>{facet.count}</Badge>,
-        }))}
-        pressed={(value) => filter().severities.includes(value)}
-        onToggle={(value) =>
-          props.state.update({ severities: toggled(filter().severities, value) })
-        }
-      />
+      <SeverityToggle state={props.state} facets={props.facets} books={props.books} />
 
-      <MultiSelect
-        id="producer"
-        label={t("Producer")}
-        summary={some(filter().producers.length, props.facets.producers.length)}
-        narrowed={filter().producers.length < props.facets.producers.length}
-        items={props.facets.producers}
-        key={(facet: Facet<Producer>) => facet.value}
-        selected={(facet) => filter().producers.includes(facet.value)}
-        onToggle={(facet) =>
-          props.state.update({ producers: toggled(filter().producers, facet.value) })
-        }
-      >
-        {(facet) => (
-          <>
-            <span class="flex-1">{producerLabel(facet.value)}</span>
-            <Badge>{facet.count}</Badge>
-          </>
-        )}
-      </MultiSelect>
+      <ProducerSelect state={props.state} facets={props.facets} books={props.books} />
 
       <BookScope
         value={kind()}
@@ -125,29 +172,7 @@ export function FindingsFilters(props: FindingsFiltersProps) {
       />
 
       <Show when={props.facets.codes.length > 0}>
-        <MultiSelect
-          id="code"
-          label={t("Codes")}
-          summary={narrowedSummary(filter().codes, props.facets.codes.length)}
-          narrowed={filter().codes !== null}
-          items={props.facets.codes}
-          key={(facet: Facet<string>) => facet.value}
-          match={(facet, query) =>
-            byText(codeLabel(facet.value), query) || byText(facet.value, query)
-          }
-          selected={(facet) => chosen(filter().codes, facet.value)}
-          onToggle={(facet) => props.state.update({ codes: narrowed(filter().codes, facet.value) })}
-          clear={{ label: t("All codes"), onClear: () => props.state.update({ codes: null }) }}
-        >
-          {(facet) => (
-            <>
-              <span class="flex-1 truncate" title={facet.value}>
-                {codeLabel(facet.value)}
-              </span>
-              <Badge>{facet.count}</Badge>
-            </>
-          )}
-        </MultiSelect>
+        <CodeSelect state={props.state} facets={props.facets} books={props.books} />
       </Show>
 
       <Input

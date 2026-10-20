@@ -70,7 +70,7 @@ const originWords = (origin: "here" | "there" | "both"): string => {
   return origin === "here" ? t("changed here") : t("changed in both places");
 };
 
-export function DiffCard(props: {
+export interface DiffCardProps {
   readonly hunk: Hunk;
   readonly sides: DiffSides;
   readonly split: boolean;
@@ -99,15 +99,21 @@ export function DiffCard(props: {
   readonly open?: CardAction;
   readonly onStep?: (step: ContextStep) => void;
   readonly onMounted?: (ms: number) => void;
-}) {
-  const [left, setLeft] = createSignal<HTMLDivElement | undefined>(undefined, { name: "cardLeft" });
-  const [right, setRight] = createSignal<HTMLDivElement | undefined>(undefined, {
-    name: "cardRight",
-  });
+}
 
-  const markup = (): boolean => props.view.usfm;
-  const usfm = (): boolean => props.usfm || markup();
+type Panes = Map<"baseline" | "current", Pane>;
+type Usfm = () => boolean;
+type CurrentPaint = (markup: boolean, split: boolean) => () => DiffPaint;
+type BaselinePaint = (markup: boolean) => () => DiffPaint;
+type HostSignal = () => HTMLDivElement | undefined;
 
+interface Paints {
+  readonly now: () => { hunk: Hunk; sides: DiffSides };
+  readonly currentPaint: CurrentPaint;
+  readonly baselinePaint: BaselinePaint;
+}
+
+const createPaints = (props: DiffCardProps): Paints => {
   const now = () => untrack(() => ({ hunk: props.hunk, sides: props.sides }));
   const controls = (): Controls | undefined => {
     const held = untrack(() => props.controls);
@@ -125,9 +131,16 @@ export function DiffCard(props: {
     const { hunk, sides } = now();
     return sidePaint(hunk.all, "baseline", markup, undefined, sides.baseline);
   };
+  return { now, currentPaint, baselinePaint };
+};
 
-  const panes = new Map<"baseline" | "current", Pane>();
-
+const createBaselinePane = (
+  props: DiffCardProps,
+  panes: Panes,
+  left: HostSignal,
+  usfm: Usfm,
+  { now, baselinePaint }: Paints,
+): void => {
   const baselineBuilt = createMemo(
     () => ({
       leftHost: left(),
@@ -163,7 +176,9 @@ export function DiffCard(props: {
       };
     },
   );
+};
 
+const createSeat = (props: DiffCardProps) => {
   const [book, setBook] = createSignal<EditorBook | undefined>(undefined, { name: "cardBook" });
   const [refused, setRefused] = createSignal(false, { name: "cardRefused" });
   createEffect(
@@ -185,7 +200,16 @@ export function DiffCard(props: {
     },
   );
   const editingBook = (): EditorBook | undefined => (props.editing === true ? book() : undefined);
+  return { editingBook, refused };
+};
 
+const createCurrentPane = (
+  props: DiffCardProps,
+  panes: Panes,
+  right: HostSignal,
+  usfm: Usfm,
+  { now, currentPaint }: Paints,
+): void => {
   const currentBuilt = createMemo(
     () => ({
       rightHost: right(),
@@ -233,16 +257,16 @@ export function DiffCard(props: {
       if (gone && pane?.live === true) pane.mount.repaint({ lines: [], marks: [], controls: [] });
     },
   );
+};
 
-  const editorCard = (card: CardMount | undefined): void => {
+const makeEditorCard =
+  (panes: Panes, livePaint: () => () => DiffPaint) =>
+  (card: CardMount | undefined): void => {
     if (card === undefined) {
       panes.delete("current");
       return;
     }
-    const paint = currentPaint(
-      untrack(usfm),
-      untrack(() => props.split),
-    );
+    const paint = livePaint();
     panes.set("current", {
       mount: {
         repaint: (next) => card.setDiff(next),
@@ -255,6 +279,7 @@ export function DiffCard(props: {
     untrack(() => card.setDiff(paint()));
   };
 
+const repaintPanes = (props: DiffCardProps, panes: Panes): void => {
   createEffect(
     () => ({
       hunk: props.hunk,
@@ -270,28 +295,64 @@ export function DiffCard(props: {
       }
     },
   );
+};
 
-  const usfmAction = (): CardAction[] =>
-    hunkKind(props.hunk.units) === undefined || props.usfm
-      ? []
-      : [
-          {
-            kind: "icon",
-            id: "usfm",
-            label: markup() ? t("Show the reading") : t("Show the USFM"),
-            icon: CodeIcon,
-            pressed: markup(),
-            onPress: () => props.onView({ kind: "usfm" }),
-          },
-        ];
+const usfmAction = (props: DiffCardProps, markup: boolean): CardAction[] =>
+  hunkKind(props.hunk.units) === undefined || props.usfm
+    ? []
+    : [
+        {
+          kind: "icon",
+          id: "usfm",
+          label: markup ? t("Show the reading") : t("Show the USFM"),
+          icon: CodeIcon,
+          pressed: markup,
+          onPress: () => props.onView({ kind: "usfm" }),
+        },
+      ];
 
-  const chosen = (): MergeSide | undefined => {
-    const controls = props.controls;
-    const units = props.hunk.units;
-    if (controls === undefined || units.length === 0) return undefined;
-    const sides = new Set(units.map((unit) => controls.decision(unit)));
-    return sides.size === 1 ? [...sides][0] : undefined;
-  };
+const chosenSide = (
+  controls: Controls | undefined,
+  units: readonly DecisionUnit[],
+): MergeSide | undefined => {
+  if (controls === undefined || units.length === 0) return undefined;
+  const sides = new Set(units.map((unit) => controls.decision(unit)));
+  return sides.size === 1 ? [...sides][0] : undefined;
+};
+
+const statusOf = (controls: Controls | undefined, units: readonly DecisionUnit[]): string => {
+  if (units.length === 0) return "";
+  if (controls !== undefined && units.every((unit) => controls.decision(unit) !== undefined))
+    return "";
+  if (units.length > 1) return `${units.length} changes`;
+  const only = units[0]?.status ?? "";
+  return only === "modified" ? "" : only;
+};
+
+export function DiffCard(props: DiffCardProps) {
+  const [left, setLeft] = createSignal<HTMLDivElement | undefined>(undefined, { name: "cardLeft" });
+  const [right, setRight] = createSignal<HTMLDivElement | undefined>(undefined, {
+    name: "cardRight",
+  });
+
+  const markup = (): boolean => props.view.usfm;
+  const usfm = (): boolean => props.usfm || markup();
+
+  const paints = createPaints(props);
+  const { currentPaint } = paints;
+  const panes: Panes = new Map();
+  createBaselinePane(props, panes, left, usfm, paints);
+  const { editingBook, refused } = createSeat(props);
+  createCurrentPane(props, panes, right, usfm, paints);
+  const livePaint = () =>
+    currentPaint(
+      untrack(usfm),
+      untrack(() => props.split),
+    );
+  const editorCard = makeEditorCard(panes, livePaint);
+  repaintPanes(props, panes);
+
+  const chosen = (): MergeSide | undefined => chosenSide(props.controls, props.hunk.units);
   const caption = (side: MergeSide, label: string) => (
     <span
       class={cx(
@@ -307,16 +368,8 @@ export function DiffCard(props: {
     </span>
   );
 
-  const status = (): string => {
-    const units = props.hunk.units;
-    if (units.length === 0) return "";
-    const controls = props.controls;
-    if (controls !== undefined && units.every((unit) => controls.decision(unit) !== undefined))
-      return "";
-    if (units.length > 1) return `${units.length} changes`;
-    const only = units[0]?.status ?? "";
-    return only === "modified" ? "" : only;
-  };
+  const status = (): string => statusOf(props.controls, props.hunk.units);
+  const usfmActions = (): CardAction[] => usfmAction(props, markup());
 
   return (
     <CardFrame
@@ -350,7 +403,7 @@ export function DiffCard(props: {
           </Show>
         </>
       }
-      headerActions={[...usfmAction(), ...(props.headerActions ?? [])]}
+      headerActions={[...usfmActions(), ...(props.headerActions ?? [])]}
       edit={
         props.editable === true
           ? {

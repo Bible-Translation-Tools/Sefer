@@ -28,38 +28,14 @@ interface TermsSearch {
   readonly locale?: string;
 }
 
-function Terms() {
-  const shell = useShell();
-  const approvals = createMemo(
-    (): ApprovalsHandle | undefined => {
-      const project = shell.project();
-      return project === undefined ? undefined : createApprovals(shell.services, project.root);
-    },
-    { name: "termsApprovals" },
-  );
-  const navigate = useNavigate();
-  const params = Route.useSearch();
+type Shell = ReturnType<typeof useShell>;
 
-  const locale = (): string => params().locale ?? DEFAULT_LOCALE;
-  const filter = (): string => params().q ?? "";
-
-  const ask = (next: TermsSearch): void => {
-    void navigate({
-      to: "/project/$slug/terms",
-      params: { slug: shell.slug() },
-      search: { ...params(), ...next },
-      replace: true,
-    });
-  };
-
+function createTermsLoad(shell: Shell, locale: () => string) {
   const [terms, setTerms] = createSignal<readonly Term[]>([], { name: "terms" });
 
   const [guides, setGuides] = createSignal<readonly Guide[]>([], { name: "termGuides" });
   const [loading, setLoading] = createSignal(true, { name: "termsLoading" });
   const [problem, setProblem] = createSignal("", { name: "termsProblem" });
-  const [readings, setReadings] = createSignal<ReadonlyMap<string, SourceReading>>(new Map(), {
-    name: "termSourceReadings",
-  });
 
   createEffect(
     () => locale(),
@@ -96,27 +72,15 @@ function Terms() {
     },
   );
 
-  const selected = createMemo(
-    () => {
-      const asked = params().term;
-      const held = terms();
-      if (asked !== undefined) {
-        const found = held.find((term) => term.id === asked);
-        if (found !== undefined) return found;
-      }
-      return held[0];
-    },
-    { name: "selectedTerm" },
-  );
+  return { terms, guides, loading, problem };
+}
 
-  const [additional, setAdditional] = createSignal(false, { name: "termsAdditional" });
-  createEffect(
-    () => selected()?.id,
-    () => {
-      setAdditional(false);
-    },
-  );
-
+function createTermsHits(
+  shell: Shell,
+  terms: () => readonly Term[],
+  selected: () => Term | undefined,
+  additional: () => boolean,
+) {
   const curatedAddresses = createMemo(
     (): readonly Address[] => {
       const all = selected()?.occurrences ?? [];
@@ -169,8 +133,17 @@ function Terms() {
     { name: "termCuratedAt" },
   );
 
-  const feed = createExcerptFeed({ hits, name: "terms", analyze });
+  return { analyze, curatedHits, allHits, hits, coreTotals, curatedAt };
+}
 
+function createTermReadings(
+  shell: Shell,
+  selected: () => Term | undefined,
+  hits: () => readonly Occurrence[],
+) {
+  const [readings, setReadings] = createSignal<ReadonlyMap<string, SourceReading>>(new Map(), {
+    name: "termSourceReadings",
+  });
   createEffect(
     () => selected()?.id,
     () => {
@@ -200,17 +173,143 @@ function Terms() {
         });
     },
   );
+  return readings;
+}
+
+interface TermsModel {
+  readonly selected: () => Term | undefined;
+  readonly load: ReturnType<typeof createTermsLoad>;
+  readonly counts: ReturnType<typeof createTermsHits>;
+  readonly feed: ReturnType<typeof createExcerptFeed>;
+  readonly readings: () => ReadonlyMap<string, SourceReading>;
+  readonly approvals: () => ApprovalsHandle | undefined;
+  readonly additional: () => boolean;
+  readonly setAdditional: (next: boolean) => void;
+  readonly locale: () => string;
+  readonly filter: () => string;
+  readonly ask: (next: TermsSearch) => void;
+}
+
+function TermsView(props: { readonly model: TermsModel }) {
+  const shell = useShell();
+  return (
+    <Show when={props.model.approvals()}>
+      {(held) => (
+        <StetView
+          approvals={held()}
+          terms={props.model.load.terms()}
+          selected={props.model.selected()?.id ?? ""}
+          onSelect={(id) => props.model.ask({ term: id })}
+          filter={props.model.filter()}
+          onFilter={(text) => props.model.ask({ q: text })}
+          guides={props.model.load.guides()}
+          locale={props.model.locale()}
+          onLocale={(next) => props.model.ask({ locale: next, term: undefined })}
+          loading={props.model.load.loading()}
+          groups={props.model.feed.groups()}
+          views={props.model.feed.views}
+          outline={props.model.feed.outline()}
+          onOpen={props.model.feed.openInEditor}
+          seat={props.model.feed.seat}
+          seatedOf={props.model.feed.seatedOf}
+          shownOf={props.model.feed.shownOf}
+          analyze={props.model.feed.analyze}
+          onEdited={props.model.feed.edited}
+          initial={props.model.feed.initial}
+          onExpand={props.model.feed.expand}
+          mode={shell.mode() === "usfm" ? "usfm" : "regular"}
+          sourceOf={(excerpt) => props.model.readings().get(excerpt.sid)}
+          additional={props.model.additional()}
+          onAdditional={props.model.setAdditional}
+          additionalCount={
+            props.model.counts.allHits().length - props.model.counts.curatedHits().length
+          }
+          coreTotalOf={(id) => props.model.counts.coreTotals().get(id) ?? 0}
+          isCurated={(excerpt) =>
+            excerpt.hits.some((hit) =>
+              props.model.counts.curatedAt().has(`${hit.bookId}:${hit.from}`),
+            )
+          }
+        />
+      )}
+    </Show>
+  );
+}
+
+function Terms() {
+  const shell = useShell();
+  const approvals = createMemo(
+    (): ApprovalsHandle | undefined => {
+      const project = shell.project();
+      return project === undefined ? undefined : createApprovals(shell.services, project.root);
+    },
+    { name: "termsApprovals" },
+  );
+  const navigate = useNavigate();
+  const params = Route.useSearch();
+
+  const locale = (): string => params().locale ?? DEFAULT_LOCALE;
+  const filter = (): string => params().q ?? "";
+
+  const ask = (next: TermsSearch): void => {
+    void navigate({
+      to: "/project/$slug/terms",
+      params: { slug: shell.slug() },
+      search: { ...params(), ...next },
+      replace: true,
+    });
+  };
+
+  const load = createTermsLoad(shell, locale);
+
+  const selected = createMemo(
+    () => {
+      const asked = params().term;
+      const held = load.terms();
+      if (asked !== undefined) {
+        const found = held.find((term) => term.id === asked);
+        if (found !== undefined) return found;
+      }
+      return held[0];
+    },
+    { name: "selectedTerm" },
+  );
+
+  const [additional, setAdditional] = createSignal(false, { name: "termsAdditional" });
+  createEffect(
+    () => selected()?.id,
+    () => {
+      setAdditional(false);
+    },
+  );
+
+  const counts = createTermsHits(shell, load.terms, selected, additional);
+  const feed = createExcerptFeed({ hits: counts.hits, name: "terms", analyze: counts.analyze });
+  const readings = createTermReadings(shell, selected, counts.hits);
+  const model: TermsModel = {
+    selected,
+    load,
+    counts,
+    feed,
+    readings,
+    approvals,
+    additional,
+    setAdditional,
+    locale,
+    filter,
+    ask,
+  };
 
   return (
     <main class="flex h-full min-w-0 flex-col gap-4 p-6">
       <PanelHeader
         title={selected()?.term ?? t("Spiritual terms")}
         actions={
-          <Show when={guides().length > 0}>
+          <Show when={load.guides().length > 0}>
             <SegmentedControl
               label={t("Spiritual terms source language")}
               tone="light"
-              items={guides().map((guide) => ({
+              items={load.guides().map((guide) => ({
                 value: guide.locale,
                 label: languageOf(guide.locale.split("-")[0] ?? guide.locale),
               }))}
@@ -225,48 +324,13 @@ function Terms() {
         when={shell.project()}
         fallback={<p class="text-small text-on-surface-primary">{t("Open a project first.")}</p>}
       >
-        <Show when={problem() !== ""}>
+        <Show when={load.problem() !== ""}>
           <p class="rounded-md bg-surface-error px-4 py-3 text-small text-on-surface-error">
-            {problem()}
+            {load.problem()}
           </p>
         </Show>
 
-        <Show when={approvals()}>
-          {(held) => (
-            <StetView
-              approvals={held()}
-              terms={terms()}
-              selected={selected()?.id ?? ""}
-              onSelect={(id) => ask({ term: id })}
-              filter={filter()}
-              onFilter={(text) => ask({ q: text })}
-              guides={guides()}
-              locale={locale()}
-              onLocale={(next) => ask({ locale: next, term: undefined })}
-              loading={loading()}
-              groups={feed.groups()}
-              views={feed.views}
-              outline={feed.outline()}
-              onOpen={feed.openInEditor}
-              seat={feed.seat}
-              seatedOf={feed.seatedOf}
-              shownOf={feed.shownOf}
-              analyze={feed.analyze}
-              onEdited={feed.edited}
-              initial={feed.initial}
-              onExpand={feed.expand}
-              mode={shell.mode() === "usfm" ? "usfm" : "regular"}
-              sourceOf={(excerpt) => readings().get(excerpt.sid)}
-              additional={additional()}
-              onAdditional={setAdditional}
-              additionalCount={allHits().length - curatedHits().length}
-              coreTotalOf={(id) => coreTotals().get(id) ?? 0}
-              isCurated={(excerpt) =>
-                excerpt.hits.some((hit) => curatedAt().has(`${hit.bookId}:${hit.from}`))
-              }
-            />
-          )}
-        </Show>
+        <TermsView model={model} />
       </Show>
     </main>
   );

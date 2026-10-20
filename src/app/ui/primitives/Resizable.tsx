@@ -241,6 +241,30 @@ const handleLine = (edge: boolean, vertical: boolean): string => {
   );
 };
 
+const trackDrag = (
+  split: SplitContext,
+  before: number,
+  vertical: boolean,
+  event: PointerEvent,
+  setDragging: (dragging: boolean) => void,
+): void => {
+  event.preventDefault();
+  const origin = vertical ? event.clientY : event.clientX;
+  split.begin();
+  setDragging(true);
+  const move = (moving: PointerEvent): void => {
+    split.drag(before, (vertical ? moving.clientY : moving.clientX) - origin);
+  };
+  const stop = (): void => {
+    setDragging(false);
+    split.end();
+    document.removeEventListener("pointermove", move);
+    document.removeEventListener("pointerup", stop);
+  };
+  document.addEventListener("pointermove", move);
+  document.addEventListener("pointerup", stop);
+};
+
 function Handle(props: ResizableHandleProps) {
   const split = useSplit();
   const before = split.addHandle();
@@ -267,23 +291,7 @@ function Handle(props: ResizableHandleProps) {
         props.edge === true && (vertical ? "h-0" : "w-0"),
         props.class,
       )}
-      onPointerDown={(event) => {
-        event.preventDefault();
-        const origin = vertical ? event.clientY : event.clientX;
-        split.begin();
-        setDragging(true);
-        const move = (moving: PointerEvent): void => {
-          split.drag(before, (vertical ? moving.clientY : moving.clientX) - origin);
-        };
-        const stop = (): void => {
-          setDragging(false);
-          split.end();
-          document.removeEventListener("pointermove", move);
-          document.removeEventListener("pointerup", stop);
-        };
-        document.addEventListener("pointermove", move);
-        document.addEventListener("pointerup", stop);
-      }}
+      onPointerDown={(event) => trackDrag(split, before, vertical, event, setDragging)}
       onKeyDown={(event) => {
         if (event.key === (vertical ? "ArrowUp" : "ArrowLeft")) nudge(-24);
         else if (event.key === (vertical ? "ArrowDown" : "ArrowRight")) nudge(24);

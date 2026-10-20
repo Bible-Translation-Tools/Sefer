@@ -97,6 +97,325 @@ type HelpsRead =
   | { readonly state: "ready"; readonly rows: readonly HelpText[] }
   | { readonly state: "failed"; readonly offline: boolean };
 
+type Shown = { readonly entry: Entry; readonly book: string } | undefined;
+
+interface PickerModel {
+  readonly busy: () => boolean;
+  readonly fetching: () => string;
+  readonly nameOf: (resource: Resource | undefined) => string;
+  readonly shown: () => Shown;
+  readonly installed: () => readonly Resource[];
+  readonly show: (resource: Resource) => void;
+  readonly offer: () => void;
+  readonly otherProjects: () => readonly ProjectSummary[];
+  readonly showProject: (row: ProjectSummary) => void;
+  readonly notes: () => HelpsRead | undefined;
+  readonly helps: () => readonly HelpText[];
+  readonly heldHelps: () => readonly Resource[];
+  readonly notesFailure: () => { readonly state: "failed"; readonly offline: boolean } | undefined;
+  readonly removeNotes: (resource: Resource) => void;
+  readonly fetchHelp: (help: HelpText) => void;
+  readonly downloadable: () => readonly CatalogueEntry[];
+  readonly fetchText: (entry: CatalogueEntry) => void;
+  readonly showProjects: () => boolean;
+  readonly setShowProjects: (open: boolean) => void;
+  readonly showOthers: () => boolean;
+  readonly setShowOthers: (open: boolean) => void;
+  readonly showHelps: () => boolean;
+  readonly setShowHelps: (open: boolean) => void;
+}
+
+const ROW = "px-6";
+
+function GroupToggle(props: {
+  readonly testId: string;
+  readonly label: string;
+  readonly open: boolean;
+  readonly onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      tabindex={-1}
+      data-testid={props.testId}
+      aria-expanded={props.open ? "true" : "false"}
+      class={`${ROW} flex h-12 w-full cursor-pointer items-center gap-3 text-start text-small font-semibold text-on-surface-primary outline-none hover:bg-surface-secondary focus-visible:bg-surface-secondary`}
+      onClick={() => props.onToggle()}
+    >
+      <span class="min-w-0 flex-1">{props.label}</span>
+      <Show when={props.open} fallback={<ChevronDown aria-hidden="true" class="size-5" />}>
+        <ChevronUp aria-hidden="true" class="size-5" />
+      </Show>
+    </button>
+  );
+}
+
+function RowText(props: { readonly name: string; readonly detail?: string }) {
+  return (
+    <span class="flex min-w-0 flex-1 flex-col">
+      <span class="truncate">{props.name}</span>
+      <Show when={props.detail !== undefined && props.detail !== props.name}>
+        <span class="truncate text-smallest text-on-surface-tertiary">{props.detail}</span>
+      </Show>
+    </span>
+  );
+}
+
+function OtherProjectsGroup(props: { readonly model: PickerModel }) {
+  return (
+    <Show when={props.model.otherProjects().length > 0}>
+      <GroupToggle
+        testId="reference-other-projects"
+        label={t("Your other projects ({count})", { count: props.model.otherProjects().length })}
+        open={props.model.showProjects()}
+        onToggle={() => props.model.setShowProjects(!props.model.showProjects())}
+      />
+      <Show when={props.model.showProjects()}>
+        <For each={props.model.otherProjects()}>
+          {(row) => (
+            <MenuItem
+              class={ROW}
+              data-testid={`pick-${row.folder}`}
+              onSelect={() => props.model.showProject(row)}
+            >
+              <RowText name={row.name} detail={languageName(row.language) ?? row.language} />
+            </MenuItem>
+          )}
+        </For>
+      </Show>
+    </Show>
+  );
+}
+
+function HeldNotesRow(props: { readonly resource: Resource; readonly model: PickerModel }) {
+  return (
+    <div
+      class={`${ROW} flex min-h-12 items-center gap-3 text-small text-on-surface-primary`}
+      data-testid="reference-held-notes"
+      data-language={props.resource.language}
+    >
+      <RowText
+        name={`${languageName(props.resource.language) ?? props.resource.title} (${props.resource.language ?? ""})`}
+        detail={t("On this device")}
+      />
+      <button
+        type="button"
+        role="menuitem"
+        tabindex={-1}
+        data-testid="reference-remove-notes"
+        title={t("Remove {title} from this device", {
+          title: props.model.nameOf(props.resource),
+        })}
+        class="flex shrink-0 cursor-pointer items-center gap-1 rounded-md px-2 py-1 text-small text-on-surface-secondary outline-none hover:bg-surface-secondary focus-visible:bg-surface-secondary"
+        onClick={() => props.model.removeNotes(props.resource)}
+      >
+        <Trash aria-hidden="true" class="size-4" />
+        {t("Remove")}
+      </button>
+    </div>
+  );
+}
+
+function HelpRow(props: { readonly help: HelpText; readonly model: PickerModel }) {
+  return (
+    <MenuItem
+      class={ROW}
+      data-testid={`pick-help-${props.help.repository}`}
+      title={t("Download {title} to read beside this project", {
+        title: t("Translation Notes · {language}", {
+          language: props.help.languageName || props.help.language,
+        }),
+      })}
+      onSelect={() => props.model.fetchHelp(props.help)}
+    >
+      <span class="flex min-w-0 flex-1 flex-col">
+        <span class="truncate">
+          {`${props.help.languageName || props.help.language} (${props.help.language})`}
+        </span>
+        <Show
+          when={
+            props.help.nationalName !== "" && props.help.nationalName !== props.help.languageName
+          }
+        >
+          <span
+            dir={props.help.direction}
+            class="truncate text-start text-smallest text-on-surface-tertiary"
+          >
+            {props.help.nationalName}
+          </span>
+        </Show>
+      </span>
+      <Show
+        when={helpDownloads().has(props.help.repository)}
+        fallback={<Download aria-hidden="true" class="size-5 shrink-0" />}
+      >
+        <span
+          role="status"
+          aria-label={t("Downloading")}
+          class="size-5 shrink-0 animate-spin rounded-full border-2 border-on-surface-tertiary border-t-transparent"
+        />
+      </Show>
+    </MenuItem>
+  );
+}
+
+function ReferenceMaterialGroup(props: { readonly model: PickerModel }) {
+  return (
+    <Show
+      when={
+        props.model.notes() !== undefined &&
+        (props.model.notes()?.state !== "ready" ||
+          props.model.helps().length > 0 ||
+          props.model.heldHelps().length > 0)
+      }
+    >
+      <GroupToggle
+        testId="reference-material"
+        label={
+          props.model.notes()?.state === "ready"
+            ? t("Reference material ({count})", {
+                count: props.model.heldHelps().length + props.model.helps().length,
+              })
+            : t("Reference material")
+        }
+        open={props.model.showHelps()}
+        onToggle={() => props.model.setShowHelps(!props.model.showHelps())}
+      />
+      <Show when={props.model.showHelps()}>
+        <div role="group" aria-label={t("Translation Notes")} data-testid="reference-notes">
+          <MenuLabel inset={ROW}>{t("Translation Notes")}</MenuLabel>
+
+          <For each={props.model.heldHelps()}>
+            {(resource) => <HeldNotesRow resource={resource} model={props.model} />}
+          </For>
+          <Show when={props.model.notes()?.state === "loading"}>
+            <p role="status" class={`${ROW} py-3 text-small text-on-surface-tertiary`}>
+              {t("Loading the list…")}
+            </p>
+          </Show>
+          <Show when={props.model.notesFailure()}>
+            {(failure) => (
+              <p role="status" class={`${ROW} py-3 text-small text-on-surface-tertiary`}>
+                {failure().offline
+                  ? t("You are offline. Open this menu again to retry.")
+                  : t("Could not read the list. Open this menu again to retry.")}
+              </p>
+            )}
+          </Show>
+          <For each={props.model.helps()}>
+            {(help) => <HelpRow help={help} model={props.model} />}
+          </For>
+        </div>
+      </Show>
+    </Show>
+  );
+}
+
+function OtherLanguagesGroup(props: { readonly model: PickerModel }) {
+  return (
+    <Show when={props.model.downloadable().length > 0}>
+      <GroupToggle
+        testId="reference-other-languages"
+        label={t("Other languages ({count})", { count: props.model.downloadable().length })}
+        open={props.model.showOthers()}
+        onToggle={() => props.model.setShowOthers(!props.model.showOthers())}
+      />
+      <Show when={props.model.showOthers()}>
+        <For each={props.model.downloadable()}>
+          {(entry) => (
+            <MenuItem
+              class={ROW}
+              data-testid={`pick-${entry.code}`}
+              title={t("Download {language} to read beside this project", {
+                language: entry.anglicizedName || entry.naturalName,
+              })}
+              onSelect={() => props.model.fetchText(entry)}
+            >
+              <span class="min-w-0 flex-1 truncate">
+                {entry.anglicizedName || entry.naturalName}
+              </span>
+              <Download aria-hidden="true" class="size-5 shrink-0" />
+            </MenuItem>
+          )}
+        </For>
+      </Show>
+    </Show>
+  );
+}
+
+function LanguagePicker(props: { readonly model: PickerModel }) {
+  return (
+    <Menu
+      label={t("Reference language")}
+      onOpenChange={(open) => {
+        if (!open) return;
+        props.model.setShowProjects(false);
+        props.model.setShowOthers(false);
+        props.model.setShowHelps(false);
+        props.model.offer();
+      }}
+      side="bottom"
+      align="start"
+      class="w-80"
+      fitViewport
+      trigger={
+        <button
+          type="button"
+          data-testid="reference-language"
+          disabled={props.model.busy()}
+          class="flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-2xl bg-surface-primary p-3 text-start transition-colors hover:bg-surface-secondary disabled:cursor-wait"
+        >
+          <span class="flex min-w-0 flex-1 flex-col">
+            <span class="text-small text-on-surface-secondary">{t("Reference language")}</span>
+            <span class="truncate text-small font-semibold text-on-surface-primary">
+              {props.model.fetching() === ""
+                ? props.model.nameOf(props.model.shown()?.entry.resource) || t("None yet")
+                : t("Getting {language}…", { language: props.model.fetching() })}
+            </span>
+          </span>
+          <ChevronDown aria-hidden="true" class="size-5 shrink-0 text-on-surface-primary" />
+        </button>
+      }
+    >
+      <div class="scrollbar-padded max-h-[min(60vh,25.5rem)] overflow-y-auto py-1">
+        <For each={props.model.installed()}>
+          {(resource) => (
+            <MenuItem class={ROW} onSelect={() => props.model.show(resource)}>
+              <RowText name={props.model.nameOf(resource)} detail={resource.title} />
+              <Show when={props.model.shown()?.entry.resource.id === resource.id}>
+                <Check aria-label={t("Showing")} class="size-5 shrink-0 text-brand" />
+              </Show>
+            </MenuItem>
+          )}
+        </For>
+        <OtherProjectsGroup model={props.model} />
+        <ReferenceMaterialGroup model={props.model} />
+        <OtherLanguagesGroup model={props.model} />
+      </div>
+    </Menu>
+  );
+}
+
+const readLibraryState = (
+  services: ReturnType<typeof useShell>["services"],
+  project: string,
+  declared: readonly RelatedResource[],
+) =>
+  Effect.gen(function* () {
+    const picked = new Set(
+      (yield* services.library.picked(project)).map((each) => each.resource.id),
+    );
+    const found: Entry[] = [];
+    for (const role of ROLES)
+      for (const resource of yield* services.library.resolve(project, role))
+        found.push({ resource, role, declared: !picked.has(resource.id) });
+    const held = yield* services.library.resources();
+    const absent = declared.filter((ref) => !held.some((resource) => answers(resource, ref)));
+    const library = held.filter((resource) => resource.root.startsWith(`${services.libraryRoot}/`));
+    return { found, absent, library };
+  });
+
 export interface ReferenceColumnProps {
   readonly onBound?: (count: number) => void;
   readonly onFolded?: (folded: boolean) => void;
@@ -149,25 +468,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       }
       setLoading(true);
       void services
-        .run(
-          Effect.gen(function* () {
-            const picked = new Set(
-              (yield* services.library.picked(project)).map((each) => each.resource.id),
-            );
-            const found: Entry[] = [];
-            for (const role of ROLES)
-              for (const resource of yield* services.library.resolve(project, role))
-                found.push({ resource, role, declared: !picked.has(resource.id) });
-            const held = yield* services.library.resources();
-            const absent = declared.filter(
-              (ref) => !held.some((resource) => answers(resource, ref)),
-            );
-            const library = held.filter((resource) =>
-              resource.root.startsWith(`${services.libraryRoot}/`),
-            );
-            return { found, absent, library };
-          }),
-        )
+        .run(readLibraryState(services, project, declared))
         // oxlint-disable-next-line solid/reactivity
         .then(({ found, absent, library }) => {
           setEntries(found);
@@ -376,7 +677,6 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     });
   };
 
-  type Shown = { readonly entry: Entry; readonly book: string } | undefined;
   const shown = createMemo(
     (): Shown => {
       const list = entries();
@@ -411,243 +711,31 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
   const [showProjects, setShowProjects] = createSignal(false, { name: "referenceShowProjects" });
   const [showOthers, setShowOthers] = createSignal(false, { name: "referenceShowOthers" });
   const [showHelps, setShowHelps] = createSignal(false, { name: "referenceShowHelps" });
-  const ROW = "px-6";
-
-  const GroupToggle = (groupProps: {
-    readonly testId: string;
-    readonly label: string;
-    readonly open: boolean;
-    readonly onToggle: () => void;
-  }) => (
-    <button
-      type="button"
-      role="menuitem"
-      tabindex={-1}
-      data-testid={groupProps.testId}
-      aria-expanded={groupProps.open ? "true" : "false"}
-      class={`${ROW} flex h-12 w-full cursor-pointer items-center gap-3 text-start text-small font-semibold text-on-surface-primary outline-none hover:bg-surface-secondary focus-visible:bg-surface-secondary`}
-      onClick={() => groupProps.onToggle()}
-    >
-      <span class="min-w-0 flex-1">{groupProps.label}</span>
-      <Show when={groupProps.open} fallback={<ChevronDown aria-hidden="true" class="size-5" />}>
-        <ChevronUp aria-hidden="true" class="size-5" />
-      </Show>
-    </button>
-  );
-
-  const RowText = (rowProps: { readonly name: string; readonly detail?: string }) => (
-    <span class="flex min-w-0 flex-1 flex-col">
-      <span class="truncate">{rowProps.name}</span>
-      <Show when={rowProps.detail !== undefined && rowProps.detail !== rowProps.name}>
-        <span class="truncate text-smallest text-on-surface-tertiary">{rowProps.detail}</span>
-      </Show>
-    </span>
-  );
-
-  const LanguagePicker = () => (
-    <Menu
-      label={t("Reference language")}
-      onOpenChange={(open) => {
-        if (!open) return;
-        setShowProjects(false);
-        setShowOthers(false);
-        setShowHelps(false);
-        offer();
-      }}
-      side="bottom"
-      align="start"
-      class="w-80"
-      fitViewport
-      trigger={
-        <button
-          type="button"
-          data-testid="reference-language"
-          disabled={busy()}
-          class="flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-2xl bg-surface-primary p-3 text-start transition-colors hover:bg-surface-secondary disabled:cursor-wait"
-        >
-          <span class="flex min-w-0 flex-1 flex-col">
-            <span class="text-small text-on-surface-secondary">{t("Reference language")}</span>
-            <span class="truncate text-small font-semibold text-on-surface-primary">
-              {fetching() === ""
-                ? nameOf(shown()?.entry.resource) || t("None yet")
-                : t("Getting {language}…", { language: fetching() })}
-            </span>
-          </span>
-          <ChevronDown aria-hidden="true" class="size-5 shrink-0 text-on-surface-primary" />
-        </button>
-      }
-    >
-      <div class="scrollbar-padded max-h-[min(60vh,25.5rem)] overflow-y-auto py-1">
-        <For each={installed()}>
-          {(resource) => (
-            <MenuItem class={ROW} onSelect={() => show(resource)}>
-              <RowText name={nameOf(resource)} detail={resource.title} />
-              <Show when={shown()?.entry.resource.id === resource.id}>
-                <Check aria-label={t("Showing")} class="size-5 shrink-0 text-brand" />
-              </Show>
-            </MenuItem>
-          )}
-        </For>
-        <Show when={otherProjects().length > 0}>
-          <GroupToggle
-            testId="reference-other-projects"
-            label={t("Your other projects ({count})", { count: otherProjects().length })}
-            open={showProjects()}
-            onToggle={() => setShowProjects(!showProjects())}
-          />
-          <Show when={showProjects()}>
-            <For each={otherProjects()}>
-              {(row) => (
-                <MenuItem
-                  class={ROW}
-                  data-testid={`pick-${row.folder}`}
-                  onSelect={() => showProject(row)}
-                >
-                  <RowText name={row.name} detail={languageName(row.language) ?? row.language} />
-                </MenuItem>
-              )}
-            </For>
-          </Show>
-        </Show>
-
-        <Show
-          when={
-            notes() !== undefined &&
-            (notes()?.state !== "ready" || helps().length > 0 || heldHelps().length > 0)
-          }
-        >
-          <GroupToggle
-            testId="reference-material"
-            label={
-              notes()?.state === "ready"
-                ? t("Reference material ({count})", {
-                    count: heldHelps().length + helps().length,
-                  })
-                : t("Reference material")
-            }
-            open={showHelps()}
-            onToggle={() => setShowHelps(!showHelps())}
-          />
-          <Show when={showHelps()}>
-            <div role="group" aria-label={t("Translation Notes")} data-testid="reference-notes">
-              <MenuLabel inset={ROW}>{t("Translation Notes")}</MenuLabel>
-
-              <For each={heldHelps()}>
-                {(resource) => (
-                  <div
-                    class={`${ROW} flex min-h-12 items-center gap-3 text-small text-on-surface-primary`}
-                    data-testid="reference-held-notes"
-                    data-language={resource.language}
-                  >
-                    <RowText
-                      name={`${languageName(resource.language) ?? resource.title} (${resource.language ?? ""})`}
-                      detail={t("On this device")}
-                    />
-                    <button
-                      type="button"
-                      role="menuitem"
-                      tabindex={-1}
-                      data-testid="reference-remove-notes"
-                      title={t("Remove {title} from this device", {
-                        title: nameOf(resource),
-                      })}
-                      class="flex shrink-0 cursor-pointer items-center gap-1 rounded-md px-2 py-1 text-small text-on-surface-secondary outline-none hover:bg-surface-secondary focus-visible:bg-surface-secondary"
-                      onClick={() => removeNotes(resource)}
-                    >
-                      <Trash aria-hidden="true" class="size-4" />
-                      {t("Remove")}
-                    </button>
-                  </div>
-                )}
-              </For>
-              <Show when={notes()?.state === "loading"}>
-                <p role="status" class={`${ROW} py-3 text-small text-on-surface-tertiary`}>
-                  {t("Loading the list…")}
-                </p>
-              </Show>
-              <Show when={notesFailure()}>
-                {(failure) => (
-                  <p role="status" class={`${ROW} py-3 text-small text-on-surface-tertiary`}>
-                    {failure().offline
-                      ? t("You are offline. Open this menu again to retry.")
-                      : t("Could not read the list. Open this menu again to retry.")}
-                  </p>
-                )}
-              </Show>
-              <For each={helps()}>
-                {(help) => (
-                  <MenuItem
-                    class={ROW}
-                    data-testid={`pick-help-${help.repository}`}
-                    title={t("Download {title} to read beside this project", {
-                      title: t("Translation Notes · {language}", {
-                        language: help.languageName || help.language,
-                      }),
-                    })}
-                    onSelect={() => fetchHelp(help)}
-                  >
-                    <span class="flex min-w-0 flex-1 flex-col">
-                      <span class="truncate">
-                        {`${help.languageName || help.language} (${help.language})`}
-                      </span>
-                      <Show
-                        when={help.nationalName !== "" && help.nationalName !== help.languageName}
-                      >
-                        <span
-                          dir={help.direction}
-                          class="truncate text-start text-smallest text-on-surface-tertiary"
-                        >
-                          {help.nationalName}
-                        </span>
-                      </Show>
-                    </span>
-                    <Show
-                      when={helpDownloads().has(help.repository)}
-                      fallback={<Download aria-hidden="true" class="size-5 shrink-0" />}
-                    >
-                      <span
-                        role="status"
-                        aria-label={t("Downloading")}
-                        class="size-5 shrink-0 animate-spin rounded-full border-2 border-on-surface-tertiary border-t-transparent"
-                      />
-                    </Show>
-                  </MenuItem>
-                )}
-              </For>
-            </div>
-          </Show>
-        </Show>
-        <Show when={downloadable().length > 0}>
-          <GroupToggle
-            testId="reference-other-languages"
-            label={t("Other languages ({count})", { count: downloadable().length })}
-            open={showOthers()}
-            onToggle={() => setShowOthers(!showOthers())}
-          />
-          <Show when={showOthers()}>
-            <For each={downloadable()}>
-              {(entry) => (
-                <MenuItem
-                  class={ROW}
-                  data-testid={`pick-${entry.code}`}
-                  title={t("Download {language} to read beside this project", {
-                    language: entry.anglicizedName || entry.naturalName,
-                  })}
-                  onSelect={() => fetchText(entry)}
-                >
-                  <span class="min-w-0 flex-1 truncate">
-                    {entry.anglicizedName || entry.naturalName}
-                  </span>
-                  <Download aria-hidden="true" class="size-5 shrink-0" />
-                </MenuItem>
-              )}
-            </For>
-          </Show>
-        </Show>
-      </div>
-    </Menu>
-  );
-
+  const picker: PickerModel = {
+    busy,
+    fetching,
+    nameOf,
+    shown,
+    installed,
+    show,
+    offer,
+    otherProjects,
+    showProject,
+    notes,
+    helps,
+    heldHelps,
+    notesFailure,
+    removeNotes,
+    fetchHelp,
+    downloadable,
+    fetchText,
+    showProjects,
+    setShowProjects,
+    showOthers,
+    setShowOthers,
+    showHelps,
+    setShowHelps,
+  };
   return (
     <aside
       aria-label={t("Reference texts")}
@@ -676,7 +764,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       >
         <div class="flex items-center gap-controls">
           <div class="min-w-0 flex-1">
-            <LanguagePicker />
+            <LanguagePicker model={picker} />
           </div>
           <IconButton
             variant="subtle"

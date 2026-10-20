@@ -55,6 +55,43 @@ const editAction = (edit: CardEdit): CardAction | undefined => {
   };
 };
 
+type CardHeaderProps = Pick<
+  CardFrameProps,
+  "flush" | "title" | "gone" | "info" | "headerActions" | "edit" | "open"
+>;
+
+function CardHeader(props: CardHeaderProps) {
+  return (
+    <header class="flex flex-wrap items-center gap-2">
+      <Show
+        when={props.flush === true}
+        fallback={
+          <strong class="text-small font-medium text-on-surface-primary tabular-nums">
+            {props.title}
+          </strong>
+        }
+      >
+        <h3 class="text-small font-bold text-on-surface-primary tabular-nums">{props.title}</h3>
+      </Show>
+      <Show when={props.gone}>
+        {(said) => (
+          <Badge tone="success" data-card-gone="">
+            {said()}
+          </Badge>
+        )}
+      </Show>
+      {props.info}
+      <div class="ms-auto flex shrink-0 items-center gap-1">
+        <CardActions actions={props.headerActions ?? []} />
+        <Show when={editAction(props.edit)}>
+          {(action) => <CardActionButton action={action} />}
+        </Show>
+        <Show when={props.open}>{(action) => <CardActionButton action={action} />}</Show>
+      </div>
+    </header>
+  );
+}
+
 export function CardFrame(props: CardFrameProps) {
   const editing = (): boolean => props.edit.kind === "edit" && props.edit.editing;
   const hasFooter = (): boolean =>
@@ -102,33 +139,15 @@ export function CardFrame(props: CardFrameProps) {
             : "border-b border-surface-border px-3 py-1.5",
         )}
       >
-        <header class="flex flex-wrap items-center gap-2">
-          <Show
-            when={props.flush === true}
-            fallback={
-              <strong class="text-small font-medium text-on-surface-primary tabular-nums">
-                {props.title}
-              </strong>
-            }
-          >
-            <h3 class="text-small font-bold text-on-surface-primary tabular-nums">{props.title}</h3>
-          </Show>
-          <Show when={props.gone}>
-            {(said) => (
-              <Badge tone="success" data-card-gone="">
-                {said()}
-              </Badge>
-            )}
-          </Show>
-          {props.info}
-          <div class="ms-auto flex shrink-0 items-center gap-1">
-            <CardActions actions={props.headerActions ?? []} />
-            <Show when={editAction(props.edit)}>
-              {(action) => <CardActionButton action={action} />}
-            </Show>
-            <Show when={props.open}>{(action) => <CardActionButton action={action} />}</Show>
-          </div>
-        </header>
+        <CardHeader
+          flush={props.flush}
+          title={props.title}
+          gone={props.gone}
+          info={props.info}
+          headerActions={props.headerActions}
+          edit={props.edit}
+          open={props.open}
+        />
 
         <Show when={props.notes}>
           <div data-card-notes class="pt-1">

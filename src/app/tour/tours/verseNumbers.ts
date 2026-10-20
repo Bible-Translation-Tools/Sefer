@@ -93,6 +93,48 @@ const renumbering = (
   };
 };
 
+const stepFor = (context: TourContext, finding: Finding): Step => {
+  const place = placeOf(context, finding);
+  return {
+    go: () => {
+      context.shell.aim(
+        finding.bookId,
+        current(context, finding.code, place.key)?.from ?? finding.from,
+      );
+      void context.navigate({
+        to: "/project/$slug/book/$book",
+        params: { slug: context.shell.slug(), book: encodeURIComponent(finding.bookId) },
+      });
+    },
+    ready: () => onBook(finding.bookId),
+    panel: {
+      title: t("{place}: {problem}", { place: place.label, problem: codeLabel(finding.code) }),
+      body: finding.message,
+      actions: [
+        {
+          label: () => {
+            const held = renumbering(context, finding.code, place.key);
+            return held === undefined ? undefined : t("Renumber to {n}", { n: held.to });
+          },
+          run: () => renumbering(context, finding.code, place.key)?.apply(),
+        },
+        {
+          label: () => repairOf(context, finding.code, place.key)?.label,
+          run: () => {
+            const repair = repairOf(context, finding.code, place.key);
+            const book = context.shell.services.seated(finding.bookId);
+            if (repair === undefined || book === undefined) return;
+            Fixes.applyFix(repair, book);
+            context.shell.changed({ kind: "book.apply", books: [finding.bookId] });
+          },
+        },
+      ],
+    },
+    done: () => current(context, finding.code, place.key) === undefined,
+    advance: "user",
+  };
+};
+
 const steps = (context: TourContext): readonly Step[] => {
   const order = new Map(
     (context.shell.project()?.books ?? []).map((book, index) => [book.id, index]),
@@ -116,47 +158,7 @@ const steps = (context: TourContext): readonly Step[] => {
         advance: "user",
       },
     ];
-  return found.map((finding): Step => {
-    const place = placeOf(context, finding);
-    return {
-      go: () => {
-        context.shell.aim(
-          finding.bookId,
-          current(context, finding.code, place.key)?.from ?? finding.from,
-        );
-        void context.navigate({
-          to: "/project/$slug/book/$book",
-          params: { slug: context.shell.slug(), book: encodeURIComponent(finding.bookId) },
-        });
-      },
-      ready: () => onBook(finding.bookId),
-      panel: {
-        title: t("{place}: {problem}", { place: place.label, problem: codeLabel(finding.code) }),
-        body: finding.message,
-        actions: [
-          {
-            label: () => {
-              const held = renumbering(context, finding.code, place.key);
-              return held === undefined ? undefined : t("Renumber to {n}", { n: held.to });
-            },
-            run: () => renumbering(context, finding.code, place.key)?.apply(),
-          },
-          {
-            label: () => repairOf(context, finding.code, place.key)?.label,
-            run: () => {
-              const repair = repairOf(context, finding.code, place.key);
-              const book = context.shell.services.seated(finding.bookId);
-              if (repair === undefined || book === undefined) return;
-              Fixes.applyFix(repair, book);
-              context.shell.changed({ kind: "book.apply", books: [finding.bookId] });
-            },
-          },
-        ],
-      },
-      done: () => current(context, finding.code, place.key) === undefined,
-      advance: "user",
-    };
-  });
+  return found.map((finding) => stepFor(context, finding));
 };
 
 let seen = -1;

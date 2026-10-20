@@ -204,213 +204,237 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
   return keys;
 };
 
+const appearanceRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
+  {
+    key: keys.theme,
+    label: "Display mode",
+    description: "Choose the theme used throughout the application.",
+    kind: "choice",
+    group: "appearance",
+    options: [
+      { value: "system", label: "System" },
+      { value: "light", label: "Light" },
+      { value: "dark", label: "Dark" },
+    ],
+  },
+  {
+    key: keys.fontSize,
+    label: "Interface text size",
+    description: "Scales every size in the interface, in pixels.",
+    kind: "number",
+    group: "appearance",
+    min: 12,
+    max: 24,
+    step: 1,
+    unit: "px",
+  },
+  {
+    key: keys.zoom,
+    label: "Zoom",
+    description: "Adjust the overall application zoom.",
+    kind: "number",
+    group: "appearance",
+    min: 50,
+    max: 200,
+    step: 10,
+    unit: "%",
+  },
+];
+
+const diffRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
+  {
+    key: keys.diffPalette,
+    label: "Change colours",
+    description:
+      "The colours Review draws added and removed words in. Blue and orange are for readers who find red and green hard to tell apart.",
+    kind: "choice",
+    group: "appearance",
+    options: [
+      { value: "standard", label: "Red and green" },
+      { value: "blue-orange", label: "Blue and orange" },
+    ],
+  },
+  {
+    key: keys.diffRemoved,
+    label: "Removed words",
+    description: "How a removed word is marked besides its colour.",
+    kind: "choice",
+    group: "appearance",
+    options: [
+      { value: "strike", label: "Struck through" },
+      { value: "underline", label: "Underlined" },
+      { value: "none", label: "Colour only" },
+    ],
+    preview: "diff",
+  },
+];
+
+const editorRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
+  {
+    key: keys.editorFontSize,
+    label: "Scripture text size",
+    description: "How large the book itself is set, in pixels.",
+    kind: "number",
+    group: "editor",
+    min: EDITOR_FONT_SIZE_RANGE.min,
+    max: EDITOR_FONT_SIZE_RANGE.max,
+    step: 1,
+    unit: "px",
+  },
+  {
+    key: keys.excerptContext,
+    label: "Context around a result",
+    description:
+      "How many verses or headings a card in Find, Spiritual terms, Findings and Review shows either side of its own verse. Each card's arrows widen it from there.",
+    kind: "number",
+    group: "editor",
+    min: 0,
+    max: 10,
+    step: 1,
+  },
+  {
+    key: keys.reviewLayout,
+    label: "Review layout",
+    description:
+      "How Review draws a difference: side by side, as one text with the other's words struck through, or side by side only when there is room.",
+    kind: "choice",
+    group: "editor",
+    options: [
+      { value: "auto", label: "Side by side when there is room" },
+      { value: "split", label: "Side by side" },
+      { value: "unified", label: "Unified" },
+    ],
+  },
+  {
+    key: keys.reviewScope,
+    label: "Review shows",
+    description:
+      "Each change as a card with its context, across every book, or the whole book with its changes drawn in place.",
+    kind: "choice",
+    group: "editor",
+    options: [
+      { value: "changes", label: "Changes" },
+      { value: "book", label: "The whole book" },
+    ],
+  },
+];
+
+const editorBehaviourRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
+  {
+    key: keys.startInUsfmMode,
+    label: "Editor mode default",
+    description: "Open books in USFM mode instead of the reading projection.",
+    kind: "boolean",
+    group: "editor",
+  },
+  {
+    key: keys.preferChapterView,
+    label: "Open books one chapter at a time",
+    description: "A book is one document; turn this on to clip the view to a chapter.",
+    kind: "boolean",
+    group: "editor",
+  },
+  {
+    key: keys.annotateEmptyParagraphs,
+    label: "Name paragraphs that have no text",
+    description:
+      "A paragraph or poetry marker with nothing after it is invisible. Turn this on to show its name where the words would go — it is never written to the file.",
+    kind: "boolean",
+    group: "editor",
+  },
+  {
+    key: keys.pairBlocks,
+    label: "Show what a block corresponds to",
+    description:
+      "Marks the block you are in, and the block at the same place in every reference open beside it — so you can see which paragraph or poetry line answers which.",
+    kind: "boolean",
+    group: "editor",
+  },
+  {
+    key: keys.syncReferences,
+    label: "References follow the book you are reading",
+    description:
+      "Scrolling the book moves every reference beside it to the same place. Each pane can be unpinned on its own from its header; this is what a newly opened one starts as.",
+    kind: "boolean",
+    group: "editor",
+  },
+];
+
+const advancedRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
+  {
+    key: keys.backupIdleMs,
+    label: "Back up work after",
+    description:
+      "How long typing must pause before the working-state backup is written. The file itself is written only when you record a version.",
+    kind: "number",
+    group: "advanced",
+    min: 200,
+    max: 10000,
+    step: 100,
+    unit: "ms",
+  },
+  {
+    key: keys.offerRecovery,
+    label: "Offer unsaved work on open",
+    description:
+      "Ask about unsaved work found when a project opens. Off, Sefer still backs up as you type; it only stops asking. Useful while developing with hot reload.",
+    kind: "boolean",
+    group: "advanced",
+  },
+  {
+    key: keys.enableReplaceAll,
+    label: "Enable Replace all",
+    description: "Allow Find to replace every matching occurrence in one action.",
+    kind: "boolean",
+    group: "advanced",
+  },
+  {
+    key: keys.showGatewayProjects,
+    label: "Show gateway languages on the projects page",
+    description:
+      "Lists the gateway languages on the projects page too. A download from there goes to Source texts, never Your projects; to revise one, use Edit as your own project in Settings.",
+    kind: "boolean",
+    group: "advanced",
+  },
+];
+
+const networkRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
+  {
+    key: keys.contentHost,
+    label: "Content host",
+    description: "The WACS server a sign-in, the repository list and a publish go to.",
+    kind: "string",
+    group: "network",
+  },
+  {
+    key: keys.catalogueUrl,
+    label: "Catalogue",
+    description:
+      "The Language API the projects page lists from. Each project it lists carries its own address, so this can point at a different server from the content host.",
+    kind: "string",
+    group: "network",
+  },
+  {
+    key: keys.webTransport,
+    label: "Browser transport",
+    description:
+      "How this browser reaches each server, as host=proxy pairs separated by commas. Each proxy serves exactly one server, so a wrong pair breaks every transfer to it.",
+    kind: "string",
+    group: "network",
+    hosts: ["web"],
+  },
+];
+
 /** The shell's preferences as the settings form's rows, in display order. */
 export const shellSettings = (settings: SettingsService): readonly AnyDescriptor[] => {
   const keys = shellKeys(settings);
   return [
-    {
-      key: keys.theme,
-      label: "Display mode",
-      description: "Choose the theme used throughout the application.",
-      kind: "choice",
-      group: "appearance",
-      options: [
-        { value: "system", label: "System" },
-        { value: "light", label: "Light" },
-        { value: "dark", label: "Dark" },
-      ],
-    },
-    {
-      key: keys.fontSize,
-      label: "Interface text size",
-      description: "Scales every size in the interface, in pixels.",
-      kind: "number",
-      group: "appearance",
-      min: 12,
-      max: 24,
-      step: 1,
-      unit: "px",
-    },
-    {
-      key: keys.zoom,
-      label: "Zoom",
-      description: "Adjust the overall application zoom.",
-      kind: "number",
-      group: "appearance",
-      min: 50,
-      max: 200,
-      step: 10,
-      unit: "%",
-    },
-    {
-      key: keys.diffPalette,
-      label: "Change colours",
-      description:
-        "The colours Review draws added and removed words in. Blue and orange are for readers who find red and green hard to tell apart.",
-      kind: "choice",
-      group: "appearance",
-      options: [
-        { value: "standard", label: "Red and green" },
-        { value: "blue-orange", label: "Blue and orange" },
-      ],
-    },
-    {
-      key: keys.diffRemoved,
-      label: "Removed words",
-      description: "How a removed word is marked besides its colour.",
-      kind: "choice",
-      group: "appearance",
-      options: [
-        { value: "strike", label: "Struck through" },
-        { value: "underline", label: "Underlined" },
-        { value: "none", label: "Colour only" },
-      ],
-      preview: "diff",
-    },
-    {
-      key: keys.editorFontSize,
-      label: "Scripture text size",
-      description: "How large the book itself is set, in pixels.",
-      kind: "number",
-      group: "editor",
-      min: EDITOR_FONT_SIZE_RANGE.min,
-      max: EDITOR_FONT_SIZE_RANGE.max,
-      step: 1,
-      unit: "px",
-    },
-    {
-      key: keys.excerptContext,
-      label: "Context around a result",
-      description:
-        "How many verses or headings a card in Find, Spiritual terms, Findings and Review shows either side of its own verse. Each card's arrows widen it from there.",
-      kind: "number",
-      group: "editor",
-      min: 0,
-      max: 10,
-      step: 1,
-    },
-    {
-      key: keys.reviewLayout,
-      label: "Review layout",
-      description:
-        "How Review draws a difference: side by side, as one text with the other's words struck through, or side by side only when there is room.",
-      kind: "choice",
-      group: "editor",
-      options: [
-        { value: "auto", label: "Side by side when there is room" },
-        { value: "split", label: "Side by side" },
-        { value: "unified", label: "Unified" },
-      ],
-    },
-    {
-      key: keys.reviewScope,
-      label: "Review shows",
-      description:
-        "Each change as a card with its context, across every book, or the whole book with its changes drawn in place.",
-      kind: "choice",
-      group: "editor",
-      options: [
-        { value: "changes", label: "Changes" },
-        { value: "book", label: "The whole book" },
-      ],
-    },
-    {
-      key: keys.startInUsfmMode,
-      label: "Editor mode default",
-      description: "Open books in USFM mode instead of the reading projection.",
-      kind: "boolean",
-      group: "editor",
-    },
-    {
-      key: keys.preferChapterView,
-      label: "Open books one chapter at a time",
-      description: "A book is one document; turn this on to clip the view to a chapter.",
-      kind: "boolean",
-      group: "editor",
-    },
-    {
-      key: keys.annotateEmptyParagraphs,
-      label: "Name paragraphs that have no text",
-      description:
-        "A paragraph or poetry marker with nothing after it is invisible. Turn this on to show its name where the words would go — it is never written to the file.",
-      kind: "boolean",
-      group: "editor",
-    },
-    {
-      key: keys.pairBlocks,
-      label: "Show what a block corresponds to",
-      description:
-        "Marks the block you are in, and the block at the same place in every reference open beside it — so you can see which paragraph or poetry line answers which.",
-      kind: "boolean",
-      group: "editor",
-    },
-    {
-      key: keys.syncReferences,
-      label: "References follow the book you are reading",
-      description:
-        "Scrolling the book moves every reference beside it to the same place. Each pane can be unpinned on its own from its header; this is what a newly opened one starts as.",
-      kind: "boolean",
-      group: "editor",
-    },
-    {
-      key: keys.backupIdleMs,
-      label: "Back up work after",
-      description:
-        "How long typing must pause before the working-state backup is written. The file itself is written only when you record a version.",
-      kind: "number",
-      group: "advanced",
-      min: 200,
-      max: 10000,
-      step: 100,
-      unit: "ms",
-    },
-    {
-      key: keys.offerRecovery,
-      label: "Offer unsaved work on open",
-      description:
-        "Ask about unsaved work found when a project opens. Off, Sefer still backs up as you type; it only stops asking. Useful while developing with hot reload.",
-      kind: "boolean",
-      group: "advanced",
-    },
-    {
-      key: keys.enableReplaceAll,
-      label: "Enable Replace all",
-      description: "Allow Find to replace every matching occurrence in one action.",
-      kind: "boolean",
-      group: "advanced",
-    },
-    {
-      key: keys.showGatewayProjects,
-      label: "Show gateway languages on the projects page",
-      description:
-        "Lists the gateway languages on the projects page too. A download from there goes to Source texts, never Your projects; to revise one, use Edit as your own project in Settings.",
-      kind: "boolean",
-      group: "advanced",
-    },
-    {
-      key: keys.contentHost,
-      label: "Content host",
-      description: "The WACS server a sign-in, the repository list and a publish go to.",
-      kind: "string",
-      group: "network",
-    },
-    {
-      key: keys.catalogueUrl,
-      label: "Catalogue",
-      description:
-        "The Language API the projects page lists from. Each project it lists carries its own address, so this can point at a different server from the content host.",
-      kind: "string",
-      group: "network",
-    },
-    {
-      key: keys.webTransport,
-      label: "Browser transport",
-      description:
-        "How this browser reaches each server, as host=proxy pairs separated by commas. Each proxy serves exactly one server, so a wrong pair breaks every transfer to it.",
-      kind: "string",
-      group: "network",
-      hosts: ["web"],
-    },
+    ...appearanceRows(keys),
+    ...diffRows(keys),
+    ...editorRows(keys),
+    ...editorBehaviourRows(keys),
+    ...advancedRows(keys),
+    ...networkRows(keys),
   ];
 };
 

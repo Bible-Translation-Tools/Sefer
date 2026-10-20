@@ -42,22 +42,9 @@ export interface LifecycleDeps {
   readonly lastLocation: (root: string) => LastLocation | undefined;
 }
 
-export const createLifecycle = ({
-  services,
-  keys,
-  stores,
-  suppressions,
-  resources,
-  project,
-  setProject,
-  setFocused,
-  setCursor,
-  live,
-  report,
-  lastLocation,
-}: LifecycleDeps) => {
-  const { changed } = stores;
+type Gesture = ReturnType<Services["composition"]["observability"]["operation"]>;
 
+const createSeatWatch = (services: Services, changed: ShellStores["changed"]) => {
   let unwatchSeats: (() => void) | undefined;
   onCleanup(() => unwatchSeats?.());
 
@@ -83,6 +70,66 @@ export const createLifecycle = ({
     edits.held.clear();
   };
 
+  const release = (): void => {
+    unwatchSeats?.();
+    unwatchSeats = undefined;
+  };
+
+  const watch = (ready: Project): void => {
+    const unwatchEdits = watchSeatedEdits();
+    const unmountRecovery = services.recovery.mount(ready, (bookId) => {
+      const book = ready.book(bookId);
+      return book === undefined
+        ? undefined
+        : Option.getOrUndefined(services.save.baseline(book))?.hash;
+    });
+    const unwatchSwaps = ready.changed((bookId) => {
+      edits.follow(bookId);
+      changed({
+        kind: services.seated(bookId) === undefined ? "seat.close" : "seat.open",
+        books: [bookId],
+      });
+    });
+    unwatchSeats = () => {
+      unwatchSwaps();
+      unwatchEdits();
+      unmountRecovery();
+    };
+  };
+
+  return { release, watch };
+};
+
+const noteLegacyMarkers = (services: Services, ready: Project, gesture: Gesture): void => {
+  const started = performance.now();
+  const legacy = registerLegacyMarkers(services.galley, function* () {
+    for (const book of ready.books) yield book.source().text;
+  });
+  gesture.note("project.legacy_markers", "ready", undefined, {
+    "project.legacy_markers": legacy.markers.map((marker) => marker.name).join(",") || "none",
+    "project.legacy_refused": legacy.refused.length,
+    "project.legacy_scan_ms": Math.round((performance.now() - started) * 1000) / 1000,
+  });
+};
+
+export const createLifecycle = ({
+  services,
+  keys,
+  stores,
+  suppressions,
+  resources,
+  project,
+  setProject,
+  setFocused,
+  setCursor,
+  live,
+  report,
+  lastLocation,
+}: LifecycleDeps) => {
+  const { changed } = stores;
+
+  const seatWatch = createSeatWatch(services, changed);
+
   const [recoveryOffer, setRecoveryOffer] = createSignal<readonly Restorable[] | undefined>(
     undefined,
     { name: "recoveryOffer" },
@@ -91,8 +138,7 @@ export const createLifecycle = ({
   const closeProject = async (): Promise<void> => {
     const staticOpen = untrack(() => project());
     setRecoveryOffer(undefined);
-    unwatchSeats?.();
-    unwatchSeats = undefined;
+    seatWatch.release();
     live.set(undefined);
     setFocused(undefined);
     setProject(undefined);
@@ -120,6 +166,36 @@ export const createLifecycle = ({
     return done;
   };
 
+  const offerRecovery = (ready: Project, root: string): void => {
+    if (services.settings.get(keys.offerRecovery)) {
+      void services
+        .run(pendingOnOpen(services.recovery, ready.id, (text) => services.galley.hash(text)))
+        .then(
+          (found) => {
+            if (opening?.root === root || live.get() === ready) setRecoveryOffer(found);
+          },
+          () => setRecoveryOffer([]),
+        );
+    } else setRecoveryOffer([]);
+  };
+
+  const attachAnalysis = (root: string, ready: Project, gesture: Gesture) =>
+    services.run(
+      Effect.provideService(
+        Effect.gen(function* () {
+          const coordinator = yield* SaveCoordinator;
+          yield* Effect.forEach(ready.books, (book) => coordinator.adopt(book), {
+            discard: true,
+          });
+          const analysis = yield* ProjectAnalysis;
+          yield* Effect.promise(() => suppressions.load(root));
+          yield* analysis.attach(ready, { first: lastLocation(root)?.bookId });
+        }),
+        Observability,
+        gesture,
+      ),
+    );
+
   const openProjectOnce = async (root: string): Promise<void> => {
     await closeProject();
     const gesture = services.composition.observability.operation("project.open", {
@@ -139,40 +215,9 @@ export const createLifecycle = ({
       return;
     }
     const ready = opened.success;
-    if (services.settings.get(keys.offerRecovery)) {
-      void services
-        .run(pendingOnOpen(services.recovery, ready.id, (text) => services.galley.hash(text)))
-        .then(
-          (found) => {
-            if (opening?.root === root || live.get() === ready) setRecoveryOffer(found);
-          },
-          () => setRecoveryOffer([]),
-        );
-    } else setRecoveryOffer([]);
-    const started = performance.now();
-    const legacy = registerLegacyMarkers(services.galley, function* () {
-      for (const book of ready.books) yield book.source().text;
-    });
-    gesture.note("project.legacy_markers", "ready", undefined, {
-      "project.legacy_markers": legacy.markers.map((marker) => marker.name).join(",") || "none",
-      "project.legacy_refused": legacy.refused.length,
-      "project.legacy_scan_ms": Math.round((performance.now() - started) * 1000) / 1000,
-    });
-    await services.run(
-      Effect.provideService(
-        Effect.gen(function* () {
-          const coordinator = yield* SaveCoordinator;
-          yield* Effect.forEach(ready.books, (book) => coordinator.adopt(book), {
-            discard: true,
-          });
-          const analysis = yield* ProjectAnalysis;
-          yield* Effect.promise(() => suppressions.load(root));
-          yield* analysis.attach(ready, { first: lastLocation(root)?.bookId });
-        }),
-        Observability,
-        gesture,
-      ),
-    );
+    offerRecovery(ready, root);
+    noteLegacyMarkers(services, ready, gesture);
+    await attachAnalysis(root, ready, gesture);
     gesture.end("ready", { "project.books": ready.books.length });
     live.set(ready);
     void suppressions.prune();
@@ -192,25 +237,7 @@ export const createLifecycle = ({
     });
     if (syncPreferences(services.settings, root).checkOnOpen) void checkForChanges(services, ready);
     else void syncWatch.refresh(services, ready).catch(() => undefined);
-    const unwatchEdits = watchSeatedEdits();
-    const unmountRecovery = services.recovery.mount(ready, (bookId) => {
-      const book = ready.book(bookId);
-      return book === undefined
-        ? undefined
-        : Option.getOrUndefined(services.save.baseline(book))?.hash;
-    });
-    const unwatchSwaps = ready.changed((bookId) => {
-      edits.follow(bookId);
-      changed({
-        kind: services.seated(bookId) === undefined ? "seat.close" : "seat.open",
-        books: [bookId],
-      });
-    });
-    unwatchSeats = () => {
-      unwatchSwaps();
-      unwatchEdits();
-      unmountRecovery();
-    };
+    seatWatch.watch(ready);
     changed({ kind: "project.open" });
     void services.run(Workflows.bindReferences(ready.root)).then((bound) => {
       const first = ready.books[0]?.id;

@@ -168,6 +168,67 @@ const reportDownload = (
         ),
       );
 
+const copyOnDisk = (
+  services: Services,
+  url: string,
+  onProgress: ((progress: CopyProgress) => void) | undefined,
+): Effect.Effect<Resource, unknown, Domain> =>
+  Effect.gen(function* () {
+    const arrived = yield* Effect.scoped(
+      Effect.flatMap(reportDownload(onProgress), () => cloneArrival(services, "sourceText", url)),
+    );
+    if (arrived.resource === undefined)
+      return yield* Effect.fail(new Error(`${url} arrived without a Library entry`));
+    const index = indexFor(arrived.resource.content);
+    if (index !== undefined) {
+      const indexing = (yield* Observability).span("reference.index");
+      yield* Effect.ignore(
+        index(services.fileSystem, arrived.resource.root, (progress) =>
+          onProgress?.({ phase: "packing", ...progress }),
+        ),
+      );
+      indexing();
+    }
+    return arrived.resource;
+  });
+
+const stageAndPack = (
+  services: Services,
+  url: string,
+  into: string,
+  staged: string,
+  onProgress: ((progress: CopyProgress) => void) | undefined,
+) =>
+  Effect.gen(function* () {
+    const observability = yield* Observability;
+    const fileSystem = yield* FileSystem.FileSystem;
+    const git = yield* Git;
+    const cloning = observability.span("reference.clone");
+    yield* reportDownload(onProgress);
+    const { repo: cloned } = yield* cloneRepository(url, staged, undefined, {
+      history: "latest",
+    });
+    cloning();
+    onProgress?.({ phase: "reading" });
+    const head = Option.getOrUndefined(yield* git.resolve(cloned, "HEAD"));
+    const recognition = yield* recognizeRoot(fileSystem, staged);
+    const pack = packFor(recognition.content);
+    if (pack === undefined)
+      return yield* Effect.fail(
+        new Error(`${url} holds ${recognition.content}, which is cloned, not packed`),
+      );
+    const packing = observability.span("reference.pack");
+    yield* pack(
+      treeInFolder(fileSystem, staged),
+      { fileSystem: services.fileSystem, root: into },
+      { at: new Date().toISOString(), ...(head === undefined ? {} : { commit: head }) },
+      (progress) => onProgress?.({ phase: "packing", ...progress }),
+    );
+    packing();
+    yield* Effect.ignore(fileSystem.remove(staged, { recursive: true }));
+    return head;
+  });
+
 /**
  * The Library's copy of reference material — a help, not a scripture text:
  * the one on this device, else a fresh one.
@@ -200,59 +261,12 @@ export const referenceCopy = (
     const held = yield* library.cloned(url);
     if (Option.isSome(held)) return held.value;
     const inMemory = services.inMemoryTransfer?.();
-    if (inMemory === undefined) {
-      const arrived = yield* Effect.scoped(
-        Effect.flatMap(reportDownload(onProgress), () => cloneArrival(services, "sourceText", url)),
-      );
-      if (arrived.resource === undefined)
-        return yield* Effect.fail(new Error(`${url} arrived without a Library entry`));
-      const index = indexFor(arrived.resource.content);
-      if (index !== undefined) {
-        const indexing = (yield* Observability).span("reference.index");
-        yield* Effect.ignore(
-          index(services.fileSystem, arrived.resource.root, (progress) =>
-            onProgress?.({ phase: "packing", ...progress }),
-          ),
-        );
-        indexing();
-      }
-      return arrived.resource;
-    }
+    if (inMemory === undefined) return yield* copyOnDisk(services, url, onProgress);
     const into = arrivalRoot(services, "sourceText", url);
     const { owner, repo } = ownerAndRepo(url);
     const staged = `/staging/${owner}_${repo}`;
-    const observability = yield* Observability;
     const stage: Effect.Effect<string | undefined, unknown, Domain> = Effect.provide(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const fileSystem = yield* FileSystem.FileSystem;
-          const git = yield* Git;
-          const cloning = observability.span("reference.clone");
-          yield* reportDownload(onProgress);
-          const { repo: cloned } = yield* cloneRepository(url, staged, undefined, {
-            history: "latest",
-          });
-          cloning();
-          onProgress?.({ phase: "reading" });
-          const head = Option.getOrUndefined(yield* git.resolve(cloned, "HEAD"));
-          const recognition = yield* recognizeRoot(fileSystem, staged);
-          const pack = packFor(recognition.content);
-          if (pack === undefined)
-            return yield* Effect.fail(
-              new Error(`${url} holds ${recognition.content}, which is cloned, not packed`),
-            );
-          const packing = observability.span("reference.pack");
-          yield* pack(
-            treeInFolder(fileSystem, staged),
-            { fileSystem: services.fileSystem, root: into },
-            { at: new Date().toISOString(), ...(head === undefined ? {} : { commit: head }) },
-            (progress) => onProgress?.({ phase: "packing", ...progress }),
-          );
-          packing();
-          yield* Effect.ignore(fileSystem.remove(staged, { recursive: true }));
-          return head;
-        }),
-      ),
+      Effect.scoped(stageAndPack(services, url, into, staged, onProgress)),
       inMemory,
     );
     const head = yield* stage;

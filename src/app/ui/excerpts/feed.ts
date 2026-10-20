@@ -78,111 +78,85 @@ export const readBooks = (
   return books;
 };
 
-export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
-  const shell = useShell();
-  const navigate = useNavigate();
+interface HeldBook {
+  readonly revision: number;
+  readonly length: number;
+  readonly analysis: Analysis;
+  readonly hits: readonly Occurrence[];
+  readonly book: BookText;
+  readonly groups: readonly BookExcerpts[];
+  readonly outline: readonly OutlineRow[];
+}
 
-  const views = createCardViews<Excerpt>("excerpt");
+const sameHits = (a: readonly Occurrence[], b: readonly Occurrence[]): boolean =>
+  a.length === b.length && a.every((hit, at) => hit === b[at]);
 
-  const context = Math.max(
-    0,
-    shell.services.settings.get(shellKeys(shell.services.settings).excerptContext),
-  );
-  const initial: Extent = { up: context, down: context };
+interface Model {
+  readonly groups: readonly BookExcerpts[];
+  readonly outline: readonly OutlineRow[];
+  readonly books: ReadonlyMap<BookId, BookText>;
+}
 
-  const expand = (sid: string, step: ContextStep): void => {
-    views.send(sid, { kind: "step", step, from: initial });
-  };
-
-  const analyze = options.analyze ?? shell.services.galley.memoize();
-
-  const held = new Map<
-    BookId,
-    {
-      readonly revision: number;
-      readonly length: number;
-      readonly analysis: Analysis;
-      readonly hits: readonly Occurrence[];
-      readonly book: BookText;
-      readonly groups: readonly BookExcerpts[];
-      readonly outline: readonly OutlineRow[];
+const buildModel = (
+  shell: Shell,
+  options: ExcerptFeedOptions,
+  analyze: (text: string) => Analysis,
+  held: Map<BookId, HeldBook>,
+  initial: Extent,
+): Model => {
+  const project = shell.project();
+  if (project === undefined) return { groups: [], outline: [], books: new Map<BookId, BookText>() };
+  const hits = options.hits();
+  const done = shell.services.composition.observability.span(`${options.name}.group`);
+  let reused = 0;
+  let rebuilt = 0;
+  const byBook = new Map<BookId, Occurrence[]>();
+  for (const hit of hits) {
+    const list = byBook.get(hit.bookId);
+    if (list === undefined) byBook.set(hit.bookId, [hit]);
+    else list.push(hit);
+  }
+  const books = readBooks(shell, new Set(byBook.keys()), analyze);
+  const groups: BookExcerpts[] = [];
+  const outline: OutlineRow[] = [];
+  const texts = new Map<BookId, BookText>();
+  for (const book of books) {
+    const own = byBook.get(book.bookId) ?? [];
+    const stamp = shell.stampOf(book.bookId);
+    const before = held.get(book.bookId);
+    const reuse = before !== undefined && sameHits(before.hits, own);
+    if (reuse) {
+      reused += 1;
+      groups.push(...before.groups);
+      outline.push(...before.outline);
+      texts.set(book.bookId, before.book);
+      continue;
     }
-  >();
+    rebuilt += 1;
+    const built = group([book], own, initial);
+    groups.push(...built.groups);
+    outline.push(...built.outline);
+    texts.set(book.bookId, book);
+    held.set(book.bookId, {
+      revision: stamp?.revision ?? -1,
+      length: stamp?.length ?? -1,
+      analysis: book.analysis,
+      hits: own,
+      book,
+      groups: built.groups,
+      outline: built.outline,
+    });
+  }
+  for (const id of held.keys()) if (!byBook.has(id)) held.delete(id);
+  done({
+    "excerpts.hits": hits.length,
+    "excerpts.books_reused": reused,
+    "excerpts.books_rebuilt": rebuilt,
+  });
+  return { groups, outline, books: texts };
+};
 
-  const sameHits = (a: readonly Occurrence[], b: readonly Occurrence[]): boolean =>
-    a.length === b.length && a.every((hit, at) => hit === b[at]);
-
-  const model = createMemo(
-    () => {
-      const project = shell.project();
-      if (project === undefined)
-        return { groups: [], outline: [], books: new Map<BookId, BookText>() };
-      const hits = options.hits();
-      const done = shell.services.composition.observability.span(`${options.name}.group`);
-      let reused = 0;
-      let rebuilt = 0;
-      const byBook = new Map<BookId, Occurrence[]>();
-      for (const hit of hits) {
-        const list = byBook.get(hit.bookId);
-        if (list === undefined) byBook.set(hit.bookId, [hit]);
-        else list.push(hit);
-      }
-      const books = readBooks(shell, new Set(byBook.keys()), analyze);
-      const groups: BookExcerpts[] = [];
-      const outline: OutlineRow[] = [];
-      const texts = new Map<BookId, BookText>();
-      for (const book of books) {
-        const own = byBook.get(book.bookId) ?? [];
-        const stamp = shell.stampOf(book.bookId);
-        const before = held.get(book.bookId);
-        const reuse = before !== undefined && sameHits(before.hits, own);
-        if (reuse) {
-          reused += 1;
-          groups.push(...before.groups);
-          outline.push(...before.outline);
-          texts.set(book.bookId, before.book);
-          continue;
-        }
-        rebuilt += 1;
-        const built = group([book], own, initial);
-        groups.push(...built.groups);
-        outline.push(...built.outline);
-        texts.set(book.bookId, book);
-        held.set(book.bookId, {
-          revision: stamp?.revision ?? -1,
-          length: stamp?.length ?? -1,
-          analysis: book.analysis,
-          hits: own,
-          book,
-          groups: built.groups,
-          outline: built.outline,
-        });
-      }
-      for (const id of held.keys()) if (!byBook.has(id)) held.delete(id);
-      done({
-        "excerpts.hits": hits.length,
-        "excerpts.books_reused": reused,
-        "excerpts.books_rebuilt": rebuilt,
-      });
-      return { groups, outline, books: texts };
-    },
-    { name: "excerptModel" },
-  );
-
-  const widened = new WeakMap<Excerpt, { readonly extent: Extent; readonly shown: Excerpt }>();
-
-  const shownOf = (excerpt: Excerpt): Excerpt => {
-    const want = views.extents().get(excerpt.sid);
-    if (want === undefined) return excerpt;
-    const held = widened.get(excerpt);
-    if (held?.extent === want) return held.shown;
-    const book = model().books.get(excerpt.bookId);
-    if (book === undefined) return excerpt;
-    const shown = extend(book, excerpt, want);
-    widened.set(excerpt, { extent: want, shown });
-    return shown;
-  };
-
+const createSeats = (shell: Shell): Pick<ExcerptFeed, "seatedOf" | "seat"> => {
   const [seats, setSeats] = createSignal(0, { name: "excerptSeats" });
   const funnels = new WeakMap<EditorBook, Following>();
   const seatedOf = (bookId: BookId): Following | undefined => {
@@ -207,8 +181,16 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
     setSeats((held) => held + 1);
     return shell.services.seated(bookId);
   };
+  return { seatedOf, seat };
+};
 
-  const openInEditor = (
+const openerOf =
+  (
+    shell: Shell,
+    navigate: ReturnType<typeof useNavigate>,
+    name: string,
+  ): ExcerptFeed["openInEditor"] =>
+  (
     bookId: BookId,
     from: number,
     to?: number,
@@ -216,7 +198,7 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
   ): void => {
     const project = shell.project();
     if (project === undefined) return;
-    const done = into.span(`${options.name}.openInEditor`, `${bookId} ${from}`);
+    const done = into.span(`${name}.openInEditor`, `${bookId} ${from}`);
     shell.aim(bookId, from, to);
     void navigate({
       to: "/project/$slug/book/$book",
@@ -225,7 +207,8 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
     done();
   };
 
-  const edited = (bookId: BookId): void => {
+const editedOf = (shell: Shell, options: ExcerptFeedOptions): ExcerptFeed["edited"] => {
+  return (bookId) => {
     shell.changed({ kind: "book.apply", books: [bookId] });
     const now = options.retake;
     if (now !== undefined) {
@@ -243,6 +226,49 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
       )
       .then(after);
   };
+};
+
+export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
+  const shell = useShell();
+  const navigate = useNavigate();
+
+  const views = createCardViews<Excerpt>("excerpt");
+
+  const context = Math.max(
+    0,
+    shell.services.settings.get(shellKeys(shell.services.settings).excerptContext),
+  );
+  const initial: Extent = { up: context, down: context };
+
+  const expand = (sid: string, step: ContextStep): void => {
+    views.send(sid, { kind: "step", step, from: initial });
+  };
+
+  const analyze = options.analyze ?? shell.services.galley.memoize();
+
+  const held = new Map<BookId, HeldBook>();
+
+  const model = createMemo(() => buildModel(shell, options, analyze, held, initial), {
+    name: "excerptModel",
+  });
+
+  const widened = new WeakMap<Excerpt, { readonly extent: Extent; readonly shown: Excerpt }>();
+
+  const shownOf = (excerpt: Excerpt): Excerpt => {
+    const want = views.extents().get(excerpt.sid);
+    if (want === undefined) return excerpt;
+    const held = widened.get(excerpt);
+    if (held?.extent === want) return held.shown;
+    const book = model().books.get(excerpt.bookId);
+    if (book === undefined) return excerpt;
+    const shown = extend(book, excerpt, want);
+    widened.set(excerpt, { extent: want, shown });
+    return shown;
+  };
+
+  const { seatedOf, seat } = createSeats(shell);
+  const openInEditor = openerOf(shell, navigate, options.name);
+  const edited = editedOf(shell, options);
 
   return {
     views,

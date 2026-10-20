@@ -31,6 +31,67 @@ export interface BookEditorProps {
   readonly book: EditorBook;
 }
 
+type Shell = ReturnType<typeof useShell>;
+
+function watchCorpus(shell: Shell, editor: BookEditorMount, book: EditorBook) {
+  const answersTo = (finding: Finding): readonly CorpusAction[] | undefined => {
+    if (finding.producer !== "sous") return undefined;
+    const check = checkLabel(finding);
+    return [
+      { name: t("Fine here"), run: () => fineHere(shell, finding) },
+      ...(finding.pattern === undefined
+        ? []
+        : [
+            {
+              name: t("Always allow “{text}”", { text: flaggedText(shell, finding) }),
+              run: () => allow(shell, finding),
+            },
+          ]),
+      ...(check === undefined
+        ? []
+        : [{ name: t("Turn off “{check}”", { check }), run: () => turnOff(shell, finding) }]),
+    ];
+  };
+  const corpus = (): void => {
+    const list: CorpusFinding[] = [];
+    for (const finding of shell.services.projectAnalysis.crossBookOf(book.id))
+      if (!stale(finding, book)) list.push({ ...finding, actions: answersTo(finding) });
+    editor.setHostDiagnostics(list);
+    annotateRepaint({
+      "findings.shown": list.length,
+      "book.id": book.id,
+      "book.revision": book.source().stamp.revision,
+    });
+  };
+  corpus();
+  const watching = shell.services.runtime.runFork(
+    Stream.runForEach(shell.services.projectAnalysis.watch(), () => Effect.sync(corpus)),
+  );
+  const unsuppressing = shell.services.projectAnalysis.onSuppressions(corpus);
+  return { watching, unsuppressing };
+}
+
+function watchSettings(shell: Shell, editor: BookEditorMount) {
+  const ghostKey = shellKeys(shell.services.settings).annotateEmptyParagraphs;
+  const ghosting = shell.services.runtime.runFork(
+    Stream.runForEach(shell.services.settings.changes(ghostKey), (on) =>
+      Effect.sync(() => {
+        editor.setEmptyBlocks(on);
+      }),
+    ),
+  );
+
+  const pairKey = shellKeys(shell.services.settings).pairBlocks;
+  const pairing = shell.services.runtime.runFork(
+    Stream.runForEach(shell.services.settings.changes(pairKey), (on) =>
+      Effect.sync(() => {
+        editor.setPairBlocks(on);
+      }),
+    ),
+  );
+  return { ghosting, pairing };
+}
+
 export function BookEditor(props: BookEditorProps) {
   const shell = useShell();
   const direction = (): "ltr" | "rtl" => textDirection(metadataOf(shell.project()));
@@ -83,58 +144,9 @@ export function BookEditor(props: BookEditorProps) {
         shell.changed({ kind: "book.apply", books: [book.id] });
       });
 
-      const answersTo = (finding: Finding): readonly CorpusAction[] | undefined => {
-        if (finding.producer !== "sous") return undefined;
-        const check = checkLabel(finding);
-        return [
-          { name: t("Fine here"), run: () => fineHere(shell, finding) },
-          ...(finding.pattern === undefined
-            ? []
-            : [
-                {
-                  name: t("Always allow “{text}”", { text: flaggedText(shell, finding) }),
-                  run: () => allow(shell, finding),
-                },
-              ]),
-          ...(check === undefined
-            ? []
-            : [{ name: t("Turn off “{check}”", { check }), run: () => turnOff(shell, finding) }]),
-        ];
-      };
-      const corpus = (): void => {
-        const list: CorpusFinding[] = [];
-        for (const finding of shell.services.projectAnalysis.crossBookOf(book.id))
-          if (!stale(finding, book)) list.push({ ...finding, actions: answersTo(finding) });
-        editor.setHostDiagnostics(list);
-        annotateRepaint({
-          "findings.shown": list.length,
-          "book.id": book.id,
-          "book.revision": book.source().stamp.revision,
-        });
-      };
-      corpus();
-      const watching = shell.services.runtime.runFork(
-        Stream.runForEach(shell.services.projectAnalysis.watch(), () => Effect.sync(corpus)),
-      );
-      const unsuppressing = shell.services.projectAnalysis.onSuppressions(corpus);
+      const { watching, unsuppressing } = watchCorpus(shell, editor, book);
 
-      const ghostKey = shellKeys(shell.services.settings).annotateEmptyParagraphs;
-      const ghosting = shell.services.runtime.runFork(
-        Stream.runForEach(shell.services.settings.changes(ghostKey), (on) =>
-          Effect.sync(() => {
-            editor.setEmptyBlocks(on);
-          }),
-        ),
-      );
-
-      const pairKey = shellKeys(shell.services.settings).pairBlocks;
-      const pairing = shell.services.runtime.runFork(
-        Stream.runForEach(shell.services.settings.changes(pairKey), (on) =>
-          Effect.sync(() => {
-            editor.setPairBlocks(on);
-          }),
-        ),
-      );
+      const { ghosting, pairing } = watchSettings(shell, editor);
 
       const unwatch = editor.onViewport((where) => {
         setAtTop(where === null ? undefined : where.ordinal);

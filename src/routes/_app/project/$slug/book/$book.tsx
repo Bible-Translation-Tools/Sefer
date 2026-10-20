@@ -12,12 +12,60 @@ import { AlignedProvider } from "#app/ui/workspace/aligned";
 import { ReferenceColumn } from "#app/ui/workspace/ReferenceColumn";
 import { Toolbar } from "#app/ui/workspace/Toolbar";
 
+function BookWorkspace(props: {
+  readonly book: Parameters<typeof BookEditor>[0]["book"];
+  readonly initial: number;
+  readonly collapsed: boolean;
+  readonly shut: boolean;
+  readonly panelClass: string | undefined;
+  readonly onBound: (count: number) => void;
+  readonly onFolded: (folded: boolean) => void;
+}) {
+  const shell = useShell();
+  return (
+    <>
+      <Resizable.Root
+        class="min-h-0 flex-1"
+        onSizesChange={(sizes) => {
+          const first = sizes[0];
+          if (first !== undefined) shell.setReferenceWidth(first);
+        }}
+      >
+        <Resizable.Panel
+          initialSize={props.initial}
+          minSize={REFERENCE_WIDTH.min}
+          maxSize={REFERENCE_WIDTH.max}
+          class={props.panelClass}
+        >
+          <Show when={!props.shut}>
+            <ReferenceColumn onBound={props.onBound} onFolded={props.onFolded} />
+          </Show>
+        </Resizable.Panel>
+        <Resizable.Handle
+          label={t("Resize the reference pane")}
+          class={props.collapsed || props.shut ? "hidden" : undefined}
+        />
+        <Resizable.Panel
+          class={cx(
+            "flex flex-col gap-2 py-4 ps-[7.5px]",
+            props.collapsed || props.shut ? "grow! [flex-basis:auto]!" : undefined,
+          )}
+        >
+          <div class="flex min-h-0 flex-1 flex-col">
+            <Show when={props.book.id} keyed>
+              <BookEditor book={props.book} />
+            </Show>
+          </div>
+        </Resizable.Panel>
+      </Resizable.Root>
+    </>
+  );
+}
+
 function BookPage(props: { readonly root: string; readonly bookId: string }) {
   const shell = useShell();
   const aligned = createAlignedGroup("reveal");
   const referenceInitial = untrack(() => shell.referenceWidth());
-  const referenceMin = REFERENCE_WIDTH.min;
-  const referenceMax = REFERENCE_WIDTH.max;
 
   const [references, setReferences] = createSignal(0, { name: "boundReferences" });
   const [folded, setFolded] = createSignal(false, { name: "referencesFolded" });
@@ -54,40 +102,15 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
             <Toolbar />
 
             <AlignedProvider value={aligned}>
-              <Resizable.Root
-                class="min-h-0 flex-1"
-                onSizesChange={(sizes) => {
-                  const first = sizes[0];
-                  if (first !== undefined) shell.setReferenceWidth(first);
-                }}
-              >
-                <Resizable.Panel
-                  initialSize={referenceInitial}
-                  minSize={referenceMin}
-                  maxSize={referenceMax}
-                  class={panelClass()}
-                >
-                  <Show when={!shut()}>
-                    <ReferenceColumn onBound={setReferences} onFolded={setFolded} />
-                  </Show>
-                </Resizable.Panel>
-                <Resizable.Handle
-                  label={t("Resize the reference pane")}
-                  class={collapsed() || shut() ? "hidden" : undefined}
-                />
-                <Resizable.Panel
-                  class={cx(
-                    "flex flex-col gap-2 py-4 ps-[7.5px]",
-                    collapsed() || shut() ? "grow! [flex-basis:auto]!" : undefined,
-                  )}
-                >
-                  <div class="flex min-h-0 flex-1 flex-col">
-                    <Show when={book().id} keyed>
-                      <BookEditor book={book()} />
-                    </Show>
-                  </div>
-                </Resizable.Panel>
-              </Resizable.Root>
+              <BookWorkspace
+                book={book()}
+                initial={referenceInitial}
+                collapsed={collapsed()}
+                shut={shut()}
+                panelClass={panelClass()}
+                onBound={setReferences}
+                onFolded={setFolded}
+              />
             </AlignedProvider>
           </>
         )}

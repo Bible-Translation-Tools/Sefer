@@ -10,6 +10,9 @@ import { t } from "../../i18n";
 import { cx, IconButton } from "../primitives";
 import { widened, type ContextStep } from "./cardState";
 
+const part =
+  "inline-flex h-6 cursor-pointer items-center gap-1 px-2 text-smallest font-medium text-on-surface-secondary transition-colors hover:not-disabled:bg-surface-secondary hover:not-disabled:text-on-surface-primary disabled:cursor-not-allowed disabled:opacity-40";
+
 export function ContextControl(props: {
   readonly extent: Extent;
   readonly canUp: boolean;
@@ -19,8 +22,6 @@ export function ContextControl(props: {
 }) {
   const chapter = (): boolean => props.extent.chapter === true;
   const folded = (): boolean => props.extent.folded !== undefined;
-  const part =
-    "inline-flex h-6 cursor-pointer items-center gap-1 px-2 text-smallest font-medium text-on-surface-secondary transition-colors hover:not-disabled:bg-surface-secondary hover:not-disabled:text-on-surface-primary disabled:cursor-not-allowed disabled:opacity-40";
   const fold = (): JSX.Element => (
     <IconButton
       size="sm"

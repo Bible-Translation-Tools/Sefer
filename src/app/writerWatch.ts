@@ -91,6 +91,42 @@ const fetchIn = (
     : Effect.provide(fetchWork(probed, "/staging"), inMemory);
 };
 
+const findWork = (
+  services: Services,
+  project: Project,
+  root: string,
+  upstreams: Parameters<typeof probeUpstreams>[0],
+) =>
+  Effect.gen(function* () {
+    const shared = yield* takenOnShared(root);
+    const probed = yield* probeUpstreams(upstreams);
+    const moved = probed.filter(
+      (each): each is typeof each & { readonly head: string } =>
+        each.head !== undefined &&
+        each.head !== each.upstream.commit &&
+        !each.upstream.books.some((book) => shared.get(book) === each.head),
+    );
+    const fetched = yield* Effect.forEach(
+      moved,
+      (each) =>
+        Effect.orElseSucceed(
+          Effect.timeout(fetchIn(services, each), UPSTREAM_TIMEOUT),
+          () => undefined,
+        ),
+      { concurrency: 3 },
+    );
+    const found: IncomingWork[] = [];
+    for (const each of fetched) {
+      if (each === undefined) continue;
+      const ours = project.book(each.book)?.source().text;
+      if (ours === undefined) continue;
+      const proposal = incoming(services.galley, each, ours);
+      if (proposal === undefined || proposal === ours) continue;
+      found.push({ ...each, proposal });
+    }
+    return { found, probed: probed.length, moved: moved.length };
+  });
+
 export const checkWriter = async (services: Services, project: Project): Promise<void> => {
   const root = project.root;
   const upstreams = await services.run(projectUpstreams(services.fileSystem, root));
@@ -106,39 +142,7 @@ export const checkWriter = async (services: Services, project: Project): Promise
   });
   try {
     const work = await services.run(
-      Effect.provideService(
-        Effect.gen(function* () {
-          const shared = yield* takenOnShared(root);
-          const probed = yield* probeUpstreams(upstreams);
-          const moved = probed.filter(
-            (each): each is typeof each & { readonly head: string } =>
-              each.head !== undefined &&
-              each.head !== each.upstream.commit &&
-              !each.upstream.books.some((book) => shared.get(book) === each.head),
-          );
-          const fetched = yield* Effect.forEach(
-            moved,
-            (each) =>
-              Effect.orElseSucceed(
-                Effect.timeout(fetchIn(services, each), UPSTREAM_TIMEOUT),
-                () => undefined,
-              ),
-            { concurrency: 3 },
-          );
-          const found: IncomingWork[] = [];
-          for (const each of fetched) {
-            if (each === undefined) continue;
-            const ours = project.book(each.book)?.source().text;
-            if (ours === undefined) continue;
-            const proposal = incoming(services.galley, each, ours);
-            if (proposal === undefined || proposal === ours) continue;
-            found.push({ ...each, proposal });
-          }
-          return { found, probed: probed.length, moved: moved.length };
-        }),
-        Observability,
-        operation,
-      ),
+      Effect.provideService(findWork(services, project, root, upstreams), Observability, operation),
     );
     operation.end("passed", {
       "upstream.probed": work.probed,

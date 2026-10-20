@@ -94,6 +94,74 @@ const pairingFacts = (source: Skeleton | undefined, target: Skeleton | undefined
   };
 };
 
+function pairedRangeAt(
+  target: Skeleton,
+  source: Skeleton,
+  at: number,
+  unpairedAt: (block: SkeletonRow) => void,
+): PairedRange | undefined {
+  const here = blockAtOffset(target.blocks, at);
+  if (here?.empty === true) {
+    const row = equivalentBlock(source.blocks, here);
+    if (row === undefined) unpairedAt(here);
+    return row === undefined ? undefined : { from: row.from, to: row.end };
+  }
+
+  const verse = verseAtOffset(target, at);
+  if (verse !== undefined) {
+    const twin = equivalentVerse(source, verse.sid);
+    return twin === undefined ? undefined : { from: twin.textFrom, to: twin.textTo };
+  }
+
+  if (here === undefined) return undefined;
+  const row = equivalentBlock(source.blocks, here);
+  return row === undefined ? undefined : { from: row.from, to: row.end };
+}
+
+function PaneHeader(props: {
+  readonly resource: Resource;
+  readonly role: Role;
+  readonly title: JSX.Element | undefined;
+  readonly following: boolean;
+  readonly onToggleFollow: () => void;
+  readonly onUnbind: (() => void) | undefined;
+}) {
+  return (
+    <div class="flex items-center gap-2 border-b border-surface-border px-3 py-1.5">
+      <p class="min-w-0 flex-1 truncate text-smallest text-on-surface-secondary">
+        <Show
+          when={props.title}
+          fallback={<span class="font-bold text-on-surface-primary">{props.resource.title}</span>}
+        >
+          {props.title}
+        </Show>
+        <Show when={props.resource.language}>{(language) => <span> · {language()}</span>}</Show>
+        <span> · {props.role === "source" ? t("Source") : t("Reference")}</span>
+      </p>
+
+      <FollowToggle
+        testId={`follow-${props.resource.id}`}
+        following={props.following}
+        stopLabel={t("Stop {title} following the book", { title: props.resource.title })}
+        startLabel={t("Let {title} follow the book", { title: props.resource.title })}
+        onToggle={() => props.onToggleFollow()}
+      />
+      <Show when={props.onUnbind}>
+        {(unbind) => (
+          <IconButton
+            size="sm"
+            data-testid={`unbind-${props.resource.id}`}
+            label={t("Remove {title}", { title: props.resource.title })}
+            tooltipSide="left"
+            icon={<X />}
+            onClick={() => unbind()()}
+          />
+        )}
+      </Show>
+    </div>
+  );
+}
+
 export function ReferencePane(props: ReferencePaneProps) {
   const shell = useShell();
   const { services } = shell;
@@ -269,22 +337,7 @@ export function ReferencePane(props: ReferencePaneProps) {
       const source = sourceSkeleton();
       if (at === undefined || target === undefined || source === undefined) return undefined;
 
-      const here = blockAtOffset(target.blocks, at);
-      if (here?.empty === true) {
-        const row = equivalentBlock(source.blocks, here);
-        if (row === undefined) unpairedAt(here);
-        return row === undefined ? undefined : { from: row.from, to: row.end };
-      }
-
-      const verse = verseAtOffset(target, at);
-      if (verse !== undefined) {
-        const twin = equivalentVerse(source, verse.sid);
-        return twin === undefined ? undefined : { from: twin.textFrom, to: twin.textTo };
-      }
-
-      if (here === undefined) return undefined;
-      const row = equivalentBlock(source.blocks, here);
-      return row === undefined ? undefined : { from: row.from, to: row.end };
+      return pairedRangeAt(target, source, at, unpairedAt);
     },
     { name: "pairedRange" },
   );
@@ -356,40 +409,14 @@ export function ReferencePane(props: ReferencePaneProps) {
           </div>
         }
       >
-        <div class="flex items-center gap-2 border-b border-surface-border px-3 py-1.5">
-          <p class="min-w-0 flex-1 truncate text-smallest text-on-surface-secondary">
-            <Show
-              when={props.title}
-              fallback={
-                <span class="font-bold text-on-surface-primary">{props.resource.title}</span>
-              }
-            >
-              {props.title}
-            </Show>
-            <Show when={props.resource.language}>{(language) => <span> · {language()}</span>}</Show>
-            <span> · {props.role === "source" ? t("Source") : t("Reference")}</span>
-          </p>
-
-          <FollowToggle
-            testId={`follow-${props.resource.id}`}
-            following={following()}
-            stopLabel={t("Stop {title} following the book", { title: props.resource.title })}
-            startLabel={t("Let {title} follow the book", { title: props.resource.title })}
-            onToggle={() => setFollowing((on) => !on)}
-          />
-          <Show when={props.onUnbind}>
-            {(unbind) => (
-              <IconButton
-                size="sm"
-                data-testid={`unbind-${props.resource.id}`}
-                label={t("Remove {title}", { title: props.resource.title })}
-                tooltipSide="left"
-                icon={<X />}
-                onClick={() => unbind()()}
-              />
-            )}
-          </Show>
-        </div>
+        <PaneHeader
+          resource={props.resource}
+          role={props.role}
+          title={props.title}
+          following={following()}
+          onToggleFollow={() => setFollowing((on) => !on)}
+          onUnbind={props.onUnbind}
+        />
       </Show>
 
       <Switch>

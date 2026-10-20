@@ -20,9 +20,8 @@ export interface ReferenceCardProps {
   readonly onOpen: () => void;
 }
 
-export function ReferenceCard(props: ReferenceCardProps) {
-  const shell = useShell();
-  const { services } = shell;
+function createReferencePreview(props: ReferenceCardProps) {
+  const { services } = useShell();
   const [preview, setPreview] = createSignal<
     { readonly analysis: Analysis; readonly from: number; readonly to: number } | undefined
   >(undefined, { name: "referenceCardPreview" });
@@ -49,6 +48,12 @@ export function ReferenceCard(props: ReferenceCardProps) {
         });
     },
   );
+  return preview;
+}
+
+export function ReferenceCard(props: ReferenceCardProps) {
+  const shell = useShell();
+  const preview = createReferencePreview(props);
 
   return (
     <button

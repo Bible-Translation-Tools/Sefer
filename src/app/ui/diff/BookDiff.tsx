@@ -43,7 +43,7 @@ const unitAt = (
   return found;
 };
 
-export function BookDiff(props: {
+export interface BookDiffProps {
   readonly sides: DiffSides;
   readonly units: readonly DecisionUnit[];
   readonly split: boolean;
@@ -62,25 +62,152 @@ export function BookDiff(props: {
     | { readonly book: EditorBook; readonly analyze: (text: string) => Analysis }
     | undefined;
   readonly awaitLive?: boolean;
-}) {
+}
+
+interface Pane {
+  readonly editor: EditorHandle;
+  repaint(paint: DiffPaint): void;
+  showAt(at: number, align?: "start" | "center"): void;
+  destroy(): void;
+}
+
+interface Mounted {
+  side: Side | "unified";
+  mount: Pane;
+  paint: () => DiffPaint;
+  live: boolean;
+}
+
+interface MountArgs {
+  readonly split: boolean;
+  readonly markup: boolean;
+  readonly live: BookDiffProps["live"];
+  readonly leftHost: HTMLDivElement | undefined;
+  readonly rightHost: HTMLDivElement;
+  readonly now: () => { sides: DiffSides; units: readonly DecisionUnit[] };
+  readonly operation: ReturnType<ObservabilityService["operation"]>;
+  readonly controls: () => Controls | undefined;
+  readonly report: (unit: DecisionUnit | undefined) => void;
+  readonly linked: () => boolean;
+}
+
+const mountPanes = (args: MountArgs): { held: Mounted[]; release: () => void } => {
+  const { split, markup, live, leftHost, rightHost, now, operation, controls, report, linked } =
+    args;
+  const { sides } = now();
+  const mode = markup ? "usfm" : "default";
+  const held: Mounted[] = [];
+  const releases: (() => void)[] = [];
+
+  const follow = (side: Side, mount: Pane): void => {
+    if (split && side !== "current") return;
+    releases.push(
+      mount.editor.onViewport((where) => {
+        if (where === null) return;
+        const probe = Math.max(where.top, where.topLineEnd - 1);
+        report(unitAt(now().units, side, probe));
+      }),
+    );
+  };
+
+  const add = (
+    side: Side | "unified",
+    parent: HTMLElement,
+    text: string,
+    paint: () => DiffPaint,
+  ): Pane => {
+    if (side !== "baseline" && live !== undefined) {
+      const card = mountCard({
+        parent,
+        book: live.book,
+        range: { from: 0, to: live.book.source().text.length },
+        clip: false,
+        policy: editorPolicy(mode === "usfm" ? "usfm" : "regular"),
+        surface: "cm-diff",
+        analyze: live.analyze,
+        diff: paint(),
+        label: `review:${sides.bookId}`,
+      });
+      const mount: Pane = {
+        editor: card,
+        repaint: (next) => card.setDiff(next),
+        showAt: (at, align = "start") => card.reveal({ from: at }, { scroll: align }),
+        destroy: () => card.destroy(),
+      };
+      held.push({ side, mount, paint, live: true });
+      return mount;
+    }
+    const analysis = side === "baseline" ? sides.baseline : sides.current;
+    const view = mountDiffView({
+      parent,
+      text,
+      analyze: () => analysis,
+      mode,
+      paint: paint(),
+    });
+    const mount: Pane = {
+      editor: view,
+      repaint: (next) => view.repaint(next),
+      showAt: (at, align) => view.showAt(at, align),
+      destroy: () => view.destroy(),
+    };
+    held.push({ side, mount, paint, live: false });
+    return mount;
+  };
+
+  const painted = operation.span("review.diff.mount");
+  if (split && leftHost !== undefined) {
+    const was = add("baseline", leftHost, sides.baselineText, () =>
+      sidePaint(now().units, "baseline", markup, undefined, now().sides.baseline),
+    );
+    const current = add("current", rightHost, sides.currentText, () =>
+      sidePaint(now().units, "current", markup, controls(), now().sides.current),
+    );
+    follow("baseline", was);
+    follow("current", current);
+    const group = createAlignedGroup("reveal");
+    releases.push(
+      group.join({ editor: was.editor, book: sides.bookId, leads: linked, follows: linked }),
+      group.join({
+        editor: current.editor,
+        book: sides.bookId,
+        leads: linked,
+        follows: linked,
+      }),
+    );
+  } else {
+    const current = add("unified", rightHost, sides.currentText, () =>
+      hunkPaint(
+        now().units,
+        markup,
+        controls(),
+        wasBlock(now().sides.baseline, mode),
+        now().sides.current,
+      ),
+    );
+    follow("current", current);
+  }
+  painted();
+  operation.end("passed", {
+    "diff.units": now().units.length,
+    "diff.live": live !== undefined,
+  });
+  return {
+    held,
+    release: () => {
+      for (const release of releases) release();
+      for (const entry of held) entry.mount.destroy();
+    },
+  };
+};
+
+export function BookDiff(props: BookDiffProps) {
   const [left, setLeft] = createSignal<HTMLDivElement | undefined>(undefined, { name: "bookLeft" });
   const [right, setRight] = createSignal<HTMLDivElement | undefined>(undefined, {
     name: "bookRight",
   });
 
-  interface Pane {
-    readonly editor: EditorHandle;
-    repaint(paint: DiffPaint): void;
-    showAt(at: number, align?: "start" | "center"): void;
-    destroy(): void;
-  }
-
-  let mounts: {
-    side: Side | "unified";
-    mount: Pane;
-    paint: () => DiffPaint;
-    live: boolean;
-  }[] = [];
+  let mounts: Mounted[] = [];
 
   const placeIn = (side: Side, unit: DecisionUnit): number | undefined => {
     const own = spanOn(side, unit);
@@ -138,106 +265,21 @@ export function BookDiff(props: {
         "diff.layout": split ? "split" : "unified",
         "diff.mode": markup ? "usfm" : "regular",
       });
-      const mode = markup ? "usfm" : "default";
       const controls = (): Controls | undefined => untrack(() => props.controls);
       const onPlace = untrack(() => props.onPlace);
       const report = (unit: DecisionUnit | undefined): void => onPlace?.(unit);
-      const held: typeof mounts = [];
-      const releases: (() => void)[] = [];
-
-      const follow = (side: Side, mount: Pane): void => {
-        if (split && side !== "current") return;
-        releases.push(
-          mount.editor.onViewport((where) => {
-            if (where === null) return;
-            const probe = Math.max(where.top, where.topLineEnd - 1);
-            report(unitAt(now().units, side, probe));
-          }),
-        );
-      };
-
-      const add = (
-        side: Side | "unified",
-        parent: HTMLElement,
-        text: string,
-        paint: () => DiffPaint,
-      ): Pane => {
-        if (side !== "baseline" && live !== undefined) {
-          const card = mountCard({
-            parent,
-            book: live.book,
-            range: { from: 0, to: live.book.source().text.length },
-            clip: false,
-            policy: editorPolicy(mode === "usfm" ? "usfm" : "regular"),
-            surface: "cm-diff",
-            analyze: live.analyze,
-            diff: paint(),
-            label: `review:${sides.bookId}`,
-          });
-          const mount: Pane = {
-            editor: card,
-            repaint: (next) => card.setDiff(next),
-            showAt: (at, align = "start") => card.reveal({ from: at }, { scroll: align }),
-            destroy: () => card.destroy(),
-          };
-          held.push({ side, mount, paint, live: true });
-          return mount;
-        }
-        const analysis = side === "baseline" ? sides.baseline : sides.current;
-        const view = mountDiffView({
-          parent,
-          text,
-          analyze: () => analysis,
-          mode,
-          paint: paint(),
-        });
-        const mount: Pane = {
-          editor: view,
-          repaint: (next) => view.repaint(next),
-          showAt: (at, align) => view.showAt(at, align),
-          destroy: () => view.destroy(),
-        };
-        held.push({ side, mount, paint, live: false });
-        return mount;
-      };
-
-      const painted = operation.span("review.diff.mount");
-      if (split && leftHost !== undefined) {
-        const was = add("baseline", leftHost, sides.baselineText, () =>
-          sidePaint(now().units, "baseline", markup, undefined, now().sides.baseline),
-        );
-        const current = add("current", rightHost, sides.currentText, () =>
-          sidePaint(now().units, "current", markup, controls(), now().sides.current),
-        );
-        follow("baseline", was);
-        follow("current", current);
-        const group = createAlignedGroup("reveal");
-        const linked = (): boolean => untrack(() => props.linked?.() ?? true);
-        releases.push(
-          group.join({ editor: was.editor, book: sides.bookId, leads: linked, follows: linked }),
-          group.join({
-            editor: current.editor,
-            book: sides.bookId,
-            leads: linked,
-            follows: linked,
-          }),
-        );
-      } else {
-        const current = add("unified", rightHost, sides.currentText, () =>
-          hunkPaint(
-            now().units,
-            markup,
-            controls(),
-            wasBlock(now().sides.baseline, mode),
-            now().sides.current,
-          ),
-        );
-        follow("current", current);
-      }
-      painted();
-      operation.end("passed", {
-        "diff.units": now().units.length,
-        "diff.live": live !== undefined,
+      const linked = (): boolean => untrack(() => props.linked?.() ?? true);
+      const { held, release } = mountPanes({
+        split,
+        markup,
+        live,
+        leftHost,
+        rightHost,
+        now,
+        operation,
+        controls,
+        report,
+        linked,
       });
       mounts = held;
       const first = untrack(() => props.initial);
@@ -245,8 +287,7 @@ export function BookDiff(props: {
 
       return () => {
         mounts = [];
-        for (const release of releases) release();
-        for (const entry of held) entry.mount.destroy();
+        release();
       };
     },
   );

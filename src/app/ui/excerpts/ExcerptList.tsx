@@ -13,7 +13,7 @@ import {
 import type { Analysis } from "#core/galley";
 
 import { t } from "../../i18n";
-import { CardList } from "../multibuffer/CardList";
+import { CardList, type CardListProps } from "../multibuffer/CardList";
 import type { CardViews } from "../multibuffer/cardViews";
 import type { VirtualSection } from "../primitives";
 import { claimSidebar } from "../workspace/sidebarSlot";
@@ -57,6 +57,61 @@ const estimate = (excerpt: Excerpt): number => {
   return ROW_GAP + CARD_CHROME + lines * LINE + 16;
 };
 
+const nearbyHits = (
+  all: readonly Occurrence[] | undefined,
+  excerpt: Excerpt,
+): readonly Occurrence[] => {
+  if (all === undefined) return [];
+  let low = 0;
+  let high = all.length;
+  while (low < high) {
+    const mid = (low + high) >> 1;
+    if ((all[mid]?.from ?? 0) < excerpt.span.from) low = mid + 1;
+    else high = mid;
+  }
+  const own = new Set(excerpt.hits.map((hit) => hit.from));
+  const out: Occurrence[] = [];
+  for (let at = low; at < all.length; at += 1) {
+    const hit = all[at];
+    if (hit === undefined || hit.from >= excerpt.span.to) break;
+    if (hit.to <= excerpt.span.to && !own.has(hit.from)) out.push(hit);
+  }
+  return out;
+};
+
+const indexHits = (groups: readonly BookExcerpts[]): Map<BookId, Occurrence[]> => {
+  const held = new Map<BookId, Occurrence[]>();
+  for (const group of groups)
+    for (const excerpt of group.excerpts)
+      for (const hit of excerpt.hits) {
+        const list = held.get(excerpt.bookId);
+        if (list === undefined) held.set(excerpt.bookId, [hit]);
+        else list.push(hit);
+      }
+  for (const list of held.values()) list.sort((a, b) => a.from - b.from);
+  return held;
+};
+
+const buildSection = (
+  props: ExcerptListProps,
+  keyOf: (group: BookExcerpts, excerpt: Excerpt) => string,
+  group: BookExcerpts,
+): VirtualSection<Excerpt> => ({
+  key: props.sections?.sectionKey?.(group) ?? group.bookId,
+  rows: group.excerpts.map((excerpt) => {
+    // Untracked on purpose: a one-time read, not a dependency (Solid 2: STRICT_READ_UNTRACKED).
+    const staticKey = keyOf(group, excerpt);
+    return {
+      key: staticKey,
+      item: excerpt,
+      estimate:
+        estimate(excerpt) +
+        (props.card.context.kind === "none" ? 0 : FOOTER) +
+        (props.card.extraHeight?.(excerpt, staticKey) ?? 0),
+    };
+  }),
+});
+
 export function ExcerptList(props: ExcerptListProps) {
   const [active, setActive] = createSignal<string | undefined>(undefined, {
     name: "excerptActiveBook",
@@ -80,21 +135,7 @@ export function ExcerptList(props: ExcerptListProps) {
   const sectionOf = (group: BookExcerpts): VirtualSection<Excerpt> => {
     const held = built.get(group);
     if (held !== undefined) return held;
-    const made: VirtualSection<Excerpt> = {
-      key: props.sections?.sectionKey?.(group) ?? group.bookId,
-      rows: group.excerpts.map((excerpt) => {
-        // Untracked on purpose: a one-time read, not a dependency (Solid 2: STRICT_READ_UNTRACKED).
-        const staticKey = keyOf(group, excerpt);
-        return {
-          key: staticKey,
-          item: excerpt,
-          estimate:
-            estimate(excerpt) +
-            (props.card.context.kind === "none" ? 0 : FOOTER) +
-            (props.card.extraHeight?.(excerpt, staticKey) ?? 0),
-        };
-      }),
-    };
+    const made = buildSection(props, keyOf, group);
     built.set(group, made);
     return made;
   };
@@ -103,40 +144,9 @@ export function ExcerptList(props: ExcerptListProps) {
     (): readonly VirtualSection<Excerpt>[] => props.groups.map(sectionOf),
     { name: "excerptSections" },
   );
-  const hitsByBook = createMemo(
-    () => {
-      const held = new Map<BookId, Occurrence[]>();
-      for (const group of props.groups)
-        for (const excerpt of group.excerpts)
-          for (const hit of excerpt.hits) {
-            const list = held.get(excerpt.bookId);
-            if (list === undefined) held.set(excerpt.bookId, [hit]);
-            else list.push(hit);
-          }
-      for (const list of held.values()) list.sort((a, b) => a.from - b.from);
-      return held;
-    },
-    { name: "excerptHitsByBook" },
-  );
-  const nearbyOf = (excerpt: Excerpt): readonly Occurrence[] => {
-    const all = hitsByBook().get(excerpt.bookId);
-    if (all === undefined) return [];
-    let low = 0;
-    let high = all.length;
-    while (low < high) {
-      const mid = (low + high) >> 1;
-      if ((all[mid]?.from ?? 0) < excerpt.span.from) low = mid + 1;
-      else high = mid;
-    }
-    const own = new Set(excerpt.hits.map((hit) => hit.from));
-    const out: Occurrence[] = [];
-    for (let at = low; at < all.length; at += 1) {
-      const hit = all[at];
-      if (hit === undefined || hit.from >= excerpt.span.to) break;
-      if (hit.to <= excerpt.span.to && !own.has(hit.from)) out.push(hit);
-    }
-    return out;
-  };
+  const hitsByBook = createMemo(() => indexHits(props.groups), { name: "excerptHitsByBook" });
+  const nearbyOf = (excerpt: Excerpt): readonly Occurrence[] =>
+    nearbyHits(hitsByBook().get(excerpt.bookId), excerpt);
 
   const current = () => {
     const held = active();
@@ -160,6 +170,31 @@ export function ExcerptList(props: ExcerptListProps) {
       )),
     );
 
+  const card: CardListProps<Excerpt>["card"] = (excerpt, key, session) => (
+    <ExcerptCard
+      excerpt={
+        session.gone
+          ? (props.views.drawn.get(key) ?? excerpt())
+          : shown(excerpt(), key, session.editing)
+      }
+      editing={session.editing}
+      gone={session.gone ? session.goneLabel : undefined}
+      onEdit={session.start}
+      onDone={session.done}
+      spec={props.card}
+      rowKey={key}
+      seat={() => props.seat(excerpt().bookId)}
+      analyze={props.analyze}
+      follow={props.seatedOf?.(excerpt().bookId)}
+      paired={props.pairedOf?.(excerpt())}
+      active={props.focus === key ? props.activeHit : undefined}
+      mode={props.mode ?? "regular"}
+      view={props.views.view(excerpt().sid)}
+      onView={(event) => props.views.send(excerpt().sid, event)}
+      nearby={session.gone ? [] : nearbyOf(props.shownOf?.(excerpt()) ?? excerpt())}
+    />
+  );
+
   return (
     <div class="flex min-h-0 flex-1 gap-4">
       <CardList<Excerpt>
@@ -177,30 +212,7 @@ export function ExcerptList(props: ExcerptListProps) {
           props.goTo?.(scrollTo);
         }}
         empty={props.empty}
-        card={(excerpt, key, session) => (
-          <ExcerptCard
-            excerpt={
-              session.gone
-                ? (props.views.drawn.get(key) ?? excerpt())
-                : shown(excerpt(), key, session.editing)
-            }
-            editing={session.editing}
-            gone={session.gone ? session.goneLabel : undefined}
-            onEdit={session.start}
-            onDone={session.done}
-            spec={props.card}
-            rowKey={key}
-            seat={() => props.seat(excerpt().bookId)}
-            analyze={props.analyze}
-            follow={props.seatedOf?.(excerpt().bookId)}
-            paired={props.pairedOf?.(excerpt())}
-            active={props.focus === key ? props.activeHit : undefined}
-            mode={props.mode ?? "regular"}
-            view={props.views.view(excerpt().sid)}
-            onView={(event) => props.views.send(excerpt().sid, event)}
-            nearby={session.gone ? [] : nearbyOf(props.shownOf?.(excerpt()) ?? excerpt())}
-          />
-        )}
+        card={card}
       />
     </div>
   );

@@ -31,15 +31,19 @@ interface Chapter {
   readonly intro: boolean;
 }
 
-export function ProjectSidebar() {
-  const shell = useShell();
-  const navigate = useNavigate();
+type Shell = ReturnType<typeof useShell>;
+
+function createSearchBox() {
   const [query, setQuery] = createSignal("", { name: "sidebarQuery" });
   const [searchOpen, setSearchOpen] = createSignal(false, { name: "sidebarSearchOpen" });
   const closeSearch = () => {
     setQuery("");
     setSearchOpen(false);
   };
+  return { query, setQuery, searchOpen, setSearchOpen, closeSearch };
+}
+
+function createTestamentPick(shell: Shell) {
   const [picked, setPicked] = createSignal<
     { readonly testament: Testament; readonly during: string | undefined } | undefined
   >(undefined, { name: "sidebarTestament" });
@@ -52,6 +56,111 @@ export function ProjectSidebar() {
   const pickTestament = (next: Testament): void => {
     setPicked({ testament: next, during: shell.focused()?.id });
   };
+  return { testament, pickTestament };
+}
+
+function chaptersOf(shell: Shell, id: string): readonly Chapter[] {
+  if (shell.focused()?.id === id) {
+    const rows: Chapter[] = [];
+    shell.outline().forEach((chapter, index) => {
+      if (chapter.label !== "") rows.push({ index, label: chapter.label, intro: false });
+      else if (index === 0 && chapter.to > chapter.from)
+        rows.push({ index, label: t("Intro"), intro: true });
+    });
+    return rows;
+  }
+  const held = Option.getOrUndefined(shell.services.projectAnalysis.analysis(id));
+  if (held === undefined) return [];
+  return tocViewOf(held.analysis).chapters.flatMap((chapter): Chapter[] => {
+    if (chapter.number > 0)
+      return [{ index: chapter.number, label: String(chapter.number), intro: false }];
+    return chapter.to > chapter.from ? [{ index: 0, label: t("Intro"), intro: true }] : [];
+  });
+}
+
+function openChapter(shell: Shell, id: string, chapter: Chapter): void {
+  if (shell.focused()?.id === id) shell.showChapter(chapter.index);
+  else if (chapter.intro) shell.showReference(introAddress(id));
+  else shell.showReference(chaptersAddress(id, chapter.index));
+}
+
+function currentChapter(shell: Shell): number | undefined {
+  const clipped = shell.chapter();
+  if (clipped !== null) return clipped;
+  const project = shell.project();
+  const book = shell.focused();
+  if (project === undefined || book === undefined) return undefined;
+  const held = shell.lastLocation(project.root);
+  return held?.bookId === book.id ? held.at : undefined;
+}
+
+function BookRow(props: {
+  readonly row: Row;
+  readonly open: boolean;
+  readonly wanted: string;
+  readonly current: number | undefined;
+  readonly onToggle: () => void;
+}) {
+  const shell = useShell();
+  const focused = (): boolean => shell.focused()?.id === props.row.id;
+  const chapters = createMemo(
+    (): readonly Chapter[] => {
+      if (!props.open) return [];
+      const all = chaptersOf(shell, props.row.id);
+      const wanted = props.wanted;
+      return wanted === "" ? all : all.filter((chapter) => chapter.label.startsWith(wanted));
+    },
+    { name: "sidebarChapters" },
+  );
+  return (
+    <li>
+      <button
+        type="button"
+        data-testid={`sidebar-book-${props.row.id}`}
+        data-book={props.row.id}
+        data-focused={focused() ? "" : undefined}
+        aria-expanded={props.open ? "true" : "false"}
+        class="flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-lg p-3 text-start text-small font-medium transition-colors data-focused:text-brand not-data-focused:text-sidebar-on-surface not-data-focused:hover:bg-sidebar-surface-hover"
+        onClick={() => props.onToggle()}
+      >
+        <BookIcon size={20} aria-hidden="true" class="shrink-0" />
+        <span class="min-w-0 flex-1 truncate">{props.row.name}</span>
+        <span aria-hidden="true" class="shrink-0">
+          <Show when={props.open} fallback={<ChevronRight size={14} />}>
+            <ChevronDown size={14} />
+          </Show>
+        </span>
+      </button>
+
+      <Show when={props.open && chapters().length > 0}>
+        <ol class="grid grid-cols-[repeat(auto-fill,minmax(3.75rem,1fr))] gap-px px-3 pt-1 pb-3">
+          <For each={chapters()}>
+            {(chapter) => (
+              <li>
+                <button
+                  type="button"
+                  data-chapter={chapter.index}
+                  data-testid={`chapter-tile-${chapter.intro ? "intro" : chapter.label}`}
+                  data-current={focused() && props.current === chapter.index ? "" : undefined}
+                  class="h-12 w-full cursor-pointer truncate rounded-lg border px-3 text-center text-small font-medium tabular-nums transition-colors data-current:border-brand data-current:bg-surface-primary data-current:font-semibold data-current:text-brand not-data-current:border-transparent not-data-current:text-on-surface-secondary not-data-current:hover:bg-surface-canvas"
+                  onClick={() => openChapter(shell, props.row.id, chapter)}
+                >
+                  {chapter.label}
+                </button>
+              </li>
+            )}
+          </For>
+        </ol>
+      </Show>
+    </li>
+  );
+}
+
+export function ProjectSidebar() {
+  const shell = useShell();
+  const navigate = useNavigate();
+  const { query, setQuery, searchOpen, setSearchOpen, closeSearch } = createSearchBox();
+  const { testament, pickTestament } = createTestamentPick(shell);
   const [opened, setOpened] = createSignal<string | null | undefined>(undefined, {
     name: "sidebarOpened",
   });
@@ -116,97 +225,6 @@ export function ProjectSidebar() {
     if ((search()?.chapter ?? "") !== "") return true;
     const choice = opened();
     return choice === undefined ? shell.focused()?.id === id : choice === id;
-  };
-
-  const chaptersOf = (id: string): readonly Chapter[] => {
-    if (shell.focused()?.id === id) {
-      const rows: Chapter[] = [];
-      shell.outline().forEach((chapter, index) => {
-        if (chapter.label !== "") rows.push({ index, label: chapter.label, intro: false });
-        else if (index === 0 && chapter.to > chapter.from)
-          rows.push({ index, label: t("Intro"), intro: true });
-      });
-      return rows;
-    }
-    const held = Option.getOrUndefined(shell.services.projectAnalysis.analysis(id));
-    if (held === undefined) return [];
-    return tocViewOf(held.analysis).chapters.flatMap((chapter): Chapter[] => {
-      if (chapter.number > 0)
-        return [{ index: chapter.number, label: String(chapter.number), intro: false }];
-      return chapter.to > chapter.from ? [{ index: 0, label: t("Intro"), intro: true }] : [];
-    });
-  };
-
-  const openChapter = (id: string, chapter: Chapter): void => {
-    if (shell.focused()?.id === id) shell.showChapter(chapter.index);
-    else if (chapter.intro) shell.showReference(introAddress(id));
-    else shell.showReference(chaptersAddress(id, chapter.index));
-  };
-
-  const currentChapter = (): number | undefined => {
-    const clipped = shell.chapter();
-    if (clipped !== null) return clipped;
-    const project = shell.project();
-    const book = shell.focused();
-    if (project === undefined || book === undefined) return undefined;
-    const held = shell.lastLocation(project.root);
-    return held?.bookId === book.id ? held.at : undefined;
-  };
-
-  const BookRow = (rowProps: { readonly row: Row }) => {
-    const focused = (): boolean => shell.focused()?.id === rowProps.row.id;
-    const open = (): boolean => isOpen(rowProps.row.id);
-    const chapters = createMemo(
-      (): readonly Chapter[] => {
-        if (!open()) return [];
-        const all = chaptersOf(rowProps.row.id);
-        const wanted = search()?.chapter ?? "";
-        return wanted === "" ? all : all.filter((chapter) => chapter.label.startsWith(wanted));
-      },
-      { name: "sidebarChapters" },
-    );
-    return (
-      <li>
-        <button
-          type="button"
-          data-testid={`sidebar-book-${rowProps.row.id}`}
-          data-book={rowProps.row.id}
-          data-focused={focused() ? "" : undefined}
-          aria-expanded={open() ? "true" : "false"}
-          class="flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-lg p-3 text-start text-small font-medium transition-colors data-focused:text-brand not-data-focused:text-sidebar-on-surface not-data-focused:hover:bg-sidebar-surface-hover"
-          onClick={() => setOpened(open() ? null : rowProps.row.id)}
-        >
-          <BookIcon size={20} aria-hidden="true" class="shrink-0" />
-          <span class="min-w-0 flex-1 truncate">{rowProps.row.name}</span>
-          <span aria-hidden="true" class="shrink-0">
-            <Show when={open()} fallback={<ChevronRight size={14} />}>
-              <ChevronDown size={14} />
-            </Show>
-          </span>
-        </button>
-
-        <Show when={open() && chapters().length > 0}>
-          <ol class="grid grid-cols-[repeat(auto-fill,minmax(3.75rem,1fr))] gap-px px-3 pt-1 pb-3">
-            <For each={chapters()}>
-              {(chapter) => (
-                <li>
-                  <button
-                    type="button"
-                    data-chapter={chapter.index}
-                    data-testid={`chapter-tile-${chapter.intro ? "intro" : chapter.label}`}
-                    data-current={focused() && currentChapter() === chapter.index ? "" : undefined}
-                    class="h-12 w-full cursor-pointer truncate rounded-lg border px-3 text-center text-small font-medium tabular-nums transition-colors data-current:border-brand data-current:bg-surface-primary data-current:font-semibold data-current:text-brand not-data-current:border-transparent not-data-current:text-on-surface-secondary not-data-current:hover:bg-surface-canvas"
-                    onClick={() => openChapter(rowProps.row.id, chapter)}
-                  >
-                    {chapter.label}
-                  </button>
-                </li>
-              )}
-            </For>
-          </ol>
-        </Show>
-      </li>
-    );
   };
 
   return (
@@ -280,7 +298,17 @@ export function ProjectSidebar() {
             fallback={<p class="px-2 py-4 text-small text-on-surface-tertiary">{emptyNote()}</p>}
           >
             <ul>
-              <For each={shown()}>{(row) => <BookRow row={row} />}</For>
+              <For each={shown()}>
+                {(row) => (
+                  <BookRow
+                    row={row}
+                    open={isOpen(row.id)}
+                    wanted={search()?.chapter ?? ""}
+                    current={currentChapter(shell)}
+                    onToggle={() => setOpened(isOpen(row.id) ? null : row.id)}
+                  />
+                )}
+              </For>
             </ul>
           </Show>
 

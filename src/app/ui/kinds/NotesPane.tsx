@@ -23,6 +23,50 @@ interface Question {
   readonly place: Address;
 }
 
+interface NoteItemProps {
+  readonly note: Note;
+  readonly answeredPlace: Address | undefined;
+}
+
+function NoteItem(props: NoteItemProps) {
+  const shell = useShell();
+  return (
+    <li
+      data-testid="note"
+      data-address={addressCode(props.note.address)}
+      class="rounded-2xl bg-surface-primary p-4"
+    >
+      <Show when={props.note.quote}>
+        {(quote) => (
+          <Markdown
+            inline
+            class="text-small font-semibold text-on-surface-primary"
+            text={quote()}
+          />
+        )}
+      </Show>
+      <Show
+        when={
+          props.note.openEnded === true ||
+          addressCode(props.note.address) !== addressCode(props.answeredPlace ?? props.note.address)
+        }
+      >
+        <p class="text-smallest text-on-surface-tertiary">
+          {props.note.openEnded === true
+            ? t("From {place} to the chapter's end", {
+                place: shell.location.label(props.note.address),
+              })
+            : shell.location.label(props.note.address)}
+        </p>
+      </Show>
+      <Markdown
+        class="note-body mt-2 text-small text-on-surface-secondary"
+        text={props.note.body}
+      />
+    </li>
+  );
+}
+
 export function NotesPane(props: NotesPaneProps) {
   const shell = useShell();
   const context = borrowedContext(shell.services);
@@ -96,42 +140,7 @@ export function NotesPane(props: NotesPaneProps) {
               >
                 <ol class="flex min-h-0 flex-col gap-3 overflow-y-auto pe-1">
                   <For each={notes()}>
-                    {(note) => (
-                      <li
-                        data-testid="note"
-                        data-address={addressCode(note.address)}
-                        class="rounded-2xl bg-surface-primary p-4"
-                      >
-                        <Show when={note.quote}>
-                          {(quote) => (
-                            <Markdown
-                              inline
-                              class="text-small font-semibold text-on-surface-primary"
-                              text={quote()}
-                            />
-                          )}
-                        </Show>
-                        <Show
-                          when={
-                            note.openEnded === true ||
-                            addressCode(note.address) !==
-                              addressCode(answeredPlace() ?? note.address)
-                          }
-                        >
-                          <p class="text-smallest text-on-surface-tertiary">
-                            {note.openEnded === true
-                              ? t("From {place} to the chapter's end", {
-                                  place: shell.location.label(note.address),
-                                })
-                              : shell.location.label(note.address)}
-                          </p>
-                        </Show>
-                        <Markdown
-                          class="note-body mt-2 text-small text-on-surface-secondary"
-                          text={note.body}
-                        />
-                      </li>
-                    )}
+                    {(note) => <NoteItem note={note} answeredPlace={answeredPlace()} />}
                   </For>
                 </ol>
               </Show>

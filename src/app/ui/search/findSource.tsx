@@ -18,6 +18,85 @@ type Held = { readonly kind: "loading" } | { readonly kind: "missing" } | BookTe
 
 const NONE = "";
 
+function createBookCache(shell: ReturnType<typeof useShell>) {
+  const { services } = shell;
+  const [read, setRead] = createSignal(0, { name: "findSourceRead" });
+  const books = new Map<BookId, Held>();
+  let generation = 0;
+
+  const reset = (): void => {
+    books.clear();
+    generation += 1;
+  };
+
+  const bookOf = (source: Resource, bookId: BookId): Held => {
+    const held = books.get(bookId);
+    if (held !== undefined) return held;
+    books.set(bookId, { kind: "loading" });
+    const asked = generation;
+    void services
+      .run(Effect.result(services.library.readBook(source.id, bookId)))
+      .then((outcome) => {
+        if (asked !== generation) return;
+        const text = Result.isFailure(outcome) ? undefined : Option.getOrUndefined(outcome.success);
+        if (text === undefined) books.set(bookId, { kind: "missing" });
+        else {
+          const analysis = services.galley.analyze(text, "find.source");
+          const heading = bookHeading(analysis);
+          books.set(bookId, {
+            bookId,
+            text: analysis.text,
+            analysis,
+            label: (address) => shell.location.label(address, heading),
+          });
+        }
+        setRead((held) => held + 1);
+      });
+    return { kind: "loading" };
+  };
+
+  return { read, reset, bookOf };
+}
+
+type SourceRow = { readonly root: string; readonly name: string; readonly language: string };
+
+interface SourcePickerProps {
+  readonly summary: string;
+  readonly narrowed: boolean;
+  readonly rows: readonly SourceRow[];
+  readonly chosen: string;
+  readonly onChoose: (root: string) => void;
+}
+
+function SourcePicker(props: SourcePickerProps) {
+  return (
+    <MultiSelect
+      single
+      id="find-source"
+      label={t("Source text")}
+      summary={props.summary}
+      narrowed={props.narrowed}
+      items={props.rows}
+      key={(row: SourceRow) => row.root}
+      match={(row, query) =>
+        `${row.name} ${row.language}`.toLowerCase().includes(query.toLowerCase())
+      }
+      placeholder={t("Search texts…")}
+      selected={(row) => row.root === props.chosen}
+      onToggle={(row) => props.onChoose(row.root)}
+    >
+      {(row) => (
+        <span class="flex min-w-0 flex-1 flex-col">
+          <span class="truncate">{row.name}</span>
+          <Show when={row.language !== ""}>
+            <span class="text-smallest text-on-surface-tertiary">{row.language}</span>
+          </Show>
+        </span>
+      )}
+    </MultiSelect>
+  );
+}
+
 export function createFindSource(onBound: () => void) {
   const shell = useShell();
   const { services } = shell;
@@ -29,15 +108,12 @@ export function createFindSource(onBound: () => void) {
     name: "findSourceChoices",
   });
   const [tick, setTick] = createSignal(0, { name: "findSourceTick" });
-  const [read, setRead] = createSignal(0, { name: "findSourceRead" });
-  const books = new Map<BookId, Held>();
-  let generation = 0;
+  const cache = createBookCache(shell);
 
   createEffect(
     () => ({ project: shell.project()?.root, tick: tick() }),
     ({ project }) => {
-      books.clear();
-      generation += 1;
+      cache.reset();
       if (project === undefined) {
         setResource(undefined);
         return;
@@ -91,37 +167,11 @@ export function createFindSource(onBound: () => void) {
       });
   };
 
-  const bookOf = (source: Resource, bookId: BookId): Held => {
-    const held = books.get(bookId);
-    if (held !== undefined) return held;
-    books.set(bookId, { kind: "loading" });
-    const asked = generation;
-    void services
-      .run(Effect.result(services.library.readBook(source.id, bookId)))
-      .then((outcome) => {
-        if (asked !== generation) return;
-        const text = Result.isFailure(outcome) ? undefined : Option.getOrUndefined(outcome.success);
-        if (text === undefined) books.set(bookId, { kind: "missing" });
-        else {
-          const analysis = services.galley.analyze(text, "find.source");
-          const heading = bookHeading(analysis);
-          books.set(bookId, {
-            bookId,
-            text: analysis.text,
-            analysis,
-            label: (address) => shell.location.label(address, heading),
-          });
-        }
-        setRead((held) => held + 1);
-      });
-    return { kind: "loading" };
-  };
-
   const pairedOf = (excerpt: Excerpt): Paired | undefined => {
-    read();
+    cache.read();
     const source = resource();
     if (source === undefined) return undefined;
-    const held = bookOf(source, excerpt.bookId);
+    const held = cache.bookOf(source, excerpt.bookId);
     if ("analysis" in held) return { kind: "text", name: source.title, book: held, hits: [] };
     return {
       kind: "none",
@@ -135,38 +185,20 @@ export function createFindSource(onBound: () => void) {
 
   const shown = (): boolean => resource() !== undefined;
 
-  type Row = { readonly root: string; readonly name: string; readonly language: string };
-  const rows = (): readonly Row[] => [
+  const rows = (): readonly SourceRow[] => [
     { root: NONE, name: t("No source text"), language: "" },
     ...choices().map((row) => ({ root: row.root, name: row.name, language: row.language })),
   ];
   const chosen = (): string => (shown() ? (resource()?.id ?? NONE) : NONE);
 
   const Picker = () => (
-    <MultiSelect
-      single
-      id="find-source"
-      label={t("Source text")}
+    <SourcePicker
       summary={shown() ? (resource()?.title ?? "") : t("none")}
       narrowed={shown()}
-      items={rows()}
-      key={(row: Row) => row.root}
-      match={(row, query) =>
-        `${row.name} ${row.language}`.toLowerCase().includes(query.toLowerCase())
-      }
-      placeholder={t("Search texts…")}
-      selected={(row) => row.root === chosen()}
-      onToggle={(row) => choose(row.root)}
-    >
-      {(row) => (
-        <span class="flex min-w-0 flex-1 flex-col">
-          <span class="truncate">{row.name}</span>
-          <Show when={row.language !== ""}>
-            <span class="text-smallest text-on-surface-tertiary">{row.language}</span>
-          </Show>
-        </span>
-      )}
-    </MultiSelect>
+      rows={rows()}
+      chosen={chosen()}
+      onChoose={choose}
+    />
   );
 
   return { resource, shown, pairedOf, Picker };

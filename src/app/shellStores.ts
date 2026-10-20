@@ -38,12 +38,7 @@ export interface ShellStores {
   readonly inventory: Accessor<Inventory>;
 }
 
-export const makeShellStores = (options: {
-  readonly services: Services;
-  readonly open: () => Project | undefined;
-}): ShellStores => {
-  const { services, open } = options;
-
+const createFindingsStore = (services: Services, open: () => Project | undefined) => {
   const [findingsVersion, setFindingsVersion] = createSignal(0, { name: "findingsVersion" });
   const [findingsPending, setFindingsPending] = createSignal(false, { name: "findingsPending" });
   const [findingTotals, setFindingTotals] = createSignal(
@@ -107,6 +102,19 @@ export const makeShellStores = (options: {
 
   const inventory = (): Inventory => inventoryHeld();
 
+  return {
+    publishFindings,
+    setFindingsPending,
+    findings,
+    findingsPending,
+    findingCounts,
+    summaryOf,
+    bookCensus,
+    inventory,
+  };
+};
+
+const createBooksStore = (services: Services, open: () => Project | undefined) => {
   const onDisk = new Set<BookId>();
 
   const saveStateOf = (book: Book): SaveState => {
@@ -139,6 +147,74 @@ export const makeShellStores = (options: {
       }
     });
   };
+  const unsaved = (book: Book): boolean => books[book.id]?.saveState === "unsaved";
+
+  const saveState = (book: Book): SaveState => books[book.id]?.saveState ?? "recorded";
+
+  const stampOf = (bookId: BookId): SourceStamp | undefined => books[bookId]?.stamp;
+
+  const NO_HISTORY = { undo: 0, redo: 0 } as const;
+
+  const historyDepth = (bookId: BookId): { readonly undo: number; readonly redo: number } => {
+    const row = books[bookId];
+    return row === undefined ? NO_HISTORY : { undo: row.undo, redo: row.redo };
+  };
+
+  const clearBooks = (): void => {
+    setBooks((draft) => {
+      for (const bookId of Object.keys(draft)) delete draft[bookId];
+    });
+  };
+
+  return {
+    onDisk,
+    refreshBooks,
+    clearBooks,
+    unsaved,
+    saveState,
+    stampOf,
+    historyDepth,
+  };
+};
+
+const watchAnalysis = (services: Services, changed: (event: ShellEvent) => void): void => {
+  let publishPending: ReturnType<typeof setTimeout> | undefined;
+  const watchingAnalysis = services.runtime.runFork(
+    Stream.runForEach(services.projectAnalysis.watch(), () =>
+      Effect.sync(() => {
+        if (publishPending !== undefined) return;
+        publishPending = setTimeout(() => {
+          publishPending = undefined;
+          changed({ kind: "corpus.publish" });
+        }, 0);
+      }),
+    ),
+  );
+  onCleanup(() => {
+    if (publishPending !== undefined) clearTimeout(publishPending);
+    Effect.runFork(Fiber.interrupt(watchingAnalysis));
+  });
+};
+
+export const makeShellStores = (options: {
+  readonly services: Services;
+  readonly open: () => Project | undefined;
+}): ShellStores => {
+  const { services, open } = options;
+
+  const {
+    publishFindings,
+    setFindingsPending,
+    findings,
+    findingsPending,
+    findingCounts,
+    summaryOf,
+    bookCensus,
+    inventory,
+  } = createFindingsStore(services, open);
+
+  const { onDisk, refreshBooks, clearBooks, unsaved, saveState, stampOf, historyDepth } =
+    createBooksStore(services, open);
 
   const changed = (event: ShellEvent): void => {
     if (event.kind === "book.write")
@@ -156,44 +232,14 @@ export const makeShellStores = (options: {
     if (event.kind === "corpus.rejudge") setFindingsPending(true);
   };
 
-  let publishPending: ReturnType<typeof setTimeout> | undefined;
-  const watchingAnalysis = services.runtime.runFork(
-    Stream.runForEach(services.projectAnalysis.watch(), () =>
-      Effect.sync(() => {
-        if (publishPending !== undefined) return;
-        publishPending = setTimeout(() => {
-          publishPending = undefined;
-          changed({ kind: "corpus.publish" });
-        }, 0);
-      }),
-    ),
-  );
-  onCleanup(() => {
-    if (publishPending !== undefined) clearTimeout(publishPending);
-    Effect.runFork(Fiber.interrupt(watchingAnalysis));
-  });
+  watchAnalysis(services, changed);
 
   const noteWritten = (bookIds: readonly BookId[], recorded: boolean): void => {
     changed({ kind: "book.write", books: bookIds, recorded });
   };
 
-  const unsaved = (book: Book): boolean => books[book.id]?.saveState === "unsaved";
-
-  const saveState = (book: Book): SaveState => books[book.id]?.saveState ?? "recorded";
-
-  const stampOf = (bookId: BookId): SourceStamp | undefined => books[bookId]?.stamp;
-
-  const NO_HISTORY = { undo: 0, redo: 0 } as const;
-
-  const historyDepth = (bookId: BookId): { readonly undo: number; readonly redo: number } => {
-    const row = books[bookId];
-    return row === undefined ? NO_HISTORY : { undo: row.undo, redo: row.redo };
-  };
-
   const clear = (): void => {
-    setBooks((draft) => {
-      for (const bookId of Object.keys(draft)) delete draft[bookId];
-    });
+    clearBooks();
     publishFindings();
   };
 

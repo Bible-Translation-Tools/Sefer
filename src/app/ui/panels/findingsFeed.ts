@@ -179,6 +179,65 @@ const byBook = (groups: readonly BookExcerpts[], frontTitle: string): readonly B
   return out;
 };
 
+const tonesOf = (
+  findings: ReturnType<FindingsFeedOptions["findings"]>,
+): ReadonlyMap<BookId, Map<number, Severity>> => {
+  const out = new Map<BookId, Map<number, Severity>>();
+  for (const finding of findings) {
+    let inBook = out.get(finding.bookId);
+    if (inBook === undefined) {
+      inBook = new Map<number, Severity>();
+      out.set(finding.bookId, inBook);
+    }
+    const held = inBook.get(finding.from);
+    if (held === undefined || RANK[finding.severity] < RANK[held])
+      inBook.set(finding.from, finding.severity);
+  }
+  return out;
+};
+
+const sectionsOf = (buckets: ReturnType<typeof bucketed>) => {
+  const groups: BookExcerpts[] = [];
+  const outline: OutlineRow[] = [];
+  const rows: FindingsRow[] = [];
+  const heads = new Map<string, FindingsHead>();
+  const byKey = new Map<string, FindingsRow>();
+
+  for (const bucket of buckets) {
+    let count = 0;
+    for (const excerpt of bucket.excerpts) {
+      const findings = inPlace(bucket.findings.get(excerpt.sid) ?? []);
+      count += findings.length;
+      const row: FindingsRow = {
+        key: `${bucket.key}${SEP}${excerpt.sid}`,
+        sectionKey: bucket.key,
+        excerpt,
+        findings,
+        bookName: bucket.bookName,
+        front: bucket.front,
+      };
+      rows.push(row);
+      byKey.set(row.key, row);
+    }
+    groups.push({
+      bookId: bucket.key,
+      name: bucket.detail ?? bucket.label,
+      excerpts: bucket.excerpts,
+      count,
+    });
+    outline.push({ bookId: bucket.key, name: bucket.label, count });
+    heads.set(bucket.key, {
+      key: bucket.key,
+      label: bucket.label,
+      ...(bucket.detail === undefined ? {} : { detail: bucket.detail }),
+      count,
+      front: bucket.front,
+    });
+  }
+
+  return { groups, outline, rows, heads, byKey };
+};
+
 export const createFindingsFeed = (options: FindingsFeedOptions): FindingsFeed => {
   const hits = createMemo((): readonly Occurrence[] => options.findings(), {
     name: "findingOccurrences",
@@ -186,23 +245,7 @@ export const createFindingsFeed = (options: FindingsFeedOptions): FindingsFeed =
 
   const excerpts = createExcerptFeed({ hits, name: "findings" });
 
-  const tones = createMemo(
-    (): ReadonlyMap<BookId, Map<number, Severity>> => {
-      const out = new Map<BookId, Map<number, Severity>>();
-      for (const finding of options.findings()) {
-        let inBook = out.get(finding.bookId);
-        if (inBook === undefined) {
-          inBook = new Map<number, Severity>();
-          out.set(finding.bookId, inBook);
-        }
-        const held = inBook.get(finding.from);
-        if (held === undefined || RANK[finding.severity] < RANK[held])
-          inBook.set(finding.from, finding.severity);
-      }
-      return out;
-    },
-    { name: "findingTones" },
-  );
+  const tones = createMemo(() => tonesOf(options.findings()), { name: "findingTones" });
 
   const model = createMemo(
     () => {
@@ -210,46 +253,7 @@ export const createFindingsFeed = (options: FindingsFeedOptions): FindingsFeed =
         options.view() === "book"
           ? byBook(excerpts.groups(), t("Front matter"))
           : bucketed(excerpts.groups(), options.view(), t("Every finding"));
-
-      const groups: BookExcerpts[] = [];
-      const outline: OutlineRow[] = [];
-      const rows: FindingsRow[] = [];
-      const heads = new Map<string, FindingsHead>();
-      const byKey = new Map<string, FindingsRow>();
-
-      for (const bucket of buckets) {
-        let count = 0;
-        for (const excerpt of bucket.excerpts) {
-          const findings = inPlace(bucket.findings.get(excerpt.sid) ?? []);
-          count += findings.length;
-          const row: FindingsRow = {
-            key: `${bucket.key}${SEP}${excerpt.sid}`,
-            sectionKey: bucket.key,
-            excerpt,
-            findings,
-            bookName: bucket.bookName,
-            front: bucket.front,
-          };
-          rows.push(row);
-          byKey.set(row.key, row);
-        }
-        groups.push({
-          bookId: bucket.key,
-          name: bucket.detail ?? bucket.label,
-          excerpts: bucket.excerpts,
-          count,
-        });
-        outline.push({ bookId: bucket.key, name: bucket.label, count });
-        heads.set(bucket.key, {
-          key: bucket.key,
-          label: bucket.label,
-          ...(bucket.detail === undefined ? {} : { detail: bucket.detail }),
-          count,
-          front: bucket.front,
-        });
-      }
-
-      return { groups, outline, rows, heads, byKey };
+      return sectionsOf(buckets);
     },
     { name: "findingsSections" },
   );

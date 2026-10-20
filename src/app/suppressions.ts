@@ -33,6 +33,14 @@ const decodeSuppressionsFile = (text: string | undefined) => {
   return decodeSuppressions(text);
 };
 
+const rungIn = (held: Suppressions, finding: Finding): Rung | undefined => {
+  const keys = finding.suppression;
+  if (keys === undefined) return undefined;
+  if (held.here.has(keys.here)) return "here";
+  if (keys.everywhere !== undefined && held.everywhere.has(keys.everywhere)) return "everywhere";
+  return undefined;
+};
+
 export const makeSuppressionStore = (options: {
   readonly services: Services;
   readonly changed: (event: ShellEvent) => void;
@@ -94,14 +102,7 @@ export const makeSuppressionStore = (options: {
       const next = withoutSuppression(held, id);
       return next === held ? true : save(pruned(next));
     },
-    rungOf: (finding) => {
-      const keys = finding.suppression;
-      if (keys === undefined) return undefined;
-      if (held.here.has(keys.here)) return "here";
-      if (keys.everywhere !== undefined && held.everywhere.has(keys.everywhere))
-        return "everywhere";
-      return undefined;
-    },
+    rungOf: (finding) => rungIn(held, finding),
     clear: () => {
       root = undefined;
       writable = true;

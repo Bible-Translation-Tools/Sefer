@@ -16,7 +16,7 @@ import * as Findings from "#core/findings/findings";
 import * as Fixes from "#core/fixes/fixes";
 
 import { t } from "../../i18n";
-import { useShell } from "../../ProjectContext";
+import { useShell, type Shell } from "../../ProjectContext";
 import { excerptCard, ExcerptList, type ExcerptCardSpec, type OutlineSpec } from "../excerpts";
 import type { CardAction } from "../multibuffer/CardAction";
 import {
@@ -39,56 +39,53 @@ import {
   foldRuns,
   inMarkup,
   type FindingRun,
+  type FindingsFeed,
   type FindingsRow,
 } from "./findingsFeed";
-import { createFindingsFilter, VIEWS, type FindingsView } from "./findingsFilter";
+import {
+  createFindingsFilter,
+  VIEWS,
+  type FindingsFilterState,
+  type FindingsView,
+} from "./findingsFilter";
 import { FindingsFilters } from "./FindingsFilters";
 import { SousSentence } from "./SousSentence";
 import { SuppressActions } from "./SuppressActions";
 
 const LINE_HEIGHT = 30;
 
-export function FindingsPanel() {
-  const shell = useShell();
-  const navigate = useNavigate();
-  const filters = createFindingsFilter(shell.services);
-  const [preview, setPreview] = createSignal<Fixes.FixPreview | undefined>(undefined, {
-    name: "fixPreview",
-  });
-  const [note, setNote] = createSignal("");
-  const [cursor, setCursor] = createSignal(0, { name: "findingsCursor" });
-  const [settingsOpen, setSettingsOpen] = createSignal(false, { name: "findingsSettingsOpen" });
-  const [showingSuppressed, setShowingSuppressed] = createSignal(false, {
-    name: "findingsShowingSuppressed",
-  });
-  const hiddenCount = createMemo(() => shell.suppressedFindings().length, {
-    name: "findingsHiddenCount",
-  });
-  const source = createFindSource(() => {});
-  const [walking, setWalking] = createSignal(false, { name: "findingsWalking" });
-
-  // SAFETY: `strict: false` gives the union of every route's search; both fields are read as `unknown` and each is narrowed before it is used.
-  const search = useSearch({ strict: false }) as () => {
-    readonly code?: unknown;
-    readonly pattern?: unknown;
-  };
-
-  const pattern = (): number | undefined => {
-    const held = search().pattern;
-    return typeof held === "number" && Number.isInteger(held) && held >= 0 ? held : undefined;
-  };
-
-  createEffect(
-    () => search().code,
-    (code) => {
-      if (typeof code !== "string" || code === "") return;
-      // Untracked on purpose: a one-time read, not a dependency (Solid 2: STRICT_READ_UNTRACKED).
-      untrack(() => {
-        filters.update({ codes: [code], books: null });
-      });
-    },
+const severitiesOf = (row: FindingsRow): readonly Finding["severity"][] =>
+  Filter.SEVERITIES.filter((severity) =>
+    row.findings.some((finding) => finding.severity === severity),
   );
 
+interface RunDisclosure {
+  readonly isOpen: (row: FindingsRow, finding: Finding) => boolean;
+  readonly toggleRun: (row: FindingsRow, finding: Finding) => void;
+  readonly isWhyOpen: (row: FindingsRow, finding: Finding) => boolean;
+  readonly toggleWhy: (row: FindingsRow, finding: Finding) => void;
+}
+
+const createRunDisclosure = (feed: FindingsFeed): RunDisclosure => {
+  const runId = (row: FindingsRow, finding: Finding): string => `${row.sectionKey}|${finding.id}`;
+  const isOpen = (row: FindingsRow, finding: Finding): boolean =>
+    feed.excerpts.views.view(row.excerpt.sid).open.has(runId(row, finding));
+  const toggleRun = (row: FindingsRow, finding: Finding): void =>
+    feed.excerpts.views.send(row.excerpt.sid, { kind: "open", id: runId(row, finding) });
+  const whyId = (row: FindingsRow, finding: Finding): string => `why|${runId(row, finding)}`;
+  const isWhyOpen = (row: FindingsRow, finding: Finding): boolean =>
+    feed.excerpts.views.view(row.excerpt.sid).open.has(whyId(row, finding));
+  const toggleWhy = (row: FindingsRow, finding: Finding): void =>
+    feed.excerpts.views.send(row.excerpt.sid, { kind: "open", id: whyId(row, finding) });
+  return { isOpen, toggleRun, isWhyOpen, toggleWhy };
+};
+
+const createFindingsPool = (
+  shell: Shell,
+  filters: FindingsFilterState,
+  pattern: () => number | undefined,
+  showingSuppressed: () => boolean,
+) => {
   const pool = createMemo(
     (): readonly Finding[] => {
       if (shell.project() === undefined) return [];
@@ -126,44 +123,14 @@ export function FindingsPanel() {
       Filter.applyFilter(Findings.list({ findings: pool }), filters.filter(), isStale),
     { name: "findingsShown" },
   );
+  return { isStale, summary, shown };
+};
 
-  const books = (): readonly BookId[] => shell.project()?.books.map((book) => book.id) ?? [];
-
-  const feed = createFindingsFeed({ findings: shown, view: filters.view });
-
-  const [body, setBody] = createSignal(false, { name: "findingsBody" });
-  let after: ReturnType<typeof setTimeout> | undefined;
-  const frame = requestAnimationFrame(() => {
-    after = setTimeout(() => setBody(true), 0);
-  });
-  onCleanup(() => {
-    cancelAnimationFrame(frame);
-    if (after !== undefined) clearTimeout(after);
-  });
-
-  const at = (index: number): FindingsRow | undefined => feed.rows()[index];
-
-  const step = (delta: 1 | -1): void => {
-    const staticCount = feed.rows().length;
-    if (staticCount === 0) return;
-    setWalking(true);
-    setCursor((held) => (held + delta + staticCount) % staticCount);
-  };
-
-  const runId = (row: FindingsRow, finding: Finding): string => `${row.sectionKey}|${finding.id}`;
-  const isOpen = (row: FindingsRow, finding: Finding): boolean =>
-    feed.excerpts.views.view(row.excerpt.sid).open.has(runId(row, finding));
-  const toggleRun = (row: FindingsRow, finding: Finding): void =>
-    feed.excerpts.views.send(row.excerpt.sid, { kind: "open", id: runId(row, finding) });
-  const whyId = (row: FindingsRow, finding: Finding): string => `why|${runId(row, finding)}`;
-  const isWhyOpen = (row: FindingsRow, finding: Finding): boolean =>
-    feed.excerpts.views.view(row.excerpt.sid).open.has(whyId(row, finding));
-  const toggleWhy = (row: FindingsRow, finding: Finding): void =>
-    feed.excerpts.views.send(row.excerpt.sid, { kind: "open", id: whyId(row, finding) });
-
-  const analysisFor = (finding: Finding) =>
-    Option.getOrUndefined(shell.services.projectAnalysis.analysis(finding.bookId));
-
+const createFindingGo = (
+  shell: Shell,
+  feed: FindingsFeed,
+  isStale: (finding: Finding) => boolean,
+) => {
   const go = (finding: Finding, via: "go" | "key" = "go"): void => {
     navigateTo(finding.bookId, finding.from, finding.to, finding, via);
   };
@@ -195,6 +162,16 @@ export function FindingsPanel() {
       ...(stale === undefined ? {} : { "findings.stale": stale }),
     });
   };
+  return go;
+};
+
+const createFixOffer = (shell: Shell) => {
+  const [preview, setPreview] = createSignal<Fixes.FixPreview | undefined>(undefined, {
+    name: "fixPreview",
+  });
+  const [note, setNote] = createSignal("");
+  const analysisFor = (finding: Finding) =>
+    Option.getOrUndefined(shell.services.projectAnalysis.analysis(finding.bookId));
 
   const offer = (finding: Finding): void => {
     const book = shell.services.seated(finding.bookId);
@@ -230,6 +207,20 @@ export function FindingsPanel() {
     setPreview(undefined);
     shell.changed({ kind: "book.apply", books: [fix.finding.bookId] });
   };
+  return { preview, setPreview, note, offer, apply };
+};
+
+const createWalk = (feed: FindingsFeed, go: (finding: Finding, via?: "go" | "key") => void) => {
+  const [cursor, setCursor] = createSignal(0, { name: "findingsCursor" });
+  const [walking, setWalking] = createSignal(false, { name: "findingsWalking" });
+  const at = (index: number): FindingsRow | undefined => feed.rows()[index];
+
+  const step = (delta: 1 | -1): void => {
+    const staticCount = feed.rows().length;
+    if (staticCount === 0) return;
+    setWalking(true);
+    setCursor((held) => (held + delta + staticCount) % staticCount);
+  };
 
   {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -262,12 +253,100 @@ export function FindingsPanel() {
   const focused = (): string | undefined => (walking() ? at(cursor())?.key : undefined);
   const focusedAt = (): number | undefined =>
     walking() ? at(cursor())?.findings[0]?.from : undefined;
+  return { focused, focusedAt };
+};
 
-  const severitiesOf = (row: FindingsRow): readonly Finding["severity"][] =>
-    Filter.SEVERITIES.filter((severity) =>
-      row.findings.some((finding) => finding.severity === severity),
-    );
+const findingLine = (
+  disclosure: RunDisclosure,
+  row: FindingsRow,
+  finding: Finding,
+  run?: FindingRun,
+) => {
+  const { isOpen, toggleRun, isWhyOpen, toggleWhy } = disclosure;
+  const folded = (run?.members.length ?? 1) > 1;
+  const markup = inMarkup(row.excerpt, finding);
+  return (
+    <li
+      class="flex flex-col gap-0.5"
+      data-finding={finding.id}
+      data-code={finding.code}
+      data-severity={finding.severity}
+      data-markup={markup ? "true" : undefined}
+    >
+      <div class="flex flex-wrap items-center gap-2">
+        <Show when={severitiesOf(row).length > 1}>
+          <Badge tone={severityTone(finding.severity)}>{finding.severity}</Badge>
+        </Show>
+        <span class="text-smallest text-on-surface-tertiary" title={finding.code}>
+          {codeLabel(finding.code)}
+        </span>
+        <span class="min-w-0 flex-1 text-small text-on-surface-secondary">
+          <Show when={finding.described} fallback={finding.message}>
+            {(described) => <SousSentence message={described()} tier="headline" />}
+          </Show>
+        </span>
 
+        <Show when={finding.comparison}>
+          {(comparison) => <SearchDialog queries={comparison()} />}
+        </Show>
+        <div class="flex items-center gap-controls">
+          <SuppressActions finding={finding} />
+          <Show when={finding.details !== undefined}>
+            <Button
+              size="sm"
+              variant="tertiary"
+              aria-expanded={isWhyOpen(row, finding) ? "true" : "false"}
+              icon={isWhyOpen(row, finding) ? <ChevronDown /> : <ChevronRight />}
+              onClick={() => toggleWhy(row, finding)}
+            >
+              {t("Why?")}
+            </Button>
+          </Show>
+          <Show when={folded}>
+            <Button
+              size="sm"
+              variant="secondary"
+              aria-expanded={isOpen(row, finding) ? "true" : "false"}
+              aria-label={
+                isOpen(row, finding)
+                  ? t("Fold {count} identical findings", { count: run?.members.length ?? 0 })
+                  : t("Unfold {count} identical findings", { count: run?.members.length ?? 0 })
+              }
+              class="tabular-nums"
+              icon={isOpen(row, finding) ? <ChevronDown /> : <ChevronRight />}
+              onClick={() => toggleRun(row, finding)}
+            >
+              × {run?.members.length ?? 1}
+            </Button>
+          </Show>
+        </div>
+      </div>
+
+      <Show when={isWhyOpen(row, finding) ? finding.described : undefined}>
+        {(described) => (
+          <p class="text-small text-on-surface-tertiary" data-why={finding.id}>
+            <SousSentence message={described()} tier="details" />
+          </p>
+        )}
+      </Show>
+
+      <Show when={folded && isOpen(row, finding)}>
+        <ul class="ms-4 flex flex-col gap-0.5 border-s border-surface-border ps-2">
+          <For each={run?.members.slice(1) ?? []}>
+            {(member) => findingLine(disclosure, row, member)}
+          </For>
+        </ul>
+      </Show>
+    </li>
+  );
+};
+
+const createFindingsCard = (
+  feed: FindingsFeed,
+  offer: (finding: Finding) => void,
+  disclosure: RunDisclosure,
+  isStale: (finding: Finding) => boolean,
+): ExcerptCardSpec => {
   const badges = (_excerpt: Excerpt, key: string) => {
     const row = feed.row(key);
     if (row === undefined) return undefined;
@@ -297,104 +376,19 @@ export function FindingsPanel() {
     }));
   };
 
-  const line = (row: FindingsRow, finding: Finding, run?: FindingRun) => {
-    const folded = (run?.members.length ?? 1) > 1;
-    const markup = inMarkup(row.excerpt, finding);
-    return (
-      <li
-        class="flex flex-col gap-0.5"
-        data-finding={finding.id}
-        data-code={finding.code}
-        data-severity={finding.severity}
-        data-markup={markup ? "true" : undefined}
-      >
-        <div class="flex flex-wrap items-center gap-2">
-          <Show when={severitiesOf(row).length > 1}>
-            <Badge tone={severityTone(finding.severity)}>{finding.severity}</Badge>
-          </Show>
-          <span class="text-smallest text-on-surface-tertiary" title={finding.code}>
-            {codeLabel(finding.code)}
-          </span>
-          <span class="min-w-0 flex-1 text-small text-on-surface-secondary">
-            <Show when={finding.described} fallback={finding.message}>
-              {(described) => <SousSentence message={described()} tier="headline" />}
-            </Show>
-          </span>
-
-          <Show when={finding.comparison}>
-            {(comparison) => <SearchDialog queries={comparison()} />}
-          </Show>
-          <div class="flex items-center gap-controls">
-            <SuppressActions finding={finding} />
-            <Show when={finding.details !== undefined}>
-              <Button
-                size="sm"
-                variant="tertiary"
-                aria-expanded={isWhyOpen(row, finding) ? "true" : "false"}
-                icon={isWhyOpen(row, finding) ? <ChevronDown /> : <ChevronRight />}
-                onClick={() => toggleWhy(row, finding)}
-              >
-                {t("Why?")}
-              </Button>
-            </Show>
-            <Show when={folded}>
-              <Button
-                size="sm"
-                variant="secondary"
-                aria-expanded={isOpen(row, finding) ? "true" : "false"}
-                aria-label={
-                  isOpen(row, finding)
-                    ? t("Fold {count} identical findings", { count: run?.members.length ?? 0 })
-                    : t("Unfold {count} identical findings", { count: run?.members.length ?? 0 })
-                }
-                class="tabular-nums"
-                icon={isOpen(row, finding) ? <ChevronDown /> : <ChevronRight />}
-                onClick={() => toggleRun(row, finding)}
-              >
-                × {run?.members.length ?? 1}
-              </Button>
-            </Show>
-          </div>
-        </div>
-
-        <Show when={isWhyOpen(row, finding) ? finding.described : undefined}>
-          {(described) => (
-            <p class="text-small text-on-surface-tertiary" data-why={finding.id}>
-              <SousSentence message={described()} tier="details" />
-            </p>
-          )}
-        </Show>
-
-        <Show when={folded && isOpen(row, finding)}>
-          <ul class="ms-4 flex flex-col gap-0.5 border-s border-surface-border ps-2">
-            <For each={run?.members.slice(1) ?? []}>{(member) => line(row, member)}</For>
-          </ul>
-        </Show>
-      </li>
-    );
-  };
-
   const notes = (_excerpt: Excerpt, key: string) => {
     const row = feed.row(key);
     if (row === undefined) return undefined;
     return (
       <ul class="flex flex-col gap-1" data-findings-in={row.findings.length}>
-        <For each={foldRuns(row.findings)}>{(run) => line(row, run.head, run)}</For>
+        <For each={foldRuns(row.findings)}>
+          {(run) => findingLine(disclosure, row, run.head, run)}
+        </For>
       </ul>
     );
   };
 
-  const sections: OutlineSpec = {
-    rowKey: (group, excerpt) => `${group.bookId}|${excerpt.sid}`,
-    title: t("Groups with findings"),
-    label: (row) => {
-      const head = feed.head(row.bookId);
-      if (head === undefined) return row.bookId;
-      return head.front ? t("{book} front", { book: head.label }) : head.label;
-    },
-  };
-
-  const card: ExcerptCardSpec = excerptCard(
+  return excerptCard(
     { kind: "steps", step: feed.excerpts.expand },
     { kind: "none" },
     {
@@ -419,6 +413,141 @@ export function FindingsPanel() {
       },
     },
   );
+};
+
+function FixPreviewCard(props: {
+  readonly fix: Fixes.FixPreview;
+  readonly onApply: (fix: Fixes.FixPreview) => void;
+  readonly onDismiss: () => void;
+}) {
+  return (
+    <Card class="space-y-2.5 border-brand/40">
+      <div class="flex flex-wrap items-center gap-2">
+        <Wrench size={14} class="text-brand" aria-hidden="true" />
+        <strong class="text-small font-semibold">{props.fix.label}</strong>
+        <Button
+          variant="primary"
+          size="sm"
+          class="ms-auto"
+          onClick={() => props.onApply(props.fix)}
+        >
+          {t("Apply")}
+        </Button>
+        <Button size="sm" onClick={() => props.onDismiss()}>
+          {t("Dismiss")}
+        </Button>
+      </div>
+      <ul class="flex flex-col gap-1">
+        <For each={props.fix.changes}>
+          {(change) => (
+            <li class="flex gap-3 rounded-sm bg-surface-secondary px-2 py-1 font-mono text-smallest">
+              <code class="text-on-surface-tertiary">
+                {change.from}–{change.to}
+              </code>
+              <code class="min-w-0 break-all">
+                {change.insert === "" ? t("(delete)") : change.insert}
+              </code>
+            </li>
+          )}
+        </For>
+      </ul>
+    </Card>
+  );
+}
+
+function SettingsAside(props: { readonly onClose: () => void }) {
+  return (
+    <aside
+      aria-label={t("Proofreading settings")}
+      class="flex w-[26rem] shrink-0 flex-col gap-3 overflow-y-auto rounded-lg border border-surface-border bg-surface-primary p-4"
+    >
+      <div class="flex items-center justify-between gap-2">
+        <h3 class="text-small font-semibold text-on-surface-primary">
+          {t("Proofreading settings")}
+        </h3>
+        <IconButton
+          size="sm"
+          label={t("Close settings")}
+          icon={<X />}
+          onClick={() => props.onClose()}
+        />
+      </div>
+      <SousSettingsPanel bare />
+    </aside>
+  );
+}
+
+export function FindingsPanel() {
+  const shell = useShell();
+  const navigate = useNavigate();
+  const filters = createFindingsFilter(shell.services);
+  const [settingsOpen, setSettingsOpen] = createSignal(false, { name: "findingsSettingsOpen" });
+  const [showingSuppressed, setShowingSuppressed] = createSignal(false, {
+    name: "findingsShowingSuppressed",
+  });
+  const hiddenCount = createMemo(() => shell.suppressedFindings().length, {
+    name: "findingsHiddenCount",
+  });
+  const source = createFindSource(() => {});
+  // SAFETY: `strict: false` gives the union of every route's search; both fields are read as `unknown` and each is narrowed before it is used.
+  const search = useSearch({ strict: false }) as () => {
+    readonly code?: unknown;
+    readonly pattern?: unknown;
+  };
+
+  const pattern = (): number | undefined => {
+    const held = search().pattern;
+    return typeof held === "number" && Number.isInteger(held) && held >= 0 ? held : undefined;
+  };
+
+  createEffect(
+    () => search().code,
+    (code) => {
+      if (typeof code !== "string" || code === "") return;
+      // Untracked on purpose: a one-time read, not a dependency (Solid 2: STRICT_READ_UNTRACKED).
+      untrack(() => {
+        filters.update({ codes: [code], books: null });
+      });
+    },
+  );
+
+  const { isStale, summary, shown } = createFindingsPool(
+    shell,
+    filters,
+    pattern,
+    showingSuppressed,
+  );
+
+  const books = (): readonly BookId[] => shell.project()?.books.map((book) => book.id) ?? [];
+
+  const feed = createFindingsFeed({ findings: shown, view: filters.view });
+
+  const [body, setBody] = createSignal(false, { name: "findingsBody" });
+  let after: ReturnType<typeof setTimeout> | undefined;
+  const frame = requestAnimationFrame(() => {
+    after = setTimeout(() => setBody(true), 0);
+  });
+  onCleanup(() => {
+    cancelAnimationFrame(frame);
+    if (after !== undefined) clearTimeout(after);
+  });
+
+  const go = createFindingGo(shell, feed, isStale);
+  const { preview, setPreview, note, offer, apply } = createFixOffer(shell);
+  const disclosure = createRunDisclosure(feed);
+  const { focused, focusedAt } = createWalk(feed, go);
+
+  const sections: OutlineSpec = {
+    rowKey: (group, excerpt) => `${group.bookId}|${excerpt.sid}`,
+    title: t("Groups with findings"),
+    label: (row) => {
+      const head = feed.head(row.bookId);
+      if (head === undefined) return row.bookId;
+      return head.front ? t("{book} front", { book: head.label }) : head.label;
+    },
+  };
+
+  const card = createFindingsCard(feed, offer, disclosure, isStale);
 
   const mode = (): "regular" | "usfm" => (shell.mode() === "usfm" ? "usfm" : "regular");
 
@@ -500,32 +629,7 @@ export function FindingsPanel() {
 
       <Show when={preview()}>
         {(fix) => (
-          <Card class="space-y-2.5 border-brand/40">
-            <div class="flex flex-wrap items-center gap-2">
-              <Wrench size={14} class="text-brand" aria-hidden="true" />
-              <strong class="text-small font-semibold">{fix().label}</strong>
-              <Button variant="primary" size="sm" class="ms-auto" onClick={() => apply(fix())}>
-                {t("Apply")}
-              </Button>
-              <Button size="sm" onClick={() => setPreview(undefined)}>
-                {t("Dismiss")}
-              </Button>
-            </div>
-            <ul class="flex flex-col gap-1">
-              <For each={fix().changes}>
-                {(change) => (
-                  <li class="flex gap-3 rounded-sm bg-surface-secondary px-2 py-1 font-mono text-smallest">
-                    <code class="text-on-surface-tertiary">
-                      {change.from}–{change.to}
-                    </code>
-                    <code class="min-w-0 break-all">
-                      {change.insert === "" ? t("(delete)") : change.insert}
-                    </code>
-                  </li>
-                )}
-              </For>
-            </ul>
-          </Card>
+          <FixPreviewCard fix={fix()} onApply={apply} onDismiss={() => setPreview(undefined)} />
         )}
       </Show>
 
@@ -588,23 +692,7 @@ export function FindingsPanel() {
           </Show>
         </div>
         <Show when={settingsOpen()}>
-          <aside
-            aria-label={t("Proofreading settings")}
-            class="flex w-[26rem] shrink-0 flex-col gap-3 overflow-y-auto rounded-lg border border-surface-border bg-surface-primary p-4"
-          >
-            <div class="flex items-center justify-between gap-2">
-              <h3 class="text-small font-semibold text-on-surface-primary">
-                {t("Proofreading settings")}
-              </h3>
-              <IconButton
-                size="sm"
-                label={t("Close settings")}
-                icon={<X />}
-                onClick={() => setSettingsOpen(false)}
-              />
-            </div>
-            <SousSettingsPanel bare />
-          </aside>
+          <SettingsAside onClose={() => setSettingsOpen(false)} />
         </Show>
       </div>
     </main>

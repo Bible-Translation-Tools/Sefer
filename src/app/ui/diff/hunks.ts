@@ -52,7 +52,7 @@ const stretchOf = (
   };
 };
 
-export const hunksOf = (options: {
+interface HunkOptions {
   readonly bookId: string;
   readonly units: readonly DecisionUnit[];
   readonly baseline: Analysis;
@@ -62,10 +62,9 @@ export const hunksOf = (options: {
   readonly extentOf?: (key: string) => Extent | undefined;
   readonly include?: (unit: DecisionUnit) => boolean;
   readonly keep?: (unit: DecisionUnit) => boolean;
-}): Hunk[] => {
-  const currentToc = tocViewOf(options.current);
-  const current = tocUnits(currentToc);
-  const baseline = tocUnits(tocViewOf(options.baseline));
+}
+
+const groupByUnit = (options: HunkOptions, current: ReturnType<typeof tocUnits>) => {
   const groups = new Map<number, DecisionUnit[]>();
   for (const unit of options.units) {
     const shown = changed(unit) ? options.include?.(unit) !== false : options.keep?.(unit) === true;
@@ -76,18 +75,49 @@ export const hunksOf = (options: {
     if (held === undefined) groups.set(at, [unit]);
     else held.push(unit);
   }
+  return groups;
+};
 
-  const count = options.units.length;
-  const firstAt = (at: number): number => {
-    let low = 0;
-    let high = count;
-    while (low < high) {
-      const mid = (low + high) >> 1;
-      if ((options.units[mid]?.place.current ?? 0) < at) low = mid + 1;
-      else high = mid;
+const firstUnitAt = (units: readonly DecisionUnit[], at: number): number => {
+  let low = 0;
+  let high = units.length;
+  while (low < high) {
+    const mid = (low + high) >> 1;
+    if ((units[mid]?.place.current ?? 0) < at) low = mid + 1;
+    else high = mid;
+  }
+  return low;
+};
+
+const baselineRange = (
+  own: readonly DecisionUnit[],
+  baseline: ReturnType<typeof tocUnits>,
+  extent: Extent,
+) => {
+  let from = Number.POSITIVE_INFINITY;
+  let to = Number.NEGATIVE_INFINITY;
+  for (const unit of own)
+    if (unit.baseline !== undefined) {
+      from = Math.min(from, unit.baseline.from);
+      to = Math.max(to, unit.baseline.to);
     }
-    return low;
-  };
+  return from === Number.POSITIVE_INFINITY
+    ? undefined
+    : stretchOf(
+        baseline,
+        Math.max(0, unitIndexAt(baseline, from)),
+        Math.max(0, unitIndexAt(baseline, Math.max(from, to - 1))),
+        extent,
+      ).range;
+};
+
+export const hunksOf = (options: HunkOptions): Hunk[] => {
+  const currentToc = tocViewOf(options.current);
+  const current = tocUnits(currentToc);
+  const baseline = tocUnits(tocViewOf(options.baseline));
+  const groups = groupByUnit(options, current);
+  const count = options.units.length;
+  const firstAt = (at: number): number => firstUnitAt(options.units, at);
 
   const out: Hunk[] = [];
   for (const [at, own] of [...groups.entries()].sort((a, b) => a[0] - b[0])) {
@@ -97,22 +127,7 @@ export const hunksOf = (options: {
     const key = `${options.bookId} ${addressCode(address)}`;
     const extent = options.extentOf?.(key) ?? { up: options.steps, down: options.steps };
     const shownCurrent = stretchOf(current, at, at, extent);
-    let from = Number.POSITIVE_INFINITY;
-    let to = Number.NEGATIVE_INFINITY;
-    for (const unit of own)
-      if (unit.baseline !== undefined) {
-        from = Math.min(from, unit.baseline.from);
-        to = Math.max(to, unit.baseline.to);
-      }
-    const shownBaseline =
-      from === Number.POSITIVE_INFINITY
-        ? undefined
-        : stretchOf(
-            baseline,
-            Math.max(0, unitIndexAt(baseline, from)),
-            Math.max(0, unitIndexAt(baseline, Math.max(from, to - 1))),
-            extent,
-          ).range;
+    const shownBaseline = baselineRange(own, baseline, extent);
     const low = firstAt(shownCurrent.range.from);
     let high = firstAt(shownCurrent.range.to);
     while (

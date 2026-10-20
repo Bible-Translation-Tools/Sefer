@@ -8,8 +8,9 @@ import { Button, Card, PanelHeader } from "./primitives";
 
 type Busy = "" | "checking" | "installing";
 
-export function UpdatePanel() {
-  const services = useServices();
+type Services = ReturnType<typeof useServices>;
+
+function createUpdater(services: Services) {
   const [busy, setBusy] = createSignal<Busy>("", { name: "updateBusy" });
   const [available, setAvailable] = createSignal<AvailableUpdate | undefined>(undefined, {
     name: "updateAvailable",
@@ -57,12 +58,19 @@ export function UpdatePanel() {
       });
   };
 
-  const row = (label: string, value: string, mark?: Record<string, string>) => (
-    <div class="flex items-center gap-3 px-4 py-2 text-small" {...mark}>
-      <span class="text-on-surface-secondary">{label}</span>
-      <span class="ms-auto font-mono text-smallest text-on-surface-primary">{value}</span>
-    </div>
-  );
+  return { busy, available, note, check, install };
+}
+
+const row = (label: string, value: string, mark?: Record<string, string>) => (
+  <div class="flex items-center gap-3 px-4 py-2 text-small" {...mark}>
+    <span class="text-on-surface-secondary">{label}</span>
+    <span class="ms-auto font-mono text-smallest text-on-surface-primary">{value}</span>
+  </div>
+);
+
+export function UpdatePanel() {
+  const services = useServices();
+  const { busy, available, note, check, install } = createUpdater(services);
 
   return (
     <Card padded={false} class="divide-y divide-surface-border" data-update-panel>

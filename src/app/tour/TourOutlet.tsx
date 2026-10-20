@@ -41,10 +41,9 @@ export const useTourContext = (): TourContext => {
   return { shell, navigate, run: runCommand };
 };
 
-export function TourOutlet() {
-  const shell = useShell();
-  const navigate = useNavigate();
-  const context = useTourContext();
+type Shell = ReturnType<typeof useShell>;
+
+const registerTourCommands = (shell: Shell, context: TourContext): void => {
   for (const tour of TOURS) {
     onCleanup(
       registerCommand({
@@ -58,7 +57,10 @@ export function TourOutlet() {
       }),
     );
   }
+};
 
+function useTourLink(shell: Shell, context: TourContext): void {
+  const navigate = useNavigate();
   const searchStr = useRouterState({ select: (state) => state.location.searchStr });
   const path = useRouterState({ select: (state) => state.location.pathname });
 
@@ -136,12 +138,14 @@ export function TourOutlet() {
   onCleanup(() => {
     if (writing !== undefined) clearTimeout(writing);
   });
+}
 
-  const step = () => {
-    const now = runningTour();
-    return now === undefined ? undefined : now.steps[now.index];
-  };
+const step = () => {
+  const now = runningTour();
+  return now === undefined ? undefined : now.steps[now.index];
+};
 
+function createSpotlightBox() {
   const [box, setBox] = createSignal<Box | undefined>(undefined);
   const [lost, setLost] = createSignal(false, { name: "tourAnchorLost" });
   let frame = 0;
@@ -186,7 +190,10 @@ export function TourOutlet() {
     else frame = requestAnimationFrame(measure);
   });
   onCleanup(() => cancelAnimationFrame(frame));
+  return { box, lost };
+}
 
+function useEscapeStops(): void {
   const onKeyDown = (event: KeyboardEvent): void => {
     if (event.key !== "Escape") return;
     const now = runningTour();
@@ -198,6 +205,197 @@ export function TourOutlet() {
   };
   document.addEventListener("keydown", onKeyDown);
   onCleanup(() => document.removeEventListener("keydown", onKeyDown));
+}
+
+const cardStyle = (held: Box, side?: "right"): Record<string, string> => {
+  const height = window.innerHeight;
+  if (side === "right") {
+    const top = CARD_GAP;
+    const right = held.left + held.width + RING_PAD + CARD_GAP;
+    const left =
+      right + CARD_WIDTH + CARD_GAP <= window.innerWidth
+        ? right
+        : Math.max(CARD_GAP, held.left - RING_PAD - CARD_GAP - CARD_WIDTH);
+    return { top: `${top}px`, left: `${left}px`, "max-height": `${height - top - CARD_GAP}px` };
+  }
+  const left = Math.min(
+    Math.max(CARD_GAP, held.left + held.width / 2 - CARD_WIDTH / 2),
+    window.innerWidth - CARD_WIDTH - CARD_GAP,
+  );
+  const below = height - (held.top + held.height + RING_PAD + CARD_GAP) - CARD_GAP;
+  const above = held.top - RING_PAD - CARD_GAP - CARD_GAP;
+  if (Math.max(below, above) < MIN_ROOM) {
+    const top = Math.max(CARD_GAP, held.top) + CARD_GAP;
+    return { top: `${top}px`, left: `${left}px`, "max-height": `${height - top - CARD_GAP}px` };
+  }
+  return below >= above
+    ? {
+        top: `${held.top + held.height + RING_PAD + CARD_GAP}px`,
+        left: `${left}px`,
+        "max-height": `${below}px`,
+      }
+    : {
+        bottom: `${height - held.top + RING_PAD + CARD_GAP}px`,
+        left: `${left}px`,
+        "max-height": `${above}px`,
+      };
+};
+
+const progress = () => {
+  const now = runningTour();
+  return now === undefined
+    ? ""
+    : t("{at} of {count}", { at: now.index + 1, count: now.steps.length });
+};
+const last = () => {
+  const now = runningTour();
+  return now !== undefined && now.index === now.steps.length - 1;
+};
+const workflow = () => runningTour()?.tour.kind === "workflow";
+
+const fixed = () => runningTour()?.fixed === true;
+
+const stopLabel = () => {
+  if (last()) return t("Close");
+  return workflow() ? t("Stop") : t("Skip tutorial");
+};
+const nextLabel = () => {
+  if (last()) return t("Done");
+  return workflow() && !fixed() ? t("Skip") : t("Next");
+};
+
+const cardHeader = (context: TourContext, onPause: () => void, title: string) => (
+  <div class="flex items-baseline justify-between gap-3">
+    <h2 class="text-base font-semibold text-on-surface-primary">{title}</h2>
+    <span class="flex shrink-0 items-center gap-1 text-smallest text-on-surface-tertiary tabular-nums">
+      {progress()}
+      <Menu
+        label={t("Go to a step")}
+        side="bottom"
+        align="end"
+        class="z-60! w-72"
+        fitViewport
+        trigger={
+          <IconButton
+            size="sm"
+            variant="quiet"
+            label={t("Go to a step")}
+            icon={<Ellipsis />}
+            data-tour-steps
+          />
+        }
+      >
+        <For each={runningTour()?.steps ?? []}>
+          {(each, at) => (
+            <MenuItem onSelect={() => jumpTour(context, at())}>
+              <span
+                class={at() === runningTour()?.index ? "font-semibold text-brand" : "font-normal"}
+              >
+                {`${at() + 1}. ${t(each.spotlight?.title ?? each.panel?.title ?? "")}`}
+              </span>
+            </MenuItem>
+          )}
+        </For>
+      </Menu>
+      <IconButton
+        size="sm"
+        variant="quiet"
+        label={t("Pause the tutorial")}
+        icon={<Minimize2 />}
+        data-tour-pause
+        onClick={onPause}
+      />
+    </span>
+  </div>
+);
+
+const tourCard = (
+  context: TourContext,
+  onPause: () => void,
+  title: string,
+  body: string,
+  style: Record<string, string>,
+  actions?: readonly PanelAction[],
+  more?: Pick<Spotlight, "try" | "notes">,
+) => (
+  <div
+    role="dialog"
+    aria-label={title}
+    data-tour-card
+    class="pointer-events-auto fixed z-50 flex flex-col gap-3 overflow-y-auto overscroll-contain rounded-lg border border-surface-border bg-surface-primary p-4 shadow-large"
+    style={{ width: `${CARD_WIDTH}px`, ...style }}
+  >
+    {cardHeader(context, onPause, title)}
+    <p class="text-small text-on-surface-secondary">{body}</p>
+    <Show when={more?.try}>
+      {(what) => (
+        <p
+          class="rounded-md border-s-4 border-brand bg-surface-secondary px-3 py-2 text-small font-medium text-on-surface-primary"
+          data-tour-try
+        >
+          {t(what())}
+        </p>
+      )}
+    </Show>
+    <For each={more?.notes ?? []}>
+      {(note) => (
+        <div class="flex flex-col gap-0.5" data-tour-note>
+          <span class="text-smallest font-semibold tracking-wide text-on-surface-tertiary uppercase">
+            {t(note.label)}
+          </span>
+          <p class="text-small text-on-surface-secondary">{t(note.text)}</p>
+        </div>
+      )}
+    </For>
+    <Show when={fixed()}>
+      <p class="text-small font-medium text-on-surface-success" data-tour-fixed>
+        {t("Looks fixed. Press Next when you are done here.")}
+      </p>
+    </Show>
+    <Show when={actions !== undefined && actions.length > 0 && !fixed()}>
+      <div class="flex flex-wrap gap-2" data-tour-actions>
+        <For each={actions ?? []}>
+          {(action) => (
+            <Show when={action.label()}>
+              {(label) => (
+                <Button size="sm" variant="secondary" onClick={() => action.run()}>
+                  {label()}
+                </Button>
+              )}
+            </Show>
+          )}
+        </For>
+      </div>
+    </Show>
+    <div class="flex items-center justify-between gap-2">
+      <Button size="sm" variant="secondary" onClick={stopTour}>
+        {stopLabel()}
+      </Button>
+      <div class="flex gap-2">
+        <Show when={(runningTour()?.index ?? 0) > 0}>
+          <Button size="sm" variant="secondary" onClick={() => stepTour(context, -1)}>
+            {t("Back")}
+          </Button>
+        </Show>
+        <Button
+          size="sm"
+          variant="primary"
+          onClick={() => (last() ? stopTour() : stepTour(context, 1))}
+        >
+          {nextLabel()}
+        </Button>
+      </div>
+    </div>
+  </div>
+);
+
+export function TourOutlet() {
+  const shell = useShell();
+  const context = useTourContext();
+  registerTourCommands(shell, context);
+  useTourLink(shell, context);
+  const { box, lost } = createSpotlightBox();
+  useEscapeStops();
 
   const [paused, setPaused] = createSignal(false, { name: "tourPaused" });
   createEffect(
@@ -207,183 +405,14 @@ export function TourOutlet() {
     },
   );
 
-  const cardStyle = (held: Box, side?: "right"): Record<string, string> => {
-    const height = window.innerHeight;
-    if (side === "right") {
-      const top = CARD_GAP;
-      const right = held.left + held.width + RING_PAD + CARD_GAP;
-      const left =
-        right + CARD_WIDTH + CARD_GAP <= window.innerWidth
-          ? right
-          : Math.max(CARD_GAP, held.left - RING_PAD - CARD_GAP - CARD_WIDTH);
-      return { top: `${top}px`, left: `${left}px`, "max-height": `${height - top - CARD_GAP}px` };
-    }
-    const left = Math.min(
-      Math.max(CARD_GAP, held.left + held.width / 2 - CARD_WIDTH / 2),
-      window.innerWidth - CARD_WIDTH - CARD_GAP,
-    );
-    const below = height - (held.top + held.height + RING_PAD + CARD_GAP) - CARD_GAP;
-    const above = held.top - RING_PAD - CARD_GAP - CARD_GAP;
-    if (Math.max(below, above) < MIN_ROOM) {
-      const top = Math.max(CARD_GAP, held.top) + CARD_GAP;
-      return { top: `${top}px`, left: `${left}px`, "max-height": `${height - top - CARD_GAP}px` };
-    }
-    return below >= above
-      ? {
-          top: `${held.top + held.height + RING_PAD + CARD_GAP}px`,
-          left: `${left}px`,
-          "max-height": `${below}px`,
-        }
-      : {
-          bottom: `${height - held.top + RING_PAD + CARD_GAP}px`,
-          left: `${left}px`,
-          "max-height": `${above}px`,
-        };
-  };
-
-  const progress = () => {
-    const now = runningTour();
-    return now === undefined
-      ? ""
-      : t("{at} of {count}", { at: now.index + 1, count: now.steps.length });
-  };
-  const last = () => {
-    const now = runningTour();
-    return now !== undefined && now.index === now.steps.length - 1;
-  };
-  const workflow = () => runningTour()?.tour.kind === "workflow";
-
-  const fixed = () => runningTour()?.fixed === true;
-
-  const stopLabel = () => {
-    if (last()) return t("Close");
-    return workflow() ? t("Stop") : t("Skip tutorial");
-  };
-  const nextLabel = () => {
-    if (last()) return t("Done");
-    return workflow() && !fixed() ? t("Skip") : t("Next");
-  };
-
+  const pause = () => setPaused(true);
   const card = (
     title: string,
     body: string,
     style: Record<string, string>,
     actions?: readonly PanelAction[],
     more?: Pick<Spotlight, "try" | "notes">,
-  ) => (
-    <div
-      role="dialog"
-      aria-label={title}
-      data-tour-card
-      class="pointer-events-auto fixed z-50 flex flex-col gap-3 overflow-y-auto overscroll-contain rounded-lg border border-surface-border bg-surface-primary p-4 shadow-large"
-      style={{ width: `${CARD_WIDTH}px`, ...style }}
-    >
-      <div class="flex items-baseline justify-between gap-3">
-        <h2 class="text-base font-semibold text-on-surface-primary">{title}</h2>
-        <span class="flex shrink-0 items-center gap-1 text-smallest text-on-surface-tertiary tabular-nums">
-          {progress()}
-          <Menu
-            label={t("Go to a step")}
-            side="bottom"
-            align="end"
-            class="z-60! w-72"
-            fitViewport
-            trigger={
-              <IconButton
-                size="sm"
-                variant="quiet"
-                label={t("Go to a step")}
-                icon={<Ellipsis />}
-                data-tour-steps
-              />
-            }
-          >
-            <For each={runningTour()?.steps ?? []}>
-              {(each, at) => (
-                <MenuItem onSelect={() => jumpTour(context, at())}>
-                  <span
-                    class={
-                      at() === runningTour()?.index ? "font-semibold text-brand" : "font-normal"
-                    }
-                  >
-                    {`${at() + 1}. ${t(each.spotlight?.title ?? each.panel?.title ?? "")}`}
-                  </span>
-                </MenuItem>
-              )}
-            </For>
-          </Menu>
-          <IconButton
-            size="sm"
-            variant="quiet"
-            label={t("Pause the tutorial")}
-            icon={<Minimize2 />}
-            data-tour-pause
-            onClick={() => setPaused(true)}
-          />
-        </span>
-      </div>
-      <p class="text-small text-on-surface-secondary">{body}</p>
-      <Show when={more?.try}>
-        {(what) => (
-          <p
-            class="rounded-md border-s-4 border-brand bg-surface-secondary px-3 py-2 text-small font-medium text-on-surface-primary"
-            data-tour-try
-          >
-            {t(what())}
-          </p>
-        )}
-      </Show>
-      <For each={more?.notes ?? []}>
-        {(note) => (
-          <div class="flex flex-col gap-0.5" data-tour-note>
-            <span class="text-smallest font-semibold tracking-wide text-on-surface-tertiary uppercase">
-              {t(note.label)}
-            </span>
-            <p class="text-small text-on-surface-secondary">{t(note.text)}</p>
-          </div>
-        )}
-      </For>
-      <Show when={fixed()}>
-        <p class="text-small font-medium text-on-surface-success" data-tour-fixed>
-          {t("Looks fixed. Press Next when you are done here.")}
-        </p>
-      </Show>
-      <Show when={actions !== undefined && actions.length > 0 && !fixed()}>
-        <div class="flex flex-wrap gap-2" data-tour-actions>
-          <For each={actions ?? []}>
-            {(action) => (
-              <Show when={action.label()}>
-                {(label) => (
-                  <Button size="sm" variant="secondary" onClick={() => action.run()}>
-                    {label()}
-                  </Button>
-                )}
-              </Show>
-            )}
-          </For>
-        </div>
-      </Show>
-      <div class="flex items-center justify-between gap-2">
-        <Button size="sm" variant="secondary" onClick={stopTour}>
-          {stopLabel()}
-        </Button>
-        <div class="flex gap-2">
-          <Show when={(runningTour()?.index ?? 0) > 0}>
-            <Button size="sm" variant="secondary" onClick={() => stepTour(context, -1)}>
-              {t("Back")}
-            </Button>
-          </Show>
-          <Button
-            size="sm"
-            variant="primary"
-            onClick={() => (last() ? stopTour() : stepTour(context, 1))}
-          >
-            {nextLabel()}
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
+  ) => tourCard(context, pause, title, body, style, actions, more);
 
   return (
     <Show when={runningTour()}>

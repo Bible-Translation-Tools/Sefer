@@ -16,6 +16,30 @@ import { ProjectSidebar } from "#app/ui/workspace/ProjectSidebar";
 import { useScreen } from "#app/ui/workspace/screen";
 import { sidebarClaim } from "#app/ui/workspace/sidebarSlot";
 
+function WorkspacePage(props: {
+  readonly toggle: ReturnType<typeof usePanelToggleLeading>;
+  readonly tabs: ReturnType<ReturnType<typeof useScreen>["versionsTab"]> | undefined;
+}) {
+  return (
+    <PageLeading value={props.toggle}>
+      <PageDoor value={() => <BackToEditor />}>
+        <div class="flex h-full min-w-0 flex-col">
+          <Show when={props.tabs}>
+            {(active) => (
+              <div class="shrink-0 border-b border-surface-border px-4">
+                <VersionTabs active={active()} inline />
+              </div>
+            )}
+          </Show>
+          <div class="min-h-0 min-w-0 flex-1 overflow-y-auto">
+            <Outlet />
+          </div>
+        </div>
+      </PageDoor>
+    </PageLeading>
+  );
+}
+
 function Workspace() {
   const shell = useShell();
   const path = useRouterState({ select: (state) => state.location.pathname });
@@ -62,22 +86,7 @@ function Workspace() {
         class={showing() ? undefined : "hidden"}
       />
       <Resizable.Panel class={showing() ? "min-w-0" : "min-w-0 [flex-basis:100%]!"}>
-        <PageLeading value={panelToggle}>
-          <PageDoor value={() => <BackToEditor />}>
-            <div class="flex h-full min-w-0 flex-col">
-              <Show when={pageTabs()}>
-                {(active) => (
-                  <div class="shrink-0 border-b border-surface-border px-4">
-                    <VersionTabs active={active()} inline />
-                  </div>
-                )}
-              </Show>
-              <div class="min-h-0 min-w-0 flex-1 overflow-y-auto">
-                <Outlet />
-              </div>
-            </div>
-          </PageDoor>
-        </PageLeading>
+        <WorkspacePage toggle={panelToggle} tabs={pageTabs()} />
       </Resizable.Panel>
     </Resizable.Root>
   );

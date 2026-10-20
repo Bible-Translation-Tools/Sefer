@@ -16,6 +16,48 @@ export interface LocationBarProps {
 
 const INTRO_LABEL = "Intro";
 
+function listedChapters(table: ReturnType<ReturnType<typeof useShell>["outline"]>) {
+  return table
+    .map((chapter) => ({
+      ordinal: chapter.ordinal,
+      label: chapter.label === "" ? t(INTRO_LABEL) : chapter.label,
+      intro: chapter.label === "",
+    }))
+    .filter((row, index) => !row.intro || index === 0);
+}
+
+function lastChapterOrdinal(list: ReturnType<ReturnType<typeof useShell>["outline"]>): number {
+  for (let index = list.length - 1; index > 0; index -= 1)
+    if (list[index]?.label !== "") return index;
+  return 0;
+}
+
+function bookChoices(project: ReturnType<ReturnType<typeof useShell>["project"]>) {
+  if (project === undefined) return [];
+  const metadata = metadataOf(project);
+  const order = new Map(CANON.map((book, index) => [book.id, index]));
+  return [...project.books]
+    .map((book) => ({ id: book.id, name: bookName(book.id, metadata) }))
+    .sort(
+      (a, b) =>
+        (order.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (order.get(b.id) ?? Number.MAX_SAFE_INTEGER),
+    );
+}
+
+function ReferencesToggle() {
+  const shell = useShell();
+  return (
+    <IconButton
+      size="sm"
+      label={shell.referenceOpen() ? t("Hide the reference texts") : t("Show the reference texts")}
+      aria-pressed={shell.referenceOpen() ? "true" : "false"}
+      data-testid="toggle-references"
+      icon={<SquareSplitHorizontal aria-hidden="true" />}
+      onClick={() => shell.setReferenceOpen(!shell.referenceOpen())}
+    />
+  );
+}
+
 export function LocationBar(props: LocationBarProps) {
   const shell = useShell();
   const navigate = useNavigate();
@@ -41,14 +83,7 @@ export function LocationBar(props: LocationBarProps) {
     return row.intro ? t(INTRO_LABEL) : t("Chapter {label}", { label: row.label });
   };
 
-  const listed = () =>
-    table()
-      .map((chapter) => ({
-        ordinal: chapter.ordinal,
-        label: chapter.label === "" ? t(INTRO_LABEL) : chapter.label,
-        intro: chapter.label === "",
-      }))
-      .filter((row, index) => !row.intro || index === 0);
+  const listed = () => listedChapters(table());
 
   const step = (delta: 1 | -1): void => {
     const list = listed();
@@ -59,28 +94,11 @@ export function LocationBar(props: LocationBarProps) {
 
   const first = (): boolean => at() === 0;
 
-  const lastOrdinal = (): number => {
-    const list = table();
-    for (let index = list.length - 1; index > 0; index -= 1)
-      if (list[index]?.label !== "") return index;
-    return 0;
-  };
+  const lastOrdinal = (): number => lastChapterOrdinal(table());
 
   const last = (): boolean => at() === lastOrdinal();
 
-  const books = createMemo(() => {
-    const project = shell.project();
-    if (project === undefined) return [];
-    const metadata = metadataOf(project);
-    const order = new Map(CANON.map((book, index) => [book.id, index]));
-    return [...project.books]
-      .map((book) => ({ id: book.id, name: bookName(book.id, metadata) }))
-      .sort(
-        (a, b) =>
-          (order.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
-          (order.get(b.id) ?? Number.MAX_SAFE_INTEGER),
-      );
-  });
+  const books = createMemo(() => bookChoices(shell.project()));
 
   const goToBook = (id: string): void => {
     void navigate({
@@ -91,16 +109,7 @@ export function LocationBar(props: LocationBarProps) {
 
   return (
     <LocationStrip testId="location-bar">
-      <IconButton
-        size="sm"
-        label={
-          shell.referenceOpen() ? t("Hide the reference texts") : t("Show the reference texts")
-        }
-        aria-pressed={shell.referenceOpen() ? "true" : "false"}
-        data-testid="toggle-references"
-        icon={<SquareSplitHorizontal aria-hidden="true" />}
-        onClick={() => shell.setReferenceOpen(!shell.referenceOpen())}
-      />
+      <ReferencesToggle />
       <Crumbs
         book={name()}
         books={books}

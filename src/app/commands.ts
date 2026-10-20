@@ -164,15 +164,71 @@ export const installCommandKeys = (target: Document): (() => void) => {
   };
 };
 
-export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
-  const { services } = bridge;
-  setCommandObservability(services.composition.observability);
-  setCommandRunner((effect) => {
-    void services.run(effect).catch((cause: unknown) => {
-      bridge.report(t("failed: {cause}", { cause: String(cause) }));
-    });
-  });
+type Helpers = {
+  readonly hasProject: () => boolean;
+  readonly hasBook: () => boolean;
+  readonly seated: () => EditorBook | undefined;
+  readonly insertion: (
+    id: string,
+    title: string,
+    keys: string,
+    action: EditorAction,
+  ) => ReturnType<typeof registerCommand>;
+  readonly multibook: ReturnType<typeof makeMultiBook>;
+};
 
+const seeIncoming = (bridge: ShellBridge): void => {
+  if (bridge.project() === undefined) return;
+  void bridge.navigate({
+    to: "/project/$slug/review",
+    params: { slug: bridge.slug() },
+    search: { against: "shared" },
+  });
+};
+
+const sendMine = (bridge: ShellBridge): void => {
+  const { services } = bridge;
+  const project = bridge.project();
+  if (project === undefined) return;
+  void sendNow(services, project).then((outcome) => bridge.report(sendOutcomeCopy(outcome).title));
+};
+
+const saveWithoutReview = async (bridge: ShellBridge, project: Project): Promise<void> => {
+  const services = bridge.services;
+  const books = project.books.filter((book) => services.save.dirty(book));
+  const openReview = () =>
+    void bridge.navigate({
+      to: "/project/$slug/history",
+      params: { slug: bridge.slug() },
+      search: { review: true },
+    });
+  if (books.length === 0) {
+    bridge.report(t("nothing to save"));
+    return;
+  }
+  const author = Option.getOrUndefined(await services.run(personAuthor()));
+  if (author === undefined) {
+    openReview();
+    return;
+  }
+  const metadata = Option.getOrUndefined(project.metadata());
+  const message = t("Edited {books}", {
+    books: books.map((book) => bookName(book.id, metadata)).join(", "),
+  });
+  const outcome = await recordVersion(services, project, books, message, author);
+  if (outcome.kind === "recorded") {
+    bridge.changed({ kind: "book.write", books: outcome.books, recorded: true });
+    bridge.report(t("saved {count} book(s)", { count: outcome.books.length }));
+    void sendAfterSave(services, project);
+    return;
+  }
+  if (outcome.kind === "not-recorded")
+    bridge.changed({ kind: "book.write", books: outcome.books, recorded: false });
+  openReview();
+};
+
+const shellHelpers = (bridge: ShellBridge): Helpers => {
+  const { services } = bridge;
   const hasProject = (): boolean => bridge.project() !== undefined;
   const hasBook = (): boolean => bridge.focused() !== undefined;
 
@@ -193,59 +249,11 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
     });
 
   const multibook = makeMultiBook(() => bridge.project()?.books ?? []);
+  return { hasProject, hasBook, seated, insertion, multibook };
+};
 
-  const seeIncoming = (): void => {
-    if (bridge.project() === undefined) return;
-    void bridge.navigate({
-      to: "/project/$slug/review",
-      params: { slug: bridge.slug() },
-      search: { against: "shared" },
-    });
-  };
-
-  const sendMine = (): void => {
-    const project = bridge.project();
-    if (project === undefined) return;
-    void sendNow(services, project).then((outcome) =>
-      bridge.report(sendOutcomeCopy(outcome).title),
-    );
-  };
-
-  const saveWithoutReview = async (project: Project): Promise<void> => {
-    const services = bridge.services;
-    const books = project.books.filter((book) => services.save.dirty(book));
-    const openReview = () =>
-      void bridge.navigate({
-        to: "/project/$slug/history",
-        params: { slug: bridge.slug() },
-        search: { review: true },
-      });
-    if (books.length === 0) {
-      bridge.report(t("nothing to save"));
-      return;
-    }
-    const author = Option.getOrUndefined(await services.run(personAuthor()));
-    if (author === undefined) {
-      openReview();
-      return;
-    }
-    const metadata = Option.getOrUndefined(project.metadata());
-    const message = t("Edited {books}", {
-      books: books.map((book) => bookName(book.id, metadata)).join(", "),
-    });
-    const outcome = await recordVersion(services, project, books, message, author);
-    if (outcome.kind === "recorded") {
-      bridge.changed({ kind: "book.write", books: outcome.books, recorded: true });
-      bridge.report(t("saved {count} book(s)", { count: outcome.books.length }));
-      void sendAfterSave(services, project);
-      return;
-    }
-    if (outcome.kind === "not-recorded")
-      bridge.changed({ kind: "book.write", books: outcome.books, recorded: false });
-    openReview();
-  };
-
-  const registrations = [
+const paletteCommands = (bridge: ShellBridge) => {
+  return [
     registerCommand({
       id: "palette.open",
       title: t("Command palette…"),
@@ -280,7 +288,11 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
         return root === undefined ? undefined : copyPlaceLink(bridge.services, root);
       },
     }),
+  ];
+};
 
+const advancedCommands = (bridge: ShellBridge) => {
+  return [
     registerCommand({
       id: "settings.showAdvanced",
       title: t("Show advanced settings"),
@@ -311,7 +323,12 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
         return bridge.services.settings.set(key, false);
       },
     }),
+  ];
+};
 
+const saveCommands = (bridge: ShellBridge, h: Helpers) => {
+  const { hasProject } = h;
+  return [
     registerCommand({
       id: "book.save",
       title: t("Save & Review…"),
@@ -323,7 +340,7 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
           project !== undefined &&
           syncPreferences(bridge.services.settings, project.root).skipReviewMine
         ) {
-          void saveWithoutReview(project);
+          void saveWithoutReview(bridge, project);
           return;
         }
         void bridge.navigate({
@@ -365,7 +382,12 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
         bridge.focused()?.history()?.redo();
       },
     }),
+  ];
+};
 
+const searchCommands = (bridge: ShellBridge, h: Helpers) => {
+  const { hasProject } = h;
+  return [
     registerCommand({
       id: "search.open",
       title: t("Find in project"),
@@ -408,7 +430,12 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
         bridge.setMode(bridge.mode() === "usfm" ? "default" : "usfm");
       },
     }),
+  ];
+};
 
+const chapterCommands = (bridge: ShellBridge, h: Helpers) => {
+  const { hasBook } = h;
+  return [
     registerCommand({
       id: "editor.chapter.next",
       title: t("Clip to next chapter"),
@@ -441,7 +468,12 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
         bridge.setChapter(null);
       },
     }),
+  ];
+};
 
+const findingCommands = (bridge: ShellBridge, h: Helpers) => {
+  const { hasProject } = h;
+  return [
     registerCommand({
       id: "findings.next",
       title: t("Next finding"),
@@ -483,7 +515,12 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
         });
       },
     }),
+  ];
+};
 
+const remoteCommands = (bridge: ShellBridge) => {
+  const { services } = bridge;
+  return [
     registerCommand({
       id: "remote.login",
       title: t("Sign in to the cloud…"),
@@ -502,19 +539,28 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
         bridge.report(t("sign in to {host} from the cloud menu or Settings", { host }));
       },
     }),
+  ];
+};
 
+const syncCommands = (bridge: ShellBridge, h: Helpers) => {
+  const { hasProject } = h;
+  return [
     registerCommand({
       id: "remote.pull",
       title: t("Receive updates…"),
       when: hasProject,
-      run: seeIncoming,
+      run: () => {
+        seeIncoming(bridge);
+      },
     }),
 
     registerCommand({
       id: "remote.push",
       title: t("Send my changes"),
       when: hasProject,
-      run: sendMine,
+      run: () => {
+        sendMine(bridge);
+      },
     }),
 
     registerCommand({
@@ -542,7 +588,12 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
         });
       },
     }),
+  ];
+};
 
+const insertCommands = (bridge: ShellBridge, h: Helpers) => {
+  const { insertion, seated } = h;
+  return [
     insertion("editor.insert.verse", t("Insert verse"), "Mod-Shift-v", "insert.verse"),
     insertion("editor.insert.paragraph", t("Insert paragraph"), "Mod-Shift-p", "insert.paragraph"),
     insertion("editor.insert.poetry", t("Insert poetry line"), "Mod-Shift-l", "insert.poetry"),
@@ -556,7 +607,12 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
         seated()?.perform("frontmatter.edit");
       },
     }),
+  ];
+};
 
+const formatCommands = (bridge: ShellBridge, h: Helpers) => {
+  const { hasBook, hasProject, multibook } = h;
+  return [
     registerCommand({
       id: "format.book",
       title: t("Format book"),
@@ -605,189 +661,217 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
         bridge.changed({ kind: "book.apply", books: operation.books });
       },
     }),
+  ];
+};
 
-    ...(() => {
-      const chapterAtCaret = (book: EditorBook): number | undefined => {
-        const at = book.selection().head;
-        const row = book
-          .structure()
-          .chapters.find(
-            (chapter: { readonly from: number; readonly to: number }) =>
-              at >= chapter.from && at < chapter.to,
-          );
-        const number = row === undefined ? Number.NaN : Number.parseInt(row.label, 10);
-        return Number.isFinite(number) ? number : undefined;
-      };
+const chapterExtent = (book: EditorBook, chapter: number | undefined) =>
+  chapter === undefined
+    ? undefined
+    : book
+        .structure()
+        .chapters.find(
+          (row: { readonly label: string }) => Number.parseInt(row.label, 10) === chapter,
+        );
 
-      const boundSource = (projectRoot: string) =>
-        Effect.map(bridge.services.library.resolve(projectRoot, "source"), (bound) => bound[0]);
+const chapterAtCaret = (book: EditorBook): number | undefined => {
+  const at = book.selection().head;
+  const row = book
+    .structure()
+    .chapters.find(
+      (chapter: { readonly from: number; readonly to: number }) =>
+        at >= chapter.from && at < chapter.to,
+    );
+  const number = row === undefined ? Number.NaN : Number.parseInt(row.label, 10);
+  return Number.isFinite(number) ? number : undefined;
+};
 
-      const showWhatNeedsText = (
-        book: EditorBook,
-        done: string,
-        within?: { readonly from: number; readonly to: number },
-      ) =>
-        Effect.gen(function* () {
-          const holes = book
-            .emptyBlocks()
-            .filter(
-              (hole) => within === undefined || (hole.from >= within.from && hole.from < within.to),
-            );
-          if (holes.length === 0) {
-            bridge.report(done);
-            return;
-          }
-          const caret = book.selection().head;
-          const next = holes.find((hole) => hole.from >= caret) ?? holes[0];
-          bridge.aim(book.id, next.from);
-          const ghostKey = shellKeys(bridge.services.settings).annotateEmptyParagraphs;
-          const wasOff = !bridge.services.settings.get(ghostKey);
-          if (wasOff) yield* bridge.services.settings.set(ghostKey, true);
-          bridge.report(
-            wasOff
-              ? t("{done} — {count} block(s) need text; showing empty paragraphs", {
-                  done,
-                  count: holes.length,
-                })
-              : t("{done} — {count} block(s) need text", { done, count: holes.length }),
-          );
-        });
+const boundSource = (bridge: ShellBridge, projectRoot: string) =>
+  Effect.map(bridge.services.library.resolve(projectRoot, "source"), (bound) => bound[0]);
 
-      const overlayFocused = (scope: "chapter" | "book") =>
-        Effect.gen(function* () {
-          const book = bridge.focused();
-          const project = bridge.project();
-          if (book === undefined || project === undefined) return;
-          const chapter = scope === "chapter" ? chapterAtCaret(book) : undefined;
-          if (scope === "chapter" && chapter === undefined) {
-            bridge.report(t("put the cursor in a chapter first"));
-            return;
-          }
-          const source = yield* boundSource(project.root);
-          if (source === undefined) {
-            bridge.report(t("no source text is bound to this project"));
-            return;
-          }
-          const text = yield* bridge.services.library.readBook(source.id, book.id);
-          if (Option.isNone(text)) {
-            bridge.report(t("the source has no {book}", { book: book.id }));
-            return;
-          }
-          const previewed = overlayBook(
-            bridge.services.galley,
-            book,
-            text.value,
-            chapter === undefined ? undefined : { scope: { chapter } },
-          );
-          if (Result.isFailure(previewed)) {
-            bridge.report(previewed.failure.description);
-            return;
-          }
-          if (previewed.success.empty) {
-            bridge.report(
-              chapter === undefined
-                ? t("{book} already matches the source's formatting", { book: book.id })
-                : t("chapter {chapter} already matches the source's formatting", { chapter }),
-            );
-            return;
-          }
-          const applied = withoutScrolling(() => applyOverlay(previewed.success, book));
-          if (Result.isFailure(applied)) {
-            bridge.report(
-              t("match formatting refused: {reason}", { reason: applied.failure.description }),
-            );
-            return;
-          }
-          bridge.changed({ kind: "book.apply", books: [book.id] });
-          const extent =
-            chapter === undefined
-              ? undefined
-              : book
-                  .structure()
-                  .chapters.find(
-                    (row: { readonly label: string }) => Number.parseInt(row.label, 10) === chapter,
-                  );
-          yield* showWhatNeedsText(
-            book,
-            chapter === undefined
-              ? t("matched {book} to {source}", { book: book.id, source: source.title })
-              : t("matched chapter {chapter} to {source}", { chapter, source: source.title }),
-            extent,
-          );
-        });
+const showWhatNeedsText = (
+  bridge: ShellBridge,
+  book: EditorBook,
+  done: string,
+  within?: { readonly from: number; readonly to: number },
+) =>
+  Effect.gen(function* () {
+    const holes = book
+      .emptyBlocks()
+      .filter(
+        (hole) => within === undefined || (hole.from >= within.from && hole.from < within.to),
+      );
+    if (holes.length === 0) {
+      bridge.report(done);
+      return;
+    }
+    const caret = book.selection().head;
+    const next = holes.find((hole) => hole.from >= caret) ?? holes[0];
+    bridge.aim(book.id, next.from);
+    const ghostKey = shellKeys(bridge.services.settings).annotateEmptyParagraphs;
+    const wasOff = !bridge.services.settings.get(ghostKey);
+    if (wasOff) yield* bridge.services.settings.set(ghostKey, true);
+    bridge.report(
+      wasOff
+        ? t("{done} — {count} block(s) need text; showing empty paragraphs", {
+            done,
+            count: holes.length,
+          })
+        : t("{done} — {count} block(s) need text", { done, count: holes.length }),
+    );
+  });
 
-      const overlayProject = () =>
-        Effect.gen(function* () {
-          const project = bridge.project();
-          if (project === undefined) return;
-          const source = yield* boundSource(project.root);
-          if (source === undefined) {
-            bridge.report(t("no source text is bound to this project"));
-            return;
-          }
-          bridge.report(t("reading {source}…", { source: source.title }));
-          const texts = new Map<string, string>();
-          for (const book of project.books) {
-            const text = yield* bridge.services.library.readBook(source.id, book.id);
-            if (Option.isSome(text)) texts.set(book.id, text.value);
-          }
-          if (texts.size === 0) {
-            bridge.report(t("{source} has none of this project's books", { source: source.title }));
-            return;
-          }
-          let refusal = "";
-          const operation = withoutScrolling(() =>
-            multibook.runAcrossBooks("overlay", (book) => {
-              const text = texts.get(book.id);
-              if (text === undefined) return null;
-              const previewed = overlayBook(bridge.services.galley, book, text);
-              if (Result.isFailure(previewed)) {
-                refusal = previewed.failure.description;
-                return null;
-              }
-              return previewed.success.empty ? null : previewed.success.changes;
-            }),
-          );
-          if (operation === null) {
-            bridge.report(
-              refusal === ""
-                ? t("every book already matches {source}", { source: source.title })
-                : refusal,
-            );
-            return;
-          }
-          bridge.changed({ kind: "book.apply", books: operation.books });
-          const done = t("matched {count} book(s) to {source}", {
-            count: operation.books.length,
-            source: source.title,
-          });
-          const focused = bridge.focused();
-          if (focused !== undefined && operation.books.includes(focused.id))
-            yield* showWhatNeedsText(focused, done);
-          else bridge.report(done);
-        });
+const overlayFocused = (bridge: ShellBridge, scope: "chapter" | "book") =>
+  Effect.gen(function* () {
+    const book = bridge.focused();
+    const project = bridge.project();
+    if (book === undefined || project === undefined) return;
+    const chapter = scope === "chapter" ? chapterAtCaret(book) : undefined;
+    if (scope === "chapter" && chapter === undefined) {
+      bridge.report(t("put the cursor in a chapter first"));
+      return;
+    }
+    const source = yield* boundSource(bridge, project.root);
+    if (source === undefined) {
+      bridge.report(t("no source text is bound to this project"));
+      return;
+    }
+    const text = yield* bridge.services.library.readBook(source.id, book.id);
+    if (Option.isNone(text)) {
+      bridge.report(t("the source has no {book}", { book: book.id }));
+      return;
+    }
+    const previewed = overlayBook(
+      bridge.services.galley,
+      book,
+      text.value,
+      chapter === undefined ? undefined : { scope: { chapter } },
+    );
+    if (Result.isFailure(previewed)) {
+      bridge.report(previewed.failure.description);
+      return;
+    }
+    if (previewed.success.empty) {
+      bridge.report(
+        chapter === undefined
+          ? t("{book} already matches the source's formatting", { book: book.id })
+          : t("chapter {chapter} already matches the source's formatting", { chapter }),
+      );
+      return;
+    }
+    const applied = withoutScrolling(() => applyOverlay(previewed.success, book));
+    if (Result.isFailure(applied)) {
+      bridge.report(
+        t("match formatting refused: {reason}", { reason: applied.failure.description }),
+      );
+      return;
+    }
+    bridge.changed({ kind: "book.apply", books: [book.id] });
+    const extent = chapterExtent(book, chapter);
+    yield* showWhatNeedsText(
+      bridge,
+      book,
+      chapter === undefined
+        ? t("matched {book} to {source}", { book: book.id, source: source.title })
+        : t("matched chapter {chapter} to {source}", { chapter, source: source.title }),
+      extent,
+    );
+  });
 
-      return [
-        registerCommand({
-          id: "overlay.chapter",
-          title: t("Match formatting from source: this chapter"),
-          when: hasBook,
-          run: () => overlayFocused("chapter"),
-        }),
-        registerCommand({
-          id: "overlay.book",
-          title: t("Match formatting from source: this book"),
-          when: hasBook,
-          run: () => overlayFocused("book"),
-        }),
-        registerCommand({
-          id: "overlay.project",
-          title: t("Match formatting from source: every book"),
-          when: hasProject,
-          run: () => overlayProject(),
-        }),
-      ];
-    })(),
+const overlayProject = (bridge: ShellBridge, multibook: Helpers["multibook"]) =>
+  Effect.gen(function* () {
+    const project = bridge.project();
+    if (project === undefined) return;
+    const source = yield* boundSource(bridge, project.root);
+    if (source === undefined) {
+      bridge.report(t("no source text is bound to this project"));
+      return;
+    }
+    bridge.report(t("reading {source}…", { source: source.title }));
+    const texts = new Map<string, string>();
+    for (const book of project.books) {
+      const text = yield* bridge.services.library.readBook(source.id, book.id);
+      if (Option.isSome(text)) texts.set(book.id, text.value);
+    }
+    if (texts.size === 0) {
+      bridge.report(t("{source} has none of this project's books", { source: source.title }));
+      return;
+    }
+    let refusal = "";
+    const operation = withoutScrolling(() =>
+      multibook.runAcrossBooks("overlay", (book) => {
+        const text = texts.get(book.id);
+        if (text === undefined) return null;
+        const previewed = overlayBook(bridge.services.galley, book, text);
+        if (Result.isFailure(previewed)) {
+          refusal = previewed.failure.description;
+          return null;
+        }
+        return previewed.success.empty ? null : previewed.success.changes;
+      }),
+    );
+    if (operation === null) {
+      bridge.report(
+        refusal === ""
+          ? t("every book already matches {source}", { source: source.title })
+          : refusal,
+      );
+      return;
+    }
+    bridge.changed({ kind: "book.apply", books: operation.books });
+    const done = t("matched {count} book(s) to {source}", {
+      count: operation.books.length,
+      source: source.title,
+    });
+    const focused = bridge.focused();
+    if (focused !== undefined && operation.books.includes(focused.id))
+      yield* showWhatNeedsText(bridge, focused, done);
+    else bridge.report(done);
+  });
+const overlayCommands = (bridge: ShellBridge, h: Helpers) => {
+  const { hasBook, hasProject } = h;
+  return [
+    registerCommand({
+      id: "overlay.chapter",
+      title: t("Match formatting from source: this chapter"),
+      when: hasBook,
+      run: () => overlayFocused(bridge, "chapter"),
+    }),
+    registerCommand({
+      id: "overlay.book",
+      title: t("Match formatting from source: this book"),
+      when: hasBook,
+      run: () => overlayFocused(bridge, "book"),
+    }),
+    registerCommand({
+      id: "overlay.project",
+      title: t("Match formatting from source: every book"),
+      when: hasProject,
+      run: () => overlayProject(bridge, h.multibook),
+    }),
+  ];
+};
+
+export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
+  const { services } = bridge;
+  setCommandObservability(services.composition.observability);
+  setCommandRunner((effect) => {
+    void services.run(effect).catch((cause: unknown) => {
+      bridge.report(t("failed: {cause}", { cause: String(cause) }));
+    });
+  });
+  const h = shellHelpers(bridge);
+  const registrations = [
+    ...paletteCommands(bridge),
+    ...advancedCommands(bridge),
+    ...saveCommands(bridge, h),
+    ...searchCommands(bridge, h),
+    ...chapterCommands(bridge, h),
+    ...findingCommands(bridge, h),
+    ...remoteCommands(bridge),
+    ...syncCommands(bridge, h),
+    ...insertCommands(bridge, h),
+    ...formatCommands(bridge, h),
+    ...overlayCommands(bridge, h),
   ];
 
   return () => {

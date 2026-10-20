@@ -11,6 +11,52 @@ export interface PaletteProps {
   readonly onClose: () => void;
 }
 
+interface PaletteListProps {
+  readonly shown: ReturnType<typeof availableCommands>;
+  readonly place: { readonly address: Address; readonly label: string } | undefined;
+  readonly onChoose: (id: string) => void;
+  readonly onGo: () => void;
+}
+
+function PaletteList(props: PaletteListProps) {
+  return (
+    <ul class="overflow-auto py-1">
+      <For each={props.shown}>
+        {(command) => (
+          <li>
+            <button
+              type="button"
+              class="flex w-full cursor-pointer items-center gap-2 px-4 py-2 text-start text-small text-on-surface-primary hover:bg-surface-secondary"
+              onClick={() => props.onChoose(command.id)}
+            >
+              <span>{command.title}</span>
+              <Show when={command.keys}>{(keys) => <Kbd class="ms-auto">{keys()}</Kbd>}</Show>
+            </button>
+          </li>
+        )}
+      </For>
+      <Show when={props.place}>
+        {(found) => (
+          <li>
+            <button
+              type="button"
+              data-testid="palette-reference"
+              class="flex w-full cursor-pointer items-center gap-2 px-4 py-2 text-start text-small text-on-surface-primary hover:bg-surface-secondary"
+              onClick={props.onGo}
+            >
+              <span>{t("Go to {place}", { place: found().label })}</span>
+              <Kbd class="ms-auto">{t("Enter")}</Kbd>
+            </button>
+          </li>
+        )}
+      </Show>
+      <Show when={props.shown.length === 0 && props.place === undefined}>
+        <li class="px-4 py-2 text-small text-on-surface-tertiary">{t("No command matches.")}</li>
+      </Show>
+    </ul>
+  );
+}
+
 export function CommandPalette(props: PaletteProps) {
   const shell = useShell();
   const [query, setQuery] = createSignal("");
@@ -90,42 +136,7 @@ export function CommandPalette(props: PaletteProps) {
               else go();
             }}
           />
-          <ul class="overflow-auto py-1">
-            <For each={shown()}>
-              {(command) => (
-                <li>
-                  <button
-                    type="button"
-                    class="flex w-full cursor-pointer items-center gap-2 px-4 py-2 text-start text-small text-on-surface-primary hover:bg-surface-secondary"
-                    onClick={() => choose(command.id)}
-                  >
-                    <span>{command.title}</span>
-                    <Show when={command.keys}>{(keys) => <Kbd class="ms-auto">{keys()}</Kbd>}</Show>
-                  </button>
-                </li>
-              )}
-            </For>
-            <Show when={place()}>
-              {(found) => (
-                <li>
-                  <button
-                    type="button"
-                    data-testid="palette-reference"
-                    class="flex w-full cursor-pointer items-center gap-2 px-4 py-2 text-start text-small text-on-surface-primary hover:bg-surface-secondary"
-                    onClick={go}
-                  >
-                    <span>{t("Go to {place}", { place: found().label })}</span>
-                    <Kbd class="ms-auto">{t("Enter")}</Kbd>
-                  </button>
-                </li>
-              )}
-            </Show>
-            <Show when={shown().length === 0 && place() === undefined}>
-              <li class="px-4 py-2 text-small text-on-surface-tertiary">
-                {t("No command matches.")}
-              </li>
-            </Show>
-          </ul>
+          <PaletteList shown={shown()} place={place()} onChoose={choose} onGo={go} />
         </div>
       </div>
     </Show>
