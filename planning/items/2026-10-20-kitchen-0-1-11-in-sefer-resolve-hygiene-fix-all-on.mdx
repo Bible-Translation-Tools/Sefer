@@ -54,6 +54,15 @@ The calls hand over a `TocView`; `galley.resolve` takes the held text's id. So e
 the id of the text it means, which the editor and analysis already hold. A caller that has only a
 TOC (excerpts over a unit list?) is the one to check first.
 
+<Question id="generic">Is there a form that does not need the text resident? Checked v0.1.11's
+typings (2026-10-20): no. The only export is `Galley.resolve(id, address, opts)` on a registered
+book; onion-wasm has none. A book registered without `keepText` answers a book, an intro or a
+chapter from its TOC, but refuses a verse by name (segment letters and the opening walk need the
+text). Sefer's resolvers today take a bare `TocView` (excerpts, align, search expectations), so
+either every caller goes through a registered id, or we ask kitchen for a pure
+`resolve(text_or_toc, address)` export. Leaning: ask for the pure export; the rules live in
+`onion/src/resolve.md`, so it should already exist on the Rust side.</Question>
+
 <Question id="coarser">`galley.resolve` says when a hit is coarser than asked (a bridge for verse 2,
 a whole verse for 3a). Today we silently take the coarser span. Show it ("1–2", "verse 3") in the
 location bar, or keep silent?</Question>
