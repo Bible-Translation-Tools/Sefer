@@ -126,6 +126,7 @@ export function SuppressActions(props: { readonly finding: Finding }) {
               size="sm"
               variant="tertiary"
               icon={<CheckCheck />}
+              data-tour="fine-here"
               title={t("Hide this one. It comes back if this text changes.")}
               onClick={fineHere}
             >
@@ -141,7 +142,14 @@ export function SuppressActions(props: { readonly finding: Finding }) {
                 side="bottom"
                 align="end"
                 class="w-80"
-                trigger={<IconButton label={t("More")} size="sm" icon={<Ellipsis />} />}
+                trigger={
+                  <IconButton
+                    label={t("More")}
+                    size="sm"
+                    icon={<Ellipsis />}
+                    data-tour="finding-more"
+                  />
+                }
               >
                 <Show when={keys().everywhere !== undefined}>
                   <MenuItem onSelect={allow}>

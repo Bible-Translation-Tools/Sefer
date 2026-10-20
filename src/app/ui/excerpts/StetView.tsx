@@ -254,28 +254,6 @@ export function StetView(props: StetViewProps) {
   const CHROME = 164;
   const NEIGHBOUR = 100;
 
-  /** A card's own unit, by sid, as it is now: what an approval's state is read from. */
-  const nowBySid = createMemo(
-    (): ReadonlyMap<string, string> => {
-      const out = new Map<string, string>();
-      for (const group of props.groups)
-        for (const excerpt of group.excerpts) out.set(excerpt.sid, ownText(excerpt));
-      return out;
-    },
-    { name: "stetNowText" },
-  );
-  /** The open term at one verse (`#core/stet/approvals`): derived from the text, never stored. */
-  const stateAt = (sid: string): ApprovalState => {
-    const now = nowBySid().get(sid);
-    return now === undefined ? "unapproved" : props.approvals.state(props.selected, sid, now);
-  };
-  const isApproved = (sid: string): boolean => isStanding(stateAt(sid));
-  /** Approved once, and the verse has changed since (or the file must be re-checked). */
-  const isChanged = (sid: string): boolean => {
-    const state = stateAt(sid);
-    return state === "changedSinceApproved" || state === "needsRecheck";
-  };
-
   /**
    * Which verses have been edited. A card's own unit, as raw USFM, is taken
    * the first time it is seen; it is edited while the text the list now holds
@@ -301,6 +279,28 @@ export function StetView(props: StetViewProps) {
     { name: "stetEdited" },
   );
   const isEdited = (sid: string): boolean => edits().has(sid);
+
+  /** A card's own unit, by sid, as it is now: what an approval's state is read from. */
+  const nowBySid = createMemo(
+    (): ReadonlyMap<string, string> => {
+      const out = new Map<string, string>();
+      for (const group of props.groups)
+        for (const excerpt of group.excerpts) out.set(excerpt.sid, ownText(excerpt));
+      return out;
+    },
+    { name: "stetNowText" },
+  );
+  /** The open term at one verse (`#core/stet/approvals`): derived from the text, never stored. */
+  const stateAt = (sid: string): ApprovalState => {
+    const now = nowBySid().get(sid);
+    return now === undefined ? "unapproved" : props.approvals.state(props.selected, sid, now);
+  };
+  const isApproved = (sid: string): boolean => isStanding(stateAt(sid));
+  /** Approved once, and the verse has changed since (or the file must be re-checked). */
+  const isChanged = (sid: string): boolean => {
+    const state = stateAt(sid);
+    return state === "changedSinceApproved" || state === "needsRecheck";
+  };
 
   /**
    * A verse's status mark, the same on its card and in the sidebar: a pencil
@@ -628,6 +628,7 @@ export function StetView(props: StetViewProps) {
   return (
     <div
       ref={measure}
+      data-tour="terms-cards"
       class="flex min-h-0 flex-1 gap-4"
       style={
         room() === undefined
