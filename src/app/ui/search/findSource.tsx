@@ -41,7 +41,7 @@ function createBookCache(shell: ReturnType<typeof useShell>) {
         const text = Result.isFailure(outcome) ? undefined : Option.getOrUndefined(outcome.success);
         if (text === undefined) books.set(bookId, { kind: "missing" });
         else {
-          const analysis = services.galley.analyze(text, "find.source");
+          const analysis = services.galley.analyzeText(text, "find.source");
           const heading = bookHeading(analysis);
           books.set(bookId, {
             bookId,

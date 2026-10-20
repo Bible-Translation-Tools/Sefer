@@ -124,16 +124,15 @@ const fromDiagnostics = (input: {
   return out;
 };
 
-const corpusSeverity = (finding: CorpusFinding): Severity => {
-  switch (finding.kind) {
-    case "Hygiene":
-      return "error";
-    case "Presence":
-      return "warning";
-    default:
-      return "info";
-  }
+const SEVERITY_OF: Readonly<Record<CorpusFinding["kind"], Severity>> = {
+  Hygiene: "error",
+  Presence: "warning",
+  SourceCopy: "info",
+  LengthProportionality: "info",
+  Convention: "info",
 };
+
+const corpusSeverity = (finding: CorpusFinding): Severity => SEVERITY_OF[finding.kind];
 
 export interface PublishedBook {
   readonly bookId: BookId;

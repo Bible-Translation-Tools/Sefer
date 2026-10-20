@@ -18,7 +18,7 @@ import type { FindSearch, Scope } from "./helpers";
 export interface FindScopeRowProps {
   readonly shell: ReturnType<typeof useShell>;
   readonly scope: () => Scope;
-  readonly ask: (next: FindSearch) => void;
+  readonly updateSearch: (next: FindSearch) => void;
   readonly books: FindBooks;
   readonly sources: FindSources;
   readonly expect: FindExpect;
@@ -35,7 +35,7 @@ function SourceSwitches(props: { readonly row: FindScopeRowProps }) {
         label={t("Search the source text")}
         checked={props.row.scope() === "reference"}
         disabled={!props.row.sources.hasReference()}
-        onChange={(on) => props.row.ask({ scope: on ? "reference" : "project" })}
+        onChange={(on) => props.row.updateSearch({ scope: on ? "reference" : "project" })}
       />
       <Show when={props.row.scope() === "reference"}>
         <span data-tour="find-expect-toggle">
@@ -51,7 +51,7 @@ function SourceSwitches(props: { readonly row: FindScopeRowProps }) {
           <Switch
             label={t("Search {title}", { title: props.row.sources.helpsTitle() })}
             checked={props.row.scope() === "helps"}
-            onChange={(on) => props.row.ask({ scope: on ? "helps" : "project" })}
+            onChange={(on) => props.row.updateSearch({ scope: on ? "helps" : "project" })}
           />
         </span>
       </Show>
@@ -119,7 +119,7 @@ export function FindScopeRow(props: FindScopeRowProps) {
     <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
       <BookScope
         value={props.books.bookScope()}
-        onChange={(next) => props.ask({ scope: next })}
+        onChange={(next) => props.updateSearch({ scope: next })}
         books={props.books.projectBooks().map((id) => ({
           id,
           name: bookName(id, metadataOf(props.shell.project())),

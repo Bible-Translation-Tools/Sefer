@@ -224,7 +224,7 @@ const make = (
       if (handed !== undefined && describesExactly(handed, source.text)) analysis = handed;
       else {
         try {
-          analysis = galley.analyze(source.text, "scheduler", bookId, into);
+          analysis = galley.analyzeBook(bookId, source.text, "scheduler", into);
         } catch {
           into?.note("book.analyze", "failed", "engine refused", { "book.id": bookId });
           return undefined;

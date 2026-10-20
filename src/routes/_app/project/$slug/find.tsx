@@ -34,7 +34,7 @@ function createFindModel(
   const scope = (): Scope => params().scope ?? "project";
   const asked = (): string => params().q ?? "";
 
-  const ask = (next: FindSearch): void => {
+  const updateSearch = (next: FindSearch): void => {
     void navigate({
       to: "/project/$slug/find",
       params: { slug: shell.slug() },
@@ -56,9 +56,16 @@ function createFindModel(
     books,
     sources,
     run: search.run,
-    ask,
+    updateSearch,
   });
-  const expect = createFindExpect({ shell, params, scope, results, sources, ask });
+  const expect = createFindExpect({
+    shell,
+    params,
+    scope,
+    results,
+    sources,
+    updateSearch,
+  });
   const { feedHits } = createFindMatches({ scope, results, sources, expect });
 
   const feed = createExcerptFeed({
@@ -85,7 +92,7 @@ function createFindModel(
     params,
     scope,
     asked,
-    ask,
+    updateSearch,
     query,
     results,
     sources,
@@ -114,7 +121,7 @@ function FindControls(props: { readonly model: FindModel }) {
         <FindScopeRow
           shell={props.model.shell}
           scope={props.model.scope}
-          ask={props.model.ask}
+          updateSearch={props.model.updateSearch}
           books={props.model.books}
           sources={props.model.sources}
           expect={props.model.expect}
@@ -133,7 +140,7 @@ function FindNotices(props: { readonly model: FindModel }) {
       <Show when={props.model.scope() === "reference" && props.model.expect.expectShown()}>
         <FindExpectCard
           params={props.model.params}
-          ask={props.model.ask}
+          updateSearch={props.model.updateSearch}
           expect={props.model.expect}
         />
       </Show>

@@ -5,6 +5,8 @@ import { ShellGate } from "#app/ui/ShellGate";
 import "#app/ui/theme";
 
 export const Route = createFileRoute("/_app/projects")({
+  validateSearch: (search: Record<string, unknown>): { readonly rename?: string } =>
+    typeof search.rename === "string" ? { rename: search.rename } : {},
   head: () => ({ meta: [{ title: "Projects · Sefer" }] }),
   component: () => <ShellGate>{() => <ProjectsLanding />}</ShellGate>,
 });

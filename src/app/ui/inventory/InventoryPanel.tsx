@@ -131,7 +131,9 @@ export function InventoryPanel() {
           </span>
         </span>
       </TableCell>
-      <TableCell class="text-end font-mono text-smallest tabular-nums">{glyph.sites}</TableCell>
+      <TableCell class="text-end font-mono text-smallest tabular-nums">
+        {glyph.population}
+      </TableCell>
       <TableCell class="text-end font-mono text-smallest whitespace-nowrap tabular-nums text-on-surface-tertiary">
         {glyph.books} / {held().bookCount}
       </TableCell>

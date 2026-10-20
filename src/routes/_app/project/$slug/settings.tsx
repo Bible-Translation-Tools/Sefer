@@ -27,9 +27,9 @@ import { SourceTextsCard } from "#app/ui/SourceTextsCard";
 import { SousSettingsPanel } from "#app/ui/SousSettingsPanel";
 import {
   applyAppearance,
-  asDiffPalette,
-  asDiffRemoved,
-  asTheme,
+  parseDiffPalette,
+  parseDiffRemoved,
+  parseTheme,
   type Appearance,
 } from "#app/ui/theme";
 import { UpdatePanel } from "#app/ui/UpdatePanel";
@@ -104,11 +104,11 @@ function createSettingsModel(services: Services, keys: Keys): SettingsModel {
   };
 
   const appearance = (): Appearance => ({
-    theme: asTheme(services.settings.get(keys.theme)),
+    theme: parseTheme(services.settings.get(keys.theme)),
     fontSize: services.settings.get(keys.fontSize),
     zoom: services.settings.get(keys.zoom),
-    diffPalette: asDiffPalette(services.settings.get(keys.diffPalette)),
-    diffRemoved: asDiffRemoved(services.settings.get(keys.diffRemoved)),
+    diffPalette: parseDiffPalette(services.settings.get(keys.diffPalette)),
+    diffRemoved: parseDiffRemoved(services.settings.get(keys.diffRemoved)),
   });
 
   applyAppearance(appearance());

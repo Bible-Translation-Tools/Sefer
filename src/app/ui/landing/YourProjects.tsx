@@ -163,12 +163,11 @@ const watchRenameRequest = (
   rows: () => readonly ProjectSummary[] | undefined,
   startRename: (row: ProjectSummary) => void,
 ): void => {
-  // SAFETY: `strict: false` gives the union of every route's search; only `rename` is read, and a missing or non-string value is treated as absent.
-  const search = useSearch({ strict: false }) as () => { readonly rename?: unknown };
+  const search = useSearch({ from: "/_app/projects" });
   createEffect(
     () => ({ target: search().rename, held: rows() }),
     ({ target, held }) => {
-      if (typeof target !== "string" || held === undefined) return;
+      if (target === undefined || held === undefined) return;
       const row = held.find((candidate) => candidate.root === target);
       if (row === undefined) return;
       startRename(row);

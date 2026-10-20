@@ -187,7 +187,7 @@ export function GlyphDetail(props: GlyphDetailProps) {
             <Badge tone="neutral">{props.glyph.pool}</Badge>
             <span class="text-small text-on-surface-tertiary">
               {t("{sites} sites · {books} of {total} books", {
-                sites: props.glyph.sites,
+                sites: props.glyph.population,
                 books: props.glyph.books,
                 total: props.bookCount,
               })}

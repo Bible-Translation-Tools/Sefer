@@ -38,7 +38,7 @@ interface Where {
   readonly owner: string;
   readonly name: string;
   readonly branch: string;
-  readonly me: string | undefined;
+  readonly username: string | undefined;
 }
 
 const where = (project: Project) =>
@@ -58,7 +58,7 @@ const where = (project: Project) =>
       host,
       ...found,
       branch,
-      me: Option.getOrUndefined(Option.map(session, (held) => held.username)),
+      username: Option.getOrUndefined(Option.map(session, (held) => held.username)),
     } satisfies Where;
   });
 
@@ -99,7 +99,7 @@ export const canWriteShared = (
     Effect.orElseSucceed(
       Effect.gen(function* () {
         const at = yield* where(project);
-        if (at === undefined || at.me === undefined) return undefined;
+        if (at === undefined || at.username === undefined) return undefined;
         return yield* (yield* Suggestions).canWrite(at.host, at.owner, at.name);
       }),
       () => undefined,
@@ -157,7 +157,8 @@ export const workInOwnCopy = (services: Services, project: Project): Promise<Cop
     Effect.gen(function* () {
       const at = yield* where(project);
       if (at === undefined) return yield* Effect.fail(new Error("no shared project to copy"));
-      if (at.me === undefined) return yield* Effect.fail(new Error("sign in to make your copy"));
+      if (at.username === undefined)
+        return yield* Effect.fail(new Error("sign in to make your copy"));
       const gitea = yield* Gitea;
       const git = yield* Git;
       const remote = yield* Remote;
@@ -167,7 +168,7 @@ export const workInOwnCopy = (services: Services, project: Project): Promise<Cop
         return yield* Effect.fail(new Error(`${at.owner}/${at.name} is not on ${at.host}`));
       const shared = found.value;
       const outcome = yield* Effect.gen(function* () {
-        if (shared.owner.toLowerCase() === at.me?.toLowerCase()) {
+        if (shared.owner.toLowerCase() === at.username?.toLowerCase()) {
           const parent: ForkParent | undefined = shared.parent;
           if (parent === undefined) return { kind: "standalone" } satisfies CopyOutcome;
           yield* remote.attachAs(repo, COPY, shared.cloneUrl);
@@ -175,7 +176,7 @@ export const workInOwnCopy = (services: Services, project: Project): Promise<Cop
           yield* remote.fetch(repo);
           return { kind: "rerooted", shared: parent.fullName } satisfies CopyOutcome;
         }
-        const username = at.me ?? "";
+        const username = at.username ?? "";
         const held = yield* existingFork(at.host, username, shared);
         const renamed = Option.isSome(held)
           ? undefined
@@ -306,7 +307,7 @@ export const suggestMyChanges = (services: Services, project: Project): Promise<
   services.run(
     Effect.gen(function* () {
       const at = yield* where(project);
-      if (at === undefined || at.me === undefined)
+      if (at === undefined || at.username === undefined)
         return yield* Effect.fail(new Error("sign in to suggest changes"));
       const git = yield* Git;
       const remote = yield* Remote;
@@ -321,7 +322,7 @@ export const suggestMyChanges = (services: Services, project: Project): Promise<
       if (standing === "shared" && !headInCopy) return yield* Effect.fail(new NeedsReview(false));
       if (!headInCopy) yield* remote.push(repo, COPY);
       return yield* (yield* Suggestions).suggest(at.host, at.owner, at.name, {
-        from: at.me,
+        from: at.username,
         branch: at.branch,
         base: at.branch,
         title: suggestionTitle(),
@@ -340,7 +341,7 @@ export const openSuggestions = (
         const at = yield* where(project);
         if (at === undefined) return [];
         const open = yield* (yield* Suggestions).open(at.host, at.owner, at.name);
-        const username = at.me?.toLowerCase();
+        const username = at.username?.toLowerCase();
         return username === undefined
           ? open
           : open.filter((each) => each.author.toLowerCase() !== username);
@@ -417,8 +418,8 @@ export const mySuggestions = (
     Effect.orElseSucceed(
       Effect.gen(function* () {
         const at = yield* where(project);
-        if (at === undefined || at.me === undefined) return [];
-        const username = at.me;
+        if (at === undefined || at.username === undefined) return [];
+        const username = at.username;
         const service = yield* Suggestions;
         const all = (yield* service.from(at.host, at.owner, at.name, username)).slice(
           0,

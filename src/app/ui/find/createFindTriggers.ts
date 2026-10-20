@@ -12,18 +12,18 @@ export interface TriggersInputs {
   readonly books: FindBooks;
   readonly sources: ReturnType<typeof createFindSources>;
   readonly run: (over?: Over) => Promise<void>;
-  readonly ask: (next: FindSearch) => void;
+  readonly updateSearch: (next: FindSearch) => void;
 }
 
 export function createFindTriggers(inputs: TriggersInputs) {
-  const { asked, scope, run, ask } = inputs;
+  const { asked, scope, run, updateSearch } = inputs;
   const { text, setText, matchCase, wholeWord, regex, markup } = inputs.query;
   const { custom } = inputs.books;
   const { bound } = inputs.sources;
 
   const commit = (): void => {
     if (asked() === text()) void run({ text: text() });
-    else ask({ q: text() });
+    else updateSearch({ q: text() });
   };
 
   let lastAsked: { readonly q: string; readonly scope: string } | undefined;

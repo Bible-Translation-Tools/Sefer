@@ -489,21 +489,14 @@ export function FindingsPanel() {
     name: "findingsHiddenCount",
   });
   const source = createFindSource(() => {});
-  // SAFETY: `strict: false` gives the union of every route's search; both fields are read as `unknown` and each is narrowed before it is used.
-  const search = useSearch({ strict: false }) as () => {
-    readonly code?: unknown;
-    readonly pattern?: unknown;
-  };
+  const search = useSearch({ from: "/_app/project/$slug/findings" });
 
-  const pattern = (): number | undefined => {
-    const held = search().pattern;
-    return typeof held === "number" && Number.isInteger(held) && held >= 0 ? held : undefined;
-  };
+  const pattern = (): number | undefined => search().pattern;
 
   createEffect(
     () => search().code,
     (code) => {
-      if (typeof code !== "string" || code === "") return;
+      if (code === undefined) return;
       // Untracked on purpose: a one-time read, not a dependency (Solid 2: STRICT_READ_UNTRACKED).
       untrack(() => {
         filters.update({ codes: [code], books: null });

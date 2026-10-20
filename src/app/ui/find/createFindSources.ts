@@ -28,7 +28,7 @@ function createAnalysisOf(shell: Shell) {
     if (text === undefined) return undefined;
     const parsed = referenceParses.get(id);
     if (parsed !== undefined && parsed.text === text) return parsed;
-    const fresh = shell.services.galley.analyze(text, "find.reference");
+    const fresh = shell.services.galley.analyzeText(text, "find.reference");
     referenceParses.set(id, fresh);
     return fresh;
   };

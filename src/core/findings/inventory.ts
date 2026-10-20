@@ -56,7 +56,7 @@ export interface Glyph {
   readonly char: string;
   readonly name: string;
   readonly pool: Pool;
-  readonly sites: number;
+  readonly population: number;
   readonly books: number;
   readonly neighbours: readonly PatternRow[];
   readonly placement: readonly PlacementCell[];
@@ -369,11 +369,11 @@ export const inventory = (
           row.channel === "BookRate",
       )
       .sort(byWeight);
-    let sites = 0;
+    let population = 0;
     let books = 0;
     for (const row of bucket.rows) {
       const counted = row.channel === "Rarity" ? row.numerator : row.denominator;
-      if (counted > sites) sites = counted;
+      if (counted > population) population = counted;
       if (row.books > books) books = row.books;
     }
     glyphs.push({
@@ -381,7 +381,7 @@ export const inventory = (
       char: codePoint === PATTERN_DIGIT_GLYPH ? "" : String.fromCodePoint(codePoint),
       name: glyphName(codePoint),
       pool: poolOf(codePoint),
-      sites,
+      population,
       books,
       neighbours,
       placement,
@@ -394,7 +394,10 @@ export const inventory = (
     });
   }
   glyphs.sort(
-    (a, b) => b.sites - a.sites || b.flagged.length - a.flagged.length || a.codePoint - b.codePoint,
+    (a, b) =>
+      b.population - a.population ||
+      b.flagged.length - a.flagged.length ||
+      a.codePoint - b.codePoint,
   );
 
   let flaggedSites = 0;

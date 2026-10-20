@@ -31,7 +31,7 @@ describe("Galley", () => {
   });
 
   it("analyzes a real book into a dish that describes exactly that text", async () => {
-    const analysis = await withGalley((galley) => galley.analyze(PHILEMON));
+    const analysis = await withGalley((galley) => galley.analyzeText(PHILEMON));
     expect(analysis.dish.tokens.length).toBeGreaterThan(0);
     expect(analysis.docLen).toBe(PHILEMON.length);
     expect(describesExactly(analysis, PHILEMON)).toBe(true);
@@ -40,7 +40,7 @@ describe("Galley", () => {
 
   it("agrees with itself across two analyses of one text", async () => {
     const [first, second] = await withGalley(
-      (galley) => [galley.analyze(PHILEMON), galley.analyze(PHILEMON)] as const,
+      (galley) => [galley.analyzeText(PHILEMON), galley.analyzeText(PHILEMON)] as const,
     );
     expect(sameSource(first, second)).toBe(true);
     expect(second.revision).toBeGreaterThan(first.revision);
@@ -57,7 +57,7 @@ describe("Galley", () => {
   it("refuses text that is not canonical LF", async () => {
     const thrown = await withGalley((galley) => {
       try {
-        galley.analyze("\\id PHM\r\n");
+        galley.analyzeText("\\id PHM\r\n");
         return null;
       } catch (cause) {
         return cause;

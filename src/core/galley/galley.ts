@@ -196,10 +196,12 @@ export interface GalleyService {
     opts?: { readonly relaxZPrefix?: boolean },
   ) => readonly ExtensionReport[];
 
-  readonly analyze: (
+  readonly analyzeText: (text: string, why?: string) => Analysis;
+
+  readonly analyzeBook: (
+    id: string,
     text: string,
     why?: string,
-    id?: string,
     into?: ObservabilityService,
   ) => Analysis;
 
@@ -323,9 +325,9 @@ const makeService = (
     held?.free();
   };
 
-  const analyze = (
+  const parseAnalysis = (
     text: string,
-    why = "unnamed",
+    why: string,
     id?: string,
     into?: ObservabilityService,
   ): Analysis => {
@@ -358,6 +360,15 @@ const makeService = (
       usfmVersion: declaredVersion(dish),
     };
   };
+
+  const analyzeText = (text: string, why = "unnamed"): Analysis => parseAnalysis(text, why);
+
+  const analyzeBook = (
+    id: string,
+    text: string,
+    why = "unnamed",
+    into?: ObservabilityService,
+  ): Analysis => parseAnalysis(text, why, id, into);
 
   const lint = (id: string, why = "unnamed"): LintReport => {
     const done = observe?.span("galley.lint", undefined, {
@@ -404,7 +415,7 @@ const makeService = (
     let last: Analysis | undefined;
     return (text: string): Analysis => {
       if (last !== undefined && last.text === text) return last;
-      last = analyze(text, "editor", id);
+      last = id === undefined ? analyzeText(text, "editor") : analyzeBook(id, text, "editor");
       return last;
     };
   };
@@ -443,7 +454,8 @@ const makeService = (
   return {
     version: engineVersion,
     setExtensions,
-    analyze,
+    analyzeText,
+    analyzeBook,
     memoize,
     lint,
     toc,

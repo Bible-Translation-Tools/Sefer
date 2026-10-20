@@ -262,8 +262,7 @@ const rangesOf = (hit: Occurrence): readonly { from: number; to: number; source:
  * nothing until something reads them.
  */
 export const withoutHits = (excerpt: Excerpt): Excerpt =>
-  // SAFETY: `Object.create(excerpt)` inherits every field and getter of `excerpt`; the one own property it defines, `hits`, has Excerpt's type.
-  Object.create(excerpt, { hits: { value: [], enumerable: true } }) as Excerpt;
+  excerpt instanceof LazyExcerpt ? excerpt.withoutHits() : { ...excerpt, hits: [] };
 
 class LazyExcerpt implements Excerpt {
   readonly bookId: BookId;
@@ -281,7 +280,7 @@ class LazyExcerpt implements Excerpt {
     private readonly units: Units,
     private readonly low: number,
     private readonly high: number,
-    own: TocUnit,
+    own: { readonly from: number; readonly to: number },
     hits: readonly Occurrence[],
     address: Address,
     extent: Extent,
@@ -297,6 +296,21 @@ class LazyExcerpt implements Excerpt {
     this.own = { from: own.from, to: own.to };
     this.hits = hits;
     this.extent = extent;
+  }
+
+  withoutHits(): LazyExcerpt {
+    const copy = new LazyExcerpt(
+      this.book,
+      this.units,
+      this.low,
+      this.high,
+      this.own,
+      [],
+      this.address,
+      this.extent,
+    );
+    copy.held = this.held;
+    return copy;
   }
 
   get analysis(): Analysis {

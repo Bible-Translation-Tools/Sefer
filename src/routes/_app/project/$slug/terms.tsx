@@ -187,7 +187,7 @@ interface TermsModel {
   readonly setAdditional: (next: boolean) => void;
   readonly locale: () => string;
   readonly filter: () => string;
-  readonly ask: (next: TermsSearch) => void;
+  readonly updateSearch: (next: TermsSearch) => void;
 }
 
 function TermsView(props: { readonly model: TermsModel }) {
@@ -199,12 +199,12 @@ function TermsView(props: { readonly model: TermsModel }) {
           approvals={held()}
           terms={props.model.load.terms()}
           selected={props.model.selected()?.id ?? ""}
-          onSelect={(id) => props.model.ask({ term: id })}
+          onSelect={(id) => props.model.updateSearch({ term: id })}
           filter={props.model.filter()}
-          onFilter={(text) => props.model.ask({ q: text })}
+          onFilter={(text) => props.model.updateSearch({ q: text })}
           guides={props.model.load.guides()}
           locale={props.model.locale()}
-          onLocale={(next) => props.model.ask({ locale: next, term: undefined })}
+          onLocale={(next) => props.model.updateSearch({ locale: next, term: undefined })}
           loading={props.model.load.loading()}
           groups={props.model.feed.groups()}
           views={props.model.feed.views}
@@ -251,7 +251,7 @@ function Terms() {
   const locale = (): string => params().locale ?? DEFAULT_LOCALE;
   const filter = (): string => params().q ?? "";
 
-  const ask = (next: TermsSearch): void => {
+  const updateSearch = (next: TermsSearch): void => {
     void navigate({
       to: "/project/$slug/terms",
       params: { slug: shell.slug() },
@@ -297,7 +297,7 @@ function Terms() {
     setAdditional,
     locale,
     filter,
-    ask,
+    updateSearch,
   };
 
   return (
@@ -314,7 +314,7 @@ function Terms() {
                 label: languageOf(guide.locale.split("-")[0] ?? guide.locale),
               }))}
               value={locale()}
-              onChange={(next) => ask({ locale: next, term: undefined })}
+              onChange={(next) => updateSearch({ locale: next, term: undefined })}
             />
           </Show>
         }

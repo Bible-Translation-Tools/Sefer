@@ -736,12 +736,8 @@ export function HistoryPanel() {
   const [yoursOpen, setYoursOpen] = createSignal<ReadonlySet<string>>(new Set(), {
     name: "historyYoursOpen",
   });
-  // SAFETY: `strict: false` gives the union of every route's search; `commit` is read as `unknown` and narrowed (the route validated it already).
-  const search = useSearch({ strict: false }) as () => { readonly commit?: unknown };
-  const selected = (): string => {
-    const asked = search().commit;
-    return typeof asked === "string" ? asked : (log()?.[0]?.id ?? "");
-  };
+  const search = useSearch({ from: "/_app/project/$slug/history" });
+  const selected = (): string => search().commit ?? log()?.[0]?.id ?? "";
   const choose = (id: string): void => {
     setYoursOpen(new Set<string>());
     void navigate({

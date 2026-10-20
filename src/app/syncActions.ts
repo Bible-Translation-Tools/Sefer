@@ -29,7 +29,7 @@ const destination = (services: Services, project: Project): Promise<string> =>
 
 type CheckResult = "up-to-date" | "fetched" | "detached" | "no-branch" | "no-repository";
 
-const ask = (root: string): Effect.Effect<CheckResult, unknown, Git | Remote> =>
+const fetchFromShared = (root: string): Effect.Effect<CheckResult, unknown, Git | Remote> =>
   Effect.gen(function* () {
     const git = yield* Git;
     const remote = yield* Remote;
@@ -68,7 +68,7 @@ const checkShared = async (
   let verdict: Verdict = "passed";
   let reason: string | undefined;
   try {
-    result = await services.run(ask(root));
+    result = await services.run(fetchFromShared(root));
     syncStatus.noteSuccess();
     syncWatch.noteFetched(root);
   } catch (cause) {
@@ -232,15 +232,15 @@ export const settleWithShared = async (
   author: Author,
   message: string,
   settled: ReadonlySet<BookId>,
-  with_: { readonly theirs?: string; readonly sendTo?: string } = {},
+  overrides: { readonly theirs?: string; readonly sendTo?: string } = {},
 ): Promise<SettleOutcome> => {
   const received = await services.run(
-    Effect.result(receive({ project, settled, ...optionalTheirs(with_.theirs) })),
+    Effect.result(receive({ project, settled, ...optionalTheirs(overrides.theirs) })),
   );
   if (received._tag === "Success") {
     const dirty = project.books.filter((book) => services.save.dirty(book));
     const recorded = await recordVersion(services, project, dirty, message, author);
-    const sending = sendAfterRecording(services, project, recorded, with_.sendTo);
+    const sending = sendAfterRecording(services, project, recorded, overrides.sendTo);
     if (sending === undefined) void syncWatch.refresh(services, project).catch(() => undefined);
     return { kind: "received", recorded, sending };
   }
@@ -251,7 +251,7 @@ export const settleWithShared = async (
       books: received.failure.books,
       description: received.failure.description,
     };
-  const sendTo = with_.sendTo ?? (await destination(services, project));
+  const sendTo = overrides.sendTo ?? (await destination(services, project));
   const combined = await services.run(
     Effect.result(
       combine({
@@ -260,7 +260,7 @@ export const settleWithShared = async (
         settled,
         sendTo,
         message,
-        ...optionalTheirs(with_.theirs),
+        ...optionalTheirs(overrides.theirs),
       }),
     ),
   );

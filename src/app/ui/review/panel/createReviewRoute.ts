@@ -6,16 +6,8 @@ import { copyRef, suggestionRef } from "../../../suggestions";
 import { syncWatch } from "../../../syncWatch";
 
 export function createReviewRoute(shell: Shell) {
-  // SAFETY: `strict: false` gives the union of every route's search; both fields are read as `unknown` and narrowed, never trusted.
-  const search = useSearch({ strict: false }) as () => {
-    readonly against?: unknown;
-    readonly pull?: unknown;
-    readonly copy?: unknown;
-  };
-  const pull = (): number | undefined => {
-    const held = untrack(() => search().pull);
-    return typeof held === "number" ? held : undefined;
-  };
+  const search = useSearch({ from: "/_app/project/$slug/review" });
+  const pull = (): number | undefined => untrack(() => search().pull);
   const fromCopy = (): boolean => search().copy === 1;
   const theirsRef = (): string | undefined => {
     const number = pull();

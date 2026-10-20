@@ -404,19 +404,21 @@ const makeGitea = (options: {
             body: JSON.stringify({ name, scopes: [...SESSION_TOKEN_SCOPES] }),
           });
 
-        const tokenName = `sefer-${options.platform}-${stamp()}`;
-        let response = yield* mint(tokenName);
-
-        if (response.status === 400) {
-          const body = yield* bodyOf(response);
-          if (!/used already/iu.test(body))
-            return yield* Effect.fail(failed("Refused", `400 ${body}`.trim()));
-          const removed = yield* request(`${tokensUrl}/${encodeURIComponent(tokenName)}`, {
-            method: "DELETE",
-            headers: { Authorization: basic, Accept: "application/json" },
+        const mintWithRecovery = (tokenName: string): Effect.Effect<HttpResponse, GiteaError> =>
+          Effect.gen(function* () {
+            const response = yield* mint(tokenName);
+            if (response.status !== 400) return response;
+            const body = yield* bodyOf(response);
+            if (!/used already/iu.test(body))
+              return yield* Effect.fail(failed("Refused", `400 ${body}`.trim()));
+            const removed = yield* request(`${tokensUrl}/${encodeURIComponent(tokenName)}`, {
+              method: "DELETE",
+              headers: { Authorization: basic, Accept: "application/json" },
+            });
+            return yield* mint(removed.ok ? tokenName : `${tokenName}-${suffix()}`);
           });
-          response = yield* mint(removed.ok ? tokenName : `${tokenName}-${suffix()}`);
-        }
+
+        const response = yield* mintWithRecovery(`sefer-${options.platform}-${stamp()}`);
 
         if (!response.ok) return yield* refuse(response);
         const decoded = decodeCreatedToken(yield* json(response));

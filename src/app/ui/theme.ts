@@ -40,12 +40,12 @@ const isTheme = (value: string): value is Theme => THEME_NAMES.has(value);
 const isDiffPalette = (value: string): value is DiffPalette => DIFF_PALETTE_NAMES.has(value);
 const isDiffRemoved = (value: string): value is DiffRemovedMark => DIFF_REMOVED_NAMES.has(value);
 
-export const asTheme = (value: string): Theme => (isTheme(value) ? value : "system");
+export const parseTheme = (value: string): Theme => (isTheme(value) ? value : "system");
 
-export const asDiffPalette = (value: string): DiffPalette =>
+export const parseDiffPalette = (value: string): DiffPalette =>
   isDiffPalette(value) ? value : "standard";
 
-export const asDiffRemoved = (value: string): DiffRemovedMark =>
+export const parseDiffRemoved = (value: string): DiffRemovedMark =>
   isDiffRemoved(value) ? value : "strike";
 
 const clamp = (value: number, low: number, high: number): number =>
@@ -106,11 +106,15 @@ const cachedAppearance = (): Appearance => {
     // SAFETY: the line above rules out null and every primitive, so what remains of a JSON.parse result is an object with string keys; each field below is still type-checked before it is used.
     const record = held as Record<string, unknown>;
     return {
-      theme: asTheme(typeof record.theme === "string" ? record.theme : ""),
+      theme: parseTheme(typeof record.theme === "string" ? record.theme : ""),
       fontSize: asFontSize(typeof record.fontSize === "number" ? record.fontSize : 16),
       zoom: asZoom(typeof record.zoom === "number" ? record.zoom : 100),
-      diffPalette: asDiffPalette(typeof record.diffPalette === "string" ? record.diffPalette : ""),
-      diffRemoved: asDiffRemoved(typeof record.diffRemoved === "string" ? record.diffRemoved : ""),
+      diffPalette: parseDiffPalette(
+        typeof record.diffPalette === "string" ? record.diffPalette : "",
+      ),
+      diffRemoved: parseDiffRemoved(
+        typeof record.diffRemoved === "string" ? record.diffRemoved : "",
+      ),
     };
   } catch {
     return DEFAULT_APPEARANCE;

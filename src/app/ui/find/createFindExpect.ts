@@ -14,11 +14,11 @@ export interface ExpectInputs {
   readonly scope: () => Scope;
   readonly results: FindResults;
   readonly sources: ReturnType<typeof createFindSources>;
-  readonly ask: (next: FindSearch) => void;
+  readonly updateSearch: (next: FindSearch) => void;
 }
 
 export function createFindExpect(inputs: ExpectInputs) {
-  const { shell, params, scope, ask } = inputs;
+  const { shell, params, scope, updateSearch } = inputs;
   const { referenceHits } = inputs.results;
   const { analyze } = inputs.sources;
 
@@ -45,7 +45,7 @@ export function createFindExpect(inputs: ExpectInputs) {
   const expectShown = (): boolean => expecting() || params().expect !== undefined;
   const toggleExpect = (on: boolean): void => {
     setExpecting(on);
-    if (!on) ask({ expect: undefined, show: undefined });
+    if (!on) updateSearch({ expect: undefined, show: undefined });
   };
 
   return { expectation, showing, expectShown, toggleExpect };

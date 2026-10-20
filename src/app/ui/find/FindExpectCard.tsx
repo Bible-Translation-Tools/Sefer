@@ -8,7 +8,7 @@ import type { Expected, FindSearch } from "./helpers";
 
 export interface FindExpectCardProps {
   readonly params: () => FindSearch;
-  readonly ask: (next: FindSearch) => void;
+  readonly updateSearch: (next: FindSearch) => void;
   readonly expect: FindExpect;
 }
 
@@ -21,10 +21,12 @@ export function FindExpectCard(props: FindExpectCardProps) {
           wrapperClass="w-64"
           placeholder={t("Expected in your text, e.g. Yesu")}
           value={props.params().expect ?? ""}
-          onChange={(event) => props.ask({ expect: event.currentTarget.value.trim() || undefined })}
+          onChange={(event) =>
+            props.updateSearch({ expect: event.currentTarget.value.trim() || undefined })
+          }
           onKeyDown={(event) => {
             if (event.key === "Enter")
-              props.ask({ expect: event.currentTarget.value.trim() || undefined });
+              props.updateSearch({ expect: event.currentTarget.value.trim() || undefined });
           }}
         />
         <Show
@@ -53,7 +55,7 @@ export function FindExpectCard(props: FindExpectCardProps) {
                   { value: "all", label: t("All") },
                 ]}
                 value={props.expect.showing()}
-                onChange={(show) => props.ask({ show })}
+                onChange={(show) => props.updateSearch({ show })}
               />
             </div>
           )}

@@ -36,7 +36,7 @@ function createReferencePreview(props: ReferenceCardProps) {
         .then((read) => {
           const text = Option.flatten(read);
           if (Option.isNone(text)) return;
-          const analysis = services.galley.analyze(text.value, "reference.preview");
+          const analysis = services.galley.analyzeText(text.value, "reference.preview");
           const verses = tocViewOf(analysis).verses;
           const first = verses[0];
           if (first === undefined) return;

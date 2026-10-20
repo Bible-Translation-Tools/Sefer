@@ -62,7 +62,7 @@ export const sourceReadings = (
           .pipe(Effect.orElseSucceed(() => Option.none<string>()));
         books.set(
           book,
-          Option.isSome(text) ? galley.analyze(text.value, "stet.source") : undefined,
+          Option.isSome(text) ? galley.analyzeText(text.value, "stet.source") : undefined,
         );
       }
       const analysis = books.get(book);
