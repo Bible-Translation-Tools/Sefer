@@ -192,7 +192,7 @@ export function LanguageTab(props: {
     <div
       data-current={props.active ? "" : undefined}
       data-tab-resource={props.resourceId}
-      class="-mb-px flex h-12 min-w-0 shrink items-center border-b-2 text-small font-semibold transition-colors data-current:border-brand data-current:text-brand not-data-current:border-transparent not-data-current:text-on-surface-primary not-data-current:hover:bg-surface-secondary"
+      class="-mb-px flex h-12 min-w-0 shrink items-center rounded-t-[12px] border-b-2 text-small font-semibold transition-colors data-current:border-brand data-current:text-brand not-data-current:border-transparent not-data-current:text-on-surface-primary not-data-current:hover:bg-surface-secondary"
     >
       <button
         type="button"
