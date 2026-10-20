@@ -1,7 +1,7 @@
 import { Effect, FileSystem, Option, Result } from "effect";
 
 import type { Galley } from "#core/galley";
-import { DEFAULT_BRANCH, Git, type Commit } from "#core/git/git";
+import { DEFAULT_BRANCH, Git, type Commit, type Repo } from "#core/git/git";
 import type { Project } from "#core/project/project";
 import { Gitea } from "#core/remote/gitea";
 import { Remote } from "#core/remote/remote";
@@ -57,31 +57,39 @@ const mergeInProgress = (fileSystem: FileSystem.FileSystem, root: string): Effec
 const orEmpty = <A, E>(effect: Effect.Effect<A, E>, fallback: A): Effect.Effect<A> =>
   Effect.orElseSucceed(effect, () => fallback);
 
-export const readSync = (
+const copyOwnedBy = (me: string | undefined, copyUrl: string | undefined): boolean => {
+  const copyOwner = copyUrl
+    ?.replace(/\.git$/u, "")
+    .split("/")
+    .at(-2);
+  return (
+    me !== undefined && copyOwner !== undefined && me.toLowerCase() === copyOwner.toLowerCase()
+  );
+};
+
+const incomingPlan = (
+  repo: Repo,
+  project: Project,
+  tracking: string,
+  localLog: readonly Commit[],
+  remoteLog: readonly Commit[],
+  behind: readonly Commit[],
+) =>
+  Effect.map(
+    surveyIncoming(repo, { tracking, base: mergeBase(localLog, remoteLog), behind, project }),
+    (survey) => survey.plan,
+  );
+
+const surveyRepo = (
   options: ReadSyncOptions,
+  repo: Repo,
+  base: SyncReading,
 ): Effect.Effect<SyncSurvey, never, Git | Remote | Gitea | FileSystem.FileSystem> =>
   Effect.gen(function* () {
     const git = yield* Git;
     const remote = yield* Remote;
     const gitea = yield* Gitea;
     const fileSystem = yield* FileSystem.FileSystem;
-
-    const base: SyncReading = {
-      ...emptyReading,
-      online: options.online,
-      lastFailure: options.lastFailure,
-      checking: options.checking,
-      sendRefused: options.sendRefused,
-      fetchedAt: options.fetchedAt,
-      signedIn:
-        options.host === null
-          ? false
-          : Option.isSome(yield* orEmpty(gitea.session(options.host), Option.none())),
-    };
-
-    const opened = yield* Effect.result(git.open(options.root));
-    if (Result.isFailure(opened)) return { reading: base, plan: undefined };
-    const repo = opened.success;
 
     const origin = Option.getOrUndefined(yield* orEmpty(remote.origin(repo), Option.none()));
     const branch = Option.getOrUndefined(yield* orEmpty(git.branch(repo), Option.none()));
@@ -100,12 +108,7 @@ export const readSync = (
         ? undefined
         : Option.getOrUndefined(yield* orEmpty(gitea.session(options.host), Option.none()))
             ?.username;
-    const copyOwner = copyUrl
-      ?.replace(/\.git$/u, "")
-      .split("/")
-      .at(-2);
-    const copyAttached =
-      me !== undefined && copyOwner !== undefined && me.toLowerCase() === copyOwner.toLowerCase();
+    const copyAttached = copyOwnedBy(me, copyUrl);
     const inCopyMode = (options.chosenMode ?? (copyAttached ? "copy" : "shared")) === "copy";
     const copied = copyRef(branch ?? DEFAULT_BRANCH);
     const copyKnown =
@@ -130,14 +133,32 @@ export const readSync = (
 
     if (behind.length === 0) return { reading, plan: undefined };
 
-    const plan = Effect.map(
-      surveyIncoming(repo, {
-        tracking,
-        base: mergeBase(localLog, remoteLog),
-        behind,
-        project: options.project,
-      }),
-      (survey) => survey.plan,
-    );
+    const plan = incomingPlan(repo, options.project, tracking, localLog, remoteLog, behind);
     return { reading, plan };
+  });
+
+export const readSync = (
+  options: ReadSyncOptions,
+): Effect.Effect<SyncSurvey, never, Git | Remote | Gitea | FileSystem.FileSystem> =>
+  Effect.gen(function* () {
+    const git = yield* Git;
+    const gitea = yield* Gitea;
+
+    const base: SyncReading = {
+      ...emptyReading,
+      online: options.online,
+      lastFailure: options.lastFailure,
+      checking: options.checking,
+      sendRefused: options.sendRefused,
+      fetchedAt: options.fetchedAt,
+      signedIn:
+        options.host === null
+          ? false
+          : Option.isSome(yield* orEmpty(gitea.session(options.host), Option.none())),
+    };
+
+    const opened = yield* Effect.result(git.open(options.root));
+    if (Result.isFailure(opened)) return { reading: base, plan: undefined };
+
+    return yield* surveyRepo(options, opened.success, base);
   });

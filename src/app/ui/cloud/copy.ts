@@ -27,6 +27,80 @@ export interface StateContext {
   readonly inCopy?: boolean;
 }
 
+type QuietState = "checking" | "detached" | "unpublished" | "attached-clean" | "ahead";
+
+const accessCopy = (state: "offline" | "unauthorized", context: StateContext): StateCopy => {
+  switch (state) {
+    case "offline":
+      return {
+        chip: t("Offline"),
+        headline: t("You're offline"),
+        detail:
+          context.sendRefused === true
+            ? t(
+                "Saved on this device. Not sent yet: you're offline. Sefer sends it the next time you save or open this project. Your work is safe here.",
+              )
+            : t("Your work is still saved here. You can send it once you're back online."),
+        tone: "muted",
+      };
+    case "unauthorized":
+      if (context.signedIn === true)
+        return {
+          chip: t("Can't send"),
+          headline: t("This account can't send to the shared project"),
+          detail: t(
+            "Saved on this device. Not sent: this account may not have permission to write to the shared project, or its sign-in has expired. Your work is safe here.",
+          ),
+          tone: "warning",
+        };
+      return {
+        chip: t("Sign in again"),
+        headline: t("Sign in to keep sharing"),
+        detail:
+          context.sendRefused === true
+            ? t(
+                "Saved on this device. Not sent: sign in to send your changes to the shared project. Your work is safe here.",
+              )
+            : t("Sending and receiving updates is paused until you sign in again."),
+        tone: "error",
+      };
+  }
+};
+
+const troubleCopy = (state: Exclude<SyncState, QuietState>, context: StateContext): StateCopy => {
+  switch (state) {
+    case "behind":
+      return {
+        chip: t("Updates to receive"),
+        headline: t("There are updates to receive"),
+        detail: t(
+          "The shared project has versions you do not have yet. You will see exactly what changes before anything is applied.",
+        ),
+        tone: "warning",
+      };
+    case "diverged":
+      return {
+        chip: t("Needs review"),
+        headline: t("Both sides have moved"),
+        detail: t(
+          "You and the shared project both recorded work. Nothing is merged automatically — your text stays exactly as it is until you choose.",
+        ),
+        tone: "warning",
+      };
+    case "conflicted":
+      return {
+        chip: t("Unfinished"),
+        headline: t("A transfer stopped part-way"),
+        detail: t(
+          "Your work is still here and still saved. Finish this before sending or receiving anything else.",
+        ),
+        tone: "error",
+      };
+    default:
+      return accessCopy(state, context);
+  }
+};
+
 export const stateCopy = (state: SyncState, context: StateContext = {}): StateCopy => {
   switch (state) {
     case "checking":
@@ -82,66 +156,8 @@ export const stateCopy = (state: SyncState, context: StateContext = {}): StateCo
         detail: t("Send it when you are ready. Nothing in the shared project is replaced."),
         tone: "warning",
       };
-    case "behind":
-      return {
-        chip: t("Updates to receive"),
-        headline: t("There are updates to receive"),
-        detail: t(
-          "The shared project has versions you do not have yet. You will see exactly what changes before anything is applied.",
-        ),
-        tone: "warning",
-      };
-    case "diverged":
-      return {
-        chip: t("Needs review"),
-        headline: t("Both sides have moved"),
-        detail: t(
-          "You and the shared project both recorded work. Nothing is merged automatically — your text stays exactly as it is until you choose.",
-        ),
-        tone: "warning",
-      };
-    case "conflicted":
-      return {
-        chip: t("Unfinished"),
-        headline: t("A transfer stopped part-way"),
-        detail: t(
-          "Your work is still here and still saved. Finish this before sending or receiving anything else.",
-        ),
-        tone: "error",
-      };
-    case "offline":
-      return {
-        chip: t("Offline"),
-        headline: t("You're offline"),
-        detail:
-          context.sendRefused === true
-            ? t(
-                "Saved on this device. Not sent yet: you're offline. Sefer sends it the next time you save or open this project. Your work is safe here.",
-              )
-            : t("Your work is still saved here. You can send it once you're back online."),
-        tone: "muted",
-      };
-    case "unauthorized":
-      if (context.signedIn === true)
-        return {
-          chip: t("Can't send"),
-          headline: t("This account can't send to the shared project"),
-          detail: t(
-            "Saved on this device. Not sent: this account may not have permission to write to the shared project, or its sign-in has expired. Your work is safe here.",
-          ),
-          tone: "warning",
-        };
-      return {
-        chip: t("Sign in again"),
-        headline: t("Sign in to keep sharing"),
-        detail:
-          context.sendRefused === true
-            ? t(
-                "Saved on this device. Not sent: sign in to send your changes to the shared project. Your work is safe here.",
-              )
-            : t("Sending and receiving updates is paused until you sign in again."),
-        tone: "error",
-      };
+    default:
+      return troubleCopy(state, context);
   }
 };
 
@@ -269,6 +285,62 @@ export const combineTrouble = (state: CombineState): string => {
   }
 };
 
+type SendCopy = ReturnType<typeof sendOutcomeCopy>;
+
+const refusedCopy = (
+  outcome: Extract<SendOutcome, { kind: "refused" }>,
+  state?: SyncState,
+): SendCopy => {
+  switch (outcome.reason) {
+    case "Rejected":
+      if (outcome.toCopy === true)
+        return {
+          tone: "warning",
+          title: t("Saved here. Not sent: your copy has changes this device does not"),
+          detail: t(
+            "They came from another device, or from changes you offered before. Compare with your copy and choose what to keep; then it sends as usual. Nothing is lost on either side.",
+          ),
+        };
+      if (outcome.description !== undefined)
+        return {
+          tone: "warning",
+          title: t("Saved here. Not sent to your copy"),
+          detail: t("Your work is safe on this device. What went wrong: {description}", {
+            description: outcome.description,
+          }),
+        };
+      return {
+        tone: "warning",
+        title: t("Saved here. Not sent: the shared project has changed"),
+        detail:
+          state === "behind" || state === "diverged"
+            ? t(
+                "It has versions you have not reviewed yet. Your work is safe on this device — compare the changes, choose, and record again to send.",
+              )
+            : t(
+                "The shared project would not take it as it is. Your work is safe on this device — check for changes and compare them.",
+              ),
+      };
+    case "Network":
+    case "Unavailable":
+      return {
+        tone: "warning",
+        title: t("Saved here. Not sent: the shared project could not be reached"),
+        detail: t(
+          "You may be offline. Your work is safe on this device, and Sefer sends it the next time you record a version or press Send.",
+        ),
+      };
+    case "Unauthorized":
+      return {
+        tone: "warning",
+        title: t("Saved here. Not sent: sign in to send"),
+        detail: t(
+          "Your sign-in has expired, or this account may not write to the shared project. Your work is safe on this device.",
+        ),
+      };
+  }
+};
+
 export const sendOutcomeCopy = (
   outcome: SendOutcome,
   state?: SyncState,
@@ -305,54 +377,7 @@ export const sendOutcomeCopy = (
         detail: t("This project does not send on save. Send it when you are ready."),
       };
     case "refused":
-      switch (outcome.reason) {
-        case "Rejected":
-          if (outcome.toCopy === true)
-            return {
-              tone: "warning",
-              title: t("Saved here. Not sent: your copy has changes this device does not"),
-              detail: t(
-                "They came from another device, or from changes you offered before. Compare with your copy and choose what to keep; then it sends as usual. Nothing is lost on either side.",
-              ),
-            };
-          if (outcome.description !== undefined)
-            return {
-              tone: "warning",
-              title: t("Saved here. Not sent to your copy"),
-              detail: t("Your work is safe on this device. What went wrong: {description}", {
-                description: outcome.description,
-              }),
-            };
-          return {
-            tone: "warning",
-            title: t("Saved here. Not sent: the shared project has changed"),
-            detail:
-              state === "behind" || state === "diverged"
-                ? t(
-                    "It has versions you have not reviewed yet. Your work is safe on this device — compare the changes, choose, and record again to send.",
-                  )
-                : t(
-                    "The shared project would not take it as it is. Your work is safe on this device — check for changes and compare them.",
-                  ),
-          };
-        case "Network":
-        case "Unavailable":
-          return {
-            tone: "warning",
-            title: t("Saved here. Not sent: the shared project could not be reached"),
-            detail: t(
-              "You may be offline. Your work is safe on this device, and Sefer sends it the next time you record a version or press Send.",
-            ),
-          };
-        case "Unauthorized":
-          return {
-            tone: "warning",
-            title: t("Saved here. Not sent: sign in to send"),
-            detail: t(
-              "Your sign-in has expired, or this account may not write to the shared project. Your work is safe on this device.",
-            ),
-          };
-      }
+      return refusedCopy(outcome, state);
   }
 };
 

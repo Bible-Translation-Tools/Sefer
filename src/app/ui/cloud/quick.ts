@@ -85,6 +85,24 @@ export interface QuickSync {
   readonly run: (action: QuickAction) => void;
 }
 
+const abortTransfer = (root: string) =>
+  Effect.gen(function* () {
+    const git = yield* Git;
+    const remote = yield* Remote;
+    return yield* remote.abortMerge(yield* git.open(root));
+  });
+
+const announceSend = (
+  outcome: Parameters<typeof sendOutcomeCopy>[0],
+  state: Sync["state"] | undefined,
+): void => {
+  const copy = sendOutcomeCopy(outcome, state);
+  const notice = { title: copy.title, message: copy.detail };
+  if (copy.tone === "success") toasts.success(notice);
+  else if (copy.tone === "warning") toasts.error({ ...notice, autoClose: false });
+  else toasts.info(notice);
+};
+
 export const createQuickSync = (shell: Shell, onSee?: () => void): QuickSync => {
   const navigate = useNavigate();
   const { services } = shell;
@@ -113,13 +131,7 @@ export const createQuickSync = (shell: Shell, onSee?: () => void): QuickSync => 
       case "resolve":
         setBusy("resolve");
         void services
-          .run(
-            Effect.gen(function* () {
-              const git = yield* Git;
-              const remote = yield* Remote;
-              return yield* remote.abortMerge(yield* git.open(project.root));
-            }),
-          )
+          .run(abortTransfer(project.root))
           .catch((cause: unknown) =>
             toasts.error({ title: t("Could not finish the transfer"), message: describe(cause) }),
           )
@@ -135,13 +147,7 @@ export const createQuickSync = (shell: Shell, onSee?: () => void): QuickSync => 
       case "send":
         setBusy("send");
         void sendNow(services, project)
-          .then((outcome) => {
-            const copy = sendOutcomeCopy(outcome, syncWatch.sync(project.root)?.state);
-            const notice = { title: copy.title, message: copy.detail };
-            if (copy.tone === "success") toasts.success(notice);
-            else if (copy.tone === "warning") toasts.error({ ...notice, autoClose: false });
-            else toasts.info(notice);
-          })
+          .then((outcome) => announceSend(outcome, syncWatch.sync(project.root)?.state))
           .finally(() => setBusy(""));
         return;
     }

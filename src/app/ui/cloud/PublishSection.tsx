@@ -9,7 +9,7 @@ import { Remote } from "#core/remote/remote";
 import { collaboration } from "../../collaboration";
 import { describe } from "../../describe";
 import { t } from "../../i18n";
-import { useShell } from "../../ProjectContext";
+import { useShell, type Shell } from "../../ProjectContext";
 import { syncWatch } from "../../syncWatch";
 import { Button, Input, toasts } from "../primitives";
 import { metadataOf } from "../workspace/project";
@@ -24,6 +24,56 @@ const suggestedName = (project: Project): string => {
     named = `${language}_${resource}`;
   return named.toLowerCase().replace(/[^a-z0-9._-]+/gu, "-");
 };
+
+const publishProject = (
+  services: Shell["services"],
+  project: Project,
+  staticName: string,
+  settled: () => void,
+): void => {
+  void services
+    .run(
+      Effect.gen(function* () {
+        const git = yield* Git;
+        const remote = yield* Remote;
+        yield* remote.publish(yield* git.init(project.root), staticName);
+      }),
+    )
+    .then(() => toasts.success({ title: t("Published as {name}", { name: staticName }) }))
+    .catch((cause: unknown) =>
+      toasts.error({ title: t("Could not publish"), message: describe(cause) }),
+    )
+    .finally(() => {
+      settled();
+      void syncWatch.refresh(services, project).catch(() => undefined);
+      void collaboration.refresh(services, project);
+    });
+};
+
+const NameRow = (props: {
+  readonly name: string;
+  readonly busy: boolean;
+  readonly onName: (value: string) => void;
+}) => (
+  <div class="flex items-center gap-2">
+    <Input
+      size="sm"
+      wrapperClass="min-w-0 flex-1"
+      aria-label={t("Name of the shared project")}
+      value={props.name}
+      onInput={(event) => props.onName(event.currentTarget.value)}
+    />
+    <Button
+      size="sm"
+      type="submit"
+      variant="primary"
+      loading={props.busy}
+      disabled={props.name.trim() === ""}
+    >
+      {t("Publish")}
+    </Button>
+  </div>
+);
 
 export function PublishSection(props: {
   readonly signedIn: boolean;
@@ -44,23 +94,7 @@ export function PublishSection(props: {
     const staticName = name().trim();
     if (project === undefined || staticName === "" || busy()) return;
     setBusy(true);
-    void services
-      .run(
-        Effect.gen(function* () {
-          const git = yield* Git;
-          const remote = yield* Remote;
-          yield* remote.publish(yield* git.init(project.root), staticName);
-        }),
-      )
-      .then(() => toasts.success({ title: t("Published as {name}", { name: staticName }) }))
-      .catch((cause: unknown) =>
-        toasts.error({ title: t("Could not publish"), message: describe(cause) }),
-      )
-      .finally(() => {
-        setBusy(false);
-        void syncWatch.refresh(services, project).catch(() => undefined);
-        void collaboration.refresh(services, project);
-      });
+    publishProject(services, project, staticName, () => setBusy(false));
   };
 
   return (
@@ -73,24 +107,7 @@ export function PublishSection(props: {
         <p class="text-small text-on-surface-secondary">
           {t("Publish it to work on it with others, or to keep a copy safe online.")}
         </p>
-        <div class="flex items-center gap-2">
-          <Input
-            size="sm"
-            wrapperClass="min-w-0 flex-1"
-            aria-label={t("Name of the shared project")}
-            value={name()}
-            onInput={(event) => setName(event.currentTarget.value)}
-          />
-          <Button
-            size="sm"
-            type="submit"
-            variant="primary"
-            loading={busy()}
-            disabled={name().trim() === ""}
-          >
-            {t("Publish")}
-          </Button>
-        </div>
+        <NameRow name={name()} busy={busy()} onName={setName} />
         <button
           type="button"
           class="text-smallest text-brand underline"

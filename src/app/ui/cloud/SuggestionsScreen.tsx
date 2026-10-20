@@ -12,6 +12,25 @@ import { claimSidebar } from "../workspace/sidebarSlot";
 import { SuggestionsCard } from "./SuggestionsCard";
 import { YourSuggestions } from "./YourSuggestions";
 
+const CheckAction = (props: {
+  readonly checkedAt: number | undefined;
+  readonly checking: boolean;
+  readonly onCheck: () => void;
+}) => (
+  <span class="inline-flex items-center gap-0.5 text-smallest text-on-surface-tertiary">
+    <Show when={props.checkedAt}>
+      {(at) => <span>{t("checked {when}", { when: ago(at()) })}</span>}
+    </Show>
+    <IconButton
+      size="sm"
+      label={t("Check for suggestions")}
+      disabled={props.checking}
+      icon={<RefreshCw class={cx(props.checking && "animate-spin")} />}
+      onClick={props.onCheck}
+    />
+  </span>
+);
+
 export function SuggestionsScreen() {
   const shell = useShell();
   const facts = () => collaboration.facts(shell.project()?.root);
@@ -48,18 +67,7 @@ export function SuggestionsScreen() {
         title={t("Suggestions")}
         subtitle={t("The shared project only changes when an editor accepts.")}
         actions={
-          <span class="inline-flex items-center gap-0.5 text-smallest text-on-surface-tertiary">
-            <Show when={facts()?.checkedAt}>
-              {(at) => <span>{t("checked {when}", { when: ago(at()) })}</span>}
-            </Show>
-            <IconButton
-              size="sm"
-              label={t("Check for suggestions")}
-              disabled={checking()}
-              icon={<RefreshCw class={cx(checking() && "animate-spin")} />}
-              onClick={check}
-            />
-          </span>
+          <CheckAction checkedAt={facts()?.checkedAt} checking={checking()} onCheck={check} />
         }
       />
 

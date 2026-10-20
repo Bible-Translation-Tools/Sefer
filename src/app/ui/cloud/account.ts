@@ -14,6 +14,25 @@ const reask = (shell: Shell): void => {
   if (project !== undefined) void collaboration.refresh(shell.services, project);
 };
 
+type Services = Shell["services"];
+
+const restoreSession = (
+  services: Services,
+  host: string | null,
+  setSession: (held: Session | undefined) => void,
+): void => {
+  createEffect(
+    () => host,
+    (base) => {
+      if (base === null) return;
+      void services
+        .run(Effect.flatMap(Gitea, (gitea) => gitea.session(base)))
+        .then((held) => setSession(Option.getOrUndefined(held)))
+        .catch(() => undefined);
+    },
+  );
+};
+
 export interface Account {
   readonly host: string | null;
   readonly session: Accessor<Session | undefined>;
@@ -28,6 +47,22 @@ export interface Account {
   readonly signOut: () => void;
   readonly attempt: (work: () => Promise<void>) => void;
 }
+
+const login = (
+  services: Services,
+  base: string,
+  fields: Parameters<Account["signIn"]>[0],
+): Promise<Session> =>
+  services.run(
+    Effect.flatMap(Gitea, (gitea) =>
+      gitea.login({
+        host: base,
+        username: fields.username,
+        password: fields.password,
+        otp: fields.otp === "" ? undefined : fields.otp,
+      }),
+    ),
+  );
 
 export const createAccount = (shell: Shell): Account => {
   const { services } = shell;
@@ -50,16 +85,7 @@ export const createAccount = (shell: Shell): Account => {
       .finally(() => setBusy(false));
   };
 
-  createEffect(
-    () => host,
-    (base) => {
-      if (base === null) return;
-      void services
-        .run(Effect.flatMap(Gitea, (gitea) => gitea.session(base)))
-        .then((held) => setSession(Option.getOrUndefined(held)))
-        .catch(() => undefined);
-    },
-  );
+  restoreSession(services, host, setSession);
 
   return {
     host,
@@ -72,16 +98,7 @@ export const createAccount = (shell: Shell): Account => {
       const base = host;
       if (base === null) return;
       attempt(async () => {
-        const held = await services.run(
-          Effect.flatMap(Gitea, (gitea) =>
-            gitea.login({
-              host: base,
-              username: fields.username,
-              password: fields.password,
-              otp: fields.otp === "" ? undefined : fields.otp,
-            }),
-          ),
-        );
+        const held = await login(services, base, fields);
         setSession(held);
         setOtpWanted(false);
         reask(shell);

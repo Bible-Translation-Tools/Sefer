@@ -11,7 +11,7 @@ import { syncWatch } from "../../syncWatch";
 import { writerWatch } from "../../writerWatch";
 import { ago } from "../panels/format";
 import { Button, IconButton, cx } from "../primitives";
-import { attentionOf, createQuickSync, quickActionOf, quickLabel } from "./quick";
+import { attentionOf, createQuickSync, quickActionOf, type QuickSync, quickLabel } from "./quick";
 
 export interface ComparisonCount {
   readonly changes: number;
@@ -87,6 +87,74 @@ const Zone = (props: {
   </span>
 );
 
+const moveOf = (held: Sync, seeing: boolean) => {
+  const action = quickActionOf(held);
+  if (action === "check") return undefined;
+  if (action === "see" && seeing) return undefined;
+  return action;
+};
+
+const SharedZone = (props: {
+  readonly held: Sync;
+  readonly plan: IncomingPlan | undefined;
+  readonly checkedAt: number | undefined;
+  readonly quick: QuickSync;
+  readonly seeing: boolean;
+}) => (
+  <Zone
+    label={t("Shared project")}
+    icon={<CloudIcon size={14} aria-hidden="true" />}
+    attention={attentionOf(props.held) === "alert"}
+    data="shared"
+  >
+    <span data-sync-line={props.held.state}>{sharedWords(props.held, props.plan)}</span>
+    <span class="inline-flex items-center gap-0.5 text-on-surface-tertiary">
+      <Show when={props.checkedAt}>
+        {(at) => <span>{t("checked {when}", { when: ago(at()) })}</span>}
+      </Show>
+      <IconButton
+        size="sm"
+        label={t("Check for changes")}
+        disabled={props.quick.busy() !== ""}
+        icon={<RefreshCw class={cx(props.quick.busy() === "check" && "animate-spin")} />}
+        onClick={() => props.quick.run("check")}
+      />
+    </span>
+    <Show when={moveOf(props.held, props.seeing)}>
+      {(action) => (
+        <Button
+          size="sm"
+          variant="link"
+          loading={props.quick.busy() !== "" && props.quick.busy() !== "check"}
+          data-sync-line-action={action()}
+          onClick={() => props.quick.run(action())}
+        >
+          {quickLabel(action())}
+        </Button>
+      )}
+    </Show>
+  </Zone>
+);
+
+const WriterZone = (props: {
+  readonly count: number;
+  readonly seeing: boolean;
+  readonly onSee: () => void;
+}) => (
+  <Zone label={t("Writer")} attention={!props.seeing} data="writer">
+    <span>
+      {t("new work in {books}", {
+        books: plural(props.count, "{count} book", "{count} books"),
+      })}
+    </span>
+    <Show when={!props.seeing}>
+      <Button size="sm" variant="link" onClick={props.onSee}>
+        {t("See it")}
+      </Button>
+    </Show>
+  </Zone>
+);
+
 export function SyncLine(props: {
   readonly comparison: ComparisonCount | undefined;
   readonly onSee: () => void;
@@ -106,12 +174,6 @@ export function SyncLine(props: {
     return at === undefined ? undefined : syncWatch.fetchedAt(at);
   };
   const writer = () => writerWatch.facts(root());
-  const move = (held: Sync) => {
-    const action = quickActionOf(held);
-    if (action === "check") return undefined;
-    if (action === "see" && props.seeing) return undefined;
-    return action;
-  };
 
   return (
     <div
@@ -128,57 +190,22 @@ export function SyncLine(props: {
 
       <Show when={sync()}>
         {(held) => (
-          <Zone
-            label={t("Shared project")}
-            icon={<CloudIcon size={14} aria-hidden="true" />}
-            attention={attentionOf(held()) === "alert"}
-            data="shared"
-          >
-            <span data-sync-line={held().state}>
-              {sharedWords(held(), syncWatch.facts(root())?.plan)}
-            </span>
-            <span class="inline-flex items-center gap-0.5 text-on-surface-tertiary">
-              <Show when={checkedAt()}>
-                {(at) => <span>{t("checked {when}", { when: ago(at()) })}</span>}
-              </Show>
-              <IconButton
-                size="sm"
-                label={t("Check for changes")}
-                disabled={quick.busy() !== ""}
-                icon={<RefreshCw class={cx(quick.busy() === "check" && "animate-spin")} />}
-                onClick={() => quick.run("check")}
-              />
-            </span>
-            <Show when={move(held())}>
-              {(action) => (
-                <Button
-                  size="sm"
-                  variant="link"
-                  loading={quick.busy() !== "" && quick.busy() !== "check"}
-                  data-sync-line-action={action()}
-                  onClick={() => quick.run(action())}
-                >
-                  {quickLabel(action())}
-                </Button>
-              )}
-            </Show>
-          </Zone>
+          <SharedZone
+            held={held()}
+            plan={syncWatch.facts(root())?.plan}
+            checkedAt={checkedAt()}
+            quick={quick}
+            seeing={props.seeing}
+          />
         )}
       </Show>
 
       <Show when={writer().work.length > 0}>
-        <Zone label={t("Writer")} attention={!props.seeingWriter} data="writer">
-          <span>
-            {t("new work in {books}", {
-              books: plural(writer().work.length, "{count} book", "{count} books"),
-            })}
-          </span>
-          <Show when={!props.seeingWriter}>
-            <Button size="sm" variant="link" onClick={() => props.onSeeWriter()}>
-              {t("See it")}
-            </Button>
-          </Show>
-        </Zone>
+        <WriterZone
+          count={writer().work.length}
+          seeing={props.seeingWriter}
+          onSee={() => props.onSeeWriter()}
+        />
       </Show>
     </div>
   );

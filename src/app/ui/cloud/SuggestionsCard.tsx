@@ -18,25 +18,80 @@ import { ago } from "../panels/format";
 import { Button, Input, toasts } from "../primitives";
 import { QuietSection } from "./QuietSection";
 
-export function SuggestionsCard(props: {
+const SuggestionRow = (props: {
+  readonly suggestion: Suggestion;
+  readonly busy: boolean;
+  readonly declining: boolean;
+  readonly note: string;
+  readonly onReview: () => void;
+  readonly onStartDecline: () => void;
+  readonly onNote: (value: string) => void;
+  readonly onDecline: () => void;
+  readonly onCancel: () => void;
+}) => (
+  <li class="space-y-2 py-1.5" data-suggestion={props.suggestion.number}>
+    <div class="flex items-center justify-between gap-3">
+      <span class="min-w-0">
+        <span class="block truncate text-small font-medium text-on-surface-primary">
+          {props.suggestion.title}
+        </span>
+        <span class="block text-smallest text-on-surface-tertiary">
+          {props.suggestion.author} · {ago(Date.parse(props.suggestion.updatedAt))}
+        </span>
+      </span>
+      <span class="flex shrink-0 gap-1">
+        <Button size="sm" disabled={props.busy} onClick={props.onReview}>
+          {t("Review")}
+        </Button>
+        <Show when={!props.declining}>
+          <Button size="sm" variant="tertiary" disabled={props.busy} onClick={props.onStartDecline}>
+            {t("Decline")}
+          </Button>
+        </Show>
+      </span>
+    </div>
+    <Show when={props.declining}>
+      <form
+        class="flex flex-wrap items-center gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          props.onDecline();
+        }}
+      >
+        <Input
+          size="sm"
+          wrapperClass="min-w-0 flex-1"
+          placeholder={t("Why? {author} will read this.", {
+            author: props.suggestion.author,
+          })}
+          value={props.note}
+          onInput={(event) => props.onNote(event.currentTarget.value)}
+        />
+        <Button size="sm" type="submit" disabled={props.busy}>
+          {t("Decline")}
+        </Button>
+        <Button size="sm" variant="tertiary" onClick={props.onCancel}>
+          {t("Not now")}
+        </Button>
+      </form>
+    </Show>
+  </li>
+);
+
+type CardProps = {
   readonly project: Project;
   readonly signedIn: boolean;
   readonly asked?: number;
-}) {
-  const shell = useShell();
-  const navigate = useNavigate();
-  const { services } = shell;
+};
+
+const createWaitingList = (props: CardProps) => {
+  const { services } = useShell();
   const [writer, setWriter] = createSignal<boolean | undefined>(undefined, {
     name: "suggestionsWriter",
   });
   const [waiting, setWaiting] = createSignal<readonly Suggestion[]>([], {
     name: "suggestionsWaiting",
   });
-  const [declining, setDeclining] = createSignal<number | undefined>(undefined, {
-    name: "suggestionsDeclining",
-  });
-  const [busy, setBusy] = createSignal(false, { name: "suggestionsBusy" });
-  const [note, setNote] = createSignal("", { name: "suggestionsDeclineNote" });
 
   let asked = 0;
   const load = async (project: Project, signedIn: boolean): Promise<void> => {
@@ -53,6 +108,17 @@ export function SuggestionsCard(props: {
       void load(project, signedIn);
     },
   );
+  return { writer, waiting, load };
+};
+
+const createSuggestionActions = (
+  props: CardProps,
+  load: (project: Project, signedIn: boolean) => Promise<void>,
+) => {
+  const shell = useShell();
+  const navigate = useNavigate();
+  const { services } = shell;
+  const [busy, setBusy] = createSignal(false, { name: "suggestionsBusy" });
 
   const act = (work: Promise<unknown>, done: string, project: Project, signedIn: boolean): void => {
     setBusy(true);
@@ -83,6 +149,17 @@ export function SuggestionsCard(props: {
       )
       .finally(() => setBusy(false));
   };
+  return { busy, act, review };
+};
+
+export function SuggestionsCard(props: CardProps) {
+  const { services } = useShell();
+  const { writer, waiting, load } = createWaitingList(props);
+  const { busy, act, review } = createSuggestionActions(props, load);
+  const [declining, setDeclining] = createSignal<number | undefined>(undefined, {
+    name: "suggestionsDeclining",
+  });
+  const [note, setNote] = createSignal("", { name: "suggestionsDeclineNote" });
 
   return (
     <Show when={props.signedIn && writer() === true}>
@@ -101,67 +178,28 @@ export function SuggestionsCard(props: {
           <ul class="space-y-1">
             <For each={waiting()}>
               {(suggestion) => (
-                <li class="space-y-2 py-1.5" data-suggestion={suggestion.number}>
-                  <div class="flex items-center justify-between gap-3">
-                    <span class="min-w-0">
-                      <span class="block truncate text-small font-medium text-on-surface-primary">
-                        {suggestion.title}
-                      </span>
-                      <span class="block text-smallest text-on-surface-tertiary">
-                        {suggestion.author} · {ago(Date.parse(suggestion.updatedAt))}
-                      </span>
-                    </span>
-                    <span class="flex shrink-0 gap-1">
-                      <Button size="sm" disabled={busy()} onClick={() => review(suggestion)}>
-                        {t("Review")}
-                      </Button>
-                      <Show when={declining() !== suggestion.number}>
-                        <Button
-                          size="sm"
-                          variant="tertiary"
-                          disabled={busy()}
-                          onClick={() => {
-                            setNote("");
-                            setDeclining(suggestion.number);
-                          }}
-                        >
-                          {t("Decline")}
-                        </Button>
-                      </Show>
-                    </span>
-                  </div>
-                  <Show when={declining() === suggestion.number}>
-                    <form
-                      class="flex flex-wrap items-center gap-2"
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        setDeclining(undefined);
-                        act(
-                          declineSuggestion(services, props.project, suggestion, note()),
-                          t("Declined"),
-                          props.project,
-                          props.signedIn,
-                        );
-                      }}
-                    >
-                      <Input
-                        size="sm"
-                        wrapperClass="min-w-0 flex-1"
-                        placeholder={t("Why? {author} will read this.", {
-                          author: suggestion.author,
-                        })}
-                        value={note()}
-                        onInput={(event) => setNote(event.currentTarget.value)}
-                      />
-                      <Button size="sm" type="submit" disabled={busy()}>
-                        {t("Decline")}
-                      </Button>
-                      <Button size="sm" variant="tertiary" onClick={() => setDeclining(undefined)}>
-                        {t("Not now")}
-                      </Button>
-                    </form>
-                  </Show>
-                </li>
+                <SuggestionRow
+                  suggestion={suggestion}
+                  busy={busy()}
+                  declining={declining() === suggestion.number}
+                  note={note()}
+                  onReview={() => review(suggestion)}
+                  onStartDecline={() => {
+                    setNote("");
+                    setDeclining(suggestion.number);
+                  }}
+                  onNote={setNote}
+                  onDecline={() => {
+                    setDeclining(undefined);
+                    act(
+                      declineSuggestion(services, props.project, suggestion, note()),
+                      t("Declined"),
+                      props.project,
+                      props.signedIn,
+                    );
+                  }}
+                  onCancel={() => setDeclining(undefined)}
+                />
               )}
             </For>
           </ul>

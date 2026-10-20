@@ -6,7 +6,7 @@ import { announceSourceTexts, cloneArrival } from "#app/arrival";
 import { describe } from "#app/describe";
 import { contentHostFor } from "#app/endpoints";
 import { t } from "#app/i18n";
-import { useShell } from "#app/ProjectContext";
+import { useShell, type Shell } from "#app/ProjectContext";
 import { projectsFrom, standingOf } from "#app/shareLinks";
 import { placeOf, sourceUrl, type Source, type VersionStanding } from "#core/project/shareLink";
 import { Remote } from "#core/remote/remote";
@@ -66,12 +66,90 @@ const standingCopy = (
   }
 };
 
-export function OpenByLink(props: {
+interface LinkContext {
+  readonly shell: Shell;
+  readonly navigate: ReturnType<typeof useNavigate>;
+  readonly isAlive: () => boolean;
+  readonly setPhase: (phase: Phase) => void;
+}
+
+const openAt = async (context: LinkContext, root: string, at: Place): Promise<void> => {
+  const { shell } = context;
+  if (!context.isAlive()) return;
+  const kept = new URLSearchParams(at.query);
+  const version = kept.get("at") ?? undefined;
+  kept.delete("at");
+  kept.delete("host");
+  const tail = kept.size === 0 ? "" : `?${kept.toString()}`;
+  void context.navigate({
+    href: `/project/${shell.slugFor(root)}${at.rest}${tail}`,
+    replace: true,
+  });
+  if (version === undefined) return;
+  const standing = await shell.services.run(standingOf(root, version));
+  if (standing !== "same") toasts.info({ ...standingCopy(standing, version), autoClose: false });
+};
+
+const lookFor = (context: LinkContext, named: Source, target: Place, project: string): void => {
+  const { shell, setPhase } = context;
+  const recent = Object.fromEntries(untrack(shell.recentProjects).map((row) => [row.root, row.at]));
+  void shell.services.run(projectsFrom(shell.services, named, recent)).then(async (roots) => {
+    if (!context.isAlive()) return;
+    const [root] = roots;
+    if (root !== undefined) return openAt(context, root, target);
+    const probed = await shell.services.run(
+      Effect.result(
+        Effect.gen(function* () {
+          const remote = yield* Remote;
+          return yield* remote.probe(sourceUrl(named));
+        }),
+      ),
+    );
+    if (!context.isAlive()) return;
+    setPhase(
+      Result.isSuccess(probed) && !probed.success.empty
+        ? { kind: "offer" }
+        : {
+            kind: "unknown",
+            why: t("{host} has no project {project} that this device can see.", {
+              host: named.host,
+              project,
+            }),
+          },
+    );
+  });
+};
+
+const downloadFrom = (context: LinkContext, named: Source, target: Place): void => {
+  const { shell, setPhase } = context;
+  setPhase({ kind: "downloading" });
+  void shell.services
+    .run(
+      Effect.result(
+        cloneArrival(shell.services, "project", sourceUrl(named), { freeFolder: true }),
+      ),
+    )
+    .then(async (arrived) => {
+      if (Result.isSuccess(arrived)) {
+        await announceSourceTexts(shell.services, arrived.success.root, named.base);
+        return openAt(context, arrived.success.root, target);
+      }
+      toasts.error({
+        title: t("Could not download the project"),
+        message: describe(arrived.failure),
+      });
+      if (context.isAlive()) setPhase({ kind: "offer" });
+    });
+};
+
+type LinkProps = {
   readonly owner: string;
   readonly repo: string;
   readonly rest: string;
   readonly searchStr: string;
-}) {
+};
+
+const createLinkOpening = (props: LinkProps) => {
   const shell = useShell();
   const navigate = useNavigate();
   const [phase, setPhase] = createSignal<Phase>({ kind: "looking" });
@@ -79,6 +157,7 @@ export function OpenByLink(props: {
   onCleanup(() => {
     alive = false;
   });
+  const context: LinkContext = { shell, navigate, isAlive: () => alive, setPhase };
 
   const query = (): URLSearchParams => new URLSearchParams(props.searchStr);
 
@@ -92,19 +171,6 @@ export function OpenByLink(props: {
 
   const place = (): Place => ({ rest: props.rest, query: query() });
 
-  const openAt = async (root: string, at: Place): Promise<void> => {
-    if (!alive) return;
-    const kept = new URLSearchParams(at.query);
-    const version = kept.get("at") ?? undefined;
-    kept.delete("at");
-    kept.delete("host");
-    const tail = kept.size === 0 ? "" : `?${kept.toString()}`;
-    void navigate({ href: `/project/${shell.slugFor(root)}${at.rest}${tail}`, replace: true });
-    if (version === undefined) return;
-    const standing = await shell.services.run(standingOf(root, version));
-    if (standing !== "same") toasts.info({ ...standingCopy(standing, version), autoClose: false });
-  };
-
   createEffect(
     () => `${props.owner}/${props.repo}`,
     (project) => {
@@ -117,70 +183,60 @@ export function OpenByLink(props: {
         return;
       }
       setPhase({ kind: "looking" });
-      const target = untrack(place);
-      const recent = Object.fromEntries(
-        untrack(shell.recentProjects).map((row) => [row.root, row.at]),
-      );
-      void shell.services.run(projectsFrom(shell.services, named, recent)).then(async (roots) => {
-        if (!alive) return;
-        const [root] = roots;
-        if (root !== undefined) return openAt(root, target);
-        const probed = await shell.services.run(
-          Effect.result(
-            Effect.gen(function* () {
-              const remote = yield* Remote;
-              return yield* remote.probe(sourceUrl(named));
-            }),
-          ),
-        );
-        if (!alive) return;
-        setPhase(
-          Result.isSuccess(probed) && !probed.success.empty
-            ? { kind: "offer" }
-            : {
-                kind: "unknown",
-                why: t("{host} has no project {project} that this device can see.", {
-                  host: named.host,
-                  project,
-                }),
-              },
-        );
-      });
+      lookFor(context, named, untrack(place), project);
     },
   );
 
-  const download = (): void => {
-    const named = source();
-    if (named === undefined) return;
-    const target = place();
-    setPhase({ kind: "downloading" });
-    void shell.services
-      .run(
-        Effect.result(
-          cloneArrival(shell.services, "project", sourceUrl(named), { freeFolder: true }),
-        ),
-      )
-      .then(async (arrived) => {
-        if (Result.isSuccess(arrived)) {
-          await announceSourceTexts(shell.services, arrived.success.root, named.base);
-          return openAt(arrived.success.root, target);
-        }
-        toasts.error({
-          title: t("Could not download the project"),
-          message: describe(arrived.failure),
-        });
-        if (alive) setPhase({ kind: "offer" });
-      });
+  return {
+    phase,
+    download: (): void => {
+      const named = source();
+      if (named === undefined) return;
+      downloadFrom(context, named, place());
+    },
+    why: (): string => {
+      const held = phase();
+      return held.kind === "unknown" ? held.why : "";
+    },
+    toProjects: (): void => {
+      void navigate({ to: "/projects", replace: true });
+    },
   };
+};
 
-  const why = (): string => {
-    const held = phase();
-    return held.kind === "unknown" ? held.why : "";
-  };
+const OfferState = (props: {
+  readonly owner: string;
+  readonly repo: string;
+  readonly downloading: boolean;
+  readonly onDownload: () => void;
+  readonly onProjects: () => void;
+}) => (
+  <EmptyState
+    title={t("{owner}/{repo} is not on this device yet", {
+      owner: props.owner,
+      repo: props.repo,
+    })}
+    description={t("Download it to open the link. It is added to your projects.")}
+    action={
+      <div class="flex gap-2">
+        <Button
+          data-tour="open-by-link-download"
+          onClick={props.onDownload}
+          disabled={props.downloading}
+        >
+          {props.downloading ? t("Downloading…") : t("Download")}
+        </Button>
+        <Button variant="secondary" onClick={props.onProjects}>
+          {t("Go to projects")}
+        </Button>
+      </div>
+    }
+  />
+);
 
-  const toProjects = (): void => {
-    void navigate({ to: "/projects", replace: true });
-  };
+export function OpenByLink(props: LinkProps) {
+  const opening = createLinkOpening(props);
+  const { phase } = opening;
 
   return (
     <main class="flex h-full items-center justify-center p-6" data-testid="open-by-link">
@@ -189,34 +245,20 @@ export function OpenByLink(props: {
           <DelayedSpinner />
         </Match>
         <Match when={phase().kind === "offer" || phase().kind === "downloading"}>
-          <EmptyState
-            title={t("{owner}/{repo} is not on this device yet", {
-              owner: props.owner,
-              repo: props.repo,
-            })}
-            description={t("Download it to open the link. It is added to your projects.")}
-            action={
-              <div class="flex gap-2">
-                <Button
-                  data-tour="open-by-link-download"
-                  onClick={download}
-                  disabled={phase().kind === "downloading"}
-                >
-                  {phase().kind === "downloading" ? t("Downloading…") : t("Download")}
-                </Button>
-                <Button variant="secondary" onClick={toProjects}>
-                  {t("Go to projects")}
-                </Button>
-              </div>
-            }
+          <OfferState
+            owner={props.owner}
+            repo={props.repo}
+            downloading={phase().kind === "downloading"}
+            onDownload={opening.download}
+            onProjects={opening.toProjects}
           />
         </Match>
         <Match when={phase().kind === "unknown"}>
           <EmptyState
             title={t("This link cannot be opened here")}
-            description={why()}
+            description={opening.why()}
             action={
-              <Button variant="secondary" onClick={toProjects}>
+              <Button variant="secondary" onClick={opening.toProjects}>
                 {t("Go to projects")}
               </Button>
             }

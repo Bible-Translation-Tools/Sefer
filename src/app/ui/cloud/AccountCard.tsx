@@ -4,6 +4,17 @@ import { t } from "../../i18n";
 import { Button, Card, Input, PanelHeader } from "../primitives";
 import type { Account } from "./account";
 
+const ProblemNote = (props: { readonly text: string }) => (
+  <Show when={props.text !== ""}>
+    <p
+      class="rounded-md bg-surface-error px-3 py-2 text-small break-words text-on-surface-error"
+      data-cloud="problem"
+    >
+      {props.text}
+    </p>
+  </Show>
+);
+
 export function SignInForm(props: { readonly account: Account; readonly host: string }) {
   const [username, setUsername] = createSignal("", { name: "cloudUser" });
   const [password, setPassword] = createSignal("", { name: "cloudPassword" });
@@ -56,14 +67,7 @@ export function SignInForm(props: { readonly account: Account; readonly host: st
           {t("Sign in")}
         </Button>
       </div>
-      <Show when={props.account.problem() !== ""}>
-        <p
-          class="rounded-md bg-surface-error px-3 py-2 text-small break-words text-on-surface-error"
-          data-cloud="problem"
-        >
-          {props.account.problem()}
-        </p>
-      </Show>
+      <ProblemNote text={props.account.problem()} />
     </form>
   );
 }
