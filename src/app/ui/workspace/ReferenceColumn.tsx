@@ -165,7 +165,9 @@ export function LanguageTab(props: {
   /** The text it shows, for the add list's flight to it. */
   readonly resourceId?: string;
 }) {
-  const closable = (): boolean => props.active && props.onClose !== undefined;
+  // The × is always laid out on a removable tab and only SHOWN on the active
+  // one, so choosing a tab never changes any tab's width.
+  const closable = (): boolean => props.onClose !== undefined;
   // The label is two layers in one grid cell: an invisible copy of the full
   // name, which gives the tab its natural width and shrinks when the strip is
   // short of room, and the visible text over it. The name shows while the copy
@@ -227,8 +229,13 @@ export function LanguageTab(props: {
           type="button"
           data-testid={props.testId === undefined ? undefined : `${props.testId}-close`}
           aria-label={t("Remove {name} from the tabs", { name: props.name })}
+          aria-hidden={props.active ? undefined : "true"}
+          tabindex={props.active ? undefined : -1}
           title={t("Remove {name} from the tabs", { name: props.name })}
-          class="me-4 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md hover:bg-surface-secondary"
+          class={cx(
+            "me-4 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md hover:bg-surface-secondary",
+            !props.active && "invisible",
+          )}
           onClick={() => props.onClose?.()}
         >
           <X aria-hidden="true" class="size-5" />
