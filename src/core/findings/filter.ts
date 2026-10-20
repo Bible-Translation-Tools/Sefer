@@ -1,61 +1,19 @@
-// filter.ts
-//
-// Reading policy for a panel of findings: which rows a reader has chosen to
-// see, and how they are grouped.
-//
-// This is presentation policy, so it is deliberately PURE and deliberately
-// subtractive-only. Two rules the whole file exists to hold:
-//
-//  - A filter never deletes a finding. `applyFilter` returns a view over the
-//    array `ProjectAnalysis` already holds; the census, the inline marks and
-//    the corpus counts are untouched by anything here. Hiding a category is a
-//    reader's choice about a screen, not a claim about the project.
-//  - Nothing here re-derives a position, a severity or a stamp. Freshness is
-//    the caller's answer (`isStale`), because only the shell holds the Books.
-//
-// It lives in core rather than in the shell because it is a total function
-// over the one shape with no host in it — the same policy a satellite panel, a
-// diff view or a headless report would want — but it takes no Effect and no
-// Solid: a click is a click, and a filter that could suspend would be a filter
-// the panel has to await on every keystroke.
-
 import type { BookId } from "@sefer/text/book";
 
 import type { Finding, Producer, Severity } from "./finding";
 
-/**
- * A reader's chosen view of the findings.
- *
- * `severities` and `producers` are ALLOW-lists: a rung or a producer absent
- * from them is hidden. `books` and `codes` are `null` for "no restriction",
- * which is not the same as `[]` (a reader who has unticked every book sees
- * nothing, and should — that is a state they can see and undo).
- *
- * `text` matches the message, the code and the book id, case-insensitively.
- * It is a plain substring: a panel filter is a way to find a row you can
- * already see, not a query language.
- */
 export interface FindingsFilter {
   readonly severities: readonly Severity[];
   readonly producers: readonly Producer[];
-  /** `null` = every book. */
   readonly books: readonly BookId[] | null;
-  /** `null` = every code. */
   readonly codes: readonly string[] | null;
   readonly hideStale: boolean;
   readonly text: string;
 }
 
-/** The three rungs and the three producers, in the order a legend reads them. */
 export const SEVERITIES: readonly Severity[] = ["error", "warning", "info"];
 export const PRODUCERS: readonly Producer[] = ["onion", "sous", "project"];
 
-/**
- * Everything shown, nothing hidden — including stale rows, which carry a badge
- * instead. The default has to be "show me the truth": a panel that opened
- * pre-filtered would let a reader believe a project is clean when a preference
- * from six months ago is hiding the reason it is not.
- */
 export const DEFAULT_FILTER: FindingsFilter = {
   severities: SEVERITIES,
   producers: PRODUCERS,
@@ -70,17 +28,6 @@ const matchesText = (finding: Finding, needle: string): boolean =>
   finding.code.toLowerCase().includes(needle) ||
   finding.bookId.toLowerCase().includes(needle);
 
-/**
- * The findings a reader has asked to see, in the order they arrived.
- *
- * Order is the CALLER's: `findings.list` has already ordered by book (project
- * order), then severity, then position, and a filter that re-sorted would
- * quietly override that. Filtering is a `filter`, in the exact sense.
- *
- * `isStale` is consulted only when `filter.hideStale` is set, so a panel that
- * shows stale rows (the default) pays for no freshness checks at all — the
- * check costs a Book lookup per finding in the shell.
- */
 export const applyFilter = (
   findings: readonly Finding[],
   filter: FindingsFilter,
@@ -90,27 +37,11 @@ export const applyFilter = (
   return findings.filter((finding) => passes(finding, filter, needle, isStale));
 };
 
-/** One row of a facet list: the value, and how many findings carry it. */
 export interface Facet<T> {
   readonly value: T;
   readonly count: number;
 }
 
-/**
- * How many findings each filterable value has, for the chips that offer them.
- *
- * Computed over the UNFILTERED list on purpose: a chip whose count fell to
- * zero because the chip itself is off would be a chip nobody could turn back
- * on, and a count that changes as you tick other boxes is a count nobody can
- * reason about. So these are the project's counts, and the filter is what
- * hides rows.
- *
- * Severities and producers appear in their legend order even at zero, because
- * they are a fixed ladder a reader learns the position of. Books appear in
- * first-appearance order — which is the project's canonical book order, since
- * `list` grouped them that way — and codes by descending count, because a
- * code picker is a "what is wrong most often here" list.
- */
 export interface Facets {
   readonly total: number;
   readonly severities: readonly Facet<Severity>[];
@@ -122,7 +53,6 @@ export interface Facets {
 const fixed = <T>(order: readonly T[], counts: Map<T, number>): readonly Facet<T>[] =>
   order.map((value) => ({ value, count: counts.get(value) ?? 0 }));
 
-/** Whether one finding passes a filter. `applyFilter` and `summarise` share it. */
 const passes = (
   finding: Finding,
   filter: FindingsFilter,
@@ -154,18 +84,6 @@ const facetsOf = (
     .sort((a, b) => b.count - a.count || (a.value < b.value ? -1 : 1)),
 });
 
-/**
- * What a HEADER needs, in one pass and without a list.
- *
- * "20,352 of 20,352 shown" and a row of filter chips are counts, and counts do
- * not need the findings sorted, grouped or even collected — but asking for them
- * through `list` + `facets` + `applyFilter` meant three walks of every finding
- * plus a sort, all of it before the panel could paint. This is the same answers
- * in one walk and no intermediate array.
- *
- * `shown` applies the filter; the facets deliberately do NOT, because a chip's
- * own count must not move as you click it.
- */
 export const summarise = (
   findings: Iterable<Finding>,
   filter: FindingsFilter,
@@ -189,5 +107,4 @@ export const summarise = (
   return { total, shown, facets: facetsOf(total, severities, producers, books, codes) };
 };
 
-/** The three axes a reader can group by. `flat` is the absence of grouping. */
 export type GroupKind = "book" | "code" | "severity";

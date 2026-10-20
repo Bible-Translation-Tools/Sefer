@@ -1,38 +1,3 @@
-// saveCoordinator.ts
-//
-// SaveCoordinator: the only module that writes a project file, and the only
-// owner of write ordering. It reads Books through the port and never touches
-// CodeMirror, so the same code serves Tauri and the Web — only the
-// `FileSystem` Layer differs. The save model is
-// `documentation/architecture/review.md`, "Record a version".
-//
-// What it owns:
-//
-//   * `save` — snapshot-bound. The stamp and the text are captured ONCE; the
-//     receipt and the baseline name that exact text, so edits that land during
-//     the write stay dirty instead of being silently promoted.
-//   * `serialize(path)` — one queue per path. Two explicit saves and a
-//     `saveAll` cannot interleave writes to the same file.
-//   * the baselines — one per successful write, plus the one `adopt` seeds
-//     when a book is opened from disk; the contract Diff consumes and
-//     Recovery asks about.
-//   * conflicts — an external change that really differs from the baseline
-//     blocks saving that book until the user resolves it. Sefer surfaces
-//     external changes; it never auto-merges.
-//
-// Sefer writes back the DOMINANT form it read: `decode` records it on
-// `Source.form`, the text in memory stays canonical LF, and `encode`
-// re-applies it on the way out. The form is never an identity — baselines,
-// diffs, stamps and external-change comparison all speak canonical text.
-//
-// Nothing here writes on its own: the project file is written by an explicit
-// `save`/`saveAll`, which is the /review screen's Record a version.
-//
-// The engine hash is optional throughout: core computes no hash. Composition
-// passes `hasher`, built from the Galley Layer, and with it dirty comparison
-// and external-change comparison use the hash across sessions while the
-// revision keeps deciding within one.
-
 import { trustedBy, type Book, type BookId, type Origin } from "@sefer/text/book";
 import { decode, encode, type SourceStamp } from "@sefer/text/source";
 import {
@@ -54,33 +19,17 @@ import type { ExternalChange } from "../project/project";
 import { Recovery } from "../recovery/recovery";
 import type { Baseline } from "./baseline";
 
-/** What one successful write did. Git commits receipts, never guesses. */
 export interface SaveReceipt {
   readonly bookId: BookId;
   readonly path: string;
-  /** The stamp of the text that was written. */
   readonly stamp: SourceStamp;
-  /** The engine hash of that text, when a hasher was configured. */
   readonly hash?: bigint;
-  /** Byte length of the bytes actually written, in the file's own form. */
   readonly bytes: number;
   readonly at: number;
-  /**
-   * Other files this save made current — a burrito's `metadata.json`, whose
-   * ingredient checksums describe this book. Sefer wrote them, so they are
-   * receipts too, and they belong in the same commit as the book.
-   */
   readonly also: readonly string[];
 }
 
-type SaveFailure =
-  | "PermissionDenied"
-  | "DiskFull"
-  /** The file changed under us and the difference is unresolved. */
-  | "Conflict"
-  /** The write path refused: a revert the rules would not admit, or no Book. */
-  | "Refused"
-  | "Io";
+type SaveFailure = "PermissionDenied" | "DiskFull" | "Conflict" | "Refused" | "Io";
 
 class SaveError extends Data.TaggedError("SaveError")<{
   readonly reason: SaveFailure;
@@ -89,12 +38,6 @@ class SaveError extends Data.TaggedError("SaveError")<{
   readonly description: string;
 }> {}
 
-/**
- * A file changed under us. Kept structural on purpose: Project owns the
- * watcher and the real type; Save only needs these two members, and depending
- * on Project would invert the seam.
- */
-/** The part of Project `externalChanges` needs, structurally. */
 export interface ExternalChangeSource {
   readonly books: readonly Book[];
   externalChanges(): Stream.Stream<ExternalChange>;
@@ -103,100 +46,24 @@ export interface ExternalChangeSource {
 export type ResolveChoice = "keepMine" | "takeDisk" | "compare";
 
 export interface SaveCoordinatorService {
-  /**
-   * Writes one Book atomically and promotes the written text to its baseline.
-   * Fails with `Conflict` when an unresolved external change is recorded for
-   * the book: overwriting a file that moved under us is the one thing save
-   * must never do quietly.
-   */
   readonly save: (book: Book) => Effect.Effect<SaveReceipt, SaveError>;
-  /**
-   * Seeds the baseline from the book's CURRENT text, as "what disk holds".
-   *
-   * Why this exists: a baseline is what Save last wrote, and `dirty` treats a
-   * missing one as dirty — nothing has been written, so everything is
-   * unsaved. That is right for a book Sefer created, and wrong for a book
-   * Sefer just READ: the text in hand IS the bytes on disk, so the honest
-   * baseline is already known and nobody should see an untouched book marked
-   * unsaved. Call it once where a book is opened from disk (the shell does, in
-   * `ProjectContext.focus`), and `dirty` becomes the only question anyone has
-   * to ask.
-   *
-   * Adopting is refused — quietly, it is not an error — when a baseline
-   * already exists (a real write, or a second open of the same book) or when
-   * the book's revision is past 0. A revision past 0 means something has
-   * applied since the read (a Recovery replay, a fix), and that text is
-   * genuinely not on disk; adopting it would promote unsaved work to saved.
-   */
   readonly adopt: (book: Book) => Effect.Effect<void>;
-  /** What was last written for this book, if anything was. */
   readonly baseline: (book: Book) => Option.Option<Baseline>;
-  /**
-   * Whether the book differs from what was written. No baseline means dirty:
-   * nothing has been saved, so everything is unsaved. Within a session the
-   * revision decides; when both the baseline and the current text have an
-   * engine hash, the hash decides — a same-length, same-revision-count
-   * replacement can never pass as saved.
-   */
   readonly dirty: (book: Book) => boolean;
-  /**
-   * The external changes that REALLY differ from what we wrote: each candidate
-   * is read back and compared against the baseline, so a save of our own bytes
-   * (or a touch that changed nothing) is dropped rather than shown. Every
-   * surviving change marks its book conflicted until `resolve`.
-   */
   readonly externalChanges: (source: ExternalChangeSource) => Stream.Stream<ExternalChange>;
-  /**
-   * Answers a conflict. `keepMine` clears it, so the next save overwrites.
-   * `takeDisk` re-reads the file and submits it as ONE trusted `revert`
-   * through `book.apply` — the funnel, never a text assignment. `compare`
-   * changes nothing and hands back the on-disk text as a Baseline-shaped
-   * value for Diff; the other two choices return `None`.
-   */
   readonly resolve: (
     change: ExternalChange,
     choice: ResolveChoice,
   ) => Effect.Effect<Option.Option<Baseline>, SaveError>;
-  /**
-   * Hands `book` the text its file holds now, as ONE trusted edit through the
-   * funnel, and makes that text the baseline — `resolve`'s `takeDisk`, for a
-   * file that changed because Sefer itself put new bytes there (a receive's
-   * checkout). `origin` is how the edit is recorded; history shows a received
-   * change as `incoming`, never as a revert.
-   *
-   * Nothing is applied when the book already holds that text, when
-   * `expect` is given and the book has moved past it (typing landed after
-   * the caller decided this book could be replaced), or when `expect` is
-   * `"keep"`: a person decided this book's text in Review, and the file
-   * moving forward underneath it must not undo that decision. The baseline moves to
-   * the file's text either way: a book whose file moved on must never keep
-   * measuring "unsaved" against bytes that are gone, or the next save would
-   * write the old text back over the new one without a difference ever
-   * being shown. Answers whether the text was applied.
-   *
-   * Refused when the file is not canonical text, or when the book's rules
-   * refuse the edit — and then the book is left as it was.
-   */
   readonly takeDisk: (
     book: Book,
     origin: Origin,
     expect?: SourceStamp | "keep",
   ) => Effect.Effect<boolean, SaveError>;
-  /**
-   * Forgets every baseline, conflict and seen book: the project they described
-   * has closed. Keyed by `BookId` alone, they would otherwise judge the next
-   * project's `GEN` against the last project's text and path — every book
-   * "changed entirely" in Review, and a Record a version committing receipts
-   * for the wrong files. Called by the shell's `closeProject`; the next open
-   * adopts its own books from disk. The write queues are kept: they are keyed
-   * by path, and a write still finishing must keep its turn.
-   */
   readonly forget: () => Effect.Effect<void>;
-  /** The per-path write queue. Save is the only owner of write ordering. */
   readonly serialize: (
     path: string,
   ) => <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
-  /** One receipt per dirty book, in order. A failure stops the run. */
   readonly saveAll: (books: readonly Book[]) => Effect.Effect<readonly SaveReceipt[], SaveError>;
 }
 
@@ -205,35 +72,10 @@ export class SaveCoordinator extends Context.Service<SaveCoordinator, SaveCoordi
 ) {}
 
 export interface SaveCoordinatorOptions {
-  /**
-   * The engine's content hash, when composition has the Galley Layer. Core
-   * computes no hash; without this, identity is the revision only.
-   */
   readonly hasher?: (text: string) => bigint;
-  /**
-   * Run after a successful write, on the same fiber, once the bytes are on
-   * disk. Composition's hook for the things that describe a file rather than
-   * contain it — today the Scripture Burrito ingredient checksums
-   * (`src/core/resources/checksum.ts`), which are wrong the moment a book is
-   * saved and which Save itself must not know about.
-   *
-   * Every write goes through `save`, which is why this is an option here
-   * rather than a decorator around the service: a wrapper outside could be
-   * bypassed by the one caller that matters. A failure is ignored — the
-   * project's own bytes are already written.
-   *
-   * It answers the paths it keeps current for this book, written or not, and
-   * they become the receipt's `also`: a file that already matched is staged
-   * as a no-op, and one an earlier failed commit left behind is recorded now.
-   */
   readonly onSaved?: (receipt: SaveReceipt) => Effect.Effect<readonly string[], unknown>;
 }
 
-/**
- * `effect/FileSystem` normalises host errors into a fixed set of tags that has
- * no "disk full" member, so the one failure users must be told about honestly
- * is recognised from the syscall text the host preserved.
- */
 const failureFor = (error: PlatformError.PlatformError): SaveFailure => {
   const reason = error.reason;
   if (reason._tag === "BadArgument") return "Io";
@@ -252,11 +94,8 @@ const make = (
     const hasher = options.hasher;
 
     const baselines = new Map<BookId, Baseline>();
-    /** Unresolved external changes; a book in here refuses to be saved. */
     const conflicts = new Map<BookId, ExternalChange>();
-    /** Books this coordinator has seen, so `resolve` can reach the funnel. */
     const seen = new Map<BookId, Book>();
-    /** One permit per path: the write queue. */
     const queues = new Map<string, Semaphore.Semaphore>();
 
     const remember = (book: Book): void => {
@@ -279,24 +118,12 @@ const make = (
       const baseline = baselines.get(book.id);
       if (baseline === undefined) return true;
       const source = book.source();
-      // The revision FIRST, because it is a number and the hash is a parse.
-      // Revision only moves when an edit was accepted, so an unmoved one means
-      // the text is the baseline's text and nothing needs hashing to say so.
-      // This is read reactively, once per badged book per keystroke: hashing
-      // first cost a full engine parse of every untouched book on screen.
       if (source.stamp.revision === baseline.stamp.revision) return false;
-      // Moved, so the text MAY differ — or may have been edited and undone
-      // back to what was written, which only the hash can tell.
       if (baseline.hash !== undefined && hasher !== undefined)
         return hasher(source.text) !== baseline.hash;
       return true;
     };
 
-    /**
-     * See the port's comment. An Effect rather than a plain function because
-     * every other entry point here is one and the caller already has a
-     * program in hand at open time; nothing in it is asynchronous.
-     */
     const adopt = (book: Book): Effect.Effect<void> =>
       Effect.sync(() => {
         remember(book);
@@ -315,8 +142,6 @@ const make = (
           stamp: source.stamp,
           ...(hasher === undefined ? {} : { hash: hasher(source.text) }),
           text: source.text,
-          // When we learned it, not when it was written: Save has no use for
-          // the file's mtime and the port's stat is optional on some hosts.
           savedAt: Date.now(),
         });
         observability?.note("baseline.adopt", "consumed", undefined, {
@@ -325,9 +150,6 @@ const make = (
         });
       });
 
-    // One Save is one end-to-end piece of work: the person chose to record a
-    // version, and the bytes reaching disk is one hop inside that, not the
-    // same fact — they can fail separately.
     const save = (book: Book): Effect.Effect<SaveReceipt, SaveError> => {
       const saving = observability?.operation("save", {
         "book.id": book.id,
@@ -361,16 +183,12 @@ const make = (
             ),
           );
 
-        // 1 capture once: the receipt and the baseline name THIS text, whatever
-        // the editor does while the bytes are in flight.
         const source = book.source();
         const stamp = source.stamp;
         const text = source.text;
-        // 2 out in the form it came in (see the header note on serialisation).
         const bytes = encode(source);
         const hash = hasher?.(text);
 
-        // 3 one queue per path, atomic on every host.
         const stop = observability?.span("file.write", undefined, {
           "book.id": book.id,
           "fs.path": book.path,
@@ -389,7 +207,6 @@ const make = (
           return yield* Effect.fail(refuse(book, reason, written.failure.message));
         }
 
-        // 4 the receipt
         const at = Date.now();
         const receipt: SaveReceipt = {
           bookId: book.id,
@@ -400,7 +217,6 @@ const make = (
           at,
           also: [],
         };
-        // 5 the baseline Diff consumes
         baselines.set(book.id, {
           bookId: book.id,
           path: book.path,
@@ -409,14 +225,11 @@ const make = (
           text,
           savedAt: at,
         });
-        // 6 counts and codes only
         observability?.note("save", "rewrote", undefined, {
           "book.id": book.id,
           "book.revision": stamp.revision,
           "fs.bytes": bytes.length,
         });
-        // 7 the journal up to this stamp is obsolete. A Recovery that cannot
-        // compact is noted, never fatal: the bytes are already on disk.
         if (recovery !== undefined) {
           const compacted = yield* Effect.result(recovery.compact(book.id, stamp, hash));
           if (Result.isFailure(compacted))
@@ -425,19 +238,15 @@ const make = (
               "save.stage": "compact",
             });
         }
-        // 8 what composition hangs off a completed write (see `onSaved`).
         if (options.onSaved === undefined) return receipt;
         const also = yield* Effect.orElseSucceed(options.onSaved(receipt), () => []);
         return { ...receipt, also };
       });
 
-    /** Reads the file back and says whether it differs from what we wrote. */
     const reallyDiffers = (change: ExternalChange): Effect.Effect<boolean> =>
       Effect.gen(function* () {
         if (change.kind === "removed") return true;
         const baseline = baselines.get(change.bookId);
-        // Never written by us: we cannot prove the disk matches what the book
-        // was opened from, so surface it rather than assume it is ours.
         if (baseline === undefined) return true;
         const read = yield* Effect.result(fileSystem.readFile(change.path));
         if (Result.isFailure(read)) return true;
@@ -446,12 +255,9 @@ const make = (
         const onDisk = decoded.success.text;
         if (baseline.hash !== undefined && hasher !== undefined)
           return hasher(onDisk) !== baseline.hash;
-        // Canonical-text equality: `decode` has already normalised newlines on
-        // both sides, so this compares content, not encoding.
         return onDisk !== baseline.text;
       });
 
-    /** The on-disk text as a Baseline-shaped value, for `compare` and `takeDisk`. */
     const readDisk = (
       change: Pick<ExternalChange, "bookId" | "path">,
     ): Effect.Effect<Baseline, SaveError> =>
@@ -481,8 +287,6 @@ const make = (
           stamp: decoded.stamp,
           ...(hasher === undefined ? {} : { hash: hasher(decoded.text) }),
           text: decoded.text,
-          // When we read it, not when it was written: Save has no use for the
-          // file's mtime and the port's stat is optional on some hosts.
           savedAt: Date.now(),
         };
       });
@@ -502,9 +306,6 @@ const make = (
             (stamp.revision !== expect.revision || stamp.length !== expect.length));
         const apply = !moved && book.source().text !== disk.text;
         if (apply) {
-          // ONE change replacing the whole text, through the funnel: the
-          // editor's rules judge it, history records one event, and every
-          // reader sees it publish like any other edit.
           const applied = book.apply(
             [{ from: 0, to: book.source().text.length, insert: disk.text }],
             origin,
@@ -515,16 +316,11 @@ const make = (
               refuse(book, "Refused", `${origin} refused by ${applied.failure.rule}`),
             );
         }
-        // The file's text is the baseline now. When it was applied its stamp
-        // is the book's, after the edit; when the book moved on, the stamp is
-        // the file's own, so `dirty` falls to the hash and says "unsaved".
         baselines.set(book.id, {
           ...disk,
           stamp: apply || !moved ? book.source().stamp : disk.stamp,
           savedAt: Date.now(),
         });
-        // "keep" is asked for, not a race lost: the baseline follows the file
-        // and the Book's text stands by design.
         observability?.note(
           "baseline.take",
           moved && expect !== "keep" ? "declined" : "rewrote",
@@ -609,11 +405,6 @@ const make = (
     };
   });
 
-/**
- * The SaveCoordinator layer. `Observability` and `Recovery` are taken through
- * `serviceOption` at build time, so a composition without them still saves —
- * it just records nothing and journals nothing.
- */
 export const SaveCoordinatorLive = (
   options: SaveCoordinatorOptions = {},
 ): Layer.Layer<SaveCoordinator, never, FileSystem.FileSystem> =>

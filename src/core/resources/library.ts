@@ -1,27 +1,3 @@
-// library.ts
-//
-// The Library: the registry of resources this installation knows about, and the
-// picks that give a resource a *role* in a project. Two independent facts are
-// kept apart: a resource's container (Burrito, Resource Container, loose USFM —
-// what it is packed as) and its contextual role in a project (`source`,
-// `notes`, `reference`, `glossary` — what it is *for*). `add` records the
-// container once; `pick` records the role per project, so the same resource
-// can be a source in one project and a reference in another, and nothing about
-// the resource itself changes.
-//
-// The registry is small, read on nearly every screen and written rarely, so it
-// is held in memory for the life of the Layer and persisted to
-// `<libraryRoot>/library.json` on each mutation with `writeFileAtomic`.
-//
-// A pick is NOT in the registry: it is this device's memory of one project
-// ("on this project I usually read that source text"), so it lives with the
-// project, as `referencePicks` in its `.sefer/project.json` (Will,
-// 2026-10-06), read when the project is reopened. Picks written by an older
-// build into `library.json`'s `bindings` move there the first time the
-// project's picks are read.
-// Classification is not duplicated here: `add` calls `classify` from
-// ./import.ts, the one place that decides what a folder is.
-
 import { localized } from "@sefer/text/localized";
 import { decode } from "@sefer/text/source";
 import {
@@ -46,13 +22,6 @@ import { recognize, type ContainerKind, type ContentKind, type Recognition } fro
 import { type Declared } from "./projectMetadata";
 import { normaliseRepoUrl, type RelatedResource } from "./relationships";
 
-/**
- * What a resource is *for*, in one project. The well-known roles are named
- * here; the type stays open so a project can bind a role Sefer has no surface
- * for yet (translation notes, translation words, questions) without a core
- * change. A role holds MANY resources: two source texts side by side, or a
- * notes set per language, are ordinary — nothing here is pre-baked to one.
- */
 export type Role = "source" | "notes" | "reference" | "glossary" | (string & {});
 
 export const ROLES = {
@@ -66,44 +35,19 @@ export const ROLES = {
 } as const satisfies Record<string, Role>;
 
 export interface Resource {
-  /**
-   * Stable local identity. It is the normalised root path: a resource is where
-   * it lives, and nothing in core mints identifiers. Moving a resource makes a
-   * new one, which is the honest answer — its provenance moved too.
-   */
   readonly id: string;
   readonly container: ContainerKind;
-  /**
-   * What it HOLDS (`kinds/content.ts`), recognised from its metadata when it
-   * was added and kept. A surface asks a handle for a slot, never this; the
-   * kind table and the renderer registry are the two that read it.
-   */
   readonly content: ContentKind;
-  /** The one reader that parses it, chosen with `content`. */
   readonly format: Recognition["format"];
   readonly root: string;
   readonly title: string;
   readonly language?: string;
-  /**
-   * What the container says it holds — a Burrito flavor (`textTranslation`),
-   * or a Resource Container subject (`Bible`, `Translation Notes`,
-   * `Translation Words`). Sefer does not render every subject yet; carrying it
-   * lets a surface pick the renderer, and lets the library list what it holds.
-   */
   readonly subject?: string;
-  /** What the resource calls itself (`ulb`), to match a project's declared source. */
   readonly identifier?: string;
-  /** The version it declares (`24-07`), to say when it is not the one a project listed. */
   readonly version?: string;
-  /**
-   * Where this copy was cloned from, and the commit it holds. Per device: a
-   * project names its source texts by language and resource, never by URL.
-   * Absent for a folder a person picked.
-   */
   readonly upstream?: Upstream;
 }
 
-/** The remote a copy came from. `url` is stored normalised, which is how it is compared. */
 export interface Upstream {
   readonly url: string;
   readonly commit: string;
@@ -117,36 +61,19 @@ class LibraryError extends Data.TaggedError("LibraryError")<{
 }> {}
 
 export interface LibraryService {
-  /** Every registered resource, in the order it was added. */
   readonly resources: () => Effect.Effect<readonly Resource[]>;
-  /**
-   * Classifies `root`, recognises what it holds, and registers it. Refuses
-   * `Unclassified` when ./import.ts cannot say what the folder is, and
-   * `Unsupported` when its metadata declares a kind or format Sefer has no
-   * reader for (`kinds/content.ts`). Adding a root that is already
-   * registered re-reads its metadata and replaces the entry.
-   */
   readonly add: (root: string, upstream?: Upstream) => Effect.Effect<Resource, LibraryError>;
-  /** The resource cloned from `url`, compared normalised; how a second pull becomes none. */
   readonly cloned: (url: string) => Effect.Effect<Option.Option<Resource>>;
-  /**
-   * What an open project declares as its source texts. Held in memory for the
-   * session; `resolve(projectRoot, "source")` answers with the matching held
-   * copies when the person has picked none.
-   */
   readonly declare: (
     projectRoot: string,
     related: readonly RelatedResource[],
   ) => Effect.Effect<void>;
-  /** Forgets a resource. A project's pick of it then resolves to nothing. */
   readonly remove: (id: string) => Effect.Effect<void, LibraryError>;
-  /** Adds `resourceId` to what the project shows under `role`; idempotent, order kept. */
   readonly pick: (
     projectRoot: string,
     role: Role,
     resourceId: string,
   ) => Effect.Effect<void, LibraryError>;
-  /** Removes one pick; a no-op when it was not there. */
   readonly unpick: (projectRoot: string, role: Role, resourceId: string) => Effect.Effect<void>;
   /**
    * Every resource picked for `role` in the project, in pick order. For
@@ -154,26 +81,9 @@ export interface LibraryService {
    * (Will, 2026-10-06: the declared source text is the default).
    */
   readonly resolve: (projectRoot: string, role: Role) => Effect.Effect<readonly Resource[]>;
-  /** Every pick of one project, so a shell can lay out panes without knowing the roles up front. */
   readonly picked: (
     projectRoot: string,
   ) => Effect.Effect<readonly { readonly role: Role; readonly resource: Resource }[]>;
-  /**
-   * The WHOLE canonical text of one book of a registered resource — the bytes
-   * of its `.usfm` file, decoded the one way `packages/text/src/source.ts`
-   * decodes anything.
-   *
-   * There is no door that answers a verse: the engine parses a book and not
-   * a fragment, and only its TOC knows where a verse begins, so a caller that
-   * wants one passage reads the book and asks the engine (the STET workflow's
-   * `sourceReadings` does). This is file resolution and decoding, and nothing
-   * else — no slicing, no interpretation.
-   *
-   * `none` when the resource is not registered or holds no file for `bookId`
-   * — a reference Bible that simply lacks Philemon is the ordinary case and
-   * the pane says so. Fails `Io` only when a file that exists cannot be read
-   * or does not decode.
-   */
   readonly readBook: (
     resourceId: string,
     bookId: string,
@@ -187,10 +97,6 @@ const REGISTRY_FILE = "library.json";
 const ResourceRecord = Schema.Struct({
   id: Schema.String,
   container: Schema.Literals(["burrito", "resourceContainer", "looseUsfm"]),
-  /**
-   * Optional in the record only: a registry written before kinds has none,
-   * and those rows are recognised again from their metadata on load.
-   */
   content: Schema.optionalKey(
     Schema.Literals(["usfm", "tn", "tq", "tw", "macula-greek", "macula-hebrew"]),
   ),
@@ -204,7 +110,6 @@ const ResourceRecord = Schema.Struct({
   upstream: Schema.optionalKey(Schema.Struct({ url: Schema.String, commit: Schema.String })),
 });
 
-/** `{ [role]: resourceId[] }`: one project's picks, many per role. */
 const Picks = Schema.Record(Schema.String, Schema.Array(Schema.String));
 
 type Picks = typeof Picks.Type;
@@ -213,15 +118,9 @@ const decodePicks = Schema.decodeUnknownResult(Picks);
 
 const Registry = Schema.Struct({
   resources: Schema.Array(ResourceRecord),
-  /**
-   * Picks an older build kept here, `{ [projectId]: Picks }`. Moved into each
-   * project's `.sefer/project.json` when that project's picks are first read,
-   * and dropped from here as they move.
-   */
   bindings: Schema.optionalKey(Schema.Record(Schema.String, Picks)),
 });
 
-/** What is held and written: every row recognised, so `content` is always there. */
 interface Registry {
   readonly resources: readonly Resource[];
   readonly bindings?: (typeof Registry.Type)["bindings"];
@@ -229,11 +128,6 @@ interface Registry {
 
 const decodeRegistry = Schema.decodeUnknownResult(Registry);
 
-/**
- * A registry written before `kind` was renamed `container` says `kind`. Read as
- * the same fact; the next write stores the new name. Without this every
- * existing library would fail to decode and start empty.
- */
 const withContainer = (stored: unknown): unknown => {
   if (typeof stored !== "object" || stored === null || !("resources" in stored)) return stored;
   const { resources } = stored;
@@ -264,12 +158,6 @@ type Described = Pick<Resource, "title" | "language" | "subject" | "identifier" 
   readonly declared?: Declared;
 };
 
-/**
- * Title, language and what a root declares about itself, read through the
- * same `readProjectMetadata` a project's own header uses, so a Resource
- * Container's `manifest.yaml` is read here too. For loose USFM, or metadata
- * that does not decode, the folder name is the title.
- */
 const describe = (fileSystem: FileSystem.FileSystem, root: string): Effect.Effect<Described> =>
   Effect.map(readProjectMetadata(fileSystem, root), (read) =>
     Option.match(read.metadata, {
@@ -288,11 +176,6 @@ const describe = (fileSystem: FileSystem.FileSystem, root: string): Effect.Effec
     }),
   );
 
-/**
- * A root, described and recognised: what `add` registers, and what a row
- * written before kinds is recognised as again. `Unsupported` names what the
- * metadata declared.
- */
 const describeAndRecognize = (
   fileSystem: FileSystem.FileSystem,
   root: string,
@@ -322,12 +205,6 @@ const describeAndRecognize = (
     };
   });
 
-/**
- * What a root holds, before it is registered: the same classification and
- * recognition `add` makes, for a caller that must know the kind to decide
- * how to store it (the Web packs a help rather than keep its tree,
- * `app/arrival.ts`). Reads metadata only.
- */
 export const recognizeRoot = (
   fileSystem: FileSystem.FileSystem,
   root: string,
@@ -342,16 +219,10 @@ export const recognizeRoot = (
     return recognition;
   });
 
-/**
- * Whether a held resource is the copy a project's declaration names: cloned
- * from `WA-Catalog/<language>_<resource>`, or declaring that language and
- * identifier itself.
- */
 export const answers = (resource: Resource, ref: RelatedResource): boolean =>
   resource.upstream?.url.endsWith(`/wa-catalog/${ref.language}_${ref.resource}`) === true ||
   (resource.language?.toLowerCase() === ref.language && resource.identifier === ref.resource);
 
-/** Book files under a resource root, relative to it. */
 const usfmFilesUnder = (
   fileSystem: FileSystem.FileSystem,
   root: string,
@@ -364,12 +235,6 @@ const usfmFilesUnder = (
     (entries) => entries.filter(isUsfm).sort(),
   );
 
-/**
- * The file for `book` inside a resource: the first `.usfm` path whose last
- * segment contains the book code, case-insensitively. That matches both
- * `58-PHM.usfm` and `PHM.usfm`; it is deliberately loose because resource
- * layouts vary and the manifest that would say authoritatively is YAML.
- */
 const bookFileFor = (files: readonly string[], book: string): string | undefined => {
   const needle = book.toLowerCase();
   return files.find((file) => lastSegment(file).toLowerCase().includes(needle));
@@ -384,21 +249,10 @@ const makeLibrary = (
     const registryPath = joinPath(libraryRoot, REGISTRY_FILE);
     const stored = yield* readJson(fileSystem, registryPath);
     let held = EMPTY;
-    /**
-     * Rows written before kinds that could not be recognised on this load —
-     * a Burrito on a drive that is not mounted, metadata that did not read
-     * this time. Not offered, but KEPT: every save writes them back, so a
-     * transient failure never deletes a row and its upstream, and the next
-     * load tries again. `add` of the same root, or `remove`, settles one.
-     */
     let unrecognised: readonly (typeof ResourceRecord.Type)[] = [];
     if (stored !== undefined) {
       const decoded = decodeRegistry(withContainer(stored));
       if (Result.isSuccess(decoded)) {
-        // A row written before kinds says nothing about what it holds. It is
-        // recognised again from its own metadata, never assumed: a row that
-        // cannot be recognised now is not offered (and said so), and is kept
-        // in the registry as it was (`unrecognised`).
         const resources: Resource[] = [];
         const kept: (typeof ResourceRecord.Type)[] = [];
         for (const record of decoded.success.resources) {
@@ -427,11 +281,7 @@ const makeLibrary = (
           resources,
           ...(decoded.success.bindings === undefined ? {} : { bindings: decoded.success.bindings }),
         };
-      } else
-        // A registry we cannot decode is not a reason to refuse to start: the
-        // user's resources are still on disk and can be added again. Say so
-        // loudly in telemetry and carry on with an empty library.
-        observability?.note("library.load", "declined", "registry did not decode");
+      } else observability?.note("library.load", "declined", "registry did not decode");
     }
 
     const persist = (next: Registry): Effect.Effect<void, LibraryError> =>
@@ -458,19 +308,10 @@ const makeLibrary = (
     const find = (id: string): Resource | undefined =>
       held.resources.find((resource) => resource.id === id);
 
-    /** Per session: what each opened project declares. Re-declared on every open. */
     const declared = new Map<string, readonly RelatedResource[]>();
 
-    /** Picks read this session, by project root: read once, then written through. */
     const picksHeld = new Map<string, Picks>();
 
-    /**
-     * One project's picks. The first read of a project that has none in its
-     * `.sefer/project.json` takes what an older build kept in `library.json`
-     * — under the root, or `root#<metadata id>` — writes it there, and drops it
-     * from the registry. Never fails: a project whose state cannot be read or
-     * written simply has no picks.
-     */
     const picksOf = (projectRoot: string): Effect.Effect<Picks> =>
       Effect.gen(function* () {
         const cached = picksHeld.get(projectRoot);
@@ -534,8 +375,6 @@ const makeLibrary = (
             root,
             classification,
           );
-          // Re-adding a root keeps where it came from unless told otherwise:
-          // a person picking a downloaded copy again has not changed its origin.
           const known = upstream ?? find(root)?.upstream;
           const resource: Resource = {
             id: root,
@@ -545,7 +384,6 @@ const makeLibrary = (
               ? {}
               : { upstream: { url: normaliseRepoUrl(known.url), commit: known.commit } }),
           };
-          // Recognised now: no longer kept aside as unrecognised.
           unrecognised = unrecognised.filter((row) => row.id !== resource.id);
           yield* persist({
             ...held,

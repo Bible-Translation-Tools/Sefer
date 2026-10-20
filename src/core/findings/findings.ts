@@ -1,36 +1,11 @@
-// findings.ts
-//
-// The panel's half of Findings: how findings are ordered, and what "navigate
-// to this finding" means in a module that cannot navigate.
-//
-// `finding.ts` holds the shape and the two adapters. This file holds the
-// reading policy, and it is deliberately tiny — if it grows a filter model, a
-// grouping DSL or a selection state, those belong to the shell, because
-// filtering is presentation policy and hiding a category does not alter
-// analysis truth.
-
 import type { BookId } from "@sefer/text/book";
 
 import type { Finding } from "./finding";
 
 export type { Finding } from "./finding";
 
-/** Errors first within a book, so the panel's first row is the worst one. */
 const RANK: Readonly<Record<Finding["severity"], number>> = { error: 0, warning: 1, info: 2 };
 
-/**
- * Every finding a ProjectAnalysis holds, grouped by book in the project's own
- * order and then ordered within a book by severity, position and code.
- *
- * Takes the pieces of the service it actually reads rather than the service
- * itself, so a satellite panel over a subset, or a caller that already has the
- * array, needs no Layer. `findings()` is memoised inside ProjectAnalysis, so
- * calling this per render costs the sort and nothing else.
- *
- * The book order is the order ids first appear in `findings()`, which is the
- * insertion order of the analyses — i.e. the project's canonical book order.
- * Sorting by book id instead would put 3 John before Jude.
- */
 export const list = (projectAnalysis: {
   findings: () => readonly Finding[];
 }): readonly Finding[] => {
@@ -54,26 +29,6 @@ export const list = (projectAnalysis: {
   return out;
 };
 
-/**
- * Where a finding points, as a plain value.
- *
- * Core cannot navigate: opening a book, clipping a chapter and placing a caret
- * are the shell's and the editor's business, and a core module that reached
- * into either would need the router and CodeMirror. So this returns the target
- * and stops. The shell calls `project.instantiate(bookId)`, mounts a view, and
- * scrolls the span into place.
- *
- * `from`/`to` are the SEMANTIC span, exactly as the engine reported it, even
- * when visual mode hides the markup it covers. A presentation
- * anchor near a visible point is the view's own decision; it must never be
- * substituted here, because the same span is what a fix would edit.
- *
- * No chapter and verse here. A label for the place is the location
- * service's (`app/location.ts`), which proves the analysis describes the text
- * the finding was measured against before it names a verse; the finding's
- * own shape carries no reference for the same reason, since a stored one
- * would outlive the text it was derived from.
- */
 export const navigateTarget = (
   finding: Finding,
 ): { readonly bookId: BookId; readonly from: number; readonly to: number } => ({

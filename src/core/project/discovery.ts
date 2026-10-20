@@ -1,15 +1,3 @@
-// discovery.ts
-//
-// Which files in a folder are books, and in what order. This is the whole of
-// "Unloaded" in the four-state model (`documentation/architecture/project.md`):
-// paths known, nothing read. Discovery is deliberately shallow — one
-// `readDirectory` of the root — because a Sefer project is a folder of books,
-// not a tree. The only way a nested path becomes a book is a Scripture
-// Burrito's own `ingredients` table saying so, which is the burrito's
-// declaration, not our guess.
-//
-// Nothing here reads book text or builds a `Book`; `openProject` does that.
-
 import { Effect, FileSystem, Option, PlatformError, Result } from "effect";
 
 import { joinPath, lastSegment, normalisePath } from "../fileSystem/path";
@@ -20,25 +8,12 @@ import {
   type ProjectMetadata,
 } from "../resources/projectMetadata";
 
-/** The burrito metadata file, read from directly under the project root. */
 export const METADATA_FILE = "metadata.json";
 
-/** The Resource Container manifest, the other way a project declares itself. */
 export const MANIFEST_FILE = "manifest.yaml";
 
-/**
- * The extensions a bare file in the root must carry to be a book. Matched
- * case-insensitively, so `.usfm`, `.USFM` and `.Usfm` are all books; `.sfm`
- * is the older Paratext spelling of the same thing.
- */
 const BOOK_EXTENSIONS: readonly string[] = [".usfm", ".sfm"];
 
-/**
- * The mime types a burrito ingredient may declare for USFM. `text/x-usfm` is
- * the registered spelling the Scripture Burrito examples use; `text/usfm`
- * appears in the wild (including `fixtures/resources/metadata.json`), so both
- * are honoured rather than averaged.
- */
 const USFM_MIME_TYPES: ReadonlySet<string> = new Set(["text/x-usfm", "text/usfm"]);
 
 const LEADING_NUMBER = /^(\d+)/;
@@ -51,15 +26,6 @@ const isBookFileName = (name: string): boolean => {
 const isUsfmIngredient = (name: string, mimeType: string): boolean =>
   USFM_MIME_TYPES.has(mimeType.toLowerCase()) || isBookFileName(name);
 
-/**
- * Canonical order: the leading number in the file name when it has one
- * (`19-PSA.usfm` before `58-PHM.usfm`), then the name. Translators name book
- * files by their canon number, so the number is the intent and the name is
- * only the tiebreaker. Files with no leading number sort after every numbered
- * one, by name, so an unnumbered `extra.usfm` never lands in the middle of the
- * canon. Comparison is codepoint order, not locale order, so the same folder
- * lists the same way on every host.
- */
 const canonicalOrder = (paths: readonly string[]): readonly string[] =>
   [...paths].sort((left, right) => {
     const leftName = lastSegment(left);
@@ -75,23 +41,11 @@ const canonicalOrder = (paths: readonly string[]): readonly string[] =>
     return left < right ? -1 : left > right ? 1 : 0;
   });
 
-/** Why a project has no metadata Sefer could read, in a note's vocabulary. */
 export type MetadataRefusal = "absent" | "unreadable" | "unparsable" | "notAKnownFormat";
 
 export interface MetadataRead {
-  /** What the application reads, whichever container it came from. */
   readonly metadata: Option.Option<ProjectMetadata>;
-  /**
-   * The BURRITO, when that is what this was.
-   *
-   * Narrower than `metadata` on purpose, and not a duplicate of it: the
-   * ingredients table is a Burrito concept that a Resource Container has no
-   * answer for, and it is what `discoverBooks` below reads to find a book that
-   * is not directly under the root. Everything that does not need ingredients
-   * should take `metadata` and stay indifferent to the format.
-   */
   readonly burrito: Option.Option<BurritoMetadata>;
-  /** Absent when the metadata decoded; otherwise why it did not. */
   readonly declined?: MetadataRefusal;
 }
 
@@ -109,29 +63,6 @@ const readTextIfPresent = (
     return Option.some(new TextDecoder().decode(bytes.success));
   });
 
-/**
- * A project's own declaration, from whichever of the two containers it uses.
- *
- *   metadata.json    Scripture Burrito
- *   manifest.yaml    Resource Container
- *
- * Burrito FIRST, and the order is a rule rather than a preference: it is the
- * format Sefer writes, so a project that carries both has been through Sefer
- * and its burrito is the newer statement. A Resource Container is only
- * consulted when there is no burrito to consult.
- *
- * Only the second half is new. Sefer read `metadata.json` and nothing else,
- * which is why `en_ulb` — a Resource Container, like most of what comes out of
- * the catalogue — showed a folder name for its title and an em dash for its
- * language. Both formats were already Effect schemas; what was missing was a
- * shape to decode them into (`resources/projectMetadata.ts`).
- *
- * Never fails: a folder of loose USFM files is a legitimate project, and
- * metadata that does not decode is treated exactly like metadata that is not
- * there — discovery falls back to the extension scan and `project.metadata()`
- * is `None`. The refusal is returned rather than logged here so the caller can
- * note it once, at the `project.open` boundary.
- */
 export const readProjectMetadata = (
   fileSystem: FileSystem.FileSystem,
   root: string,
@@ -142,10 +73,6 @@ export const readProjectMetadata = (
       () => Option.none<string>(),
     );
     if (Option.isSome(burritoText)) {
-      // Decoded ONCE, here, and narrowed after: this is the one caller that
-      // needs the burrito itself as well as the application's view of it, so
-      // it takes the raw decoder and applies the adapter rather than reading
-      // the file's shape twice.
       let parsed: unknown;
       try {
         parsed = JSON.parse(burritoText.value);
@@ -176,19 +103,6 @@ export const readProjectMetadata = (
       : { metadata: Option.some(read.success), burrito: Option.none() };
   });
 
-/**
- * The book paths of a project, canonically ordered and absolute (resolved
- * against `root`).
- *
- * Two sources, unioned: every `*.usfm` / `*.USFM` / `*.sfm` directly under
- * `root`, and — when `<root>/metadata.json` decodes as a Scripture Burrito —
- * every ingredient whose mime type is a USFM one or whose path ends in a book
- * extension. Burrito ingredients are the only reason a path below the root
- * appears; there is no recursive walk.
- *
- * Fails only when the root cannot be listed. Metadata problems degrade to the
- * extension scan (see `readProjectMetadata`).
- */
 export const discoverBooks = (
   fileSystem: FileSystem.FileSystem,
   root: string,

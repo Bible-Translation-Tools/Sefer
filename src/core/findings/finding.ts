@@ -1,30 +1,3 @@
-// finding.ts
-//
-// The ONE shape (`documentation/architecture/findings.md`). Two producers speak
-// completely different dialects — Galley's per-book lint (producer `onion`)
-// emits catalogued USFM diagnostics with a severity ladder and offered repairs,
-// Sous emits statistical corpus findings with digests and no severity at all —
-// and every consumer above them (the panel, navigation, the counts in the
-// census, the fix previews) wants one record. This file is the only place
-// either dialect is translated, so a producer's vocabulary never leaks into a
-// reader.
-//
-// Three rules the whole file exists to hold:
-//
-//  - Positions are ENGINE positions in the text the stamp names. Nothing here
-//    re-derives or shifts an offset. If the stamp moved, the finding is stale
-//    and is recomputed, not adjusted (`stale`).
-//  - Every finding carries both stamps: the Book's `SourceStamp` (revision
-//    within one Book's lifetime) and the engine's `EngineStamp` (hash + length,
-//    which survives across lifetimes and across products).
-//  - Identity is SEMANTIC. A row index into a parse or a publication is not a
-//    durable id — the next publication renumbers everything — so `id` is built
-//    from producer, book, code and span. Two rows with the same code at the
-//    same span are one finding, which is what a panel wants anyway.
-//
-// `message` is panel text: it quotes the document. It must never reach
-// Observability, which records counts and codes only.
-
 import type { BookId } from "@sefer/text/book";
 import type { TocView } from "@sefer/text/location/locate";
 import type { SourceStamp } from "@sefer/text/source";
@@ -58,56 +31,23 @@ import {
   type Suppressions,
 } from "./suppressions";
 
-/**
- * The three rungs a reader is shown. The per-book lint's `hint` folds into
- * `info` and its `form`/absent severities are dropped entirely — see
- * `fromAnalysis`.
- */
 export type Severity = "error" | "warning" | "info";
 
-/**
- * Which half of the engine said so, or Sefer itself. `project` is reserved for
- * findings Sefer computes across books without the engine (a missing book, a
- * duplicate `\id`); nothing emits it yet.
- */
 export type Producer = "onion" | "sous" | "project";
 
-/**
- * A pointer back into the analysis the finding came from, NOT the edits.
- * Resolving it costs a walk of the fix section, so the preview is computed on
- * demand by `src/core/fixes`; a panel showing four hundred findings pays for
- * none of them. The index is only meaningful for the exact analysis whose
- * `EngineStamp` this finding carries.
- */
 export interface FixRef {
   readonly kind: "engine";
   readonly diagnosticIndex: number;
 }
 
 export interface Finding {
-  /** `producer:bookId:code:from-to`. Semantic, not a row number. */
   readonly id: string;
   readonly bookId: BookId;
   readonly severity: Severity;
-  /** The producer's stable code: a catalogue name, or `sous.<lane>`. */
   readonly code: string;
   readonly producer: Producer;
-  /**
-   * Panel text, plain: a Sous finding's headline. Quotes the document; never
-   * goes to telemetry.
-   */
   readonly message: string;
-  /**
-   * A Sous finding's supporting numbers — what is usual, how often, where —
-   * as plain text, for behind a "Why?". Quotes the document, like `message`.
-   */
   readonly details?: string;
-  /**
-   * What both of a Sous finding's sentences are rendered from: kitchen's id,
-   * its parameters, and the searches behind them (`queries`). A
-   * screen that draws each mark as a keycap renders from this
-   * (`messages.ts`'s `renderRich`), never by parsing `message`.
-   */
   readonly described?: FindingMessage;
   /** UTF-16 offsets into the text `stamp`/`engine` name. */
   readonly from: number;
@@ -115,36 +55,9 @@ export interface Finding {
   readonly stamp: SourceStamp;
   readonly engine: EngineStamp;
   readonly fix?: FixRef;
-  /**
-   * The number an Onion ordering finding expected, from the catalogue's
-   * `expectedNumber` aux: "verse 3 repeats the verse at 3; expected 4" is
-   * span "3", expected 4. Absent for every other code. With the span, it is
-   * everything a renumber needs, without reading the text.
-   */
   readonly expected?: number;
-  /**
-   * Row in the publication's pattern table, for a Sous `Convention` finding
-   * only. It is NOT a durable identity — the next publication renumbers the
-   * table exactly as it renumbers findings — so it is only meaningful against
-   * the snapshot this finding was read from, which is the one ProjectAnalysis
-   * still holds. It is carried because the character inventory
-   * (`src/core/findings/inventory.ts`) is the pattern table's reader and the
-   * panel wants to say "the other sites of THIS pattern"; re-deriving it would
-   * mean re-walking the snapshot for every row.
-   */
   readonly pattern?: number;
-  /**
-   * What a Sous sentence compares, as kitchen's queries (`./compare.ts`):
-   * the form here, and what else the sentence names. Absent when there is
-   * nothing to search. Quotes the document, so never goes to telemetry, like
-   * `message`.
-   */
   readonly comparison?: readonly FindingQuery[];
-  /**
-   * What "Fine here" and "Always allow" would save for a Sous finding
-   * (`./suppressions.ts`). Computed when first read: only a finding someone
-   * suppresses, or a project that has suppressions, needs it.
-   */
   readonly suppression?: SuppressionKeys;
 }
 
@@ -156,29 +69,9 @@ const identify = (
   to: number,
 ): string => `${producer}:${bookId}:${code}:${from}-${to}`;
 
-/**
- * `hint` is a rung the one shape does not carry. It becomes `info` rather than
- * being dropped: the engine still wants the reader to see the site, and a
- * panel that filters by code can hide it without the shape growing a rung.
- */
 const rung = (severity: "error" | "warning" | "info" | "hint"): Severity =>
   severity === "hint" ? "info" : severity;
 
-/**
- * Per-book (`onion`) diagnostics → findings, for one book at one revision.
- *
- * `stamp` is the Book's stamp for the text `analysis` describes — the caller
- * holds both, and pairing them here is cheaper than making this function
- * re-read the Book. It is a caller bug to pass a stamp from a different text;
- * `describesExactly` is the door that proves it.
- *
- * A diagnostic whose severity is `null` at this document's declared `\usfm`
- * version is DROPPED, not downgraded: the catalogue is saying the code has
- * nothing to report at that version (and `diagnosticSeverity` already folds
- * the `form` category away, since a formatting observation is the formatter's
- * business, not a reader's). Suppressing it here rather than in the panel
- * keeps the census counts honest.
- */
 export const fromAnalysis = (
   bookId: BookId,
   analysis: Analysis,
@@ -193,29 +86,10 @@ export const fromAnalysis = (
     usfmVersion: analysis.usfmVersion,
   });
 
-/**
- * The same, over a LINT report rather than a whole parse.
- *
- * A lint buffer is a parse buffer with only the diagnostics section plated —
- * no tree, no tokens, no TOC — and it costs about a tenth of a parse. The four
- * things a finding needs from a parse are all still in it: the diagnostics
- * themselves, the declared `\usfm` version that gates their severity, and the
- * source hash and length that stamp them. The text is the caller's, because
- * the caller is who holds the Book.
- *
- * This is what lets a project open with every badge already right, having
- * parsed nothing.
- */
 const fromDiagnostics = (input: {
   readonly bookId: BookId;
   readonly stamp: SourceStamp;
   readonly engine: EngineStamp;
-  /**
-   * Indexable rather than iterable, and tolerant of a hole, so that BOTH
-   * sources fit without either copying: the parse buffer's `Diagnostics` is a
-   * cursor whose `at` always answers, and a lint report's is a plain array
-   * whose `at` is `Array.prototype.at`.
-   */
   readonly diagnostics: { readonly length: number; at(n: number): DiagnosticView | undefined };
   readonly text: string;
   readonly usfmVersion: string | null;
@@ -230,9 +104,6 @@ const fromDiagnostics = (input: {
     if (severity === null) continue;
     const code = diagnosticName(view);
     const span = view.span();
-    // The only way to know whether THIS site was offered a repair is to read
-    // the fix section: `fixLabel` is a catalogue-level statement about the
-    // code, not about the occurrence.
     const fix: FixRef | undefined =
       view.fix() === null ? undefined : { kind: "engine", diagnosticIndex: index };
     out.push({
@@ -253,15 +124,6 @@ const fromDiagnostics = (input: {
   return out;
 };
 
-/**
- * Sous carries no severity ladder — it reports what it measured and leaves the
- * judgement to the consumer — so these three lines are Sefer's presentation
- * policy, stated once. Hygiene is an `error` because a C0 control, a
- * replacement character or a merge conflict marker inside scripture text is a
- * defect in the file rather than an opinion about the translation. Presence is
- * a `warning`: a verse coverage gap is usually real and occasionally
- * deliberate. Everything else is statistical and advisory.
- */
 const corpusSeverity = (finding: CorpusFinding): Severity => {
   switch (finding.kind) {
     case "Hygiene":
@@ -273,36 +135,19 @@ const corpusSeverity = (finding: CorpusFinding): Severity => {
   }
 };
 
-/** A published book, as the Sous readers need it back. */
 export interface PublishedBook {
   readonly bookId: BookId;
   readonly stamp: SourceStamp;
   readonly engine: EngineStamp;
-  /** The text the publication measured, which `stamp` names. */
   readonly text: string;
-  /** What the reader calls the book. */
   readonly name: string;
-  /**
-   * The book's reading map (`GalleyService.mask`), asked for only when a
-   * Casing message wants the mark before its word.
-   */
   readonly mask?: () => MaskMap | undefined;
-  /** The book's table of contents, which names the verse a suppression is keyed by. */
   readonly toc?: () => TocView;
 }
 
-/** Enough reading before a word to find the mark in front of it. */
 const BEFORE_WINDOW = 32;
 
-/**
- * The mark before source offset `at`, read from the verse text the engine
- * judged (markers removed, as `markBefore` requires) rather than the USFM,
- * where `\q2` between `;` and `He` would read as the digit 2. Only the last
- * few kept spans before `at` are joined: `markBefore` walks back over space
- * and quotation marks and stops at the first other character.
- */
 const markBeforeIn = (text: string, mask: MaskMap, at: number): MarkBefore | undefined => {
-  // The last kept span starting before `at`: the ranges are in source order.
   let low = 0;
   let high = mask.rangeCount;
   while (low < high) {
@@ -333,38 +178,10 @@ const corpusCode = (finding: CorpusFinding, channel: string | undefined): string
   }
 };
 
-/**
- * Sous corpus findings → findings, for a whole publication: what a
- * `corpusReader` answers, one book at a time.
- *
- * `resolveBook` maps the host id a book was published under back to the stamps
- * of the text we published; a book the caller no longer holds (closed between
- * the `publish` and this call) is SKIPPED rather than stamped with a guess,
- * because a finding without a provable stamp cannot be checked for freshness
- * and so cannot be navigated to or fixed.
- *
- * `text` is the book's text as it was published, so a message can quote the
- * finding's own words (the engine keys a word by hash), and `name` is what
- * the reader calls the book, for a message that names one.
- *
- * A publication whose coordinates are UTF-8 byte offsets is dropped whole: the
- * offsets in the one shape are UTF-16 code units into canonical LF text, and
- * silently mixing spaces is exactly the class of bug the stamps exist to
- * prevent. The engine flags UTF-16 when the books were published that way,
- * which is what `ProjectAnalysis` does.
- */
 export interface CorpusReader {
-  /** One book's findings, converted on first ask and held for the publication. Suppressed ones are left out. */
   of(bookId: BookId): readonly Finding[];
-  /** Every book's — the Findings panel's list. Converts what was not asked for yet. */
   all(): readonly Finding[];
-  /** The findings the reader said are fine, every book's: what "Show suppressed" lists. */
   suppressed(): readonly Finding[];
-  /**
-   * How many errors and warnings are shown. From the severities alone when
-   * nothing is suppressed; otherwise every book is converted, since only a
-   * finding's identity says whether it is suppressed.
-   */
   totals(): { readonly errors: number; readonly warnings: number };
 }
 
@@ -386,7 +203,6 @@ export const corpusReader = (
 ): CorpusReader => {
   const usable = snapshot.coordinateSpace === "utf16";
   const bookCount = snapshot.length;
-  // Shared by every book's conversion, and built only by the first.
   let shared:
     | {
         readonly patterns: ReturnType<FindingsSnapshot["patterns"]>;
@@ -398,7 +214,6 @@ export const corpusReader = (
     if (shared !== undefined) return shared;
     shared = {
       patterns: snapshot.patterns(),
-      // Which books hold each pattern, so a two-book spread is named, not counted.
       patternBooks: booksByPattern(snapshot),
       bookName: (index: number): string => {
         const book = snapshot.book(index);
@@ -408,9 +223,6 @@ export const corpusReader = (
     };
     return shared;
   };
-  // A Casing message says what the project does after the mark before its
-  // word; the reading map that finds that mark is asked for once per book,
-  // and only by a book that has one.
   const masks = new Map<string, MaskMap | undefined>();
   const before = (
     resolved: PublishedBook,
@@ -418,7 +230,6 @@ export const corpusReader = (
     pattern: Pattern | undefined,
   ): { readonly before?: MarkBefore } => {
     if (pattern?.key.kind !== "Casing" || resolved.mask === undefined) return {};
-    // A map of any other revision than the one published names other offsets.
     if (!masks.has(resolved.bookId)) {
       const mask = resolved.mask();
       masks.set(resolved.bookId, mask?.sourceLen === resolved.text.length ? mask : undefined);
@@ -428,7 +239,6 @@ export const corpusReader = (
     return mark === undefined ? {} : { before: mark };
   };
 
-  /** Each published book's index and what it resolves to; a closed book is not there. */
   let indexes:
     | Map<BookId, { readonly index: number; readonly resolved: PublishedBook }>
     | undefined;
@@ -485,8 +295,6 @@ export const corpusReader = (
         ...before(resolved, finding, pattern),
       });
       const comparison = comparisonOf(described);
-      // The two sentences, formatted when first read: most findings are
-      // counted or squiggled, and never have either drawn.
       let headline: string | undefined;
       let more: string | undefined;
       let keys: SuppressionKeys | null | undefined;
@@ -586,14 +394,5 @@ export const corpusReader = (
   };
 };
 
-/**
- * Has the book moved on since this finding was computed?
- *
- * The Book's revision is the authority inside one Book's lifetime, and that is
- * the whole scope of a panel finding: a stale finding is recomputed, never
- * shifted. Across lifetimes (a release, a reload, a product handed between
- * modules) the engine hash on `finding.engine` is the check instead, which is
- * what `src/core/fixes` uses before it will touch text.
- */
 export const stale = (finding: Finding, book: { source: () => { stamp: SourceStamp } }): boolean =>
   book.source().stamp.revision !== finding.stamp.revision;

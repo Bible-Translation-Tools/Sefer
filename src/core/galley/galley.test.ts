@@ -1,13 +1,3 @@
-/**
- * The one test this module gets: does the real wasm artifact load, parse a real
- * book, and publish a real corpus snapshot?
- *
- * This is the riskiest seam in the app — a pinned wasm binary, two generated
- * readers, and a wire handshake — and every one of those failures is silent or
- * catastrophic rather than gradual. Everything else about Galley is a pure
- * function over the value this proves we can get.
- */
-
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -29,7 +19,6 @@ const fixture = (name: string): string =>
 
 const PHILEMON = fixture("58-PHM.usfm");
 
-/** One built engine, reused: `Effect.provide` shares a layer across calls. */
 const withGalley = <A>(use: (galley: GalleyService) => A): Promise<A> =>
   Effect.runPromise(Effect.provide(Galley.useSync(use), NodeGalleyLive));
 

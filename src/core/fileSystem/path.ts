@@ -22,7 +22,6 @@ export const parentPath = (path: string): string => {
   return path.slice(0, index);
 };
 
-/** The last `/`-separated segment: a file or folder name. */
 export const lastSegment = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
 
 export const joinPath = (left: string, right: string): string => {

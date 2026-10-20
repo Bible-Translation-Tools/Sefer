@@ -1,30 +1,3 @@
-/**
- * Assemble: the chosen books become one project, with their Writer history.
- *
- * What it writes into a new folder:
- *
- *   NN-BOOK.usfm       each chosen book, as the template rendered it
- *   metadata.json      the Burrito Sefer reads   } one description,
- *   manifest.yaml      the RC other tools read   } `writeMetadata.ts`
- *   .upstreams.json    which Writer project each book follows (committed:
- *                      a teammate needs to know it too)
- *
- * First the books' Writer saves, replayed (`writerHistory.ts`): each save
- * that changed a book's text is a commit of that whole book file, with its
- * own author and date, every book interleaved by time, written into the new
- * `.git` as one pack. Then ONE commit for the assembly itself — the metadata
- * and `.upstreams.json` — on top. (Will, 2026-10-09, replacing 2026-10-06's
- * single commit with no history: keeping the saves proved cheap.) The Writer
- * authors are credited with `Co-authored-by` where there is an address, and
- * by name in the body where there is not. Adding a book later is one commit.
- *
- * A history that cannot be replayed, or that intake cannot open afterwards,
- * fails the assembly and removes the half-made folder: it never quietly
- * arrives without its past.
- *
- * Nothing is sent: the project reaches a server through ordinary sync.
- */
-
 import { CANON } from "@sefer/text/location/canon";
 import { Data, Effect, FileSystem, Option, Result } from "effect";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
@@ -53,10 +26,8 @@ class AssembleError extends Data.TaggedError("AssembleError")<{
   readonly description: string;
 }> {}
 
-/** The project form: what the person confirmed on the last step. */
 export type AssembleForm = Omit<NewProjectMetadata, "books" | "date">;
 
-/** The form prefilled from the chosen books, to bwc_reg's convention. */
 export const prefillForm = (books: readonly StagedBook[]): AssembleForm => {
   const first = books[0]?.project;
   return {
@@ -79,13 +50,11 @@ export const prefillForm = (books: readonly StagedBook[]): AssembleForm => {
   };
 };
 
-/** The book's own name, from the `\h` the template wrote. */
 const titleOf = (staged: StagedBook): string =>
   /^\\h\s+(.+)$/m.exec(staged.usfm)?.[1]?.trim() ??
   CANON.find((entry) => entry.id === staged.project.book)?.name ??
   staged.project.book;
 
-/** The assembly's message: what it is, who did the work, and their credit trailers. */
 const assemblyMessage = (form: AssembleForm, books: readonly StagedBook[]): string => {
   const authors = new Map<string, Author>();
   for (const book of books)
@@ -117,7 +86,6 @@ const assemblyMessage = (form: AssembleForm, books: readonly StagedBook[]): stri
 
 const encode = (text: string): Uint8Array => new TextEncoder().encode(text);
 
-/** The replayed pack and its index, into a repository's object store. */
 const writePack = (fileSystem: FileSystem.FileSystem, root: string, replayed: Replayed) =>
   Effect.gen(function* () {
     const git = joinPath(root, ".git");
@@ -127,11 +95,6 @@ const writePack = (fileSystem: FileSystem.FileSystem, root: string, replayed: Re
     yield* fileSystem.writeFile(joinPath(git, `objects/pack/${replayed.name}.idx`), replayed.idx);
   });
 
-/**
- * The replayed history as a repository intake can adopt: its pack and index,
- * the branch at its last commit, and HEAD on that branch. Intake writes the
- * config and commits the assembly on top.
- */
 const writeHistory = (fileSystem: FileSystem.FileSystem, root: string, replayed: Replayed) =>
   Effect.gen(function* () {
     const git = joinPath(root, ".git");
@@ -143,10 +106,6 @@ const writeHistory = (fileSystem: FileSystem.FileSystem, root: string, replayed:
     yield* fileSystem.writeFileString(joinPath(git, "HEAD"), `ref: refs/heads/${DEFAULT_BRANCH}\n`);
   });
 
-/**
- * Writes the books, both metadata files and `.upstreams.json` into `root`,
- * which must not exist yet, and records it all as one commit.
- */
 export const assemble = (options: {
   readonly root: string;
   readonly form: AssembleForm;
@@ -192,10 +151,7 @@ export const assemble = (options: {
 
     yield* Effect.mapError(fileSystem.makeDirectory(options.root, { recursive: true }), io);
 
-    // Everything from here writes into the new folder, and any failure removes
-    // it again: a project never arrives half made, or without its history.
     const build = Effect.gen(function* () {
-      // The Writer saves first, so the assembly commits on top of them.
       const observability = Option.getOrUndefined(yield* Effect.serviceOption(Observability));
       const histories = options.books.flatMap((staged) =>
         staged.history === undefined ? [] : [staged.history],
@@ -248,8 +204,6 @@ export const assemble = (options: {
             description: "description" in error ? String(error.description) : String(error),
           }),
       );
-      // Intake starts a fresh repository when it cannot open the one it found,
-      // which here would be the replayed history, lost without a word.
       if (replayed !== undefined && !result.adopted)
         return yield* abandon("the replayed Writer history could not be opened");
       replaying?.(
@@ -270,25 +224,12 @@ export const assemble = (options: {
     );
   });
 
-/** The text of a file under `root`, or `undefined` when it is not there. */
 const readIfThere = (
   fileSystem: FileSystem.FileSystem,
   path: string,
 ): Effect.Effect<string | undefined> =>
   Effect.orElseSucceed(fileSystem.readFileString(path), () => undefined);
 
-/**
- * Brings Writer books into a project that exists: Books → "Add a book…".
- * The same arrival as an assembly, for some books, and one commit for them,
- * made on the project's own repository as it is — never adopted or begun
- * again — joining the books' replayed Writer saves as a second parent.
- *
- * Refuses a book the project already holds: no Bible prints John twice, and
- * a newer copy of one of its books is an update, which goes through Review,
- * not here. Each metadata file is updated only where the project has one: a
- * Burrito gains the ingredient, its scope and its name; a Resource
- * Container's `projects` gains the book. `.upstreams.json` gains its row.
- */
 export const addBooks = (options: {
   readonly root: string;
   readonly books: readonly StagedBook[];
@@ -317,8 +258,6 @@ export const addBooks = (options: {
         );
     }
 
-    // The added books' Writer saves, as a side branch of their own: the
-    // project's history is not rewritten, the arrival joins them.
     const observability = Option.getOrUndefined(yield* Effect.serviceOption(Observability));
     const histories = options.books.flatMap((staged) =>
       staged.history === undefined ? [] : [staged.history],
@@ -414,17 +353,11 @@ export const addBooks = (options: {
     if (fresh.length > 0) {
       const text = yield* readIfThere(fileSystem, joinPath(options.root, UPSTREAMS_FILE));
       const known = text === undefined ? [] : Option.getOrElse(readUpstreams(text), () => []);
-      // One upstream per book: a row left from an earlier arrival of the
-      // same book is replaced, not kept beside the new one.
       const adding = new Set(fresh.flatMap((upstream) => upstream.books));
       const kept = known.filter((upstream) => !upstream.books.some((book) => adding.has(book)));
       yield* write(UPSTREAMS_FILE, upstreamsText([...kept, ...fresh]));
     }
 
-    // The project's own repository, as it is: no adopt (that rewrites the
-    // config and drops `refs/remotes`, which is where sync keeps its
-    // baseline), and no fresh repository if it will not open — that would
-    // throw the project's history away to make room for the books.
     const git = yield* Git;
     const failed = (what: string) => (error: GitError) =>
       new AssembleError({
@@ -464,13 +397,11 @@ type Added = {
   readonly bytes: Uint8Array;
 };
 
-/** An object's own entries as a fresh record; anything else is an empty one. */
 const record = (value: unknown): Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
     ? Object.fromEntries(Object.entries(value))
     : {};
 
-/** A Burrito's raw object with the books added: ingredient, scope and name. */
 const withBooks = (
   raw: Record<string, unknown>,
   books: readonly Added[],
@@ -501,7 +432,6 @@ const withBooks = (
   };
 };
 
-/** A Resource Container's `manifest.yaml` with the books added to `projects`. */
 const withProjects = (text: string, books: readonly Added[]): string => {
   const document = record(parseYaml(text));
   const projects: unknown[] = Array.isArray(document.projects) ? [...document.projects] : [];

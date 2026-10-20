@@ -1,4 +1,3 @@
-/** Small deterministic bounds used by the disposable local history prototype. */
 export class BoundedLru<K, V> {
   private readonly held = new Map<K, V>();
   private heldWeight = 0;
@@ -33,7 +32,6 @@ export class BoundedLru<K, V> {
     this.heldWeight = 0;
   }
 
-  /** Read without making the entry recent; for renders, which are not uses. */
   peek(key: K): V | undefined {
     return this.held.get(key);
   }

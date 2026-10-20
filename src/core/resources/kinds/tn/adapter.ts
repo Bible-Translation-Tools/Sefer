@@ -1,16 +1,3 @@
-/**
- * Translation Notes as a `ResourceHandle`: the TN kind's adapter.
- *
- * In core because it imports nothing but the `FileSystem` port and the pure
- * reader; a kind that loads wasm or fetches (Macula) has its adapter under
- * `src/platform` instead, and the kind table in `src/app` maps both.
- *
- * Holds a few books' packs in memory — the one being read and the ones just
- * before it — and loads the next on demand; a Bible's notes are 14 MB of
- * text, and nothing reads them all at once except a search, which asks book
- * by book.
- */
-
 import type { BookId } from "@sefer/text/book";
 import type { Address } from "@sefer/text/location/address";
 import { Effect, Option, type FileSystem } from "effect";
@@ -25,7 +12,6 @@ import { FolderTree } from "../tree";
 import { answersPlace, noteOf, type Note } from "./note";
 import { bookPack, helpBooks, type HelpBook, type Pack } from "./pack";
 
-/** How many books' packs stay in memory. A reader moves between two or three. */
 const HELD = 3;
 
 export const openTranslationNotes = (
@@ -36,14 +22,9 @@ export const openTranslationNotes = (
     const books = new Map<string, HelpBook>(
       (yield* helpBooks(fileSystem, resource.root)).map((help) => [help.book, help]),
     );
-    // The host's fast path to a folder, captured now as `fileSystem` is: the
-    // handle's reads run later, wherever the caller runs them (the notes pane
-    // forks them bare), and would otherwise find no `FolderTree` and walk the
-    // port one IPC call per file.
     const fast = yield* Effect.serviceOption(FolderTree);
     const withHost = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
       Option.isSome(fast) ? Effect.provideService(effect, FolderTree, fast.value) : effect;
-    /** Most recent last. */
     const held = new Map<string, Pack>();
 
     const packOf = (book: BookId): Effect.Effect<Pack, Unavailable> =>
@@ -76,18 +57,6 @@ export const openTranslationNotes = (
           .map((record) => noteOf(address.book, record, context)),
       );
 
-    /**
-     * The haystack, per book, for the life of the handle. A search reads
-     * every book, and through the three-book `held` that was every pack read
-     * and decoded again on each search (about 0.65 s for en_tn over the
-     * Bisa Bible's 66 books, each time). Kept here instead, released with
-     * the handle (the project's close): the texts of the books searched, a
-     * few megabytes, in exchange for searches that are only the scan.
-     *
-     * Addresses are built with the `context` of the first search: a later
-     * change to the project's verse counts moves only an open-ended note's
-     * last verse, until the handle is reopened.
-     */
     const haystack = new Map<string, readonly HaystackDocument[]>();
     const list = (requested: readonly BookId[], context?: PlaceContext) =>
       Effect.gen(function* () {

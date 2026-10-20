@@ -1,18 +1,3 @@
-// import.ts
-//
-// Resource import: the three-step seam that gets foreign bytes into a project
-// without ever letting an unvalidated file land there. `stage` copies what the
-// user picked into a staging directory, `classify` decides what it is from the
-// files themselves, and `commit` validates every book, records provenance and
-// only then copies into the project root. Nothing between `stage` and `commit`
-// touches the project, so an abandoned or refused import leaves no trace but a
-// staging directory the host may sweep.
-//
-// The module reads and writes only through the `effect/FileSystem` port, so the
-// same code imports from a Node folder, an OPFS handle or the in-memory
-// fixture. It records no content hash: identity of text belongs to the engine's
-// xxh3 at the Galley boundary, never to core (see documentation/architecture/source.md).
-
 import { decode } from "@sefer/text/source";
 import { Data, Effect, FileSystem, Result, type PlatformError } from "effect";
 
@@ -22,25 +7,12 @@ import { decodeBurritoMetadata } from "./burrito";
 import { readResourceContainerManifest } from "./projectMetadata";
 import { decodeResourceContainerManifest } from "./resourceContainer";
 
-/**
- * What a staged directory looks like once it has been read.
- *
- * `burrito` and `resourceContainer` are decided by a metadata file that decodes
- * against the schemas in this folder; `looseUsfm` is the fallback for a bare
- * folder or selection of `.usfm` files. `unknown` is the refusal: a caller must
- * not guess, and `commit` fails on it.
- */
 export type Classification = "burrito" | "resourceContainer" | "looseUsfm" | "unknown";
 
-/** A staging directory holding a copy of what the user picked. */
 export interface Staged {
-  /** The last segment of `root`; also the provenance key for this import. */
   readonly stageId: string;
-  /** `<stagingRoot>/<stageId>` — absolute in whatever the port's root is. */
   readonly root: string;
-  /** The paths the user picked, kept for provenance. */
   readonly sources: readonly string[];
-  /** Every staged file, relative to `root`, sorted. Directories excluded. */
   readonly files: readonly string[];
 }
 
@@ -66,7 +38,6 @@ const unreadable =
 
 const isUsfm = (path: string): boolean => path.toLowerCase().endsWith(".usfm");
 
-/** Files, relative to `root` and sorted; a directory entry is not a file. */
 const filesUnder = (
   fileSystem: FileSystem.FileSystem,
   root: string,
@@ -81,14 +52,6 @@ const filesUnder = (
     return files.sort();
   });
 
-/**
- * Copies each picked path into a fresh staging directory under `stagingRoot`.
- * A directory contributes its *contents* (so importing a Resource Container
- * folder puts `manifest.yaml` at the staging root, not one level down); a file
- * contributes itself under its own name. The staging directory is created
- * through the port's `makeTempDirectory`, which is how core gets a fresh name
- * without owning a source of randomness.
- */
 export const stage = (
   fileSystem: FileSystem.FileSystem,
   paths: readonly string[],
@@ -127,10 +90,8 @@ export const stage = (
     return { stageId: lastSegment(root), root, sources: paths, files };
   });
 
-/** JSON.parse narrowed to `unknown`: what comes off disk is untyped until decoded. */
 const parseJson = (text: string): unknown => JSON.parse(text);
 
-/** Reads and JSON-parses a file, or `undefined` when it is absent or not JSON. */
 export const readJson = (
   fileSystem: FileSystem.FileSystem,
   path: string,
@@ -142,12 +103,6 @@ export const readJson = (
 const readTextOrEmpty = (fileSystem: FileSystem.FileSystem, path: string): Effect.Effect<string> =>
   Effect.orElseSucceed(fileSystem.readFileString(path), () => "");
 
-/**
- * Decides what a staged (or already-on-disk) resource root holds. Never fails:
- * an unreadable or undecodable candidate simply is not that kind, and the
- * answer degrades to `looseUsfm` or `unknown`. Takes anything with a `root` so
- * the Library can classify a folder it did not stage.
- */
 export const classify = (
   fileSystem: FileSystem.FileSystem,
   staged: { readonly root: string },
@@ -163,9 +118,6 @@ export const classify = (
     if (manifest !== undefined && Result.isSuccess(decodeResourceContainerManifest(manifest)))
       return "resourceContainer";
 
-    // Decoded, not sniffed: `recognize` reads this same manifest to say what
-    // the container holds, so a YAML file that is not a manifest must not
-    // classify as one.
     const yaml = yield* readTextOrEmpty(fileSystem, joinPath(root, "manifest.yaml"));
     if (yaml !== "" && Result.isSuccess(readResourceContainerManifest(yaml)))
       return "resourceContainer";
@@ -177,17 +129,6 @@ export const classify = (
     return files.some(isUsfm) ? "looseUsfm" : "unknown";
   });
 
-/**
- * Validates every staged book, records provenance and copies the staged files
- * into the project. Returns the committed book paths (relative to
- * `into.root`), in the order they will be read.
- *
- * Refuses before writing anything: `Unclassified` when `classify` cannot say
- * what the staging directory is or it holds no book, `InvalidBook` when a
- * `.usfm` file is not canonical UTF-8 text. Provenance is written first (so a
- * half-copied project still says where its files came from) and the staging
- * directory is removed last, which makes the whole thing a move.
- */
 export const commit = (
   fileSystem: FileSystem.FileSystem,
   staged: Staged,

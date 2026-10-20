@@ -1,106 +1,54 @@
-/**
- * Suggested changes: Gitea's pull requests, as the few questions the
- * suggested-changes flow asks.
- *
- * A translator who works in their own copy (a fork) — because they cannot
- * write to the shared project, or chose to — SUGGESTS what is there: one open
- * pull request from that copy's branch, which follows the copy as more is
- * sent. Someone who can write to the shared project sees the open suggestions
- * and brings them in, or declines them. "Pull request" is Gitea's word and
- * this module's; the screen says "suggestion".
- *
- * A service of its own beside `Gitea`, and deliberately so: the whole flow is
- * one topology among several (a team whose members are all writers never
- * needs it), and it comes out by removing this service's one registration and
- * the app module that calls it (`src/app/suggestions.ts`). It reads the
- * session `Gitea` keeps, so there is no second sign-in. On the Web every path
- * here goes through the WACS proxy's API allowlist, which names each one; a
- * new call needs a new entry there, or it fails as "Failed to fetch".
- */
 import { Context, Effect, Layer, Option, Schema } from "effect";
 
 import { Gitea, GiteaError, type HttpFetch, type HttpResponse, type Session } from "./gitea";
 
-/** One suggestion, as the editors' list and its author's own list show it. */
 export interface Suggestion {
   readonly number: number;
   readonly title: string;
-  /** The account that suggested it. */
   readonly author: string;
-  /** ISO-8601, when it last moved. */
   readonly updatedAt: string;
-  /** The branch it suggests, on its author's copy. */
   readonly branch: string;
-  /**
-   * The commit it suggests, when Gitea said. One copy's branch backs every
-   * suggestion its person makes, and Gitea reports that branch's CURRENT tip
-   * here — for a closed suggestion too — so it says nothing about what one
-   * particular suggestion held, and is never used to decide whether it was
-   * taken.
-   */
   readonly head: string | undefined;
-  /**
-   * Gitea's own word. `merged` is only true when Gitea merged it or was told
-   * it was; where a repository does not allow "manually merged", a suggestion
-   * Sefer brought in ends merely `closed`, and the `BROUGHT_IN` line on its
-   * note is what tells it from a declined one.
-   */
   readonly state: "open" | "merged" | "closed";
 }
 
 interface SuggestRequest {
-  /** The suggester's account, whose copy holds `branch`. */
   readonly from: string;
   readonly branch: string;
-  /** The shared project's branch it is suggested into. */
   readonly base: string;
   readonly title: string;
   readonly body: string;
 }
 
 interface SuggestionsService {
-  /** Can the signed-in account write to `owner/name`? */
   readonly canWrite: (
     host: string,
     owner: string,
     name: string,
   ) => Effect.Effect<boolean, GiteaError>;
-  /** The open suggestions to `owner/name`, newest first. */
   readonly open: (
     host: string,
     owner: string,
     name: string,
   ) => Effect.Effect<readonly Suggestion[], GiteaError>;
-  /**
-   * Opens a suggestion, or answers the one already open from the same
-   * account and branch: one open suggestion per person, which a later send
-   * to their copy updates by itself.
-   */
   readonly suggest: (
     host: string,
     owner: string,
     name: string,
     request: SuggestRequest,
   ) => Effect.Effect<Suggestion, GiteaError>;
-  /** Suggestion `number` on `owner/name`, or `undefined` when there is none. */
   readonly one: (
     host: string,
     owner: string,
     name: string,
     number: number,
   ) => Effect.Effect<Suggestion | undefined, GiteaError>;
-  /** The suggestions `author` made to `owner/name`, open or not, newest first. */
   readonly from: (
     host: string,
     owner: string,
     name: string,
     author: string,
   ) => Effect.Effect<readonly Suggestion[], GiteaError>;
-  /**
-   * The last thing anybody but `author` said on suggestion `number` — the
-   * editor's note on a declined or brought-in one — or `undefined` when
-   * nobody did.
-   */
   readonly noteOn: (
     host: string,
     owner: string,
@@ -108,25 +56,14 @@ interface SuggestionsService {
     number: number,
     author: string,
   ) => Effect.Effect<string | undefined, GiteaError>;
-  /**
-   * Marks a suggestion brought in by `commit` — Gitea's "manually merged" —
-   * or, where the repository does not allow that, closes it; either way it
-   * leaves `note` on it, ending with `BROUGHT_IN`, so its author sees it
-   * taken rather than declined, and in the reviewer's own words.
-   */
   readonly accept: (
     host: string,
     owner: string,
     name: string,
     number: number,
     commit: string,
-    /** What the reviewer wrote when bringing it in — its author reads it. */
     note: string,
   ) => Effect.Effect<void, GiteaError>;
-  /**
-   * Closes a suggestion without bringing it in, leaving `note` on it when
-   * given: an editor declining it, or its author withdrawing it.
-   */
   readonly decline: (
     host: string,
     owner: string,
@@ -183,16 +120,8 @@ const suggestionOf = (record: PullValue): Suggestion => ({
   state: record.merged === true ? "merged" : record.state === "closed" ? "closed" : "open",
 });
 
-/** The same login, as Gitea compares them: without regard to case. */
 const sameLogin = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase();
 
-/**
- * The line Sefer ends a brought-in suggestion's note with — how its author
- * tells "taken" from "declined" on a repository that does not allow marking a
- * pull request "manually merged", where both end merely closed. Git cannot
- * say: one copy's branch backs every suggestion its person makes, and Gitea
- * reports that branch's CURRENT tip as the head of each, closed or not.
- */
 export const BROUGHT_IN = "Brought in with Sefer.";
 
 const failed = (reason: GiteaError["reason"], description: string): GiteaError =>
@@ -234,8 +163,6 @@ const make = (fetch: HttpFetch) =>
     const answer = (response: HttpResponse): Effect.Effect<unknown, GiteaError> =>
       Effect.gen(function* () {
         if (!response.ok) {
-          // Gitea's reason travels with the status: a bare "403" cannot tell
-          // a missing token scope from a permission from a proxy refusal.
           const text = yield* Effect.orElseSucceed(
             Effect.tryPromise(() => response.text()),
             () => "",
@@ -289,8 +216,6 @@ const make = (fetch: HttpFetch) =>
             }),
             answer,
           ),
-          // A sign-in from before notes needed `write:issue` (gitea.ts) carries
-          // a token Gitea refuses a comment to. Say the fix, not the status.
           (error: GiteaError): GiteaError =>
             error.reason === "Unauthorized"
               ? failed(
@@ -350,8 +275,6 @@ const make = (fetch: HttpFetch) =>
               answer,
             ),
           );
-          // Where the repository does not allow "manually merged", it is closed
-          // instead — and either way the reviewer's own words go on it.
           if (marked._tag === "Failure")
             yield* answer(
               yield* request(held, repoPath(host, owner, name, `/pulls/${number}`), {
@@ -396,8 +319,6 @@ const make = (fetch: HttpFetch) =>
       decline: (host, owner, name, number, note) =>
         Effect.gen(function* () {
           const held = yield* session(host);
-          // Closed first, then the note: a close that is refused leaves
-          // nothing behind, so trying again does not post the note twice.
           const closed = decodePull(
             yield* answer(
               yield* request(held, repoPath(host, owner, name, `/pulls/${number}`), {
@@ -417,7 +338,6 @@ const make = (fetch: HttpFetch) =>
     } satisfies SuggestionsService;
   });
 
-/** Registered once, beside `Gitea`, over the same transport. */
 export const SuggestionsLive = (options: {
   readonly fetch: HttpFetch;
 }): Layer.Layer<Suggestions, never, Gitea> => Layer.effect(Suggestions, make(options.fetch));

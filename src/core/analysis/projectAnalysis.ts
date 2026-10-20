@@ -1,46 +1,3 @@
-// projectAnalysis.ts
-//
-// ProjectAnalysis — Sefer's whole-project consumer of Galley ("global truth,
-// local rendering"). See `documentation/architecture/findings.md` and
-// `documentation/architecture/galley.md`.
-//
-// It exists to answer one question the editor cannot: does this PROJECT have
-// errors? A translator must not have to open sixty-six files to find out. So
-// this is the only module that holds many books' analyses at once, and it
-// holds them as stamped, disposable products: a publish on a book marks its
-// entry stale, and re-analysis happens off the keystroke path.
-//
-// Three decisions shape the whole file.
-//
-//  1. ONE scheduling fiber, not one per book. A single fiber over a pending
-//     set of book ids gives the same ~150 ms quiet window as a debounced
-//     fiber per book with less machinery, and coalesces a bulk
-//     operation that touches forty books into one pass and ONE corpus
-//     publication — which is what "bulk operations coalesce" has to mean,
-//     because `publish()` is whole-corpus and a snapshot replaces the previous
-//     one entirely.
-//
-//  2. The instantiated book is not analyzed twice. The editor already analyzes
-//     synchronously on every keystroke, so it hands its current `Analysis` in
-//     through `supply(bookId, analysis)`; the scheduler then only owes that
-//     book its corpus update. Composition wires `supply` from the editor
-//     layer — core cannot reach into CodeMirror.
-//
-//  3. Failure retains, never clears. `analyze` throws on text the engine
-//     refuses; the held analysis stays and the entry stays stale, so the panel
-//     shows known-stale findings rather than an apparently clean project.
-//
-// ONE engine. The per-book `analyze` and the whole-corpus `update`/`remove`/
-// `publish` are two halves of the same `Galley` handle in this process, and
-// every call here is SYNCHRONOUS. That is load-bearing, not incidental:
-// JavaScript cannot run a keystroke handler in the middle of a wasm call, so a
-// debounced publication needs its revision checked once on entry and never
-// again — nothing can move underneath it. Why the corpus half is not a port
-// with a native implementation is in documentation/architecture/galley.md.
-//
-// Telemetry carries counts and codes only. A diagnostic's message quotes the
-// document and lives in Findings.
-
 import type { Book, BookId } from "@sefer/text/book";
 import { tocViewOf } from "@sefer/text/engine/location";
 import { bookName } from "@sefer/text/location/canon";
@@ -67,18 +24,10 @@ import {
 import { Observability, type ObservabilityService } from "../observability";
 import type { Project } from "../project/project";
 
-/**
- * Quiet window before a changed book is re-analyzed. Long enough that typing
- * in an unfocused-but-subscribed book does not queue a parse per keystroke,
- * short enough that the panel feels attached to the document.
- */
 const QUIET = 150;
 
-/** Upper bound from the first arming of a burst, so a long paste-and-type
- * session still refreshes the panel instead of waiting for silence. */
 const DEADLINE = 1_000;
 
-/** One book's row in the census. Counts come from the held analysis. */
 export interface BookSummary {
   readonly bookId: BookId;
   readonly path: string;
@@ -88,177 +37,58 @@ export interface BookSummary {
   readonly diagnostics: { readonly errors: number; readonly warnings: number };
 }
 
-/** What `analysis(bookId)` hands back: the parse, and the text it describes. */
 export interface HeldAnalysis {
   readonly analysis: Analysis;
   readonly stamp: SourceStamp;
 }
 
-/**
- * One book of a Library-bound source or reference resource, as text.
- *
- * The TEXT, not a path: this module reads no files. Whoever resolved the
- * binding did the reading — `src/app/workflows/references.ts` — because the
- * Library and the FileSystem are the shell's to reach and a core module that
- * required both would make every composition of ProjectAnalysis carry them.
- */
 export interface ReferenceText {
-  /** The caller's own id, unique across the project. The resource path serves. */
   readonly id: string;
   readonly text: string;
 }
 
 export interface ProjectAnalysisService {
-  /**
-   * Subscribe to a Project: analyze every book once, register the corpus, and
-   * keep both in step as books change. Requires `Scope` because it forks the
-   * scheduling fiber and holds subscriptions; closing the scope drops both.
-   *
-   * Analyzing every book here is deliberate and is the point of the module.
-   * It is a project-open cost, not an interaction cost.
-   *
-   * Attaching a second Project replaces the first: the module holds one
-   * project's worth of analyses, and the Galley corpus is one corpus.
-   */
   readonly attach: (
     project: Project,
     options?: { readonly first?: BookId },
   ) => Effect.Effect<void, never, Scope.Scope>;
 
-  /**
-   * The editor's own synchronous analysis, handed in instead of a second
-   * parse. Safe to call from a `book.changes` callback: it writes two maps and
-   * opens a latch. The book's corpus registration is refreshed on the next
-   * scheduler pass, so a keystroke costs no wasm call beyond the editor's own.
-   */
-  /**
-   * `cause` is the trace of the gesture that produced this Analysis. The pass
-   * it arms is debounced and serves several gestures, so it cannot be a child
-   * of one — it carries `op.cause` instead, and one query returns the cascade.
-   */
   readonly supply: (bookId: BookId, analysis: Analysis, cause?: string) => void;
 
-  /**
-   * Register the project's bound source and reference books WITH THEIR TEXT,
-   * so Find's "Reference" scope and the overlay doors have something to read.
-   *
-   * Separate from `attach` on purpose. A reference is a Library binding, and
-   * the Library and the FileSystem are the shell's services: making this
-   * module require them would put two host-facing Layers behind every
-   * composition of it, for a feature two screens use. So the shell resolves
-   * the binding and hands the text in, exactly as the editor hands its
-   * analysis in through `supply`.
-   *
-   * REPLACES the set: a reference registered by a previous call and absent
-   * from this one is dropped from the corpus, because a binding the project no
-   * longer has must not keep answering searches. Succeeds with the ids that
-   * are now registered — a caller uses it to decide whether to offer the scope
-   * at all.
-   *
-   * Idempotent per id: the same text costs a checksum, so a screen may call
-   * this every time it opens.
-   */
   readonly attachReferences: (
     references: readonly ReferenceText[],
   ) => Effect.Effect<readonly string[]>;
 
-  /** The reference ids currently registered, in the order they were given. */
   readonly references: () => readonly string[];
 
-  /**
-   * One registered reference's canonical text, or `undefined` for an id this
-   * never registered.
-   *
-   * The engine holds its own copy and will not give it back as addressable
-   * source — `verseText(id)` answers the PROJECTION — so a caller that has to
-   * turn a reference hit into a chapter and verse reads it here.
-   */
   readonly referenceText: (id: string) => string | undefined;
 
-  /**
-   * The project census, from the analyses currently held. Synchronous: every
-   * input is already in memory, and a census that could suspend would be a
-   * census the shell has to await on every render.
-   *
-   * A book with no held analysis yet (or one whose analysis failed) reports
-   * zero chapters, zero verses and zero counts — read `fresh` to tell that
-   * apart from a clean book.
-   */
   readonly census: (project: Project) => readonly BookSummary[];
 
   readonly analysis: (bookId: BookId) => Option.Option<HeldAnalysis>;
-  /** Is the held analysis the one for this stamp? */
   readonly fresh: (bookId: BookId, stamp: SourceStamp) => boolean;
-  /** Mark a book's analysis stale and schedule a re-analysis. */
   readonly invalidate: (bookId: BookId) => void;
 
-  /**
-   * The judging settings changed: mark every book stale and let the scheduler
-   * republish once, the way an edit does. The publication judged under the
-   * old settings is kept until that one replaces it, so a screen can show its
-   * findings as pending (`findingsPending`) rather than none at all.
-   */
   readonly rejudge: () => void;
 
-  /**
-   * Every finding in the project, in one shape: per-book Galley diagnostics
-   * from the held analyses, plus the Sous findings of the last publication.
-   * Memoised until something changes, because a panel asks on every render.
-   */
   readonly findings: () => readonly Finding[];
 
-  /** Just the corpus-level half — the findings no single book could produce. */
   readonly crossBook: () => readonly Finding[];
 
-  /**
-   * One book's share of the corpus half, converted on its own: an editor's
-   * squiggles need their book, not the project's whole list.
-   */
   readonly crossBookOf: (bookId: BookId) => readonly Finding[];
 
-  /**
-   * How many errors and warnings `findings()` holds, counted without
-   * converting the corpus half — what a badge needs, at a fraction of the list.
-   */
   readonly findingTotals: () => { readonly errors: number; readonly warnings: number };
 
-  /**
-   * The reader's suppressions, applied from now on: `findings()`,
-   * `crossBookOf` and `findingTotals` leave a suppressed Sous finding out,
-   * and `suppressed()` lists them. The caller reads and writes the file
-   * (`src/core/findings/suppressions.ts`); this only applies what it holds.
-   */
   readonly setSuppressions: (suppressions: Suppressions) => void;
 
-  /** The findings left out because the reader said they are fine. */
   readonly suppressed: () => readonly Finding[];
 
-  /**
-   * Called after `setSuppressions`: the same publication, filtered again. Not
-   * a `watch` event, since no book was re-analysed; an editor showing a
-   * book's squiggles listens to both. Returns the detach.
-   */
   readonly onSuppressions: (listener: () => void) => () => void;
 
-  /**
-   * One held book's verses by reference, raw USFM: what pruning a
-   * suppression reads. `undefined` for a book not analysed yet.
-   */
   readonly versesIn: (bookId: BookId) => ReadonlyMap<string, readonly string[]> | undefined;
 
-  /**
-   * The last publication's pattern table, pivoted per character — what the
-   * corpus does with its punctuation, and which sites were flagged.
-   *
-   * Memoised beside `findings()` and recomputed only when a publication lands,
-   * so it is off the keystroke path by construction: nothing recomputes it
-   * until the same event that replaces the snapshot. Empty until the first
-   * publication. The pattern indices inside it are indices into THAT snapshot
-   * and are never valid against another one.
-   */
   readonly inventory: () => Inventory;
 
-  /** Republishes `{ bookId, stamp }` after each re-analysis. */
   readonly watch: () => Stream.Stream<{ readonly bookId: BookId; readonly stamp: SourceStamp }>;
 }
 
@@ -267,25 +97,12 @@ export class ProjectAnalysis extends Context.Service<ProjectAnalysis, ProjectAna
 ) {}
 
 interface Entry {
-  /** The last analysis we hold, fresh or not. Retained through failures. */
   analysis: Analysis | undefined;
-  /** The Book stamp `analysis` describes. */
   stamp: SourceStamp | undefined;
   path: string;
-  /** True when the text moved and the analysis has not caught up. */
   stale: boolean;
 }
 
-/**
- * A bridged anchor (`\v 5-7`) names three verses from one row, so a verse count
- * is over verse NUMBERS, not over rows. `first === 0` is the engine's mark for
- * a missing or malformed designator; it still occupies one anchor.
- *
- * Stated here rather than inline because the TOC reader (`toc(id)`) answers the
- * same question with two getters that do NOT mean this — `verseCount` counts
- * `\v` markers, and `chapters` drops the synthetic front-matter row that
- * `chapterRows.length` includes — so anyone reaching for those needs this walk.
- */
 const versesIn = (rows: {
   length: number;
   seek: (n: number) => { first: number; last: number };
@@ -298,15 +115,9 @@ const versesIn = (rows: {
   return verses;
 };
 
-/**
- * Chapters as a reader counts them. Row 0 of `chapterRows` is ALWAYS the
- * synthetic front-matter row (Kitchen's `toc-reader.ts`), so Genesis has 51
- * rows and 50 chapters.
- */
 const chaptersIn = (analysis: Analysis): number =>
   Math.max(0, analysis.dish.toc.chapterRows.length - 1);
 
-/** The two rungs the census reports, counted once over the one shape. */
 const countsOf = (
   bookId: BookId,
   analysis: Analysis,
@@ -321,12 +132,6 @@ const countsOf = (
   return { errors, warnings };
 };
 
-/**
- * One book's census counts from one analysis: what a Book census row shows,
- * for text that is not (yet) a project's book. The Writer migration's health
- * line is this, so it cannot disagree with the book list once the book
- * arrives.
- */
 export const censusOf = (
   bookId: BookId,
   analysis: Analysis,
@@ -364,26 +169,10 @@ const make = (
 ): Effect.Effect<ProjectAnalysisService> =>
   Effect.gen(function* () {
     const entries = new Map<BookId, Entry>();
-    /** Analyses handed in by the editor, keyed by book; consumed by the pass. */
     const supplied = new Map<BookId, Analysis>();
     const pending = new Set<BookId>();
-    /** Bound source/reference books registered with their text, in order. */
     let referenceIds: readonly string[] = [];
 
-    /**
-     * The canonical text of every registered reference, by id.
-     *
-     * Held because the ENGINE's copy cannot be read back as text a consumer can
-     * address: `verseText(id)` answers the projection, and a projection offset
-     * is not a source offset until the mask map carries it across, and the map
-     * is only useful beside the text it indexes. Find's reference scope needs
-     * the source, to turn a hit into a chapter and verse and to show the verse
-     * it landed in.
-     *
-     * The cost is one more Bible in memory per bound reference, and the text
-     * was already read off disk to register it — this keeps the string rather
-     * than reading it twice.
-     */
     const referenceTexts = new Map<string, string>();
     let attached: Project | undefined;
     let snapshot: FindingsSnapshot | undefined;
@@ -402,7 +191,6 @@ const make = (
     let lastArmed = 0;
     let burstStarted = 0;
     let armed = false;
-    /** The gesture that most recently armed the scheduler. See `supply`. */
     let causedBy: string | undefined;
 
     const invalidateCaches = (): void => {
@@ -412,7 +200,6 @@ const make = (
       inventoryCache = undefined;
     };
 
-    /** Synchronous, called from `book.changes`. Two numbers and a latch. */
     const arm = (bookId: BookId): void => {
       pending.add(bookId);
       const now = Date.now();
@@ -424,45 +211,21 @@ const make = (
       latch.openUnsafe();
     };
 
-    /**
-     * Analyze one book, registering it with the corpus in the same call.
-     * Succeeds with the stamp the analysis describes, or `undefined` when the
-     * engine refused the text (the previously held analysis is kept and the
-     * entry stays stale).
-     *
-     * ONE door, not two, and so PLAIN rather than an effect. `analyze(text,
-     * why, id)` registers the text and then parses off the retained copy; a
-     * separate `corpus.update` beside it would send the same string across the
-     * wall a second time, which is the habit the engine's maintainer measured
-     * as most of a project open's cost. Nothing here leaves this thread, so a
-     * generator that never yields would say otherwise.
-     *
-     * It is also why the corpus is not behind a port: a registration the parse
-     * path cannot SEE is not a registration the parse path can name, so an
-     * engine anywhere but here cannot answer `parse(id)` at all.
-     */
     const refresh = (
       bookId: BookId,
       book: Book,
       entry: Entry,
-      // Whoever is narrating: the pass that is running, or the root when a
-      // project is opening. `refresh` cannot tell, which is the point.
       into: ObservabilityService | undefined = observability,
     ): SourceStamp | undefined => {
       const source = book.source();
       const handed = supplied.get(bookId);
       supplied.delete(bookId);
-      // The editor's analysis counts only if it describes the text the Book
-      // holds RIGHT NOW; a keystroke between the supply and this pass makes
-      // it a stale gift, not a shortcut.
       let analysis: Analysis;
       if (handed !== undefined && describesExactly(handed, source.text)) analysis = handed;
       else {
         try {
           analysis = galley.analyze(source.text, "scheduler", bookId, into);
         } catch {
-          // Retain, do not clear: an engine refusal is an integration
-          // problem, not evidence that the book became clean.
           into?.note("book.analyze", "failed", "engine refused", { "book.id": bookId });
           return undefined;
         }
@@ -470,9 +233,6 @@ const make = (
       entry.analysis = analysis;
       entry.stamp = source.stamp;
       entry.stale = false;
-      // A gift from the editor was parsed through the id door too, on the
-      // keystroke that produced it, so the corpus already holds this text
-      // either way and there is nothing to register here.
       const { errors } = countsOf(bookId, analysis, source.stamp);
       into?.note("book.analyze", "ready", undefined, {
         "book.id": bookId,
@@ -482,47 +242,22 @@ const make = (
       return source.stamp;
     };
 
-    /**
-     * Drop one id from the corpus, never mind whether it was there.
-     *
-     * `remove` answers `false` for an id it never knew, which is not a failure
-     * and is not interesting: every caller here is tidying up after a project
-     * it is leaving.
-     */
     const forget = (id: string): void => {
       try {
         galley.remove(id);
-      } catch {
-        // An engine that will not forget an id is an engine we are about to
-        // replace the whole corpus of anyway.
-      }
+      } catch {}
     };
 
-    /**
-     * One whole-corpus publication, through whichever door this host got. The
-     * span carries the engine kind so a reading of the ring says which one ran
-     * and how long it took there.
-     *
-     * A refused publication RETAINS the previous snapshot: known-stale
-     * cross-book findings beat an apparently clean project.
-     */
     const publishCorpus = (into: ObservabilityService | undefined = observability): void => {
       const done = into?.span("corpus.publish");
       try {
         snapshot = galley.publish();
       } catch (cause) {
-        // A refused publication RETAINS the previous snapshot: known-stale
-        // cross-book findings beat an apparently clean project.
         into?.note("corpus.publish", "failed", String(cause));
       }
       done?.();
     };
 
-    /**
-     * One scheduler pass: re-analyze every pending book, then publish the
-     * corpus ONCE. Publishing per book would throw away the previous snapshot
-     * n times and judge the corpus n times for one user gesture.
-     */
     const pass = Effect.sync(() => {
       const project = attached;
       if (project === undefined) {
@@ -531,8 +266,6 @@ const make = (
       }
       const todo = [...pending];
       pending.clear();
-      // One pass is one piece of work, and it FOLLOWED the gestures that armed
-      // it rather than happening inside any of them.
       const running = observability?.operation(
         "analysis.pass",
         { "analysis.books": todo.length },
@@ -555,9 +288,6 @@ const make = (
       return refreshed;
     });
 
-    // The held analysis is the text the last publication measured: a pass
-    // refreshes the analyses it owes and then publishes, and nothing else
-    // writes `entry.analysis`.
     const resolveBook = (id: string): PublishedBook | undefined => {
       const entry = entries.get(id);
       if (entry === undefined || entry.analysis === undefined || entry.stamp === undefined)
@@ -576,7 +306,6 @@ const make = (
       };
     };
 
-    /** The publication's corpus findings, converted a book at a time as they are asked for. */
     const corpus = (): CorpusReader | undefined => {
       if (snapshot === undefined) return undefined;
       corpusCache ??= corpusReader(snapshot, resolveBook, suppressions);
@@ -645,23 +374,7 @@ const make = (
       options?: { readonly first?: BookId },
     ): Effect.Effect<void, never, Scope.Scope> =>
       Effect.gen(function* () {
-        // The observability IN CONTEXT NOW, not the one this module closed over
-        // when its Layer was built. They are different services, and the
-        // difference is the whole wide-event model: the shell opens
-        // `project.open` as the reader's gesture and provides it for this call,
-        // and a module that captured the root at construction narrates BESIDE
-        // that gesture instead of inside it. The ring showed exactly that — a
-        // 256ms `project.open` with no children, and `analysis.pass` sitting
-        // next to it as a root, as though nobody had asked for it.
-        //
-        // Only `attach` takes it this way. The scheduler's later passes happen
-        // long after any gesture has ended and correctly belong to the module's
-        // own service, which is what `observability` still is everywhere else.
         const into = Option.getOrUndefined(yield* Effect.serviceOption(Observability));
-        // One project at a time. Re-attaching drops the previous corpus rather
-        // than judging two projects as one — the bound references included,
-        // because a resource bound to the project we are leaving is not a
-        // reference for the one we are opening.
         for (const bookId of entries.keys()) forget(bookId);
         for (const id of referenceIds) forget(id);
         referenceIds = [];
@@ -675,8 +388,6 @@ const make = (
         const unsubscribes = new Map<BookId, () => void>();
         const subscribe = (book: Book): void => {
           unsubscribes.get(book.id)?.();
-          // The Book publishes synchronously inside `apply`; arming is the
-          // only thing allowed to happen here.
           unsubscribes.set(
             book.id,
             book.changes(() => {
@@ -688,18 +399,7 @@ const make = (
           );
         };
 
-        // One record, not two. A span and a note under the SAME name is the
-        // duplicate-emission shape `galley.parse` was already caught in: the
-        // count belongs on the span that measured the work.
         const done = into?.span("analysis.pass", project.root);
-        // The book the reader is about to look at goes FIRST.
-        //
-        // The loop is serial and the whole project is parsed before the open
-        // finishes either way, so this costs nothing and changes nothing about
-        // the total. What it changes is which parse the reader is waiting on:
-        // in canonical order, opening JUD waits behind sixty-five books it is
-        // not going to show. The editor needs one analysis to draw, and this
-        // makes it the first one produced rather than the last.
         let slowest: BookId | undefined;
         let slowestMs = 0;
         const first = options?.first;
@@ -758,9 +458,6 @@ const make = (
         publishCorpus(into);
         invalidateCaches();
 
-        // A seat swap replaces the object that holds a book's canonical text,
-        // so the old subscription is dead: re-resolve and re-subscribe, and
-        // re-analyze because the seat may already hold different text.
         const unwatchProject = project.changed((bookId) => {
           const book = project.book(bookId);
           if (book === undefined) return;
@@ -780,9 +477,6 @@ const make = (
           }),
         );
 
-        // The scheduling fiber. `Effect.forever` over "wait for quiet, then
-        // one pass" — the numbers are re-read each lap so arming during the
-        // wait extends the quiet period without restarting the deadline.
         const loop = Effect.forever(
           Effect.gen(function* () {
             yield* latch.await;
@@ -794,8 +488,6 @@ const make = (
               if (wait <= 0) break;
               yield* Effect.sleep(Duration.millis(wait));
             }
-            // Close before the pass: an edit arriving during it re-arms and is
-            // picked up by the next lap rather than being lost.
             armed = false;
             latch.closeUnsafe();
             const refreshed = yield* pass;
@@ -805,15 +497,6 @@ const make = (
         yield* Effect.forkScoped(loop);
       });
 
-    /**
-     * `keepText: true` on every one of them. A reference registered without it
-     * retains verse lengths and nothing else, which is all the length lane
-     * needs and nothing a search or an overlay can read — and this door exists
-     * precisely for the two callers that read.
-     *
-     * A registration that fails is reported and skipped, not thrown: one
-     * unreadable reference must not cost the others their scope.
-     */
     const attachReferences = (
       references: readonly ReferenceText[],
     ): Effect.Effect<readonly string[]> =>
@@ -831,7 +514,6 @@ const make = (
             referenceTexts.set(reference.id, reference.text);
             registered.push(reference.id);
           } catch (cause) {
-            // One unreadable reference must not cost the others their scope.
             observability?.note("corpus.reference", "failed", `${reference.id} ${String(cause)}`);
           }
         }
@@ -847,8 +529,6 @@ const make = (
       referenceText: (id) => referenceTexts.get(id),
       supply: (bookId, analysis, cause) => {
         supplied.set(bookId, analysis);
-        // The most recent gesture wins: a pass serving three keystrokes names
-        // the last one, which is the one whose text it is about to read.
         if (cause !== undefined) causedBy = cause;
         arm(bookId);
       },
@@ -886,10 +566,6 @@ const make = (
         arm(bookId);
       },
       rejudge: () => {
-        // The old publication is KEPT until the pass replaces it, as a
-        // refused one is: the screen dims the findings judged under the old
-        // settings for the ~100 ms the pass takes, instead of showing the
-        // project with no proofreading findings at all in between.
         invalidateCaches();
         for (const [bookId, entry] of entries) {
           entry.stale = true;
@@ -909,14 +585,6 @@ const make = (
     };
   });
 
-/**
- * The Layer. Needs `Galley`, and only `Galley`: the per-book parse and the
- * whole-corpus publication are two halves of ONE handle in this process, so
- * they are one requirement.
- * Takes `Observability` optionally, so core policy runs with or without the
- * ring. It is NOT scoped: the module holds no host resource of its own, and
- * the fibers and subscriptions belong to the scope that called `attach`.
- */
 export const ProjectAnalysisLive: Layer.Layer<ProjectAnalysis, never, Galley> = Layer.effect(
   ProjectAnalysis,
   Effect.gen(function* () {

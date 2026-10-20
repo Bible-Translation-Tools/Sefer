@@ -1,45 +1,12 @@
-/**
- * Every recorded event, on disk, bounded by age and size.
- *
- * The ring is the MEMORY bound — enough for the dev surface, small enough not
- * to pressure a Web heap — and these files are what is kept. So nothing is
- * lost when the ring wraps or the app restarts, an export can include the
- * sessions before this one, and an agent on desktop can `jq` the log without
- * driving the app.
- *
- * Cheap on the keystroke path by construction:
- *
- *   - The ring's sink is `LogQueue.sink`: one array push. Nothing is
- *     serialised when an event is recorded.
- *   - The host drains the queue when the browser is idle, and on close: one
- *     serialise-and-append per batch, never per event.
- *   - The queue is bounded. When the disk falls behind, the OLDEST pending
- *     events are dropped and counted, and the count is written as a line of
- *     its own. Recording never waits on disk.
- *
- * Small by construction: one session is a run of parts, each at most
- * `partBytes` (appending to OPFS rewrites the file, so parts stay small), and
- * every part opens with the session header, so any one file read alone says
- * which build and host wrote it. At start, parts older than `maxAgeMs` go,
- * then the oldest sessions until the directory is under `totalBytes`.
- *
- * These files hold what the ring holds, full paths included — they are local,
- * like the projects beside them. What is handed to another person goes
- * through `diagnostics/export.ts`, never these bytes as they are.
- */
 import { Effect, type FileSystem, type PlatformError } from "effect";
 
 import { eventLine, type ObservabilityEvent, type ObservabilitySink } from "../observability";
 import type { SessionHeader } from "./header";
 
 export interface LogLimits {
-  /** One part file, in bytes. */
   readonly partBytes: number;
-  /** Every part of every session in the directory, in bytes. */
   readonly totalBytes: number;
-  /** A part older than this is deleted at start. */
   readonly maxAgeMs: number;
-  /** Events waiting for the disk. The oldest go first when it is full. */
   readonly pending: number;
 }
 
@@ -51,20 +18,12 @@ const LOG_LIMITS: LogLimits = {
 };
 
 export interface LogQueue {
-  /** The ring's sink: an array push, and a wake-up when the queue was empty. */
   readonly sink: ObservabilitySink;
-  /** Everything pending, oldest first, and how many were dropped since the last take. */
   readonly take: () => { readonly events: readonly ObservabilityEvent[]; readonly dropped: number };
-  /** Called once each time the queue goes from empty to not; the host schedules a drain. */
   readonly onPending: (wake: () => void) => void;
   readonly size: () => number;
 }
 
-/**
- * The queue exists from boot, before any filesystem does: the domain
- * FileSystem arrives with the services, and the events of boot itself are
- * worth keeping. Until a writer attaches, the queue just holds (bounded).
- */
 export const makeLogQueue = (limit = LOG_LIMITS.pending): LogQueue => {
   let pending: ObservabilityEvent[] = [];
   let dropped = 0;
@@ -94,7 +53,6 @@ export const makeLogQueue = (limit = LOG_LIMITS.pending): LogQueue => {
 
 const pad = (value: number, width = 2): string => String(value).padStart(width, "0");
 
-/** `20260924T111500Z`: sorts as time, and is safe in a file name on every host. */
 const fileStamp = (epoch: number): string => {
   const at = new Date(epoch);
   return `${at.getUTCFullYear()}${pad(at.getUTCMonth() + 1)}${pad(at.getUTCDate())}T${pad(at.getUTCHours())}${pad(at.getUTCMinutes())}${pad(at.getUTCSeconds())}Z`;
@@ -102,7 +60,6 @@ const fileStamp = (epoch: number): string => {
 
 const STAMP = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z-/u;
 
-/** The epoch a part's name says it was started at, or undefined for a stranger. */
 const stampOf = (name: string): number | undefined => {
   const found = STAMP.exec(name);
   if (found === null) return undefined;
@@ -113,11 +70,9 @@ const stampOf = (name: string): number | undefined => {
 const sessionPrefix = (header: SessionHeader): string =>
   `${fileStamp(header.started)}-${header.session}`;
 
-/** `<stamp>-<session>-<part>.jsonl`, the part numbered from 1. */
 const partName = (header: SessionHeader, part: number): string =>
   `${sessionPrefix(header)}-${pad(part, 3)}.jsonl`;
 
-/** The session a part belongs to: everything before the part number. */
 const sessionOf = (name: string): string => name.slice(0, name.lastIndexOf("-"));
 
 export interface LogPart {
@@ -127,7 +82,6 @@ export interface LogPart {
   readonly started: number;
 }
 
-/** The directory's parts, oldest first. Anything that is not a part is left alone. */
 export const listParts = (
   fileSystem: FileSystem.FileSystem,
   directory: string,
@@ -146,14 +100,6 @@ export const listParts = (
     return parts.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   });
 
-/**
- * Deletes what is too old, then whole sessions oldest-first until the rest
- * fits, and if the session being written is still over on its own, its own
- * oldest parts. `current` — the part being appended to — is never deleted,
- * so a session that runs for hours keeps the most recent `totalBytes` of
- * itself rather than growing without bound: a rolling window, not a quota
- * that only applies at the next start.
- */
 export const pruneLogs = (
   fileSystem: FileSystem.FileSystem,
   directory: string,
@@ -173,8 +119,6 @@ export const pruneLogs = (
       if (now - part.started > limits.maxAgeMs && !part.name.startsWith(keep))
         doomed.add(part.path);
     let bytes = parts.reduce((sum, part) => (doomed.has(part.path) ? sum : sum + part.bytes), 0);
-    // Whole sessions, oldest first: half a session is worse evidence than
-    // none, because its header survives and its failures may not.
     for (const part of parts) {
       if (bytes <= limits.totalBytes) break;
       if (doomed.has(part.path) || part.name.startsWith(keep)) continue;
@@ -185,8 +129,6 @@ export const pruneLogs = (
           bytes -= sibling.bytes;
         }
     }
-    // Only this session is left over the line: its oldest parts go, each one
-    // self-describing, so what survives still opens with the header.
     for (const part of parts) {
       if (bytes <= limits.totalBytes) break;
       if (doomed.has(part.path) || !part.name.startsWith(keep) || part.name === current) continue;
@@ -198,14 +140,12 @@ export const pruneLogs = (
   });
 
 export interface LogWriter {
-  /** Appends one batch, rolling to a new part when this one is full. */
   readonly append: (
     events: readonly ObservabilityEvent[],
     dropped: number,
   ) => Effect.Effect<void, PlatformError.PlatformError>;
 }
 
-/** `{"kind":"dropped",...}`: the queue fell behind and lost this many, oldest first. */
 const droppedLine = (count: number, t: number): string =>
   JSON.stringify({ kind: "dropped", t, count });
 
@@ -228,8 +168,6 @@ export const makeLogWriter = (
     part += 1;
     yield* fileSystem.writeFileString(`${directory}/${partName(header, part)}`, headerLine);
     written = headerLine.length;
-    // Each new part is where the window rolls: the directory is held to
-    // `totalBytes` while the session runs, not only at the next start.
     if (part > 1)
       yield* pruneLogs(fileSystem, directory, Date.now(), header, limits, partName(header, part));
   });

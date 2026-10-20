@@ -1,25 +1,8 @@
 /**
- * A Writer project's history, kept — in the project's shape, not Writer's.
- *
- * Writer kept one repository per book, chunk files (`05/03.txt`) and a commit
- * per autosave. A migrated project keeps every save that changed the book's
- * text as a commit of its own: one whole book file (`46-ROM.usfm`) as the
- * migration template renders it at that save, with the save's own author,
- * committer, date and zone. Several books' saves are interleaved by author
- * time, so the project's log reads as the team worked. The chunk shape never
- * enters the history (Will, 2026-10-09, replacing 2026-10-06's single
- * assembly commit once this proved cheap: one New Testament, 3,219 saves, a
- * 2.7 MB pack in about two seconds).
- *
- * Writer's own messages are a timestamp ("Fri Aug 28 2026 18:08:27 GMT+0200"),
- * so a replayed commit says what changed — the verses of the chunks it touched
- * (`TIT 1:6–7`) — and keeps the original and its source as trailers. Writer's
- * device identity, `tsDesktop`, stays the author where it was (Will).
- *
- * Two steps, because the clone is read when a candidate is opened and the
- * history written when the project is assembled: `readWriterHistory` keeps
- * only the text files each save changed (a few KB a save), and
- * `replayWriterHistories` writes them all as one pack (`../git/pack.ts`).
+ * Every Writer save is kept as a commit (Will, 2026-10-09, replacing
+ * 2026-10-06's single assembly commit once this proved cheap: one New
+ * Testament, 3,219 saves, a 2.7 MB pack in about two seconds). Writer's device
+ * identity, `tsDesktop`, stays the author where it was (Will).
  */
 
 import { decode } from "@sefer/text/source";
@@ -29,23 +12,18 @@ import { Git, type CommitId, type GitError, type Repo, type Signature } from "..
 import { commitBody, packWriter, treeBody, type FinishedPack } from "../git/pack";
 import { isWriterTextPath, treeFromFiles, usfmFileName, writerBookToUsfm } from "./writerBook";
 
-/** One Writer save that changed a text file: who, when, and those files' new text (`null`: deleted). */
 export interface WriterSave {
   readonly id: CommitId;
   readonly author: Signature;
   readonly committer: Signature;
-  /** Writer's own message, first line: a timestamp, in practice. */
   readonly message: string;
   readonly changes: ReadonlyMap<string, string | null>;
 }
 
 export interface WriterHistory {
   readonly book: string;
-  /** The template's fallback title, as the rendering of the newest save uses. */
   readonly title: string;
-  /** `owner/repo`, or the folder's name: where `Writer-Source` says a save came from. */
   readonly source: string;
-  /** Oldest first. */
   readonly saves: readonly WriterSave[];
 }
 
@@ -54,11 +32,6 @@ const text = (bytes: Uint8Array): string | null => {
   return decoded._tag === "Success" ? decoded.success.text : null;
 };
 
-/**
- * The saves of the repository at `repo` that changed a text file the template
- * reads, oldest first. A file that will not decode reads as deleted, as
- * `readWriterTree` leaves out a file it cannot read.
- */
 export const readWriterHistory = (
   repo: Repo,
   book: string,
@@ -93,11 +66,6 @@ export const readWriterHistory = (
     return { book, title, source, saves };
   });
 
-/**
- * `5:1–11`: the chapter and the verses a chunk holds. A chunk with no verse
- * marker (its `\v` lost, or a chapter's opening text) says so, rather than a
- * bare `5` that reads as a verse beside the others.
- */
 const versesOf = (chapter: number, chunk: string): string => {
   const verses = [...chunk.matchAll(/\\v\s+(\d+)(?:-(\d+))?/g)].map((match): [number, number] => [
     Number(match[1]),
@@ -111,7 +79,6 @@ const versesOf = (chapter: number, chunk: string): string => {
     : `${String(chapter)}:${String(low)}–${String(high)}`;
 };
 
-/** What a save did to its book, in the project's terms: `ROM 5:1–11, 6:4–6; titles`. */
 const summaryOf = (
   book: string,
   changes: ReadonlyMap<string, string | null>,
@@ -133,26 +100,14 @@ const summaryOf = (
 };
 
 export interface Replayed extends FinishedPack {
-  /** The last replayed commit: what the assembly commits on top of. */
   readonly head: CommitId;
   readonly commits: number;
-  /** Saves read that changed no rendered text (a manifest save, an unchanged chunk). */
   readonly unchanged: number;
 }
 
-/**
- * Every history's saves as commits of one project, oldest first by author
- * time, written as one pack. `undefined` when no save changed any book —
- * there is no history to keep.
- */
 export const replayWriterHistories = async (
   histories: readonly WriterHistory[],
 ): Promise<Replayed | undefined> => {
-  // Interleaved by author time, but a book's own saves never reorder: each
-  // save stores its files' new text, so a save replayed before an earlier one
-  // would leave the book as it was before. A device whose clock ran wrong
-  // (a reset battery's 2000-01-01) is where author time goes backwards, so a
-  // save's key is never earlier than the save before it in the same book.
   const events = histories
     .flatMap((history, book) => {
       let key = -Infinity;

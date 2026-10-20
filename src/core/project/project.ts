@@ -1,36 +1,3 @@
-// project.ts
-//
-// Project: one folder of books, and the owner of their lifetimes
-// (`documentation/architecture/project.md`). Nothing above Project holds Books — it hands out references and
-// closes them.
-//
-// What Project is NOT: it is not a service registry, not a DI container, and
-// not a place to hang project-wide features. It knows four things — which
-// paths are books, which Book currently seats each one, whether the folder is
-// a Scripture Burrito, and what the world outside did to the files.
-//
-// The four states, and where each transition lives:
-//
-//   Unloaded      → discovery.ts: paths known, nothing read
-//   Plain         → openProject: `openBook` per discovered path
-//   Instantiated  → instantiate(id): the editor `seat` takes over as canonical
-//   Mounted       → the editor's own business; Project never sees a view
-//
-// Why a `seat` port rather than an import: core cannot import CodeMirror
-// (`pnpm boundaries`), so the editor layer supplies the factory that turns a
-// plain Book into an editor-backed one. Project only needs to know that the
-// result satisfies `Book` and can say how many views hold it.
-//
-// Why `changed(fn)` rather than swapping Books in place: instantiating a book
-// REPLACES the object that holds its canonical text, and a generic Project
-// cannot re-point subscribers that were registered against the old object —
-// `book.changes` subscriptions belong to the Book, not to Project. So Project
-// keeps one mutable `current` per id and publishes `changed(id)`; readers
-// re-resolve through `project.book(id)` and re-subscribe. The alternative — a
-// permanent proxy Book that forwards to whichever seat is current — would put
-// a hop on the keystroke path, which §1.2 rules out. Holding a Book reference
-// across an `instantiate` or `release` is therefore a bug in the holder.
-
 import { makeBook, type Book, type BookId, type Receipt } from "@sefer/text/book";
 import type { Change, SourceDecodeError } from "@sefer/text/source";
 import {
@@ -51,90 +18,39 @@ import { Observability, type ObservabilityService, type Operation } from "../obs
 import type { ProjectMetadata } from "../resources/projectMetadata";
 import { discoverBooks, readProjectMetadata } from "./discovery";
 
-/**
- * The project's identity: its root path, and — when the folder is a burrito —
- * the primary id the metadata claims, so two checkouts of the same
- * publication at different paths are still distinguishable from two unrelated
- * folders. Recovery journals are keyed by this, so it must not change between
- * sessions for the same folder.
- */
 export type ProjectId = string;
 
-/**
- * What the world outside Sefer did to a book file. `changed` covers creation
- * and modification alike: either way the bytes on disk are no longer the ones
- * we read. Project reports; it NEVER auto-merges — resolving a change is
- * Save's `resolve(change, choice)`, which needs the
- * baseline Project does not hold.
- */
 export interface ExternalChange {
   readonly bookId: BookId;
   readonly path: string;
   readonly kind: "changed" | "removed";
 }
 
-/**
- * `NotADirectory` — the root is not a folder. `NoBooks` — it is, and holds no
- * book files. `Refused` — everything Project itself declined: an unknown book
- * id, a release with views still attached, an instantiate with no seat, a
- * duplicate `\id`, and host failures reading the root (whose `PlatformError`
- * text is carried in the description rather than widening this error).
- */
 class ProjectError extends Data.TaggedError("ProjectError")<{
   readonly reason: "NotADirectory" | "NoBooks" | "Refused";
   readonly description: string;
 }> {}
 
-/**
- * A discovered path that did not become a Book. Recorded rather than fatal: a
- * project with one unreadable file is still a project, and the shell can show
- * the failure next to the books that did open.
- *
- * Note on the fixture: `fixtures/small-nt/99-BAD.usfm` is deliberately
- * malformed *USFM*, not malformed *bytes* — valid UTF-8, LF newlines, no BOM —
- * so `Source.decode` accepts it and it opens as an ordinary Book with id
- * `BAD`. Only Galley has anything to say about it. `failed` is therefore
- * empty for the fixture project; it exists for the refusal `decode` names
- * (`InvalidUtf8` — a BOM or mixed newlines are recorded on `Source.form`, not
- * refused) and for read errors.
- */
 export interface FailedBook {
   readonly path: string;
   readonly error: PlatformError.PlatformError | SourceDecodeError | ProjectError;
 }
 
-/**
- * What an editor seat returns: a Book, plus the two lifetime facts a plain
- * Book cannot answer. Both are optional so the editor layer can start with
- * neither and Project still behaves (an absent `attached` reads as zero, so
- * `release` will not be refused).
- */
 export interface Seated extends Book {
-  /** How many views and windows currently hold this book; blocks `release`. */
   readonly attached?: () => number;
-  /** Releases the seat's own resources. Called by `release` and by `close`. */
   readonly close?: () => void;
 }
 
-/**
- * The Plain → Instantiated port. The editor layer supplies a factory that
- * builds an editor-backed Book over the plain one's `Source`; core never sees
- * CodeMirror. Called synchronously inside `instantiate`, so a throw here is a
- * defect, not a `ProjectError`.
- */
 export type Seat = (book: Book) => Seated;
 
 export interface OpenProjectOptions {
   readonly seat?: Seat;
 }
 
-/** Told which book's seat changed; re-resolve through `project.book(id)`. */
 export type ProjectListener = (id: BookId) => void;
 
-/** One accepted edit to a book's canonical text, whichever object holds it. */
 export interface ProjectEdit {
   readonly bookId: BookId;
-  /** The book that took it: the seated one, or the plain one. */
   readonly book: Book;
   readonly receipt: Receipt;
   readonly changes: readonly Change[];
@@ -145,45 +61,20 @@ export type EditListener = (edit: ProjectEdit) => void;
 export interface Project {
   readonly id: ProjectId;
   readonly root: string;
-  /** Currently seated Books in canonical order. Re-read after `changed`. */
   readonly books: readonly Book[];
-  /** Discovered paths that did not become Books. */
   readonly failed: readonly FailedBook[];
   book(id: BookId): Book | undefined;
   metadata(): Option.Option<ProjectMetadata>;
-  /** Plain → Instantiated. Idempotent; `Refused` without a seat. */
   instantiate(id: BookId): Effect.Effect<Book, ProjectError>;
-  /** Instantiated → Plain, carrying the seat's current text. */
   release(id: BookId): Effect.Effect<void, ProjectError>;
-  /** Synchronous listener set, published after a seat swap. */
   changed(fn: ProjectListener): () => void;
-  /**
-   * Every accepted edit to any book's canonical text, seated or not —
-   * synchronously, as `book.changes` delivers it. The Project is the one
-   * place that knows which object holds a book's text (the plain Book, then
-   * the seated one, then the plain one again after `release`), so this feed
-   * moves itself across every swap: a listener hears each edit exactly once
-   * and never has to follow seats. What Recovery journals from.
-   */
   edits(fn: EditListener): () => void;
-  /** Disk changes to book files. Empty when the host cannot watch. */
   externalChanges(): Stream.Stream<ExternalChange>;
   close(): Effect.Effect<void>;
 }
 
-/**
- * Coalescing window for disk events. Editors and sync clients write a file
- * two or three times in quick succession; one report per file per window is
- * what a human means by "the file changed".
- *
- * `Stream.groupedWithin` rather than `Stream.debounce` on purpose: debounce
- * keeps only the newest element in the window, which across a project would
- * report one book and silently drop the others when a Git checkout rewrites
- * several files at once. Grouping keeps the last event *per path*.
- */
 const WINDOW = Duration.millis(250);
 
-/** Cap on a single window's batch, so a mass rewrite reports promptly. */
 const BATCH = 256;
 
 const refuse = (
@@ -194,7 +85,6 @@ const refuse = (
 const describe = (error: FailedBook["error"]): string =>
   error._tag === "PlatformError" ? error.message : error.reason;
 
-/** One book's seat: the plain Book, and the editor-backed one when seated. */
 interface Entry {
   plain: Book;
   seated: Seated | undefined;
@@ -223,18 +113,12 @@ const makeProject = (parts: ProjectParts): Project => {
     },
   });
 
-  // Path → book id, fixed at open. `release` rebuilds the plain Book but never
-  // its path, so this stays correct for the project's lifetime. A book file
-  // created after open is not in it and is therefore not reported: discovery
-  // is a snapshot, and a new file needs a re-open, not a merge.
   const byPath = new Map<string, BookId>();
   for (const [bookId, entry] of entries) byPath.set(normalisePath(entry.plain.path), bookId);
 
   const listeners = new Set<ProjectListener>();
   let closed = false;
 
-  // The edit feed: one `changes` subscription per book, on whichever object
-  // holds its text, taken while anybody listens and moved at every swap.
   const editListeners = new Set<EditListener>();
   const following = new Map<BookId, () => void>();
   const follow = (bookId: BookId, entry: Entry): void => {
@@ -255,8 +139,6 @@ const makeProject = (parts: ProjectParts): Project => {
   };
 
   const publish = (bookId: BookId): void => {
-    // Snapshot first so a listener may unsubscribe itself, matching
-    // `makeListeners` in book.ts.
     for (const fn of Array.from(listeners)) fn(bookId);
   };
 
@@ -297,9 +179,6 @@ const makeProject = (parts: ProjectParts): Project => {
         if (entry.seated !== undefined) return Effect.succeed<Book>(entry.seated);
         if (seat === undefined)
           return refuse("Refused", `no editor seat was supplied for ${bookId}`);
-        // The seat takes the plain Book, not its Source, so it can read the
-        // stamp the text arrived with: the invariant is one canonical text,
-        // and from here the seat holds it.
         const seated = seat(entry.plain);
         entry.seated = seated;
         follow(bookId, entry);
@@ -322,8 +201,6 @@ const makeProject = (parts: ProjectParts): Project => {
           });
           return refuse("Refused", `${bookId} still has ${attached} attached view(s)`);
         }
-        // Carry the seat's CURRENT text back to the plain Book: releasing a
-        // seat must not lose edits that were accepted but not yet saved.
         entry.plain = makeBook(seated.path, seated.source(), observability);
         entry.seated = undefined;
         follow(bookId, entry);
@@ -356,27 +233,17 @@ const makeProject = (parts: ProjectParts): Project => {
           Stream.map(Stream.groupedWithin(fileSystem.watch(root), BATCH, WINDOW), coalesce),
         ),
         (cause) => {
-          // The memory and OPFS layers do not implement `watch` today, and a
-          // host may lose the watch later. Either way the project keeps
-          // working with no external-change reporting rather than failing the
-          // stream into whoever is rendering it.
           observability?.note("project.watch", "declined", describeCause(cause));
           return Stream.empty;
         },
       ),
 
     close: () =>
-      // The narrator the CLOSE was handed, when it was handed one — the
-      // shell's `project.close` operation — and the one the open captured
-      // otherwise. The captured one is the open's own operation, long ended,
-      // so a note written there would land in a trace that already finished.
       Effect.flatMap(Effect.serviceOption(Observability), (provided) =>
         Effect.sync(() => {
           if (closed) return;
           closed = true;
           const into = Option.getOrUndefined(provided) ?? observability;
-          // The lifetime hook reserved as `close(book)`: the plain Book
-          // holds no resources today, so only a seat has anything to release.
           let seats = 0;
           for (const entry of entries.values()) {
             if (entry.seated !== undefined) seats += 1;
@@ -394,27 +261,8 @@ const makeProject = (parts: ProjectParts): Project => {
   };
 };
 
-/**
- * Bounded, message-free-ish description of why a watch stopped. The cause's
- * own text is the host's, so it is truncated: telemetry carries codes and
- * counts, never unbounded text (observability caps at 512 either way).
- */
 const describeCause = (cause: unknown): string => String(cause).slice(0, 120);
 
-/**
- * Opens every discovered book in `root` as a plain Book: the Unloaded → Plain
- * transition for the whole folder.
- *
- * A path that cannot be read or decoded is recorded in `project.failed` and
- * the project still opens — one bad file must not cost the translator the
- * other sixty-five. Only two things fail the open: a root that is not a
- * directory, and a directory with no book files at all.
- *
- * Requires `Scope`: the scope owns the project's lifetime and closes it, which
- * is also what interrupts any watch fibers a caller started from
- * `externalChanges()` in the same scope. Takes `Observability` optionally, via
- * `serviceOption`, so core policy runs with or without the ring.
- */
 export const openProject = (
   root: string,
   options: OpenProjectOptions = {},
@@ -422,28 +270,7 @@ export const openProject = (
   Effect.flatMap(Effect.serviceOption(Observability), (found) => {
     const observability = Option.getOrUndefined(found);
     if (observability === undefined) return openIn(root, options, undefined);
-    // Opening a project is one end-to-end piece of work, and everything it
-    // does — reading metadata, opening each book, adopting baselines, the
-    // first analysis pass — belongs inside it rather than beside it. The
-    // operation IS an ObservabilityService, so `openIn` narrates into it
-    // without knowing it is doing so.
-    //
-    // Unless we are ALREADY inside one, which is the ordinary case: the shell
-    // opens `project.open` as the reader's gesture and provides it here, so
-    // that opening the files and analysing them are one record rather than two
-    // whose durations have to be added up by hand. Opening a second operation
-    // of the same name defeated exactly that, and the ring showed the damage —
-    // two overlapping `project.open` records per landing, both claiming 66
-    // books, which reads as the project having been opened twice. It was not;
-    // it was recorded twice.
-    //
-    // So: contribute to the one we were handed, and open our own only when
-    // nobody handed us anything. That is the rule the event inventory already
-    // states for `seat.open` — nested when inside, its own operation when not
-    // — and the DI model gives it for free, because whichever service arrives
-    // is the one that decides.
-    // SAFETY: an `Operation` is an `ObservabilityService` with these three
-    // extra members; `attr` is the one probed for and the one used.
+    // SAFETY: an `Operation` is an `ObservabilityService` with three extra members; `attr` is probed before use.
     const enclosing = observability as Partial<Operation>;
     if (typeof enclosing.attr === "function") {
       const attr = enclosing.attr.bind(enclosing);
@@ -508,24 +335,6 @@ const openIn = (
     const entries = new Map<BookId, Entry>();
     const failed: FailedBook[] = [];
 
-    // The reads go WIDE; the bookkeeping stays in order.
-    //
-    // Opening a project spent more time reading files than parsing them — 66
-    // sequential awaits on OPFS, each one a round trip to the storage thread
-    // that the main thread simply waits out. They do not depend on each other,
-    // so they do not need to be sequential.
-    //
-    // `Effect.forEach` with a concurrency answers IN INPUT ORDER however the
-    // reads interleave, which is what lets the fold below stay exactly as it
-    // was: canonical order still decides which of two files claiming one `\id`
-    // keeps it, and a slow read cannot promote a book past its neighbour.
-    //
-    // Bounded rather than unbounded: sixty-six simultaneous file handles is a
-    // burst the storage layer queues anyway, and an unbounded `forEach` over a
-    // whole-Bible project would also hold every book's bytes in memory at once.
-    // Spanned, because this is half the open: without it a `project.open`
-    // says 190ms with a 115ms parse inside it and no account of the rest.
-    // Reading the files IS the rest.
     const reading = observability?.span("file.read", undefined, {
       "project.books": paths.length,
       "file.concurrency": OPEN_CONCURRENCY,
@@ -545,9 +354,6 @@ const openIn = (
       }
       const book = opened.success;
       if (entries.has(book.id)) {
-        // Two files claiming one `\id` would make `book(id)` ambiguous, and
-        // every reader addresses books by id. The first in canonical order
-        // keeps the id; the second is reported, not silently shadowed.
         const error = new ProjectError({
           reason: "Refused",
           description: `${path} repeats the book id ${book.id}`,

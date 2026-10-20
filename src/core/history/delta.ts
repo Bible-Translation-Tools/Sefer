@@ -1,11 +1,3 @@
-/**
- * Pure projection from Galley's paired-text diff into book/chapter/verse facts.
- *
- * The caller must pass the exact before/after strings that produced `skeleton`.
- * Lengths are checked as a cheap stale-result guard, but equal-length text
- * changes cannot be detected from a DiffSkeleton alone. No git, author,
- * remote, editor, or decision policy belongs here.
- */
 import type { Addr, DiffSkeleton, DecisionUnit } from "../galley/diff";
 
 export interface UnitChangeFact {
@@ -27,11 +19,9 @@ export interface BookChangeScope {
 
 export interface ChapterChangeScope {
   readonly book: string;
-  /** `0` is front matter; chapter numbers are otherwise the USFM designator. */
   readonly chapter: number;
   readonly occurrence: number;
   readonly kind: Addr["kind"];
-  /** SIDs retain verse bridges, duplicate suffixes, and non-verse addresses. */
   readonly refs: readonly string[];
   readonly unitIds: readonly string[];
 }
@@ -57,13 +47,6 @@ const isChanged = (unit: DecisionUnit): boolean =>
 
 const addrKey = (addr: Addr): string => `${addr.book}\0${addr.chapter}\0${addr.cdup}\0${addr.kind}`;
 
-/**
- * Derive location metadata for one exact, already-aligned text pair.
- *
- * This does not decide whether a person should accept, reject, or apply any
- * unit. Addresses and unit identity come from Galley; both sides are retained
- * so moves and relabels are not flattened into one guessed location.
- */
 export const deriveDeltaScope = (
   beforeText: string,
   afterText: string,

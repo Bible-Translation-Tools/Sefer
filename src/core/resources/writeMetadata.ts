@@ -1,25 +1,3 @@
-/**
- * Writes a new project's metadata: one description, two files.
- *
- *   metadata.json    Scripture Burrito — what Sefer reads (`discovery.ts`
- *                    reads the Burrito first)
- *   manifest.yaml    Resource Container — output only, for the
- *                    organisation's other tools; if it drifts, the Burrito
- *                    wins and the next write fixes it
- *
- * Both follow what WA's own converter (usfm-tools, "UsfmWizard") writes for
- * `Tech_Advance/bwc_reg`, with the three corrections the migration note
- * lists: contributors de-duplicated, sources de-duplicated, and sources as
- * Burrito relationships (`wycliffeassociates::en/ulb`, revision = the listed
- * version), not only RC `source`.
- *
- * The Burrito is checked against the same schema every reader decodes
- * through, so a project Sefer writes is a project Sefer can open.
- *
- * Pure: the caller writes the bytes. Kept in `src/core/resources` until a
- * second tool needs it, then extracted (the note's "shared org library").
- */
-
 import { CANON } from "@sefer/text/location/canon";
 import { Result } from "effect";
 import { stringify as stringifyYaml } from "yaml";
@@ -29,16 +7,12 @@ import { fingerprint } from "./checksum";
 import { SOURCE_AUTHORITY, toBurritoRelationships, type RelatedResource } from "./relationships";
 
 export interface NewProjectBook {
-  /** Upper case: `1JN`. */
   readonly book: string;
-  /** What the project calls it: "1 Yohane". */
   readonly title: string;
-  /** `63-1JN.usfm`. */
   readonly path: string;
   readonly bytes: Uint8Array;
 }
 
-/** The project form, as the person confirmed it. */
 export interface NewProjectMetadata {
   readonly title: string;
   readonly language: {
@@ -46,16 +20,12 @@ export interface NewProjectMetadata {
     readonly name: string;
     readonly direction: "ltr" | "rtl";
   };
-  /** `reg`, `ulb`. */
   readonly resource: string;
   readonly contributors: readonly string[];
-  /** Every listed version: the files keep them all, as written. */
   readonly sources: readonly RelatedResource[];
-  /** Ours, not the source's: Writer's `"3"` is the SOURCE's checking level. */
   readonly checkingLevel: string;
   readonly rights: string;
   readonly books: readonly NewProjectBook[];
-  /** ISO date, `2026-10-06`. */
   readonly date: string;
 }
 
@@ -64,12 +34,6 @@ const testamentOf = (book: string): "bible-ot" | "bible-nt" =>
 
 const sortOf = (book: string): number => CANON.findIndex((entry) => entry.id === book);
 
-/**
- * Merged on a normalised key — case-folded, `_` read as a space, whitespace
- * collapsed — keeping the first spelling seen. A team written as one string
- * ("Kapiso Gershom, Salt Mwinuna, …") stays one entry: splitting on commas
- * would break names that contain one.
- */
 export const dedupeContributors = (names: readonly string[]): readonly string[] => {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -82,7 +46,6 @@ export const dedupeContributors = (names: readonly string[]): readonly string[] 
   return out;
 };
 
-/** Every listed version, once each: (language, resource, version). */
 export const dedupeSources = (sources: readonly RelatedResource[]): readonly RelatedResource[] => {
   const seen = new Set<string>();
   return sources.filter((ref) => {
@@ -93,7 +56,6 @@ export const dedupeSources = (sources: readonly RelatedResource[]): readonly Rel
   });
 };
 
-/** `metadata.json`'s text, or why the schema refuses it. */
 export const burritoText = (form: NewProjectMetadata): Result.Result<string, string> => {
   const scope = Object.fromEntries(form.books.map((book) => [book.book, []]));
   const value = {
@@ -158,7 +120,6 @@ export const burritoText = (form: NewProjectMetadata): Result.Result<string, str
     : Result.succeed(`${JSON.stringify(value, null, 2)}\n`);
 };
 
-/** `manifest.yaml`'s text, in bwc_reg's shape. */
 export const resourceContainerText = (form: NewProjectMetadata): string =>
   stringifyYaml({
     dublin_core: {

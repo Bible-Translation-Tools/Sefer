@@ -1,30 +1,3 @@
-/**
- * A BTT Writer book project, read and turned into one USFM book.
- *
- * Writer kept one project per book, in its own shape:
- *
- *   manifest.json        target_language, project (the book), resource,
- *                        source_translations, translators
- *   front/title.txt      the book's title, one line per \mt
- *   NN/title.txt         a chapter's label, when it has one
- *   NN/NN.txt            the chunks, as inline USFM fragments; the first
- *                        chunk of a chapter carries its \c
- *
- * Sefer does not keep this shape. It is read once, on the way in, and what
- * arrives is a spec USFM file. The app is not built around the old tool.
- *
- * ONE TEMPLATE, and it copies structure only: the header usfm-tools'
- * `txt2USFM.py` writes (`writeHeader`), then the chapters and chunks in
- * numeric order. It does not repair the translator's text — no verse-marker
- * fixes, no `\p` added or removed, no title-casing, no guessed headings —
- * even where txt2USFM does. People must not learn to expect normalising on
- * the way in; a repair is a fix they see and choose later (Will, 2026-10-06).
- *
- * The manifest is read LENIENTLY: only the book, the language and a resource
- * are required. `package_version`, `generator` and anything else are carried
- * or ignored, never a reason to refuse.
- */
-
 import { CANON } from "@sefer/text/location/canon";
 import { decode } from "@sefer/text/source";
 import { Effect, FileSystem, Result, Schema } from "effect";
@@ -54,29 +27,23 @@ const Manifest = Schema.Struct({
 
 const decodeManifest = Schema.decodeUnknownResult(Manifest);
 
-/** What a Writer project says about itself, once its manifest decodes. */
 export interface WriterProject {
   readonly root: string;
-  /** The claimed book, upper case: `1JN`. */
   readonly book: string;
   readonly language: {
     readonly id: string;
     readonly name: string | undefined;
     readonly direction: "ltr" | "rtl";
   };
-  /** `resource.id`, else the folder name's last part (`…_text_reg` → `reg`). */
   readonly resource: string;
   readonly sources: readonly RelatedResource[];
   readonly translators: readonly string[];
 }
 
-/** The book's parts, read off disk in numeric order. Pure data for the template. */
 export interface WriterTree {
-  /** `front/title.txt`, one entry per non-empty line. */
   readonly title: readonly string[];
   readonly chapters: readonly {
     readonly number: number;
-    /** `NN/title.txt`, when it says something other than the number. */
     readonly label: string | undefined;
     readonly chunks: readonly string[];
   }[];
@@ -96,11 +63,6 @@ const readText = (
     () => undefined,
   );
 
-/**
- * A Writer project at `root`, or `undefined` when it is not one: no
- * `manifest.json`, a manifest without a book, language or resource, or a book
- * id that is not in the canon.
- */
 export const recognizeWriter = (
   fileSystem: FileSystem.FileSystem,
   root: string,
@@ -136,23 +98,12 @@ export const recognizeWriter = (
     };
   });
 
-/** `01`, `150`; not `00`, which Writer uses for front matter. */
 const numbered = (name: string): number | undefined =>
   /^\d{2,3}$/.test(name) && Number(name) > 0 ? Number(name) : undefined;
 
-/**
- * The files the template reads: `front/title.txt`, and each chapter's
- * `NN/title.txt` and `NN/NN.txt` chunks. Everything else in a Writer
- * project (the manifest, `LICENSE.md`, `.git`) is not the book.
- */
 export const isWriterTextPath = (path: string): boolean =>
   path === "front/title.txt" || /^\d{2,3}\/(?:title|\d{2,3})\.txt$/i.test(path);
 
-/**
- * The book's parts, from its files by relative path. Pure: the same tree from
- * a folder on disk (`readWriterTree`) or from a commit's blobs, which is how
- * the text a project last took from Writer is rendered again later.
- */
 export const treeFromFiles = (files: ReadonlyMap<string, string>): WriterTree => {
   const title = (files.get("front/title.txt") ?? "")
     .split(/\r?\n/)
@@ -185,7 +136,6 @@ export const treeFromFiles = (files: ReadonlyMap<string, string>): WriterTree =>
   return { title, chapters };
 };
 
-/** Reads the parts the template needs off disk, in numeric order. */
 const READ_AT_ONCE = 32;
 
 export const readWriterTree = (
@@ -203,9 +153,6 @@ export const readWriterTree = (
       fileSystem.readDirectory(root),
       (): readonly string[] => [],
     );
-    // Many at once: a long book is hundreds of chunk files, and one at a time
-    // each read waits out the storage's own round trip (OPFS: a handle walk
-    // per path). Read in sequence, John took longer to read than to clone.
     const listed = yield* Effect.forEach(
       names.filter((name) => numbered(name) !== undefined),
       (chapter) =>
@@ -222,20 +169,8 @@ export const readWriterTree = (
     return treeFromFiles(files);
   });
 
-/**
- * A chunk's own leading `\c N`, every one of them: the template writes the
- * chapter marker once. Writer sometimes saved it twice (`\c 3 \c 3 \v 1`,
- * Moffat_chola's bwc REV), and the second made the book unreadable to the
- * engine. That marker is Writer's chunk framing, not the translator's text.
- */
 const withoutChapterMarker = (chunk: string): string => chunk.replace(/^(?:\s*\\c\s+\d+\s*)+/, "");
 
-/**
- * The template. Header as txt2USFM's `writeHeader` writes it (`\toc3` is the
- * book id in lower case; one `\mt` per title line), then each chapter: `\c`,
- * `\cl` when the chapter has its own label, then its chunks as written.
- * `book` is the claimed id; Writer's chunks carry no `\id`.
- */
 export const writerBookToUsfm = (tree: WriterTree, book: string, fallbackTitle: string): string => {
   const title = tree.title.length > 0 ? tree.title : [fallbackTitle];
   const head = title[0] ?? fallbackTitle;
@@ -259,7 +194,6 @@ export const writerBookToUsfm = (tree: WriterTree, book: string, fallbackTitle: 
   return `${lines.join("\n")}\n`;
 };
 
-/** `44-JHN.usfm`: the RC file name, numbered as the catalogue numbers books (MAT is 41). */
 export const usfmFileName = (book: string): string => {
   const index = CANON.findIndex((entry) => entry.id === book);
   const number = index < 39 ? index + 1 : index + 2;

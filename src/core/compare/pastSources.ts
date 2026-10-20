@@ -1,32 +1,3 @@
-// pastSources.ts
-//
-// The reader's OWN PAST as compare sources: the bytes in the file, and the
-// text in the last recorded version.
-//
-// These exist because `/review` is one screen for "these two texts differ;
-// which do I keep", with neither side hard-coded. Both sides of the review are
-// a `CompareSource`, so the file on disk and the blob at HEAD are simply two
-// more of them, and the screen has no idea which of the five a reader picked.
-//
-// Two are here rather than one per file because they are the same shape said
-// twice: a read-only side whose text comes from somewhere the reader has
-// already been. Neither can be written — Sefer does not write into the past —
-// so `canApply` is false and the project side is always the target.
-//
-// ## Freshness: live, and deliberately
-//
-// `review.md` asks a source to be a SNAPSHOT, so a side cannot move under a
-// decision already made. `currentProjectSource` already breaks that on purpose
-// (it reads `project.book(id)` on every call, which is what makes a comparison
-// of an open book show unsaved keystrokes), and `savedSource` does the same:
-// it reads `baselineOf` at `read()` time, so recording a version moves the file
-// side immediately rather than leaving the screen describing a file that has
-// been overwritten. The screen re-takes the whole comparison when either of
-// those moves; a FOLDER, which cannot move, is still scanned once and frozen.
-//
-// `recordedSource` is frozen by construction: the map is read once per HEAD by
-// `src/app/ui/panels/recorded.ts` and rebuilt when a commit moves it.
-
 import type { Book, BookId } from "@sefer/text/book";
 import type { SourceStamp } from "@sefer/text/source";
 import { Effect, Option } from "effect";
@@ -34,26 +5,11 @@ import { Effect, Option } from "effect";
 import type { Project } from "../project/project";
 import { failCompare, type CompareSource } from "./source";
 
-/** Just enough of a `Baseline` to be one side: what Save last wrote. */
 export interface SavedText {
   readonly text: string;
   readonly stamp: SourceStamp;
 }
 
-/**
- * The bytes in the project's files, as one side.
- *
- * `baselineOf` is `SaveCoordinator.baseline`, passed rather than taken as a
- * service so this stays `R = never` like every other source — a side captures
- * what it needs when it is CONSTRUCTED.
- *
- * A book with NO baseline reads as the book's own current text. That is no
- * longer the ordinary case: the shell `adopt`s every book's baseline when the
- * project opens (and Recovery before a replay), so every book has one. The
- * fallback is kept for a book that somehow reaches here without — failing
- * instead would refuse the whole comparison, since one unreadable side refuses
- * all of it.
- */
 export const savedSource = (
   project: Project,
   baselineOf: (book: Book) => Option.Option<SavedText>,
@@ -79,23 +35,11 @@ export const savedSource = (
     }),
 });
 
-/**
- * One book's text in the last recorded version, plus the stamp it decoded to.
- * The shape `recorded.ts` already builds from `git.show`.
- */
 export interface RecordedTexts {
   readonly head: string | undefined;
   readonly texts: ReadonlyMap<BookId, SavedText>;
 }
 
-/**
- * The blobs at HEAD, as one side.
- *
- * A book HEAD has never seen fails `Absent`, which is the truth and reads on
- * the screen as "only in the editor" — a book about to be recorded for the
- * first time. A project with no repository holds no books at all here, which
- * is also true and is why this side is never the default.
- */
 export const recordedSource = (
   recorded: RecordedTexts,
   label = "The last recorded version",
@@ -116,12 +60,6 @@ export const recordedSource = (
     }),
 });
 
-/**
- * The shared project's newest version, as the last check fetched it, as one
- * side: the blobs at the branch's remote-tracking ref, read once per commit
- * exactly as `recordedSource` reads HEAD. Read-only — the shared project is
- * changed by sending, never by a review writing into it.
- */
 export const sharedSource = (
   shared: RecordedTexts,
   label = "The shared project",

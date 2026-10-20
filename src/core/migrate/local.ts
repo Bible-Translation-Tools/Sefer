@@ -1,14 +1,3 @@
-/**
- * The offline producers: every BTT Writer project under a folder or an
- * unzipped zip, as candidates. No network, ever: a zip carried over Bluetooth
- * or a USB stick must work as well as the catalogue does.
- *
- * Writer's own working directory holds one folder per project, and a zip
- * holds either one project or a folder of them, so this looks at the root and
- * two levels below it — deep enough for both, shallow enough that picking a
- * home folder does not walk a disk.
- */
-
 import { Effect, FileSystem } from "effect";
 
 import { joinPath, lastSegment } from "../fileSystem/path";
@@ -17,7 +6,6 @@ import { recognizeWriter } from "./writerBook";
 
 const DEPTH = 2;
 
-/** Folders under `root`, skipping dot folders (`.git`, `.sefer`) and chapter folders. */
 const childFolders = (
   fileSystem: FileSystem.FileSystem,
   root: string,
@@ -37,11 +25,6 @@ const childFolders = (
     return out;
   });
 
-/**
- * One candidate per Writer project found under `root`. `kind` and `name` say
- * where they came from, for the tab a person chooses between ("from
- * psalms.zip").
- */
 export const localCandidates = (
   fileSystem: FileSystem.FileSystem,
   root: string,

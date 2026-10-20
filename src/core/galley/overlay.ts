@@ -1,90 +1,21 @@
-// overlay.ts
-//
-// THE OVERLAY DOORS: match formatting, as the engine sees it.
-//
-// The job: show the source text and highlight the equivalent block in the
-// target, so a translator can carry paragraphing and poetry across without
-// retyping the words. It belongs in the engine rather than in TypeScript by
-// verse anchors, because the engine already knows the structure of both
-// documents (`galley/src/overlay.md`).
-//
-// Four ideas, and they are the whole model.
-//
-//  1. A BLOCK ADDRESS, not an offset. `{ sid, where, ordinal, marker }`: which
-//     verse, whether the block sits immediately before the verse's `\v`
-//     (`leading`) or after its text (`inside`), which one of those it is, and
-//     what it is called. The two documents have different lengths and different
-//     words; an address is the only thing they can share.
-//
-//  2. `marker` is a CHECK, not the key. The position is the key. If the
-//     position still exists but now spells something else the node doors THROW
-//     ("… names q2 but the node there is q1 — the address is stale") rather
-//     than answering about a different node, which is the stale-range bug this
-//     whole codebase is arranged to make impossible.
-//
-//  3. An inserted INSIDE block arrives EMPTY. Where a verse's text splits is
-//     unknowable across languages, so the transaction inserts the marker and no
-//     words; the report says which ones (`inserted[].empty`) and the screen
-//     shows a placeholder. The file holds an empty block; nothing is invented.
-//
-//  4. It is a SUGGESTION, applied on request. Never a finding, never automatic.
-//
-// ## Offsets
-//
-// The overlay doors answer in BYTES unless asked for UTF-16 — the unit is a
-// property of the call, not of the engine. Sefer has no byte offsets and must
-// never acquire one (a byte offset that reached `book.apply` would splice
-// inside a character), so every call from `galley.ts` passes `utf16: true` and
-// nothing here converts.
-//
-// ## Drawing the live highlight
-//
-// Fetch `skeleton()` for both sides ONCE per edit (~0.4 ms each) and match
-// addresses in TypeScript as the cursor moves. `targetNodeFor`/`sourceNodeFor`
-// are ~1.4 ms and are for one-off questions — "where would this go?" — not for
-// a per-keystroke loop.
-
 import type { FormatEdit } from "./format";
 
-/** Which side of its verse a block sits on. */
 export type BlockWhere = "leading" | "inside";
 
-/**
- * One block's address, shared by both sides of an overlay.
- *
- * `ordinal` counts from ONE per `(sid, where)` pair, so the second `\q` line
- * leading `GEN 1:1` is ordinal 2.
- */
 export interface BlockAddress {
   readonly sid: string;
   readonly where: BlockWhere;
   readonly ordinal: number;
-  /** The spelling that position held — `"q1"`, no backslash. Checked, not keyed. */
   readonly marker: string;
 }
 
-/**
- * One row of a skeleton: an address, its marker's span, where the block ends,
- * and whether the block holds words.
- *
- * `from..to` is the MARKER and nothing else — `\p` is two characters — which
- * is the shape an overlay needs, since it inserts and removes markers.
- * `from..end` is the whole block as the engine's tree closes it, so a heading,
- * a `\d` or a `\c` ends a block even though none of them is a block row. Ask
- * "which block is this offset in" of `from..end`, never of `from..to`, and
- * never by taking the next row's `from` (`galley/src/overlay.md`, "A row's
- * spans").
- */
 export interface SkeletonRow extends BlockAddress {
   readonly from: number;
   readonly to: number;
-  /** Where the block ends: `from..end` is the paragraph. */
   readonly end: number;
-  /** The engine's empty paragraph. A source folds runs of these away. */
   readonly empty: boolean;
 }
 
-/** One verse of a skeleton: the `\v` marker's span, and the verse's own text. */
 export interface SkeletonVerse {
   readonly sid: string;
   readonly from: number;
@@ -93,35 +24,25 @@ export interface SkeletonVerse {
   readonly textTo: number;
 }
 
-/** One book's block structure — the whole truth for drawing one side. */
 export interface Skeleton {
   readonly verses: readonly SkeletonVerse[];
   readonly blocks: readonly SkeletonRow[];
 }
 
-/** Why a verse has no pair on the other side. */
 export type UnpairedReason = "absent" | "bridge" | "ambiguous";
 
-/**
- * Where one side's block lands on the other. Three answers and no fourth:
- * it is there, it is not there but the overlay knows where it would go, or the
- * verse itself has no pair and the question does not arise.
- */
 export type Equivalent =
   | { readonly kind: "found"; readonly row: SkeletonRow }
   | { readonly kind: "absent"; readonly insertAt: number; readonly where: BlockWhere }
   | { readonly kind: "unpaired"; readonly reason: UnpairedReason };
 
-/** A block the overlay would add to the target. */
 export interface Inserted {
   readonly address: BlockAddress;
   readonly marker: string;
   readonly at: number;
-  /** An `inside` block with no words yet — the screen shows a placeholder. */
   readonly empty: boolean;
 }
 
-/** A target block the source lacks; its text joins the block before it. */
 export interface Removed {
   readonly address: BlockAddress;
   readonly marker: string;
@@ -129,21 +50,18 @@ export interface Removed {
   readonly to: number;
 }
 
-/** A run of empty source blocks folded to one. */
 export interface Collapsed {
   readonly sid: string;
   readonly marker: string;
   readonly count: number;
 }
 
-/** A verse with no counterpart, and why. */
 export interface Unpaired {
   readonly sid: string;
   readonly side: "target" | "source";
   readonly reason: UnpairedReason;
 }
 
-/** What the overlay did, and what it declined to do. */
 export interface OverlayReport {
   readonly inserted: readonly Inserted[];
   readonly removed: readonly Removed[];
@@ -151,25 +69,11 @@ export interface OverlayReport {
   readonly unpaired: readonly Unpaired[];
 }
 
-/**
- * The overlay, as one applicable transaction plus its narration.
- *
- * `edits` is what goes through `book.apply` — ascending, non-overlapping,
- * UTF-16 — and `report` is what the confirm dialog reads before it does.
- */
 export interface OverlayEdits {
   readonly edits: readonly FormatEdit[];
   readonly report: OverlayReport;
 }
 
-/**
- * What the caller may narrow an overlay to.
- *
- * `markers` defaults to onion's paragraph-and-poetry block set with no titles,
- * which is what "match formatting" means; naming a set is how a caller says
- * "sections too" or "poetry only". `scope` bounds it to one chapter or one
- * verse, which is what a per-chapter Apply uses.
- */
 export interface OverlayOptions {
   readonly markers?: readonly string[];
   readonly scope?: { readonly chapter: number } | { readonly sid: string };
@@ -187,11 +91,6 @@ const whereOf = (value: unknown): BlockWhere => (value === "inside" ? "inside" :
 const reasonOf = (value: unknown): UnpairedReason =>
   value === "bridge" ? "bridge" : value === "ambiguous" ? "ambiguous" : "absent";
 
-/**
- * An address off the wire. Read defensively — this is JSON crossing a wasm
- * boundary, and a reader that assumed its shape would turn a regenerated
- * artifact into silent nonsense about where a paragraph belongs.
- */
 const readAddress = (value: unknown): BlockAddress => {
   if (!isRecord(value)) return { sid: "", where: "leading", ordinal: 0, marker: "" };
   return {
@@ -238,15 +137,12 @@ const list = <T>(value: unknown, read: (entry: unknown) => T | undefined): reado
   return out;
 };
 
-/** `skeleton()`'s JSON as a `Skeleton` — named apart from `diff.ts`'s
- * `decodeSkeleton`, which reads a DiffSkeleton and is a different buffer. */
 export const decodeBlockSkeleton = (json: string): Skeleton => {
   const parsed: unknown = JSON.parse(json);
   if (!isRecord(parsed)) return { verses: [], blocks: [] };
   return { verses: list(parsed.verses, readVerse), blocks: list(parsed.blocks, readRow) };
 };
 
-/** `overlayReport()`'s JSON as an `OverlayReport`. */
 const decodeReport = (json: string): OverlayReport => {
   const parsed: unknown = JSON.parse(json);
   if (!isRecord(parsed)) return { inserted: [], removed: [], collapsed: [], unpaired: [] };
@@ -288,13 +184,6 @@ const decodeReport = (json: string): OverlayReport => {
   };
 };
 
-/**
- * `targetNodeFor`/`sourceNodeFor`'s JSON as an `Equivalent`.
- *
- * The wire is a three-way union discriminated by which key is present, and it
- * is re-tagged here with an explicit `kind` so a consumer switches on one
- * field instead of probing for three.
- */
 export const decodeEquivalent = (json: string): Equivalent => {
   const parsed: unknown = JSON.parse(json);
   if (!isRecord(parsed)) return { kind: "unpaired", reason: "absent" };
@@ -308,42 +197,17 @@ export const decodeEquivalent = (json: string): Equivalent => {
   return { kind: "unpaired", reason: "absent" };
 };
 
-/**
- * The options object as the wasm door reads it — plain JSON, `utf16` always
- * on. Built here so `utf16: true` is stated once and no call site can forget.
- */
 export const overlayOptions = (options?: OverlayOptions): object => ({
   utf16: true,
   ...(options?.markers === undefined ? {} : { markers: [...options.markers] }),
   ...(options?.scope === undefined ? {} : { scope: options.scope }),
 });
 
-/** The overlay's two halves, read together. */
 export const decodeOverlay = (edits: readonly FormatEdit[], reportJson: string): OverlayEdits => ({
   edits,
   report: decodeReport(reportJson),
 });
 
-/**
- * Every chapter an overlay touches, in ascending order.
- *
- * The confirm dialog names them, because "this will change 14 places" is not a
- * sentence anyone can act on and "this will change Psalms 3, 4 and 7" is. Read
- * off the report's addresses rather than the edits, since an address is the
- * only thing that names a place without a second parse.
- */
-/**
- * The block that holds `offset`, or `undefined`.
- *
- * Binary search, because this runs on caret moves: the rows are in document
- * order, so the last block beginning at or before the offset is the only
- * candidate, and it holds the offset only if the offset is before its `end`.
- *
- * `undefined` is an ordinary answer, not a failure: front matter, a heading
- * or a `\d` belongs to no block. A caret there has no pair, which is
- * different from having a pair that is missing. There is deliberately no
- * "nearest block" fallback.
- */
 export const blockAtOffset = (
   blocks: readonly SkeletonRow[],
   offset: number,
@@ -363,21 +227,6 @@ export const blockAtOffset = (
   return found !== undefined && offset < found.end ? found : undefined;
 };
 
-/**
- * The block of THESE rows at the same address, or `undefined`.
- *
- * `(sid, where, ordinal)` and NOT the marker: matching on the name too would
- * mean a `\q1` here and a `\q2` there never pair, which is exactly the
- * correspondence the reader opened this to see.
- */
-/**
- * The same verse id in two texts. The engine builds a sid from the book code
- * as the text's own `\id` writes it, and real files write `\id mrk` as well as
- * `\id MRK`; a project and its reference must still pair verse for verse
- * (2026-10-15: a merged Bisa Mark, `mrk 1:1`, found nothing in Cebuano's
- * `MRK 1:1`). The whole sid is compared without case; a verse part written
- * `1a` in one text and `1A` in the other is the same verse anyway.
- */
 const sameSid = (left: string, right: string): boolean =>
   left === right || left.toUpperCase() === right.toUpperCase();
 
@@ -423,6 +272,5 @@ export const verseAtOffset = (skeleton: Skeleton, offset: number): SkeletonVerse
   return found !== undefined && offset < found.textTo ? found : undefined;
 };
 
-/** The verse of THIS skeleton with the same sid. The sid is the whole address. */
 export const equivalentVerse = (skeleton: Skeleton, sid: string): SkeletonVerse | undefined =>
   skeleton.verses.find((row) => sameSid(row.sid, sid));
