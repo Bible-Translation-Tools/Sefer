@@ -58,9 +58,9 @@ export function usePanelToggleLeading(): () => JSX.Element | undefined {
  * The panels layout (a design tweak): the project panel's show/hide for every
  * screen, drawn by the workspace beside the panel rather than in any page.
  *
- * Panel showing: the toggle in a 48px gutter of its own just outside the
- * panel, as tall as the project card (64px) and 16px from the top, so the two
- * line up. Panel hidden: a floating 48px book button, 24px from the window's
+ * Panel showing: the toggle just outside the panel, 64px square like the
+ * project card's height and 16px from the top, so the two line up; the page
+ * beside it keeps its own padding clear of it. Panel hidden: a floating 48px book button, 24px from the window's
  * edge and centred on the card's row, that opens it again.
  */
 export function PanelGutter(props: { readonly showing: boolean }) {
@@ -83,8 +83,8 @@ export function PanelGutter(props: { readonly showing: boolean }) {
           </button>
         }
       >
-        <div class="absolute start-0 top-4 z-10 flex w-12 justify-center">
-          <PanelToggle class="h-16 w-12" />
+        <div class="absolute start-0 top-4 z-10">
+          <PanelToggle class="size-16" />
         </div>
       </Show>
     </Show>
