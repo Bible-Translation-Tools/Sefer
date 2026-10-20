@@ -234,10 +234,17 @@ export interface ProjectAnalysisService {
   readonly suppressed: () => readonly Finding[];
 
   /**
+   * Called after `setSuppressions`: the same publication, filtered again. Not
+   * a `watch` event, since no book was re-analysed; an editor showing a
+   * book's squiggles listens to both. Returns the detach.
+   */
+  readonly onSuppressions: (listener: () => void) => () => void;
+
+  /**
    * One held book's verses by reference, raw USFM: what pruning a
    * suppression reads. `undefined` for a book not analysed yet.
    */
-  readonly versesIn: (bookId: BookId) => ReadonlyMap<string, string> | undefined;
+  readonly versesIn: (bookId: BookId) => ReadonlyMap<string, readonly string[]> | undefined;
 
   /**
    * The last publication's pattern table, pivoted per character — what the
@@ -385,6 +392,7 @@ const make = (
     let totalsCache: { readonly errors: number; readonly warnings: number } | undefined;
     let inventoryCache: Inventory | undefined;
     let suppressions: Suppressions = NO_SUPPRESSIONS;
+    const suppressionListeners = new Set<() => void>();
 
     const pubsub = yield* PubSub.unbounded<{
       readonly bookId: BookId;
@@ -600,9 +608,14 @@ const make = (
       findingsCache = undefined;
       corpusCache = undefined;
       totalsCache = undefined;
+      for (const listener of suppressionListeners) listener();
+    };
+    const onSuppressions = (listener: () => void): (() => void) => {
+      suppressionListeners.add(listener);
+      return () => suppressionListeners.delete(listener);
     };
     const suppressed = (): readonly Finding[] => corpus()?.suppressed() ?? [];
-    const versesIn = (bookId: BookId): ReadonlyMap<string, string> | undefined => {
+    const versesIn = (bookId: BookId): ReadonlyMap<string, readonly string[]> | undefined => {
       const analysis = entries.get(bookId)?.analysis;
       return analysis === undefined
         ? undefined
@@ -889,6 +902,7 @@ const make = (
       findingTotals,
       setSuppressions,
       suppressed,
+      onSuppressions,
       versesIn,
       inventory: characters,
       watch: () => Stream.fromPubSub(pubsub),

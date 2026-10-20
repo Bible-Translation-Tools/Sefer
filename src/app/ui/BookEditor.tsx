@@ -167,6 +167,9 @@ export function BookEditor(props: BookEditorProps) {
       const watching = shell.services.runtime.runFork(
         Stream.runForEach(shell.services.projectAnalysis.watch(), () => Effect.sync(corpus)),
       );
+      // A suppression filters the same publication again: no book is
+      // re-analysed, so `watch` says nothing, and the squiggle would stay.
+      const unsuppressing = shell.services.projectAnalysis.onSuppressions(corpus);
 
       // `editor.annotateEmptyParagraphs`, live. One effect on a mounted view
       // rather than a compartment reconfigure: it is one boolean, and the
@@ -244,6 +247,7 @@ export function BookEditor(props: BookEditorProps) {
         Effect.runFork(Fiber.interrupt(ghosting));
         Effect.runFork(Fiber.interrupt(pairing));
         Effect.runFork(Fiber.interrupt(watching));
+        unsuppressing();
         unsubscribe();
         releaseReports();
         editor.destroy();

@@ -42,6 +42,18 @@ Five commits, each driven on the fixture (small-nt) with agent-browser:
 - **A term row's count reads the file**: a term not open has no text on screen to say whether a
   verse changed since. Only the open term's cards show Changed since approved.
 
+**From the review (one Opus pass, 2026-10-20), fixed:** the open editor's squiggles now refresh
+on a suppression (`ProjectAnalysis.onSuppressions`; invisible today, since Fine here is only on
+the Findings page, where the book editor is not mounted); a verse reference several units share
+is checked against all of them when pruning; a span that runs past its verse offers no Fine here
+(pruning could not find it again); a save the file refused says so instead of a success toast;
+writes to each file go one at a time; an approval pressed before the file is read waits for it;
+Show again on a finding hidden both ways clears both.
+
+**Left, and why:** an approval made while the file's hash header is not this build's keeps the
+whole file in "needs re-check", since one header covers every entry. It can only happen when
+Sefer changes the hash, and that change would come with a migration that rehashes.
+
 **Not driven:** persistence across a reload (the fixture is in memory and reseeds), and the
 needs-re-check state. Both want a real project: on the branch, on `x-en-ulb`.
 

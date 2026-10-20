@@ -303,9 +303,9 @@ export interface Shell {
    */
   readonly suppressedFindings: Accessor<readonly Finding[]>;
   /** "Fine here" (`here`) or "Always allow" (`everywhere`) on a Sous finding. */
-  readonly suppress: (finding: Finding, rung: Rung) => Promise<void>;
-  /** Takes a suppression back, by its identity. */
-  readonly unsuppress: (id: string) => Promise<void>;
+  readonly suppress: (finding: Finding, rung: Rung) => Promise<boolean>;
+  /** Takes a suppression back, by its identity. False when nothing could be saved. */
+  readonly unsuppress: (id: string) => Promise<boolean>;
   /** Which rung hides a suppressed finding. */
   readonly suppressedBy: (finding: Finding) => Rung | undefined;
 

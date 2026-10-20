@@ -149,7 +149,10 @@ export const siteKeyOf = (
   to: number,
 ): string | undefined => {
   const verse = verseAt(bookId, text, toc, from);
-  if (verse === undefined) return undefined;
+  // A span running past its verse (a doubled word split by `\v`) could not
+  // be found in that verse again, so pruning would drop it at once: such a
+  // finding offers no "Fine here".
+  if (verse === undefined || to > verse.from + verse.text.length) return undefined;
   const siteText = text.slice(from, to);
   return siteIdentityOf({
     verseRef: verse.ref,
@@ -177,18 +180,22 @@ const siteFields = (
 };
 
 /**
- * Every verse of a book by its reference, raw USFM: what pruning reads.
- * A reference two verses share (a duplicated `\v`) keeps the first.
+ * Every verse of a book by its reference, raw USFM: what pruning reads. A
+ * reference several units share (a duplicated `\v`, a `\v 0` beside its
+ * chapter's head) keeps every one of them.
  */
 export const versesOf = (
   bookId: BookId,
   text: string,
   toc: TocView,
-): ReadonlyMap<string, string> => {
-  const out = new Map<string, string>();
+): ReadonlyMap<string, readonly string[]> => {
+  const out = new Map<string, string[]>();
   for (const unit of tocUnits(toc)) {
     const ref = addressCode(unitAddress(bookId, toc, unit));
-    if (!out.has(ref)) out.set(ref, text.slice(unit.from, unit.to));
+    const held = out.get(ref);
+    const verse = text.slice(unit.from, unit.to);
+    if (held === undefined) out.set(ref, [verse]);
+    else held.push(verse);
   }
   return out;
 };
@@ -202,17 +209,22 @@ export const versesOf = (
  */
 export const staleHere = (
   suppressions: Suppressions,
-  versesIn: (bookId: string) => ReadonlyMap<string, string> | undefined,
+  versesIn: (bookId: string) => ReadonlyMap<string, readonly string[]> | undefined,
 ): readonly string[] => {
+  const books = new Map<string, ReadonlyMap<string, readonly string[]> | undefined>();
   const out: string[] = [];
   for (const id of suppressions.here.keys()) {
     const site = siteFields(id);
     if (site === undefined || site.siteText === "") continue;
-    const verses = versesIn(site.ref.split(" ")[0] ?? "");
+    const bookId = site.ref.split(" ")[0] ?? "";
+    if (!books.has(bookId)) books.set(bookId, versesIn(bookId));
+    const verses = books.get(bookId);
     if (verses === undefined) continue;
-    const verse = verses.get(site.ref);
-    if (verse === undefined || ordinalOf(verse, site.siteText, verse.length + 1) <= site.ordinal)
-      out.push(id);
+    // Still there if any unit with this reference holds the text at that ordinal.
+    const held = (verses.get(site.ref) ?? []).some(
+      (verse) => ordinalOf(verse, site.siteText, verse.length + 1) > site.ordinal,
+    );
+    if (!held) out.push(id);
   }
   return out;
 };

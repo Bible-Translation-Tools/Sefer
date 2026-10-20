@@ -9,7 +9,7 @@
  */
 
 import { Effect } from "effect";
-import { createSignal, type Accessor } from "solid-js";
+import { createSignal, untrack, type Accessor } from "solid-js";
 
 import { readDeviceFile, writeDeviceFile } from "#core/project/deviceFile";
 import {
@@ -44,33 +44,45 @@ export const createApprovals = (services: Services, root: string): ApprovalsHand
   let writable = false;
   const hash = (text: string): string => hex(services.galley.hash(text));
 
-  void services.run(readDeviceFile(services.fileSystem, root, APPROVALS_FILE)).then((text) => {
-    const decoded =
-      text === "" ? NO_APPROVALS : text === undefined ? undefined : decodeApprovals(text);
-    writable = decoded !== undefined;
-    if (decoded !== undefined) setHeld(decoded);
-  });
+  const loaded = services
+    .run(readDeviceFile(services.fileSystem, root, APPROVALS_FILE))
+    .then((text) => {
+      const decoded =
+        text === "" ? NO_APPROVALS : text === undefined ? undefined : decodeApprovals(text);
+      writable = decoded !== undefined;
+      if (decoded !== undefined) setHeld(decoded);
+    });
 
-  const save = (next: Approvals): void => {
-    if (!writable) return;
-    setHeld(next);
-    void services.run(
-      Effect.ignore(
-        writeDeviceFile(services.fileSystem, root, APPROVALS_FILE, encodeApprovals(next)),
-      ),
-    );
+  // A press before the file is read waits for it, rather than being lost;
+  // writes go one at a time, in order (they share one temporary name).
+  let writing: Promise<void> = loaded;
+  const save = (change: (from: Approvals) => Approvals): void => {
+    writing = writing.then(() => {
+      if (!writable) return;
+      // The latest held, at write time: not a tracked read.
+      const next = change(untrack(held));
+      setHeld(next);
+      return services.run(
+        Effect.ignore(
+          writeDeviceFile(services.fileSystem, root, APPROVALS_FILE, encodeApprovals(next)),
+        ),
+      );
+    });
   };
 
   return {
     held,
     state: (term, verse, now) => stateOf(held(), term, verse, hash(now)),
-    approve: (term, verse, opened, now) =>
-      save(
-        withApproval(
-          { ...held(), recheck: false },
-          { term, verse, open: hash(opened), approved: hash(now), at: new Date().toISOString() },
-        ),
-      ),
-    unapprove: (term, verse) => save(withoutApproval(held(), term, verse)),
+    approve: (term, verse, opened, now) => {
+      const entry = {
+        term,
+        verse,
+        open: hash(opened),
+        approved: hash(now),
+        at: new Date().toISOString(),
+      };
+      save((from) => withApproval(from, entry));
+    },
+    unapprove: (term, verse) => save((from) => withoutApproval(from, term, verse)),
   };
 };

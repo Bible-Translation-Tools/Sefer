@@ -36,8 +36,9 @@ export interface SuppressionStore {
   load(root: string): Promise<void>;
   /** Drops entries whose text is gone, once the project's books are analysed. */
   prune(): Promise<void>;
-  suppress(finding: Finding, rung: Rung): Promise<void>;
-  unsuppress(id: string): Promise<void>;
+  /** False when nothing was saved: the file could not be read, so it is left alone. */
+  suppress(finding: Finding, rung: Rung): Promise<boolean>;
+  unsuppress(id: string): Promise<boolean>;
   /** Which rung hides this finding, if any: "Bring back" says what it will undo. */
   rungOf(finding: Finding): Rung | undefined;
   /** Back to none, when the project closes. */
@@ -59,16 +60,22 @@ export const makeSuppressionStore = (options: {
     services.projectAnalysis.setSuppressions(next);
   };
 
-  const save = async (next: Suppressions): Promise<void> => {
-    if (root === undefined || !writable) return;
+  // One write at a time, in order: every write to the file shares one
+  // temporary name, so two at once could leave the older one on disk.
+  let writing: Promise<void> = Promise.resolve();
+  const save = async (next: Suppressions): Promise<boolean> => {
+    if (root === undefined || !writable) return false;
     const at = root;
     apply(next);
     changed({ kind: "findings.suppress" });
-    await services.run(
-      Effect.ignore(
-        writeDeviceFile(services.fileSystem, at, SOUS_SUPPRESSIONS_FILE, encodeSuppressions(next)),
+    const text = encodeSuppressions(next);
+    writing = writing.then(() =>
+      services.run(
+        Effect.ignore(writeDeviceFile(services.fileSystem, at, SOUS_SUPPRESSIONS_FILE, text)),
       ),
     );
+    await writing;
+    return true;
   };
 
   const pruned = (from: Suppressions): Suppressions =>
@@ -96,12 +103,12 @@ export const makeSuppressionStore = (options: {
     suppress: async (finding, rung) => {
       const keys = finding.suppression;
       const id = rung === "here" ? keys?.here : keys?.everywhere;
-      if (id === undefined) return;
-      await save(withSuppression(pruned(held), rung, id, new Date().toISOString()));
+      if (id === undefined) return false;
+      return save(withSuppression(pruned(held), rung, id, new Date().toISOString()));
     },
     unsuppress: async (id) => {
       const next = withoutSuppression(held, id);
-      if (next !== held) await save(pruned(next));
+      return next === held ? true : save(pruned(next));
     },
     rungOf: (finding) => {
       const keys = finding.suppression;

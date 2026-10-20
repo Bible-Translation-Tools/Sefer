@@ -28,6 +28,16 @@ import { Button, IconButton, Menu, MenuItem, toasts } from "../primitives";
 /** Long enough to recognise a word pair; a whole verse quoted in a menu is noise. */
 const QUOTE_MAX = 32;
 
+/** The file could not be read when the project opened, so nothing is saved over it. */
+const unsaved = (): void => {
+  toasts.error({
+    title: t("Could not save that"),
+    message: t(
+      "This project's list of findings marked fine could not be read, so Sefer leaves it alone rather than replace it.",
+    ),
+  });
+};
+
 export function SuppressActions(props: { readonly finding: Finding }) {
   const shell = useShell();
   const services = shell.services;
@@ -44,12 +54,14 @@ export function SuppressActions(props: { readonly finding: Finding }) {
   const fineHere = (): void => {
     const id = props.finding.suppression?.here;
     if (id === undefined) return;
-    void shell.suppress(props.finding, "here").then(() =>
-      toasts.info({
-        title: t("Marked fine here"),
-        message: t("Hidden on this device. It comes back if this text changes."),
-        action: { label: t("Undo"), onPress: () => void shell.unsuppress(id) },
-      }),
+    void shell.suppress(props.finding, "here").then((saved) =>
+      !saved
+        ? unsaved()
+        : toasts.info({
+            title: t("Marked fine here"),
+            message: t("Hidden on this device. It comes back if this text changes."),
+            action: { label: t("Undo"), onPress: () => void shell.unsuppress(id) },
+          }),
     );
   };
 
@@ -57,12 +69,14 @@ export function SuppressActions(props: { readonly finding: Finding }) {
     const id = props.finding.suppression?.everywhere;
     if (id === undefined) return;
     const quoted = flagged();
-    void shell.suppress(props.finding, "everywhere").then(() =>
-      toasts.info({
-        title: t("Always allowing “{text}”", { text: quoted }),
-        message: t("In this project, on this device."),
-        action: { label: t("Undo"), onPress: () => void shell.unsuppress(id) },
-      }),
+    void shell.suppress(props.finding, "everywhere").then((saved) =>
+      !saved
+        ? unsaved()
+        : toasts.info({
+            title: t("Always allowing “{text}”", { text: quoted }),
+            message: t("In this project, on this device."),
+            action: { label: t("Undo"), onPress: () => void shell.unsuppress(id) },
+          }),
     );
   };
 
@@ -88,14 +102,23 @@ export function SuppressActions(props: { readonly finding: Finding }) {
   const bringBack = (): void => {
     const keys = props.finding.suppression;
     const rung = shell.suppressedBy(props.finding);
-    const id = rung === "here" ? keys?.here : keys?.everywhere;
-    if (rung === undefined || id === undefined) return;
-    void shell.unsuppress(id).then(() =>
-      toasts.info({
-        title: rung === "here" ? t("Shown again") : t("No longer always allowed"),
-        action: { label: t("Undo"), onPress: () => void shell.suppress(props.finding, rung) },
-      }),
-    );
+    if (keys === undefined || rung === undefined) return;
+    // Both rungs: one hidden here AND allowed everywhere comes back only when
+    // neither holds it.
+    const ids = [keys.here, ...(keys.everywhere === undefined ? [] : [keys.everywhere])];
+    void ids
+      .reduce<Promise<boolean>>(
+        (done, id) => done.then((ok) => (ok ? shell.unsuppress(id) : false)),
+        Promise.resolve(true),
+      )
+      .then((saved) =>
+        !saved
+          ? unsaved()
+          : toasts.info({
+              title: rung === "here" ? t("Shown again") : t("No longer always allowed"),
+              action: { label: t("Undo"), onPress: () => void shell.suppress(props.finding, rung) },
+            }),
+      );
   };
 
   /** On a finding the reader already hid: one door back, saying what it undoes. */
