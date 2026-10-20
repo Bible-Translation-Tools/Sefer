@@ -13,10 +13,10 @@ export const ago = (at: number, now = Date.now()): string => {
   const magnitude = Math.abs(elapsed);
   let unit: Intl.RelativeTimeFormatUnit = "second";
   let size = 1000;
-  for (const [name, ms] of UNITS) {
-    if (magnitude < ms) break;
+  for (const [name, milliseconds] of UNITS) {
+    if (magnitude < milliseconds) break;
     unit = name;
-    size = ms;
+    size = milliseconds;
   }
   const format = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
   return format.format(Math.round(elapsed / size), unit);

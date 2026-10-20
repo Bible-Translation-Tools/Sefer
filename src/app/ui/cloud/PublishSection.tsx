@@ -18,12 +18,10 @@ const suggestedName = (project: Project): string => {
   const metadata = metadataOf(project);
   const language = metadata?.language.tag ?? "";
   const resource = metadata?.id ?? "";
-  const named =
-    language !== "" && resource !== "" && !resource.includes(language)
-      ? `${language}_${resource}`
-      : resource !== ""
-        ? resource
-        : project.root.slice(project.root.lastIndexOf("/") + 1);
+  const folder = project.root.slice(project.root.lastIndexOf("/") + 1);
+  let named = resource !== "" ? resource : folder;
+  if (language !== "" && resource !== "" && !resource.includes(language))
+    named = `${language}_${resource}`;
   return named.toLowerCase().replace(/[^a-z0-9._-]+/gu, "-");
 };
 

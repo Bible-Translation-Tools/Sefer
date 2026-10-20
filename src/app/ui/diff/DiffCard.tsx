@@ -65,6 +65,11 @@ export const sameFields = (
   b: Readonly<Record<string, unknown>>,
 ) => Object.keys(a).every((key) => a[key] === b[key]);
 
+const originWords = (origin: "here" | "there" | "both"): string => {
+  if (origin === "there") return t("changed there");
+  return origin === "here" ? t("changed here") : t("changed in both places");
+};
+
 export function DiffCard(props: {
   readonly hunk: Hunk;
   readonly sides: DiffSides;
@@ -125,7 +130,7 @@ export function DiffCard(props: {
 
   const baselineBuilt = createMemo(
     () => ({
-      l: left(),
+      leftHost: left(),
       split: props.split,
       markup: usfm(),
       text: props.sides.baselineText,
@@ -136,13 +141,13 @@ export function DiffCard(props: {
   );
   createEffect(
     () => baselineBuilt(),
-    ({ l, split, markup, text, from, to }) => {
-      if (!split || l === undefined || from === undefined || to === undefined) return;
+    ({ leftHost, split, markup, text, from, to }) => {
+      if (!split || leftHost === undefined || from === undefined || to === undefined) return;
       const { sides } = now();
       const paint = baselinePaint(markup);
       const mount = untrack(() =>
         mountDiffView({
-          parent: l,
+          parent: leftHost,
           text,
           analyze: () => sides.baseline,
           mode: markup ? "usfm" : "default",
@@ -183,7 +188,7 @@ export function DiffCard(props: {
 
   const currentBuilt = createMemo(
     () => ({
-      r: right(),
+      rightHost: right(),
       split: props.split,
       markup: usfm(),
       decidable: props.controls !== undefined,
@@ -196,14 +201,14 @@ export function DiffCard(props: {
   );
   createEffect(
     () => currentBuilt(),
-    ({ r, split, markup, editing }) => {
-      if (r === undefined || editing) return;
+    ({ rightHost, split, markup, editing }) => {
+      if (rightHost === undefined || editing) return;
       const started = performance.now();
       const { hunk, sides } = now();
       const paint = currentPaint(markup, split);
       const mount = untrack(() =>
         mountDiffView({
-          parent: r,
+          parent: rightHost,
           text: sides.currentText,
           analyze: () => sides.current,
           mode: markup ? "usfm" : "default",
@@ -332,11 +337,7 @@ export function DiffCard(props: {
                 )}
                 data-diff-origin={origin()}
               >
-                {origin() === "there"
-                  ? t("changed there")
-                  : origin() === "here"
-                    ? t("changed here")
-                    : t("changed in both places")}
+                {originWords(origin())}
               </span>
             )}
           </Show>

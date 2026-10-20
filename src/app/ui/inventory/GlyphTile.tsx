@@ -18,8 +18,10 @@ const BOX = {
 } as const;
 
 export function GlyphTile(props: GlyphTileProps) {
-  const shown = (): string =>
-    props.pooled === true ? "0-9" : invisible(props.char) ? BLANK : props.char;
+  const shown = (): string => {
+    if (props.pooled === true) return "0-9";
+    return invisible(props.char) ? BLANK : props.char;
+  };
 
   return (
     <span

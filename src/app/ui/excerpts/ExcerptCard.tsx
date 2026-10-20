@@ -139,6 +139,10 @@ export function ExcerptCard(props: ExcerptCardProps) {
     name: "excerptBody",
   });
   const [wide, setWide] = createSignal(true, { name: "excerptWide" });
+  const layout = (): "single" | "side" | "stacked" => {
+    if (props.paired === undefined) return "single";
+    return wide() ? "side" : "stacked";
+  };
   const usfm = (): boolean => props.view.usfm;
   const mode = (): "regular" | "usfm" => (props.mode === "usfm" || usfm() ? "usfm" : "regular");
 
@@ -261,6 +265,16 @@ export function ExcerptCard(props: ExcerptCardProps) {
     if (verse === undefined || verse.first === 0 || next?.row !== home?.row) return t("Show Verse");
     const label = verse.last > verse.first ? `${verse.first}-${verse.last}` : `${verse.first}`;
     return t("Show Verse {verse}", { verse: label });
+  };
+  const stepLabel = (side: "up" | "down"): string => {
+    if (chapterOpen()) return t("Show fewer verses");
+    if (doubled()) return t("Show the whole chapter");
+    return verseLabel(side);
+  };
+  const stepIcon = (side: "up" | "down") => {
+    if (chapterOpen()) return side === "up" ? <ChevronsDownIcon /> : <ChevronsUpIcon />;
+    if (doubled()) return side === "up" ? <ChevronsUpIcon /> : <ChevronsDownIcon />;
+    return side === "up" ? <ChevronUpIcon /> : <ChevronDownIcon />;
   };
   const contextStep = (which: ContextStep): void => {
     const held = spec().context;
@@ -497,7 +511,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
           <div class={cx("min-h-0 overflow-hidden", !condensed() && "-mb-2 pb-2")}>
             <div
               ref={setBody}
-              data-layout={props.paired === undefined ? "single" : wide() ? "side" : "stacked"}
+              data-layout={layout()}
               class={cx(
                 props.paired !== undefined && "grid gap-2",
                 props.paired !== undefined && !direct() && "p-2",
@@ -526,44 +540,16 @@ export function ExcerptCard(props: ExcerptCardProps) {
                       <IconButton
                         variant="bare"
                         data-step={chapterOpen() || doubled() ? "chapter" : "up"}
-                        label={
-                          chapterOpen()
-                            ? t("Show fewer verses")
-                            : doubled()
-                              ? t("Show the whole chapter")
-                              : verseLabel("up")
-                        }
-                        icon={
-                          chapterOpen() ? (
-                            <ChevronsDownIcon />
-                          ) : doubled() ? (
-                            <ChevronsUpIcon />
-                          ) : (
-                            <ChevronUpIcon />
-                          )
-                        }
+                        label={stepLabel("up")}
+                        icon={stepIcon("up")}
                         disabled={!chapterOpen() && !doubled() && !props.excerpt.more.up}
                         onClick={() => contextStep(chapterOpen() || doubled() ? "chapter" : "up")}
                       />
                       <IconButton
                         variant="bare"
                         data-step={chapterOpen() || doubled() ? "chapter" : "down"}
-                        label={
-                          chapterOpen()
-                            ? t("Show fewer verses")
-                            : doubled()
-                              ? t("Show the whole chapter")
-                              : verseLabel("down")
-                        }
-                        icon={
-                          chapterOpen() ? (
-                            <ChevronsUpIcon />
-                          ) : doubled() ? (
-                            <ChevronsDownIcon />
-                          ) : (
-                            <ChevronDownIcon />
-                          )
-                        }
+                        label={stepLabel("down")}
+                        icon={stepIcon("down")}
                         disabled={!chapterOpen() && !doubled() && !props.excerpt.more.down}
                         onClick={() => contextStep(chapterOpen() || doubled() ? "chapter" : "down")}
                       />

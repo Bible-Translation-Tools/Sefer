@@ -25,6 +25,9 @@ export interface BookDiffApi {
   readonly middle: () => number | undefined;
 }
 
+const spanOn = (side: Side, unit: DecisionUnit) =>
+  side === "baseline" ? unit.baseline : unit.current;
+
 const unitAt = (
   units: readonly DecisionUnit[],
   side: Side,
@@ -68,7 +71,7 @@ export function BookDiff(props: {
   interface Pane {
     readonly editor: EditorHandle;
     repaint(paint: DiffPaint): void;
-    showAt(at: number, y?: "start" | "center"): void;
+    showAt(at: number, align?: "start" | "center"): void;
     destroy(): void;
   }
 
@@ -80,13 +83,12 @@ export function BookDiff(props: {
   }[] = [];
 
   const placeIn = (side: Side, unit: DecisionUnit): number | undefined => {
-    const own = side === "baseline" ? unit.baseline : unit.current;
+    const own = spanOn(side, unit);
     if (own !== undefined) return own.from;
     const units = untrack(() => props.units);
     for (let index = units.indexOf(unit) - 1; index >= 0; index--) {
       const before = units[index];
-      const span =
-        before === undefined ? undefined : side === "baseline" ? before.baseline : before.current;
+      const span = before === undefined ? undefined : spanOn(side, before);
       if (span !== undefined) return span.to;
     }
     return 0;
@@ -118,20 +120,20 @@ export function BookDiff(props: {
       markup: props.usfm,
       decidable: props.controls !== undefined,
       waiting: props.awaitLive === true && props.live === undefined,
-      l: left(),
-      r: right(),
+      leftHost: left(),
+      rightHost: right(),
     }),
     { name: "bookDiffBuilt", equals: sameFields },
   );
 
   createEffect(
     () => built(),
-    ({ split, markup, live, waiting, l, r }) => {
-      if (waiting || r === undefined || (split && l === undefined)) return;
+    ({ split, markup, live, waiting, leftHost, rightHost }) => {
+      if (waiting || rightHost === undefined || (split && leftHost === undefined)) return;
       const now = () => untrack(() => ({ sides: props.sides, units: props.units }));
       const { sides } = now();
       const observability = untrack(() => props.observability);
-      const op = observability.operation("review.diff.book", {
+      const operation = observability.operation("review.diff.book", {
         "diff.book": sides.bookId,
         "diff.layout": split ? "split" : "unified",
         "diff.mode": markup ? "usfm" : "regular",
@@ -175,7 +177,7 @@ export function BookDiff(props: {
           const mount: Pane = {
             editor: card,
             repaint: (next) => card.setDiff(next),
-            showAt: (at, y = "start") => card.reveal({ from: at }, { scroll: y }),
+            showAt: (at, align = "start") => card.reveal({ from: at }, { scroll: align }),
             destroy: () => card.destroy(),
           };
           held.push({ side, mount, paint, live: true });
@@ -192,19 +194,19 @@ export function BookDiff(props: {
         const mount: Pane = {
           editor: view,
           repaint: (next) => view.repaint(next),
-          showAt: (at, y) => view.showAt(at, y),
+          showAt: (at, align) => view.showAt(at, align),
           destroy: () => view.destroy(),
         };
         held.push({ side, mount, paint, live: false });
         return mount;
       };
 
-      const painted = op.span("review.diff.mount");
-      if (split && l !== undefined) {
-        const was = add("baseline", l, sides.baselineText, () =>
+      const painted = operation.span("review.diff.mount");
+      if (split && leftHost !== undefined) {
+        const was = add("baseline", leftHost, sides.baselineText, () =>
           sidePaint(now().units, "baseline", markup, undefined, now().sides.baseline),
         );
-        const current = add("current", r, sides.currentText, () =>
+        const current = add("current", rightHost, sides.currentText, () =>
           sidePaint(now().units, "current", markup, controls(), now().sides.current),
         );
         follow("baseline", was);
@@ -221,7 +223,7 @@ export function BookDiff(props: {
           }),
         );
       } else {
-        const current = add("unified", r, sides.currentText, () =>
+        const current = add("unified", rightHost, sides.currentText, () =>
           hunkPaint(
             now().units,
             markup,
@@ -233,7 +235,10 @@ export function BookDiff(props: {
         follow("current", current);
       }
       painted();
-      op.end("passed", { "diff.units": now().units.length, "diff.live": live !== undefined });
+      operation.end("passed", {
+        "diff.units": now().units.length,
+        "diff.live": live !== undefined,
+      });
       mounts = held;
       const first = untrack(() => props.initial);
       if (first !== undefined) requestAnimationFrame(() => showUnit(first));

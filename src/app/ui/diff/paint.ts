@@ -14,22 +14,38 @@ const tint = (
   live: boolean,
   marked: boolean,
 ): string =>
-  live && changed(unit)
-    ? statusTint(unit, marked)
-    : decision === "current"
-      ? "cm-diff-kept"
-      : decision === "baseline"
-        ? "cm-diff-taken"
-        : statusTint(unit, marked);
+  live && changed(unit) ? statusTint(unit, marked) : decidedTint(decision, unit, marked);
 
-const statusTint = (unit: DecisionUnit, marked: boolean): string =>
-  unit.status === "added"
-    ? "cm-diff-added-unit"
-    : unit.status === "deleted"
-      ? "cm-diff-deleted-unit"
-      : unit.isUsfmStructureChange || !marked
-        ? "cm-diff-markup-unit"
-        : "";
+const modifiedRuns = (unit: DecisionUnit, side: Side) => {
+  if (unit.status !== "modified") return undefined;
+  return side === "baseline" ? unit.text?.baseline : unit.text?.current;
+};
+
+const hunkKind = (unit: DecisionUnit): "decided" | "added" | "modified" => {
+  if (!changed(unit)) return "decided";
+  return unit.status === "added" ? "added" : "modified";
+};
+
+const hunkVerb = (unit: DecisionUnit): string => {
+  if (!changed(unit)) return "Decided";
+  return unit.status === "added" ? "Added" : "Changed";
+};
+
+const decidedTint = (
+  decision: MergeSide | undefined,
+  unit: DecisionUnit,
+  marked: boolean,
+): string => {
+  if (decision === "current") return "cm-diff-kept";
+  if (decision === "baseline") return "cm-diff-taken";
+  return statusTint(unit, marked);
+};
+
+const statusTint = (unit: DecisionUnit, marked: boolean): string => {
+  if (unit.status === "added") return "cm-diff-added-unit";
+  if (unit.status === "deleted") return "cm-diff-deleted-unit";
+  return unit.isUsfmStructureChange || !marked ? "cm-diff-markup-unit" : "";
+};
 
 const marksWords = (unit: DecisionUnit, usfm: boolean): boolean =>
   [...(unit.text?.baseline ?? []), ...(unit.text?.current ?? [])].some(
@@ -49,11 +65,11 @@ export interface Controls {
 }
 
 const chevron = (points: "left" | "right"): SVGSVGElement => {
-  const ns = "http://www.w3.org/2000/svg";
-  const svg = document.createElementNS(ns, "svg");
+  const svgNamespace = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svgNamespace, "svg");
   svg.setAttribute("viewBox", "0 0 24 24");
   svg.setAttribute("aria-hidden", "true");
-  const path = document.createElementNS(ns, "path");
+  const path = document.createElementNS(svgNamespace, "path");
   path.setAttribute("d", points === "left" ? "M15 5 L8 12 L15 19" : "M9 5 L16 12 L9 19");
   svg.append(path);
   return svg;
@@ -121,12 +137,7 @@ export const sidePaint = (
         : tint(unit, decision, controls?.live === true, marksWords(unit, usfm));
       if (line !== "")
         lines.push({ from: span.from, to: Math.max(span.from + 1, end), class: line });
-      const runs =
-        unit.status !== "modified"
-          ? undefined
-          : side === "baseline"
-            ? unit.text?.baseline
-            : unit.text?.current;
+      const runs = modifiedRuns(unit, side);
       for (const run of runs ?? [])
         if (run.kind !== "unchanged" && visibleRun(run.what, usfm))
           marks.push({
@@ -175,7 +186,7 @@ export const hunkPaint = (
     const runs = unit.status === "modified" ? (unit.text?.current ?? []) : [];
     hunks.push({
       key: unit.id,
-      kind: !changed(unit) ? "decided" : unit.status === "added" ? "added" : "modified",
+      kind: hunkKind(unit),
       from: span.from,
       to: Math.max(span.from + 1, end),
       tint: changed(unit) ? "cm-diff-now" : tint(unit, decision, controls?.live === true, true),
@@ -183,7 +194,7 @@ export const hunkPaint = (
         .filter((run) => run.kind !== "unchanged" && visibleRun(run.what, usfm))
         .map((run) => ({ from: run.from, to: run.to, class: "cm-diff-added" })),
       old: unit.baseline === undefined || !changed(unit) ? undefined : () => was(unit),
-      label: `${!changed(unit) ? "Decided" : unit.status === "added" ? "Added" : "Changed"} ${unitReference(unit)}`,
+      label: `${hunkVerb(unit)} ${unitReference(unit)}`,
     });
   }
   return { lines: [], marks: [], controls: base.controls, hunks };

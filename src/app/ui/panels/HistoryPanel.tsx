@@ -117,6 +117,19 @@ export function HistoryPanel() {
   const [older, setOlder] = createSignal<"whole" | "missing" | "loading" | "failed">("whole", {
     name: "historyOlder",
   });
+  const emptyTitle = (): string => {
+    if (log()?.length === 0) return t("No versions yet.");
+    if (selected() === "") return t("Reading the history…");
+    return t("This version changed no book's text.");
+  };
+  const olderNote = (): string => {
+    if (older() === "loading") return t("Bringing the older history to this device…");
+    if (older() === "failed")
+      return t(
+        "The older history could not be brought to this device. What is here is recent history only.",
+      );
+    return t("Only recent history is on this device. The older history is on the shared project.");
+  };
 
   const load = (fresh = false): void => {
     const project = shell.project();
@@ -182,7 +195,10 @@ export function HistoryPanel() {
         setLog(answer.commits);
         setVersions(answer.perBook);
         setShared(answer.shared);
-        setOlder((now) => (answer.shallow ? (now === "loading" ? now : "missing") : "whole"));
+        setOlder((now) => {
+          if (!answer.shallow) return "whole";
+          return now === "loading" ? now : "missing";
+        });
         if (answer.shallow && !deepened.has(project.root) && syncStatus.interfaceUp()) {
           deepened.add(project.root);
           loadOlder(HISTORY_STEP);
@@ -548,17 +564,7 @@ export function HistoryPanel() {
           </ul>
           <Show when={older() !== "whole"}>
             <div class="space-y-2 px-5 pt-3" data-history-older={older()}>
-              <p class="text-smallest text-on-surface-secondary">
-                {older() === "loading"
-                  ? t("Bringing the older history to this device…")
-                  : older() === "failed"
-                    ? t(
-                        "The older history could not be brought to this device. What is here is recent history only.",
-                      )
-                    : t(
-                        "Only recent history is on this device. The older history is on the shared project.",
-                      )}
-              </p>
+              <p class="text-smallest text-on-surface-secondary">{olderNote()}</p>
               <Show when={older() !== "loading"}>
                 <div class="flex gap-2">
                   <Button variant="secondary" size="sm" onClick={() => loadOlder(HISTORY_STEP)}>
@@ -634,20 +640,7 @@ export function HistoryPanel() {
             </Show>
           }
         >
-          <Show
-            when={shown().length > 0}
-            fallback={
-              <EmptyState
-                title={
-                  log()?.length === 0
-                    ? t("No versions yet.")
-                    : selected() === ""
-                      ? t("Reading the history…")
-                      : t("This version changed no book's text.")
-                }
-              />
-            }
-          >
+          <Show when={shown().length > 0} fallback={<EmptyState title={emptyTitle()} />}>
             <div class="flex flex-wrap items-center gap-x-4 gap-y-2" data-history-books>
               <For each={shown()}>
                 {(changes) => (

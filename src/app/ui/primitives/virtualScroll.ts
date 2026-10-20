@@ -30,11 +30,12 @@ export interface Correction {
   readonly fold: number;
 }
 
-export const compensates = (c: Correction): boolean => {
-  if (c.pinnedIndex !== undefined && c.index < c.pinnedIndex) return true;
-  if (!c.remeasured) return false;
-  if (c.fold <= 0) return false;
-  return c.start + c.size <= c.fold;
+export const compensates = (correction: Correction): boolean => {
+  if (correction.pinnedIndex !== undefined && correction.index < correction.pinnedIndex)
+    return true;
+  if (!correction.remeasured) return false;
+  if (correction.fold <= 0) return false;
+  return correction.start + correction.size <= correction.fold;
 };
 
 export type Aim =

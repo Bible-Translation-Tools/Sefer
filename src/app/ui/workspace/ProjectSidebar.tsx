@@ -84,6 +84,11 @@ export function ProjectSidebar() {
     { name: "sidebarSearch" },
   );
   const searching = (): boolean => search() !== undefined;
+  const emptyNote = (): string => {
+    if (rows().length === 0) return t("This project has no books yet.");
+    if (searching()) return t("No book matches {query}", { query: query().trim() });
+    return t("No books in this testament.");
+  };
 
   const shown = createMemo(
     (): readonly Row[] => {
@@ -272,15 +277,7 @@ export function ProjectSidebar() {
         <nav aria-label={t("Books")} class="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
           <Show
             when={shown().length > 0}
-            fallback={
-              <p class="px-2 py-4 text-small text-on-surface-tertiary">
-                {rows().length === 0
-                  ? t("This project has no books yet.")
-                  : searching()
-                    ? t("No book matches {query}", { query: query().trim() })
-                    : t("No books in this testament.")}
-              </p>
-            }
+            fallback={<p class="px-2 py-4 text-small text-on-surface-tertiary">{emptyNote()}</p>}
           >
             <ul>
               <For each={shown()}>{(row) => <BookRow row={row} />}</For>

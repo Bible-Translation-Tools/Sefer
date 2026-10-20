@@ -270,6 +270,13 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
     return t("{have} of {total}", { have: have.length, total });
   };
 
+  const assembleLabel = (): string => {
+    if (assembling() && ready().some((staged) => (staged.history?.saves.length ?? 0) > 0))
+      return t("Writing {count} books' history…", { count: picked().length });
+    if (props.into === undefined) return t("Assemble {count} books", { count: picked().length });
+    return t("Add {count} books", { count: picked().length });
+  };
+
   const runAssemble = (): void => {
     const books = ready();
     const form = prefillForm(books);
@@ -507,11 +514,7 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
             disabled={!canAssemble() || assembling()}
             onClick={props.into === undefined ? runAssemble : runAdd}
           >
-            {assembling() && ready().some((staged) => (staged.history?.saves.length ?? 0) > 0)
-              ? t("Writing {count} books' history…", { count: picked().length })
-              : props.into === undefined
-                ? t("Assemble {count} books", { count: picked().length })
-                : t("Add {count} books", { count: picked().length })}
+            {assembleLabel()}
           </Button>
         </Card>
 

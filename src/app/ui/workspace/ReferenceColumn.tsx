@@ -218,7 +218,10 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
   const installed = (): readonly Resource[] => {
     const seen = new Map<string, Resource>();
     for (const entry of entries()) seen.set(entry.resource.id, entry.resource);
-    for (const resource of [...copies().filter(isBible), ...copies().filter((r) => !isBible(r))])
+    for (const resource of [
+      ...copies().filter(isBible),
+      ...copies().filter((candidate) => !isBible(candidate)),
+    ])
       if (!seen.has(resource.id)) seen.set(resource.id, resource);
     return [...seen.values()];
   };

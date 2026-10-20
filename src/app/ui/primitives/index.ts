@@ -24,6 +24,8 @@ export {
   TableHead,
   TableHeader,
   TableRow,
+  ariaSortOf,
+  sortIcon,
   type SortDirection,
 } from "./Table";
 export { ToggleGroup } from "./ToggleGroup";

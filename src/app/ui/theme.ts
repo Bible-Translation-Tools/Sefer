@@ -32,24 +32,21 @@ export const DEFAULT_EDITOR_FONT_SIZE = 18;
 const CACHE_KEY = "sefer.appearance";
 const EDITOR_CACHE_KEY = "sefer.editorFontSize";
 
-/**
- * A stored string is whatever was there last; only a known name is a theme.
- *
- * SAFETY: both assertions are guarded by the `includes` check on the line they
- * are on — widening `THEMES` to `readonly string[]` is what lets an arbitrary
- * string be compared against it at all, and `value` is narrowed to a member of
- * that tuple by the check succeeding.
- */
-export const asTheme = (value: string): Theme =>
-  (THEMES as readonly string[]).includes(value) ? (value as Theme) : "system";
+const THEME_NAMES: ReadonlySet<string> = new Set(THEMES);
+const DIFF_PALETTE_NAMES: ReadonlySet<string> = new Set(DIFF_PALETTES);
+const DIFF_REMOVED_NAMES: ReadonlySet<string> = new Set(DIFF_REMOVED_MARKS);
 
-/** SAFETY: as `asTheme` — the `includes` check is what narrows `value`. */
+const isTheme = (value: string): value is Theme => THEME_NAMES.has(value);
+const isDiffPalette = (value: string): value is DiffPalette => DIFF_PALETTE_NAMES.has(value);
+const isDiffRemoved = (value: string): value is DiffRemovedMark => DIFF_REMOVED_NAMES.has(value);
+
+export const asTheme = (value: string): Theme => (isTheme(value) ? value : "system");
+
 export const asDiffPalette = (value: string): DiffPalette =>
-  (DIFF_PALETTES as readonly string[]).includes(value) ? (value as DiffPalette) : "standard";
+  isDiffPalette(value) ? value : "standard";
 
-/** SAFETY: as `asTheme`. */
 export const asDiffRemoved = (value: string): DiffRemovedMark =>
-  (DIFF_REMOVED_MARKS as readonly string[]).includes(value) ? (value as DiffRemovedMark) : "strike";
+  isDiffRemoved(value) ? value : "strike";
 
 const clamp = (value: number, low: number, high: number): number =>
   Number.isFinite(value) ? Math.min(high, Math.max(low, Math.round(value))) : low;
@@ -62,9 +59,9 @@ const asZoom = (value: number): number => clamp(value, ZOOM_RANGE.min, ZOOM_RANG
 const asEditorFontSize = (value: number): number =>
   clamp(value, EDITOR_FONT_SIZE_RANGE.min, EDITOR_FONT_SIZE_RANGE.max);
 
-export const applyEditorFontSize = (px: number): void => {
+export const applyEditorFontSize = (pixels: number): void => {
   if (typeof document === "undefined") return;
-  const size = asEditorFontSize(px);
+  const size = asEditorFontSize(pixels);
   document.documentElement.style.setProperty("--editor-font-size", `${size}px`);
   try {
     globalThis.localStorage?.setItem(EDITOR_CACHE_KEY, String(size));

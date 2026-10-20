@@ -121,16 +121,16 @@ export function ExcerptList(props: ExcerptListProps) {
   const nearbyOf = (excerpt: Excerpt): readonly Occurrence[] => {
     const all = hitsByBook().get(excerpt.bookId);
     if (all === undefined) return [];
-    let lo = 0;
-    let hi = all.length;
-    while (lo < hi) {
-      const mid = (lo + hi) >> 1;
-      if ((all[mid]?.from ?? 0) < excerpt.span.from) lo = mid + 1;
-      else hi = mid;
+    let low = 0;
+    let high = all.length;
+    while (low < high) {
+      const mid = (low + high) >> 1;
+      if ((all[mid]?.from ?? 0) < excerpt.span.from) low = mid + 1;
+      else high = mid;
     }
     const own = new Set(excerpt.hits.map((hit) => hit.from));
     const out: Occurrence[] = [];
-    for (let at = lo; at < all.length; at += 1) {
+    for (let at = low; at < all.length; at += 1) {
       const hit = all[at];
       if (hit === undefined || hit.from >= excerpt.span.to) break;
       if (hit.to <= excerpt.span.to && !own.has(hit.from)) out.push(hit);

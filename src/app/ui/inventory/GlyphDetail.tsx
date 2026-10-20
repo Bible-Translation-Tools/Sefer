@@ -28,7 +28,7 @@ import {
 } from "../primitives";
 import { GlyphTile } from "./GlyphTile";
 
-const share = (bp: number): string => `${(bp / 100).toFixed(2)}%`;
+const share = (basisPoints: number): string => `${(basisPoints / 100).toFixed(2)}%`;
 
 const rawAt = (text: string, from: number, to: number): Quotation => {
   const start = Math.max(0, from - 26);

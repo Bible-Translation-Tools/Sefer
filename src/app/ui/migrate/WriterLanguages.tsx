@@ -1,6 +1,3 @@
-import ArrowDown from "lucide-solid/icons/arrow-down";
-import ArrowUp from "lucide-solid/icons/arrow-up";
-import ChevronsUpDown from "lucide-solid/icons/chevrons-up-down";
 import SearchIcon from "lucide-solid/icons/search";
 import { For, Show, createMemo, createSignal, untrack } from "solid-js";
 
@@ -10,7 +7,15 @@ import { t } from "../../i18n";
 import { writerLanguages } from "../../migrate";
 import { useShell } from "../../ProjectContext";
 import { formatDate } from "../landing/summaries";
-import { Card, Input, VirtualList, cx, type SortDirection } from "../primitives";
+import {
+  Card,
+  Input,
+  VirtualList,
+  ariaSortOf,
+  cx,
+  sortIcon,
+  type SortDirection,
+} from "../primitives";
 
 type Column = "code" | "language" | "region" | "projects" | "date";
 
@@ -119,6 +124,15 @@ export function WriterLanguages(props: {
     { name: "writerLanguagesVirtual" },
   );
 
+  const emptyNote = (): string => {
+    if (query().trim().length < 2)
+      return t("Type two letters or more of a language's name or code.");
+    if (loading() || rows() === undefined) return t("Searching…");
+    return t("No language with Writer projects matches “{query}”.", { query: query().trim() });
+  };
+
+  const sortOf = (key: Column): SortDirection => (column() === key ? direction() : "none");
+
   const sortBy = (key: Column): void => {
     if (column() === key) setDirection(direction() === "asc" ? "desc" : "asc");
     else {
@@ -163,25 +177,14 @@ export function WriterLanguages(props: {
           <div role="row" class={cx(COLUMNS, "text-on-surface-secondary")}>
             <For each={SORTABLE}>
               {([key, label]) => (
-                <div
-                  role="columnheader"
-                  aria-sort={
-                    column() !== key ? "none" : direction() === "asc" ? "ascending" : "descending"
-                  }
-                >
+                <div role="columnheader" aria-sort={ariaSortOf(sortOf(key))}>
                   <button
                     type="button"
                     class="flex w-full cursor-pointer items-center gap-1.5 py-3 text-start font-medium hover:text-on-surface-primary"
                     onClick={() => sortBy(key)}
                   >
                     <span class="min-w-0 flex-1 truncate">{label()}</span>
-                    {column() !== key ? (
-                      <ChevronsUpDown size={14} aria-hidden="true" class="opacity-50" />
-                    ) : direction() === "asc" ? (
-                      <ArrowUp size={14} aria-hidden="true" />
-                    ) : (
-                      <ArrowDown size={14} aria-hidden="true" />
-                    )}
+                    {sortIcon(sortOf(key), 14)}
                   </button>
                 </div>
               )}
@@ -192,17 +195,7 @@ export function WriterLanguages(props: {
           role="rowgroup"
           class="scrollbar-subtle min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]"
           sections={virtualRows().length > 0 ? [{ key: "languages", rows: virtualRows() }] : []}
-          empty={
-            <p class="py-8 text-center text-body text-on-surface-tertiary">
-              {query().trim().length < 2
-                ? t("Type two letters or more of a language's name or code.")
-                : loading() || rows() === undefined
-                  ? t("Searching…")
-                  : t("No language with Writer projects matches “{query}”.", {
-                      query: query().trim(),
-                    })}
-            </p>
-          }
+          empty={<p class="py-8 text-center text-body text-on-surface-tertiary">{emptyNote()}</p>}
           row={(item) => (
             <button
               type="button"

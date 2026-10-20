@@ -130,9 +130,9 @@ export const forgetRemembered = (
     yield* indexChanged;
   });
 
-export const formatDate = (iso: string | undefined): string => {
-  if (iso === undefined) return "";
-  const at = new Date(iso);
+export const formatDate = (isoDate: string | undefined): string => {
+  if (isoDate === undefined) return "";
+  const at = new Date(isoDate);
   if (Number.isNaN(at.getTime())) return "";
   return at.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 };

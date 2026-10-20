@@ -37,20 +37,23 @@ const row = variants({
 
 const ITEMS = '[role^="menuitem"]:not(:disabled)';
 
+const itemForKey = (
+  key: string,
+  items: readonly HTMLElement[],
+  at: number,
+): HTMLElement | undefined => {
+  if (key === "ArrowDown") return items[(at + 1) % items.length];
+  if (key === "ArrowUp") return items[(at - 1 + items.length) % items.length];
+  if (key === "Home") return items[0];
+  if (key === "End") return items.at(-1);
+  return undefined;
+};
+
 const rove = (event: KeyboardEvent, menu: HTMLElement): void => {
   const items = [...menu.querySelectorAll<HTMLElement>(ITEMS)];
   if (items.length === 0) return;
   const at = items.findIndex((item) => item === document.activeElement);
-  const next =
-    event.key === "ArrowDown"
-      ? items[(at + 1) % items.length]
-      : event.key === "ArrowUp"
-        ? items[(at - 1 + items.length) % items.length]
-        : event.key === "Home"
-          ? items[0]
-          : event.key === "End"
-            ? items.at(-1)
-            : undefined;
+  const next = itemForKey(event.key, items, at);
   if (next === undefined) return;
   event.preventDefault();
   next.focus();

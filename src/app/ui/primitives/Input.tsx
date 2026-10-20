@@ -27,6 +27,12 @@ const padding = (size: InputSize, icon: boolean): string => {
   return icon ? "pe-2.5 ps-8" : "px-2.5";
 };
 
+const iconPosition = (size: InputSize): string => {
+  if (size === "lg") return "start-8";
+  if (size === "md") return "start-3 [&>svg]:size-5";
+  return "start-2.5 [&>svg]:size-4";
+};
+
 export interface InputProps extends Omit<ComponentProps<"input">, "size"> {
   readonly size?: InputSize;
   readonly icon?: JSX.Element;
@@ -52,11 +58,7 @@ export function Input(props: InputProps) {
           aria-hidden="true"
           class={cx(
             "pointer-events-none absolute flex text-on-surface-tertiary",
-            props.size === "lg"
-              ? "start-8"
-              : (props.size ?? "md") === "md"
-                ? "start-3 [&>svg]:size-5"
-                : "start-2.5 [&>svg]:size-4",
+            iconPosition(props.size ?? "md"),
           )}
         >
           {props.icon}

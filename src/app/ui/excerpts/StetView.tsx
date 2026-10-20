@@ -217,6 +217,12 @@ export function StetView(props: StetViewProps) {
     return state === "changedSinceApproved" || state === "needsRecheck";
   };
 
+  const approveLabel = (sid: string): string => {
+    if (isChanged(sid)) return t("Text changed since last approved");
+    if (isApproved(sid)) return isEdited(sid) ? t("Approved with edits") : t("Approved");
+    return isEdited(sid) ? t("Approve with edits") : t("Approve");
+  };
+
   const Status = (statusProps: { readonly sid: string; readonly size: number }) => (
     <Show
       when={!isChanged(statusProps.sid)}
@@ -335,15 +341,7 @@ export function StetView(props: StetViewProps) {
         {
           kind: "button",
           id: "approve",
-          label: isChanged(excerpt.sid)
-            ? t("Text changed since last approved")
-            : isApproved(excerpt.sid)
-              ? isEdited(excerpt.sid)
-                ? t("Approved with edits")
-                : t("Approved")
-              : isEdited(excerpt.sid)
-                ? t("Approve with edits")
-                : t("Approve"),
+          label: approveLabel(excerpt.sid),
           icon: isApproved(excerpt.sid) ? CheckIcon : ThumbsUpIcon,
           class: "w-72 justify-center",
           pressed: isApproved(excerpt.sid),

@@ -85,6 +85,37 @@ const LIVE = new Set(["project", "disk"]);
 
 const keyOf = (bookId: BookId, unitId: string): string => `${bookId}\0${unitId}`;
 
+type SettleOutcome = Awaited<ReturnType<typeof settleWithShared>>;
+
+const refusedDetail = (outcome: Extract<SettleOutcome, { kind: "refused" }>): string => {
+  if (outcome.receive !== undefined) return receiveRefusal(outcome.receive, outcome.books ?? []);
+  if (outcome.combine !== undefined) return combineRefusal(outcome.combine);
+  if (outcome.state !== undefined) return combineTrouble(outcome.state);
+  return outcome.description;
+};
+
+const settledMessage = (copyReview: boolean, settledNames: readonly string[]): string => {
+  const books = settledNames.join(", ");
+  if (copyReview) {
+    return settledNames.length === 0
+      ? t("Combined with your copy")
+      : t("Combined {books} with your copy", { books });
+  }
+  return settledNames.length === 0
+    ? t("Combined with the shared project")
+    : t("Combined {books} with the shared project", { books });
+};
+
+const sendAction = (
+  outcome: SendOutcome,
+): "see" | "copy" | "retry" | "send" | "open" | undefined => {
+  if (outcome.kind === "held") return "send";
+  if (outcome.kind !== "refused") return undefined;
+  if (outcome.reason === "Rejected") return outcome.toCopy === true ? "copy" : "see";
+  if (outcome.reason === "Unauthorized") return "open";
+  return "retry";
+};
+
 export function ReviewPanel() {
   const shell = useShell();
   const pageLeading = usePageLeading();
@@ -121,14 +152,12 @@ export function ReviewPanel() {
   const common = createRecordedVersion(shell, "base", theirsRef);
 
   const [leftId, setLeftId] = createSignal("project", { name: "reviewLeftKind" });
-  const [rightId, setRightId] = createSignal(
-    untrack(() => search().against) === "shared"
-      ? "shared"
-      : untrack(() => search().against) === "writer"
-        ? "writer"
-        : "disk",
-    { name: "reviewRightKind" },
-  );
+  const initialRightId = (): string => {
+    const against = untrack(() => search().against);
+    if (against === "shared") return "shared";
+    return against === "writer" ? "writer" : "disk";
+  };
+  const [rightId, setRightId] = createSignal(initialRightId(), { name: "reviewRightKind" });
   const againstWriter = (): boolean => rightId() === "writer" || leftId() === "writer";
   const [leftPicked, setLeftPicked] = createSignal<CompareSource | undefined>(undefined, {
     name: "reviewLeftPicked",
@@ -214,6 +243,16 @@ export function ReviewPanel() {
     };
   };
 
+  const sharedLabelWords = (): string | undefined => {
+    if (pull() !== undefined) return t("The suggested changes");
+    return fromCopy() ? t("Your copy") : undefined;
+  };
+  const sharedExplainerWords = (): string | undefined => {
+    if (pull() !== undefined)
+      return t("What the suggestion offers: its author's copy, as they last sent it.");
+    return fromCopy() ? t("Your copy, as another of your devices last sent it.") : undefined;
+  };
+
   const choices = (): readonly SourceChoice[] =>
     sourceChoices({
       services,
@@ -221,14 +260,8 @@ export function ReviewPanel() {
       baselineOf: (book) => services.save.baseline(book),
       recorded: version.recorded(),
       shared: shared.recorded(),
-      sharedLabel:
-        pull() !== undefined ? t("The suggested changes") : fromCopy() ? t("Your copy") : undefined,
-      sharedExplainer:
-        pull() !== undefined
-          ? t("What the suggestion offers: its author's copy, as they last sent it.")
-          : fromCopy()
-            ? t("Your copy, as another of your devices last sent it.")
-            : undefined,
+      sharedLabel: sharedLabelWords(),
+      sharedExplainer: sharedExplainerWords(),
       writer: writerSide(),
     });
 
@@ -249,8 +282,10 @@ export function ReviewPanel() {
   const leftLabel = (): string => left()?.label ?? choiceOf(leftId())?.label ?? "";
   const rightLabel = (): string => right()?.label ?? choiceOf(rightId())?.label ?? "";
 
-  const target = (): "left" | "right" | undefined =>
-    left()?.canApply === true ? "left" : right()?.canApply === true ? "right" : undefined;
+  const target = (): "left" | "right" | undefined => {
+    if (left()?.canApply === true) return "left";
+    return right()?.canApply === true ? "right" : undefined;
+  };
 
   const live = (): boolean => LIVE.has(leftId()) || LIVE.has(rightId());
 
@@ -582,7 +617,10 @@ export function ReviewPanel() {
         if (sides.here.has(sid)) here = true;
         if (sides.there.has(sid)) there = true;
       }
-    return here && there ? "both" : here ? "here" : there ? "there" : undefined;
+    if (here && there) return "both";
+    if (here) return "here";
+    if (there) return "there";
+    return undefined;
   };
 
   const mineOnly = createMemo(
@@ -627,7 +665,8 @@ export function ReviewPanel() {
   const preset = (bookId: BookId, unit: DecisionUnit): MergeSide | undefined => {
     if (!againstShared()) return undefined;
     const origin = originOf(bookId, [unit]);
-    return origin === "there" ? "baseline" : origin === "here" ? "current" : undefined;
+    if (origin === "there") return "baseline";
+    return origin === "here" ? "current" : undefined;
   };
 
   const effectiveFor = (bookId: BookId, unitId: string): MergeSide | undefined => {
@@ -728,7 +767,7 @@ export function ReviewPanel() {
     if (book === undefined || other === undefined || live === undefined) return;
     const taking = side === "baseline";
     const putBack = staticUnits.filter((unit) => decisionFor(bookId, unit.id) === "baseline");
-    const op = services.composition.observability.operation("review.diff.take", {
+    const operation = services.composition.observability.operation("review.diff.take", {
       "review.book": bookId,
       "review.units": staticUnits.length,
       "review.side": side ?? "clear",
@@ -738,7 +777,7 @@ export function ReviewPanel() {
     if (taking && !originals.has(bookId)) originals.set(bookId, live);
     decide(bookId, staticUnits, side);
     if (from === undefined || chosen.length === 0) {
-      op.end("passed", { "review.wrote": false });
+      operation.end("passed", { "review.wrote": false });
       return;
     }
     const merged = services.galley.merge(
@@ -748,22 +787,22 @@ export function ReviewPanel() {
       "current",
     );
     if (Result.isFailure(merged)) {
-      op.end("refused", { "review.reason": "merge" });
+      operation.end("refused", { "review.reason": "merge" });
       setNote(merged.failure.description);
       return;
     }
     const splices = services.galley.mergeSplices(live, merged.success, new Map(), "current");
     if (Result.isFailure(splices)) {
-      op.end("refused", { "review.reason": "merge" });
+      operation.end("refused", { "review.reason": "merge" });
       setNote(splices.failure.description);
       return;
     }
     if (splices.success.length === 0) {
-      op.end("passed", { "review.wrote": false });
+      operation.end("passed", { "review.wrote": false });
       return;
     }
     const applied = book.apply(splices.success, "compare", trustedBy("compare"));
-    op.end(Result.isSuccess(applied) ? "passed" : "refused", {
+    operation.end(Result.isSuccess(applied) ? "passed" : "refused", {
       "review.wrote": Result.isSuccess(applied),
       "review.splices": splices.success.length,
     });
@@ -812,6 +851,37 @@ export function ReviewPanel() {
     return names.length === 0 ? t("Edited") : t("Edited {books}", { books: names.join(", ") });
   };
 
+  const decidedDescription = (): string => {
+    if (againstShared())
+      return t(
+        "The editor now reads as you chose. Save to finish: it keeps your choices and joins your work with the shared project's.",
+      );
+    return unsaved().length > 0
+      ? t("Both sides now read the same. Save to keep it.")
+      : t("Both sides now read the same. Nothing is left to save.");
+  };
+
+  const settleOptions = (
+    copyReview: boolean,
+  ): { theirs?: ReturnType<typeof theirsRef>; sendTo?: "origin" } => {
+    if (pull() !== undefined) return { theirs: theirsRef(), sendTo: "origin" };
+    return copyReview ? { theirs: theirsRef() } : {};
+  };
+
+  const saveDescription = (): string => {
+    if (!againstShared())
+      return t("Your changes in {count} book(s) are written and kept as a version.", {
+        count: unsaved().length,
+      });
+    return fromCopy()
+      ? t(
+          "The project's text is kept as you left it here: your choices, and anything you edited. A passage only your copy changed, that you didn't choose for, comes in. Its versions stay in the history either way, and this one goes on top, so the next send is an ordinary one.",
+        )
+      : t(
+          "The project's text is kept as you left it here: your choices, and anything you edited. A passage only the shared project changed, that you didn't choose for, comes in. Everything else it changed arrives too, as one version.",
+        );
+  };
+
   const record = async (): Promise<void> => {
     const project = shell.project();
     const review = unsaved();
@@ -821,15 +891,7 @@ export function ReviewPanel() {
     const staticNote = typedMessage;
     const settledNames = reviewBooks().map((book) => bookName(book.bookId, metadataOf(project)));
     const copyReview = fromCopy();
-    const settling = !againstShared()
-      ? undefined
-      : copyReview
-        ? settledNames.length === 0
-          ? t("Combined with your copy")
-          : t("Combined {books} with your copy", { books: settledNames.join(", ") })
-        : settledNames.length === 0
-          ? t("Combined with the shared project")
-          : t("Combined {books} with the shared project", { books: settledNames.join(", ") });
+    const settling = againstShared() ? settledMessage(copyReview, settledNames) : undefined;
     const staticMessage = typedMessage !== "" ? typedMessage : (settling ?? defaultMessage());
     const typed = typedName().trim();
     const by = author() ?? (typed === "" ? undefined : { name: typed, email: "" });
@@ -873,11 +935,7 @@ export function ReviewPanel() {
         by,
         staticMessage,
         settled,
-        pull() !== undefined
-          ? { theirs: theirsRef(), sendTo: "origin" }
-          : copyReview
-            ? { theirs: theirsRef() }
-            : {},
+        settleOptions(copyReview),
       );
       const accepted = untrack(closeOnSave) ? pull() : undefined;
       const markTaken = (sent: boolean): void => {
@@ -904,14 +962,7 @@ export function ReviewPanel() {
           setRecordedLine({
             tone: "error",
             title: t("Not combined"),
-            detail:
-              outcome.receive !== undefined
-                ? receiveRefusal(outcome.receive, outcome.books ?? [])
-                : outcome.combine !== undefined
-                  ? combineRefusal(outcome.combine)
-                  : outcome.state !== undefined
-                    ? combineTrouble(outcome.state)
-                    : outcome.description,
+            detail: refusedDetail(outcome),
           });
           break;
         case "combined":
@@ -1090,18 +1141,7 @@ export function ReviewPanel() {
             action: "offer",
           };
     }
-    const action =
-      outcome.kind === "held"
-        ? ("send" as const)
-        : outcome.kind !== "refused"
-          ? undefined
-          : outcome.reason === "Rejected"
-            ? outcome.toCopy === true
-              ? ("copy" as const)
-              : ("see" as const)
-            : outcome.reason === "Unauthorized"
-              ? ("open" as const)
-              : ("retry" as const);
+    const action = sendAction(outcome);
     return { ...copy, ...(action === undefined ? {} : { action }) };
   };
 
@@ -1493,15 +1533,7 @@ export function ReviewPanel() {
               <EmptyState
                 icon={<Check size={20} />}
                 title={t("Every change is decided")}
-                description={
-                  againstShared()
-                    ? t(
-                        "The editor now reads as you chose. Save to finish: it keeps your choices and joins your work with the shared project's.",
-                      )
-                    : unsaved().length > 0
-                      ? t("Both sides now read the same. Save to keep it.")
-                      : t("Both sides now read the same. Nothing is left to save.")
-                }
+                description={decidedDescription()}
                 action={
                   <div class="flex flex-wrap justify-center gap-2" data-review-settled>
                     <Show
@@ -1554,19 +1586,7 @@ export function ReviewPanel() {
             }
           }}
           title={t("Save")}
-          description={
-            againstShared()
-              ? fromCopy()
-                ? t(
-                    "The project's text is kept as you left it here: your choices, and anything you edited. A passage only your copy changed, that you didn't choose for, comes in. Its versions stay in the history either way, and this one goes on top, so the next send is an ordinary one.",
-                  )
-                : t(
-                    "The project's text is kept as you left it here: your choices, and anything you edited. A passage only the shared project changed, that you didn't choose for, comes in. Everything else it changed arrives too, as one version.",
-                  )
-              : t("Your changes in {count} book(s) are written and kept as a version.", {
-                  count: unsaved().length,
-                })
-          }
+          description={saveDescription()}
           footer={
             <Show
               when={recordedLine() === undefined}

@@ -229,6 +229,18 @@ interface ResizableHandleProps {
   readonly class?: ClassValue;
 }
 
+const gutter = (vertical: boolean): string => (vertical ? "py-1" : "px-1");
+
+const handleLine = (edge: boolean, vertical: boolean): string => {
+  if (!edge) return cx("bg-surface-border", vertical ? "h-px w-full" : "w-px");
+  return cx(
+    "absolute bg-transparent",
+    vertical
+      ? "inset-x-0 top-1/2 h-0.5 -translate-y-1/2"
+      : "inset-y-0 start-1/2 w-0.5 -translate-x-1/2",
+  );
+};
+
 function Handle(props: ResizableHandleProps) {
   const split = useSplit();
   const before = split.addHandle();
@@ -251,7 +263,7 @@ function Handle(props: ResizableHandleProps) {
       class={cx(
         "group relative flex shrink-0 items-stretch justify-center",
         vertical ? "cursor-row-resize flex-col" : "cursor-col-resize",
-        props.edge === true ? "z-10" : vertical ? "py-1" : "px-1",
+        props.edge === true ? "z-10" : gutter(vertical),
         props.edge === true && (vertical ? "h-0" : "w-0"),
         props.class,
       )}
@@ -289,14 +301,7 @@ function Handle(props: ResizableHandleProps) {
         aria-hidden="true"
         class={cx(
           "rounded-full transition-colors",
-          props.edge === true
-            ? cx(
-                "absolute bg-transparent",
-                vertical
-                  ? "inset-x-0 top-1/2 h-0.5 -translate-y-1/2"
-                  : "inset-y-0 start-1/2 w-0.5 -translate-x-1/2",
-              )
-            : cx("bg-surface-border", vertical ? "h-px w-full" : "w-px"),
+          handleLine(props.edge === true, vertical),
           "group-hover:bg-brand group-focus-visible:bg-brand group-data-dragging:bg-brand",
         )}
       />

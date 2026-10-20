@@ -81,6 +81,28 @@ interface Prepared {
   readonly hunks: readonly Hunk[];
 }
 
+const stepTarget = (
+  held: number | undefined,
+  at: number | undefined,
+  from: number,
+  delta: number,
+  last: number,
+): number => {
+  if (held === undefined && delta > 0)
+    return at === undefined ? from : Math.min(last, from + delta);
+  return Math.max(0, Math.min(last, from + delta));
+};
+
+const viewLabel = (filter: Filter): string => {
+  if (filter === "all") return t("View");
+  return filter === "words" ? t("View · words only") : t("View · markup only");
+};
+
+const filterLabel = (filter: Filter): string => {
+  if (filter === "all") return t("All changes");
+  return filter === "words" ? t("Changes to the words") : t("Markup and spacing only");
+};
+
 export function ReviewReader(props: {
   readonly books: readonly ReviewBook[];
   readonly decision: (bookId: BookId, unitId: string) => MergeSide | undefined;
@@ -228,7 +250,7 @@ export function ReviewReader(props: {
     }),
     ({ books, show, result }) => {
       const steps = services.settings.get(keys.excerptContext);
-      const op = observability.operation("review.diff.prepare", {
+      const operation = observability.operation("review.diff.prepare", {
         "review.books": books.length,
         "review.filter": show,
         "review.mode": result ? "result" : "compare",
@@ -261,7 +283,7 @@ export function ReviewReader(props: {
         if (stopped) return;
         const book = queue[at];
         if (book === undefined) {
-          op.end("passed", {
+          operation.end("passed", {
             "review.reused": reused,
             "review.prepared": queue.length,
             "review.cards": list().reduce((sum, entry) => sum + entry.hunks.length, 0),
@@ -269,7 +291,7 @@ export function ReviewReader(props: {
           return;
         }
         at += 1;
-        const done = op.span("review.diff.book", book.bookId);
+        const done = operation.span("review.diff.book", book.bookId);
         const prepared = prepare(book, steps, show, result);
         done({ "review.units": prepared.shown.length, "review.cards": prepared.hunks.length });
         held.set(book.bookId, { key: keyOf(book, show, result), prepared });
@@ -348,12 +370,7 @@ export function ReviewReader(props: {
     const at = untrack(place);
     const held = at !== undefined && onScreen(keysNow[at]) ? at : undefined;
     const from = held ?? visibleCard() ?? 0;
-    const to =
-      held === undefined && delta > 0
-        ? at === undefined
-          ? from
-          : Math.min(keysNow.length - 1, from + delta)
-        : Math.max(0, Math.min(keysNow.length - 1, from + delta));
+    const to = stepTarget(held, at, from, delta, keysNow.length - 1);
     const key = keysNow[to];
     if (key === undefined) return;
     goTo?.(key);
@@ -491,12 +508,10 @@ export function ReviewReader(props: {
     const unit = held?.shown[place() ?? 0];
     return unit === undefined ? undefined : chapterOf(unit);
   };
-  const chapterWords = (chapter: number | undefined): string =>
-    chapter === undefined
-      ? ""
-      : chapter === 0
-        ? t("Intro")
-        : t("Chapter {label}", { label: chapter });
+  const chapterWords = (chapter: number | undefined): string => {
+    if (chapter === undefined) return "";
+    return chapter === 0 ? t("Intro") : t("Chapter {label}", { label: chapter });
+  };
   const chapterAt = (delta: 1 | -1): number | undefined => {
     const held = selectedBook();
     if (held === undefined) return undefined;
@@ -611,6 +626,12 @@ export function ReviewReader(props: {
     const sides = new Set(hunk.units.map((unit) => props.decision(hunk.bookId, unit.id)));
     const side: MergeSide | "mixed" | undefined = sides.size !== 1 ? "mixed" : [...sides][0];
     const one = hunk.units.length === 1;
+    const takeLabel = (): string => {
+      if (side === "baseline") return t("Taken from {source}", { source: props.baselineShort });
+      return one
+        ? t("Take {source}'s", { source: props.baselineShort })
+        : t("Take all of {source}'s", { source: props.baselineShort });
+    };
     const choose = (chosen: MergeSide): void =>
       props.decide(hunk.bookId, hunk.units, side === chosen ? undefined : chosen);
     return [
@@ -619,12 +640,7 @@ export function ReviewReader(props: {
         id: "take",
         emphasis: "tertiary",
         pressed: side === "baseline",
-        label:
-          side === "baseline"
-            ? t("Taken from {source}", { source: props.baselineShort })
-            : one
-              ? t("Take {source}'s", { source: props.baselineShort })
-              : t("Take all of {source}'s", { source: props.baselineShort }),
+        label: takeLabel(),
         onPress: () => choose("baseline"),
       },
       {
@@ -830,11 +846,7 @@ export function ReviewReader(props: {
             <Button size="sm" variant="tertiary" data-review-view>
               <Columns2 aria-hidden="true" />
 
-              {filter() === "all"
-                ? t("View")
-                : filter() === "words"
-                  ? t("View · words only")
-                  : t("View · markup only")}
+              {viewLabel(filter())}
               <ChevronDown aria-hidden="true" />
             </Button>
           }
@@ -850,11 +862,7 @@ export function ReviewReader(props: {
                   setPlace(undefined);
                 }}
               >
-                {value === "all"
-                  ? t("All changes")
-                  : value === "words"
-                    ? t("Changes to the words")
-                    : t("Markup and spacing only")}
+                {filterLabel(value)}
               </MenuRadio>
             )}
           </For>

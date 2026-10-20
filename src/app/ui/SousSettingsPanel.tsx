@@ -16,7 +16,12 @@ import { shellKeys } from "../settings";
 import { fits, SOUS_GROUPS, sousValues, withSetting, type SousOverrides } from "../sousSettings";
 import { Button, Card, IconButton, Input, PanelHeader, Switch } from "./primitives";
 
-const percent = (bp: number): number => bp / 100;
+const percent = (basisPoints: number): number => basisPoints / 100;
+
+const stepOf = (kind: string): number => {
+  if (kind === "share-bp") return 0.01;
+  return kind === "decimal" ? 0.1 : 1;
+};
 
 const shown = (key: SousSettingKey, value: boolean | number): string => {
   const kind = SOUS_SETTINGS[key].kind;
@@ -69,9 +74,13 @@ export function SousSettingsPanel(props: SousSettingsPanelProps) {
   const numberBox = (setting: SousSettingKey) => {
     const spec = SOUS_SETTINGS[setting];
     const share = spec.kind === "share-bp";
+    const shownBound = (bound: number | undefined): number | undefined =>
+      bound === undefined || !share ? bound : percent(bound);
+    const step = stepOf(spec.kind);
     const display = (): number => {
       const value = values()[setting];
-      return typeof value === "number" ? (share ? percent(value) : value) : 0;
+      if (typeof value !== "number") return 0;
+      return share ? percent(value) : value;
     };
     return (
       <span class="flex items-center gap-1">
@@ -81,9 +90,9 @@ export function SousSettingsPanel(props: SousSettingsPanelProps) {
           size="sm"
           wrapperClass="w-28"
           class="tabular-nums"
-          min={spec.min === undefined ? undefined : share ? percent(spec.min) : spec.min}
-          max={spec.max === undefined ? undefined : share ? percent(spec.max) : spec.max}
-          step={share ? 0.01 : spec.kind === "decimal" ? 0.1 : 1}
+          min={shownBound(spec.min)}
+          max={shownBound(spec.max)}
+          step={step}
           value={display()}
           onChange={(event) => {
             const typed = Number(event.currentTarget.value);

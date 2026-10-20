@@ -23,8 +23,10 @@ export type CardAction =
     })
   | (ActionBase & { readonly kind: "icon"; readonly icon: CardIcon });
 
-const pressedOf = (action: CardAction): "true" | "false" | undefined =>
-  action.pressed === undefined ? undefined : action.pressed ? "true" : "false";
+const pressedOf = (action: CardAction): "true" | "false" | undefined => {
+  if (action.pressed === undefined) return undefined;
+  return action.pressed ? "true" : "false";
+};
 
 export function CardActionButton(props: {
   readonly action: Accessor<CardAction>;

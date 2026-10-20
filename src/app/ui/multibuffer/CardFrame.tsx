@@ -34,26 +34,26 @@ export interface CardFrameProps {
   readonly data?: Readonly<Record<`data-${string}`, string | undefined>>;
 }
 
-const editAction = (edit: CardEdit): CardAction | undefined =>
-  edit.kind === "none"
-    ? undefined
-    : edit.editing
-      ? {
-          kind: "button",
-          id: "done",
-          label: t("Done"),
-          emphasis: "primary",
-          title: t("Stop editing (Escape)"),
-          onPress: edit.onDone,
-        }
-      : {
-          kind: "button",
-          id: "edit",
-          label: t("Edit"),
-          icon: PencilIcon,
-          emphasis: "tertiary",
-          onPress: edit.onEdit,
-        };
+const editAction = (edit: CardEdit): CardAction | undefined => {
+  if (edit.kind === "none") return undefined;
+  if (edit.editing)
+    return {
+      kind: "button",
+      id: "done",
+      label: t("Done"),
+      emphasis: "primary",
+      title: t("Stop editing (Escape)"),
+      onPress: edit.onDone,
+    };
+  return {
+    kind: "button",
+    id: "edit",
+    label: t("Edit"),
+    icon: PencilIcon,
+    emphasis: "tertiary",
+    onPress: edit.onEdit,
+  };
+};
 
 export function CardFrame(props: CardFrameProps) {
   const editing = (): boolean => props.edit.kind === "edit" && props.edit.editing;

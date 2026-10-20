@@ -8,6 +8,18 @@ import { cx } from "./cx";
 
 export type SortDirection = "asc" | "desc" | "none";
 
+export const ariaSortOf = (sort: SortDirection): "none" | "ascending" | "descending" => {
+  if (sort === "asc") return "ascending";
+  if (sort === "desc") return "descending";
+  return "none";
+};
+
+export const sortIcon = (sort: SortDirection, size: number): JSX.Element => {
+  if (sort === "asc") return <ArrowUp size={size} aria-hidden="true" />;
+  if (sort === "desc") return <ArrowDown size={size} aria-hidden="true" />;
+  return <ChevronsUpDown size={size} aria-hidden="true" class="opacity-50" />;
+};
+
 export function Table(props: ComponentProps<"table">) {
   const rest = omit(props, "class");
   const merged = merge(rest, {
@@ -79,7 +91,7 @@ export function TableHeader(props: TableHeaderProps) {
   const merged = merge(rest, {
     get "aria-sort"() {
       if (props.sort === undefined) return undefined;
-      return props.sort === "none" ? "none" : props.sort === "asc" ? "ascending" : "descending";
+      return ariaSortOf(props.sort);
     },
     get class() {
       return cx("px-3 py-2 text-start font-medium whitespace-nowrap", props.class);
@@ -97,13 +109,7 @@ export function TableHeader(props: TableHeaderProps) {
           onClick={() => props.onSort?.()}
         >
           {props.children}
-          {props.sort === "asc" ? (
-            <ArrowUp size={12} aria-hidden="true" />
-          ) : props.sort === "desc" ? (
-            <ArrowDown size={12} aria-hidden="true" />
-          ) : (
-            <ChevronsUpDown size={12} aria-hidden="true" class="opacity-50" />
-          )}
+          {sortIcon(props.sort, 12)}
         </button>
       )}
     </th>

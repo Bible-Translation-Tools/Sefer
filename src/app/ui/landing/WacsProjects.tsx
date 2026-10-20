@@ -1,7 +1,6 @@
 import { Effect, Fiber, Option, Stream } from "effect";
 import ArrowDown from "lucide-solid/icons/arrow-down";
 import ArrowUp from "lucide-solid/icons/arrow-up";
-import ChevronsUpDown from "lucide-solid/icons/chevrons-up-down";
 import Download from "lucide-solid/icons/download";
 import Filter from "lucide-solid/icons/filter";
 import SearchIcon from "lucide-solid/icons/search";
@@ -37,7 +36,9 @@ import {
   SegmentedControl,
   Tooltip,
   VirtualList,
+  ariaSortOf,
   cx,
+  sortIcon,
   toasts,
   type SortDirection,
 } from "../primitives";
@@ -83,9 +84,6 @@ const sortChoices = (column: Column): readonly (readonly [SortDirection, string]
       ];
 
 const ROW_HEIGHT = 75;
-
-const ariaSort = (sort: SortDirection): "none" | "ascending" | "descending" =>
-  sort === "asc" ? "ascending" : sort === "desc" ? "descending" : "none";
 
 type Column = "code" | "language" | "region" | "date";
 
@@ -491,7 +489,7 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
             >
               <For each={SORTABLE}>
                 {([column, label]) => (
-                  <div role="columnheader" aria-sort={ariaSort(sortOf(column))} class="h-full">
+                  <div role="columnheader" aria-sort={ariaSortOf(sortOf(column))} class="h-full">
                     <Menu
                       size="lg"
                       label={t("{column} options", { column: label() })}
@@ -515,13 +513,7 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
                           data-open={menuFor() === column ? "" : undefined}
                         >
                           <span class="min-w-0 flex-1 truncate">{label()}</span>
-                          {sortOf(column) === "asc" ? (
-                            <ArrowUp size={14} aria-hidden="true" />
-                          ) : sortOf(column) === "desc" ? (
-                            <ArrowDown size={14} aria-hidden="true" />
-                          ) : (
-                            <ChevronsUpDown size={14} aria-hidden="true" class="opacity-50" />
-                          )}
+                          {sortIcon(sortOf(column), 14)}
                           <Show when={column === "region" && regionFilter().size > 0}>
                             <Filter size={14} aria-label={t("filtered")} class="text-brand" />
                           </Show>

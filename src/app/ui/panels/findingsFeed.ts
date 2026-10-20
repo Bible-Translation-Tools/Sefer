@@ -48,8 +48,12 @@ const ALL = "all";
 
 const RANK: Readonly<Record<Severity, number>> = { error: 0, warning: 1, info: 2 };
 
-const rankOfKey = (key: string): number =>
-  key === "error" ? 0 : key === "warning" ? 1 : key === "info" ? 2 : 3;
+const rankOfKey = (key: string): number => {
+  if (key === "error") return 0;
+  if (key === "warning") return 1;
+  if (key === "info") return 2;
+  return 3;
+};
 
 const isFront = (excerpt: Excerpt): boolean => excerpt.address.kind === "intro";
 
@@ -104,8 +108,11 @@ interface Bucket {
   readonly bookName: string;
 }
 
-const groupKeyOf = (finding: Finding, view: FindingsView): string =>
-  view === "code" ? finding.code : view === "severity" ? finding.severity : ALL;
+const groupKeyOf = (finding: Finding, view: FindingsView): string => {
+  if (view === "code") return finding.code;
+  if (view === "severity") return finding.severity;
+  return ALL;
+};
 
 const bucketed = (
   groups: readonly BookExcerpts[],

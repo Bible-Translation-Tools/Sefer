@@ -79,14 +79,14 @@ export const hunksOf = (options: {
 
   const count = options.units.length;
   const firstAt = (at: number): number => {
-    let lo = 0;
-    let hi = count;
-    while (lo < hi) {
-      const mid = (lo + hi) >> 1;
-      if ((options.units[mid]?.place.current ?? 0) < at) lo = mid + 1;
-      else hi = mid;
+    let low = 0;
+    let high = count;
+    while (low < high) {
+      const mid = (low + high) >> 1;
+      if ((options.units[mid]?.place.current ?? 0) < at) low = mid + 1;
+      else high = mid;
     }
-    return lo;
+    return low;
   };
 
   const out: Hunk[] = [];

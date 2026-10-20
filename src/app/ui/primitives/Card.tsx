@@ -10,6 +10,8 @@ export interface CardProps extends ComponentProps<"section"> {
   readonly raised?: boolean;
 }
 
+const padding = (size: CardProps["size"]): string => (size === "lg" ? "p-6" : "p-4");
+
 export function Card(props: CardProps) {
   const rest = omit(props, "padded", "size", "raised", "class");
   const merged = merge(rest, {
@@ -18,7 +20,7 @@ export function Card(props: CardProps) {
         "border border-surface-border bg-surface-primary",
         props.raised === false ? undefined : "shadow-small",
         props.size === "lg" ? "rounded-3xl" : "rounded-lg",
-        props.padded === false ? undefined : props.size === "lg" ? "p-6" : "p-4",
+        props.padded === false ? undefined : padding(props.size),
         props.class,
       );
     },

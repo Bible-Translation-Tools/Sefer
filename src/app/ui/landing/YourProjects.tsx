@@ -59,6 +59,10 @@ export function YourProjects(props: {
   const [newName, setNewName] = createSignal("", { name: "newProjectName" });
   const lookalike = (row: ProjectSummary): string =>
     `${row.name}\u0000${row.language}\u0000${row.languageTag}`;
+  const folderLabel = (row: ProjectSummary): string => {
+    if (row.languageTag === "") return row.folder;
+    return twins().has(lookalike(row)) ? `${row.languageTag} · ${row.folder}` : row.languageTag;
+  };
   const twins = createMemo(
     (): ReadonlySet<string> => {
       const seen = new Map<string, number>();
@@ -157,9 +161,9 @@ export function YourProjects(props: {
     };
     return [...(rows() ?? [])].sort((left, right) => {
       if (rank(left) !== rank(right)) return rank(left) - rank(right);
-      const l = left.lastOpened ?? "";
-      const r = right.lastOpened ?? "";
-      if (l !== r) return r.localeCompare(l);
+      const leftOpened = left.lastOpened ?? "";
+      const rightOpened = right.lastOpened ?? "";
+      if (leftOpened !== rightOpened) return rightOpened.localeCompare(leftOpened);
       return left.name.localeCompare(right.name);
     });
   };
@@ -347,11 +351,7 @@ export function YourProjects(props: {
                       class="truncate font-mono text-smallest text-on-surface-tertiary"
                       data-project-folder={row.folder}
                     >
-                      {row.languageTag === ""
-                        ? row.folder
-                        : twins().has(lookalike(row))
-                          ? `${row.languageTag} · ${row.folder}`
-                          : row.languageTag}
+                      {folderLabel(row)}
                     </code>
 
                     <div class="mt-auto flex items-center gap-2 pt-4">

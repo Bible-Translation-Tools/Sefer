@@ -94,6 +94,10 @@ export function ResultsOutline(props: ResultsOutlineProps) {
                 { name: "outlineTiles" },
               );
               const current = (): boolean => props.active === row.bookId;
+              const expanded = (): "true" | "false" | undefined => {
+                if (tiles().length === 0) return undefined;
+                return isOpen(row.bookId) ? "true" : "false";
+              };
               return (
                 <li>
                   <button
@@ -101,9 +105,7 @@ export function ResultsOutline(props: ResultsOutlineProps) {
                     data-outline={row.bookId}
                     data-focused={current() ? "" : undefined}
                     aria-current={current() ? "true" : undefined}
-                    aria-expanded={
-                      tiles().length === 0 ? undefined : isOpen(row.bookId) ? "true" : "false"
-                    }
+                    aria-expanded={expanded()}
                     class="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-start text-small transition-colors data-focused:bg-sidebar-surface-active data-focused:font-medium data-focused:text-brand not-data-focused:text-sidebar-on-surface not-data-focused:hover:bg-sidebar-surface-hover"
                     onClick={() => {
                       props.onGo(row.bookId, row.bookId);

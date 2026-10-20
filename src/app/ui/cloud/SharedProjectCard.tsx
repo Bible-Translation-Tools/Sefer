@@ -21,6 +21,10 @@ export function SharedProjectCard(props: {
   const { services } = shell;
   // oxlint-disable-next-line solid/reactivity
   const account = props.account;
+  const emptyNote = (): string => {
+    if (account.host === null) return t("Sign in to choose a shared project.");
+    return account.busy() ? t("Listing your projects…") : t("No projects to choose from.");
+  };
   const reread = (): void => {
     const project = shell.project();
     if (project === undefined) return;
@@ -165,15 +169,7 @@ export function SharedProjectCard(props: {
         >
           <Show
             when={repos().length > 0}
-            fallback={
-              <p class="p-2 text-small text-on-surface-tertiary">
-                {account.host === null
-                  ? t("Sign in to choose a shared project.")
-                  : account.busy()
-                    ? t("Listing your projects…")
-                    : t("No projects to choose from.")}
-              </p>
-            }
+            fallback={<p class="p-2 text-small text-on-surface-tertiary">{emptyNote()}</p>}
           >
             <FilterList
               label={t("Filter shared projects")}

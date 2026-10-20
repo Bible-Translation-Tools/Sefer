@@ -32,6 +32,16 @@ const comparisonWords = (count: ComparisonCount): string => {
     : t("{said} · {decided} decided", { said, decided: count.decided });
 };
 
+const toReceiveWords = (books: number, verses: number): string => {
+  if (books === 0) return t("has changes you don't have yet");
+  if (verses === 0)
+    return t("{books} to receive", { books: plural(books, "{count} book", "{count} books") });
+  return t("{verses} in {books} to receive", {
+    verses: plural(verses, "{count} verse", "{count} verses"),
+    books: plural(books, "{count} book", "{count} books"),
+  });
+};
+
 const sharedWords = (sync: Sync, plan: IncomingPlan | undefined): string => {
   switch (sync.state) {
     case "offline":
@@ -49,18 +59,7 @@ const sharedWords = (sync: Sync, plan: IncomingPlan | undefined): string => {
   if (sync.clocks.shared.unshared > 0) {
     const books = plan === undefined ? 0 : plan.books.length;
     const verses = plan?.verseCount ?? 0;
-    parts.push(
-      books === 0
-        ? t("has changes you don't have yet")
-        : verses === 0
-          ? t("{books} to receive", {
-              books: plural(books, "{count} book", "{count} books"),
-            })
-          : t("{verses} in {books} to receive", {
-              verses: plural(verses, "{count} verse", "{count} verses"),
-              books: plural(books, "{count} book", "{count} books"),
-            }),
-    );
+    parts.push(toReceiveWords(books, verses));
   }
   if (sync.clocks.local.unshared > 0) parts.push(t("your saved changes aren't sent yet"));
   return parts.length === 0 ? t("up to date") : parts.join(" · ");

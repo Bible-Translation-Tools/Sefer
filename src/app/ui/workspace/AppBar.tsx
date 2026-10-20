@@ -124,8 +124,10 @@ export function AppBar() {
     else void navigate({ to: "/" });
   };
 
-  const mode = (): Mode | undefined =>
-    terms() === "true" ? "terms" : refining() === "true" ? "refine" : undefined;
+  const mode = (): Mode | undefined => {
+    if (terms() === "true") return "terms";
+    return refining() === "true" ? "refine" : undefined;
+  };
   const goTo = (next: Mode): void => {
     if (next === "refine") void navigate({ to: "/project/$slug", params: { slug: shell.slug() } });
     else if (next === "terms")

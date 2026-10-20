@@ -25,11 +25,8 @@ const stepExtent = (now: Extent, step: ContextStep): Extent => {
     down: now.down,
     ...(now.chapter === true ? { chapter: true } : {}),
   };
-  return step === "chapter"
-    ? { up: at.up, down: at.down, chapter: at.chapter !== true }
-    : step === "up"
-      ? { up: at.up + 1, down: at.down }
-      : { up: at.up, down: at.down + 1 };
+  if (step === "chapter") return { up: at.up, down: at.down, chapter: at.chapter !== true };
+  return step === "up" ? { up: at.up + 1, down: at.down } : { up: at.up, down: at.down + 1 };
 };
 
 export const widened = (now: Extent): boolean => now.chapter === true || now.up > 0 || now.down > 0;

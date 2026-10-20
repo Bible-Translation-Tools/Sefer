@@ -21,7 +21,7 @@ export function SuggestionsScreen() {
     const opened = shell.project();
     if (opened === undefined || checking()) return;
     setChecking(true);
-    setAsked((n) => n + 1);
+    setAsked((count) => count + 1);
     void collaboration.refresh(shell.services, opened).finally(() => setChecking(false));
   };
   // Untracked on purpose: a one-time read, not a dependency (Solid 2: STRICT_READ_UNTRACKED).
