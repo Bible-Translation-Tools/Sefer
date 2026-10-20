@@ -89,7 +89,7 @@
     "@wdio/spec-reporter": "^9.31.2",
     "@wdio/tauri-service": "1.5.0",
     "eslint-plugin-solid": "~0.18.0",
-    "fallow": "3.28.0",
+    "fallow": "3.34.1",
     "lefthook": "2.1.14",
     "magic-string": "^1.4.1",
     "oxc-parser": "^0.151.0",
