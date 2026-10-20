@@ -3,9 +3,13 @@ import type { Tour, TourContext } from "../machine";
 /**
  * Telling Sefer a finding is fine, and approving a key term: how the first
  * version works and why, for the product owner and the designer to give
- * feedback on, rather than for a translator. On whatever project is open (an
- * English one reads best for them): no share link, so nothing waits on the
- * network. The plan it walks: `planning/items/2026-10-06-project-state-and-suppressions.mdx`.
+ * feedback on, rather than for a translator. The plan it walks:
+ * `planning/items/2026-10-06-project-state-and-suppressions.mdx`.
+ *
+ * It starts from a share link to WA's English ULB, pinned to one commit, so
+ * everyone who runs it reads the same text and the same findings: the link
+ * downloads the project where it is not on the device yet (a few seconds to
+ * a minute), and opens it where it is.
  *
  * Strings are raw and translated where they are drawn.
  */
@@ -28,6 +32,13 @@ const toTerms = (context: TourContext): void => {
 
 const present = (selector: string): boolean => document.querySelector(selector) !== null;
 
+/** WA's English ULB as of 2025-10-02: public, and it does not move under the tutorial. */
+const PROJECT =
+  "/r/WA-Catalog/en_ulb/findings?at=8baaf2076f7813ac7ab5f3e7988627ec0f9d91dc&host=content.bibletranslationtools.org";
+
+/** Long enough for a first download on a slow line. */
+const DOWNLOAD_MS = 600_000;
+
 export const suppressionsTour: Tour = {
   id: "suppressions",
   kind: "tutorial",
@@ -35,10 +46,12 @@ export const suppressionsTour: Tour = {
   summary:
     "The first version of suppressions and approvals: what each answer does, why the wider ones are tucked away, and what does not travel yet. For feedback.",
   needsProject: true,
+  start: PROJECT,
   steps: [
     {
       go: toFindings,
       ready: () => present("[data-findings-count]"),
+      timeoutMs: DOWNLOAD_MS,
       spotlight: {
         anchor: "[data-findings-count]",
         title: "Saying a finding is fine",

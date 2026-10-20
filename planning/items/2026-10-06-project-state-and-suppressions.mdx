@@ -54,8 +54,14 @@ Show again on a finding hidden both ways clears both.
 whole file in "needs re-check", since one header covers every entry. It can only happen when
 Sefer changes the hash, and that change would come with a migration that rehashes.
 
-**Not driven:** persistence across a reload (the fixture is in memory and reseeds), and the
-needs-re-check state. Both want a real project: on the branch, on `x-en-ulb`.
+**Driven on real text** (2026-10-20): the tutorial now starts from a share link to WA's English
+ULB pinned to one commit (`/r/WA-Catalog/en_ulb/findings?at=8baaf20…`), so everyone reads the same
+text. On the branch: the link downloads it and opens Findings (984), all six stops run, Fine here
+984 → 983, and after a reload it is still 983 with "1 marked fine": the file persists. Not
+driven: the needs-re-check state.
+
+The branch worktree needs the main checkout's `.env` to reach WACS: without it every share link
+reads "has no project … that this device can see".
 
 <Followup id="tests-wanted">
 
