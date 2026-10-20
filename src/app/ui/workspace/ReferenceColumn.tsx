@@ -43,6 +43,8 @@ import Check from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronUp from "lucide-solid/icons/chevron-up";
 import Download from "lucide-solid/icons/download";
+import Globe from "lucide-solid/icons/globe";
+import Heart from "lucide-solid/icons/heart";
 import PanelLeftClose from "lucide-solid/icons/panel-left-close";
 import Plus from "lucide-solid/icons/plus";
 import Trash from "lucide-solid/icons/trash-2";
@@ -75,7 +77,16 @@ import { shellKeys } from "../../settings";
 import { ResourceCard, ResourcePane } from "../kinds/registry";
 import { flyCard } from "../landing/downloads";
 import { listProjects, type ProjectSummary } from "../landing/summaries";
-import { Button, EmptyState, IconButton, Menu, MenuItem, MenuLabel, cx } from "../primitives";
+import {
+  Button,
+  EmptyState,
+  IconButton,
+  Menu,
+  MenuItem,
+  MenuLabel,
+  Popover,
+  cx,
+} from "../primitives";
 
 /**
  * The roles the column shows, in the order it shows them: every role some
@@ -165,8 +176,6 @@ export function LanguageTab(props: {
   /** The text it shows, for the add list's flight to it. */
   readonly resourceId?: string;
 }) {
-  // The × is always laid out on a removable tab and only SHOWN on the active
-  // one, so choosing a tab never changes any tab's width.
   const closable = (): boolean => props.onClose !== undefined;
   // The label is two layers in one grid cell: an invisible copy of the full
   // name, which gives the tab its natural width and shrinks when the strip is
@@ -201,14 +210,19 @@ export function LanguageTab(props: {
         data-testid={props.testId}
         title={props.name}
         class={cx(
-          "flex h-full min-w-0 cursor-pointer items-center gap-2",
-          // Removable: 48px each side of the label — on the right, 8px, the
-          // 24px × and its 16px margin — so the name is centred with or
-          // without the × showing.
-          closable() ? "ps-12 pe-2" : "px-6",
+          "flex h-full min-w-0 cursor-pointer items-center gap-2 text-start",
+          closable() ? "ps-4 pe-2" : "px-4",
         )}
         onClick={() => props.onSelect?.()}
       >
+        {/* What kind of language it is: a gateway to read beside, or the
+            heart language being refined. */}
+        <Show
+          when={props.refining === true}
+          fallback={<Globe aria-hidden="true" class="size-5 shrink-0" />}
+        >
+          <Heart aria-hidden="true" class="size-5 shrink-0" />
+        </Show>
         <span class="grid min-w-0">
           <span
             ref={setGhost}
@@ -217,7 +231,7 @@ export function LanguageTab(props: {
           >
             {props.name}
           </span>
-          <span class="col-start-1 row-start-1 truncate text-center">
+          <span class="col-start-1 row-start-1 truncate text-start">
             {fits() ? props.name : props.code}
           </span>
         </span>
@@ -232,13 +246,8 @@ export function LanguageTab(props: {
           type="button"
           data-testid={props.testId === undefined ? undefined : `${props.testId}-close`}
           aria-label={t("Remove {name} from the tabs", { name: props.name })}
-          aria-hidden={props.active ? undefined : "true"}
-          tabindex={props.active ? undefined : -1}
           title={t("Remove {name} from the tabs", { name: props.name })}
-          class={cx(
-            "me-4 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md hover:bg-surface-secondary",
-            !props.active && "invisible",
-          )}
+          class="me-3 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md hover:bg-surface-secondary"
           onClick={() => props.onClose?.()}
         >
           <X aria-hidden="true" class="size-5" />
@@ -931,28 +940,6 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     </Menu>
   );
 
-  /** A section heading in the language list. */
-  const ListHeading = (headingProps: { readonly children: JSX.Element }) => (
-    <h3 class="py-3 text-h4 font-semibold text-on-surface-primary">{headingProps.children}</h3>
-  );
-
-  /** One row of the language list, on one line: "Name (code)", then the one thing to do. */
-  const ListRow = (rowProps: {
-    readonly testId?: string;
-    readonly name: string;
-    readonly children: JSX.Element;
-  }) => (
-    <li
-      data-testid={rowProps.testId}
-      class="flex min-h-12 items-center gap-3 py-1.5 text-small text-on-surface-primary"
-    >
-      <span class="min-w-0 flex-1 truncate" title={rowProps.name}>
-        {rowProps.name}
-      </span>
-      {rowProps.children}
-    </li>
-  );
-
   /** A row of the add list: what it is called, how to sort it, and what its button does. */
   type Offer =
     | {
@@ -962,6 +949,8 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
         readonly added: () => boolean;
         /** `from`: where the row's name is, for the flight to its tab. */
         readonly add: (from: DOMRect) => void;
+        /** Takes it off the tabs again; absent where that cannot be done. */
+        readonly remove?: () => void;
       }
     | {
         readonly kind: "download";
@@ -1015,6 +1004,10 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
           show(resource);
           flyToTab(from, nameOf(resource), (id) => id === resource.id);
         },
+        remove: () => {
+          const entry = tabOf(resource);
+          if (entry !== undefined && !entry.declared) unpick(entry);
+        },
       })),
       ...otherProjects().map((row): Offer => {
         const name =
@@ -1052,6 +1045,8 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     ];
     return [...held.sort(byName), ...toGet.sort(byName)];
   };
+  const downloaded = (): readonly Offer[] => offers().filter((offer) => offer.kind === "held");
+  const available = (): readonly Offer[] => offers().filter((offer) => offer.kind === "download");
 
   /**
    * The panel's add list (the panel variant's "+"): one list under one title,
@@ -1060,18 +1055,104 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
    * progress bar and leaves the row, now with Add, when it lands. Taking a
    * text off the tabs is the × on its tab.
    */
+  /** One row's action: Add, Remove, Download, or the bar while it downloads. */
+  const offerAction = (offer: Offer): JSX.Element => {
+    if (offer.kind === "download")
+      return (
+        <Show
+          when={offer.pulling()}
+          fallback={
+            <Button variant="tertiary" onClick={() => offer.download()}>
+              <Download aria-hidden="true" />
+              {t("Download")}
+            </Button>
+          }
+        >
+          {/* No byte count to show, so the bar runs until the copy lands. */}
+          <div
+            role="progressbar"
+            aria-label={t("Downloading {name}", { name: offer.name })}
+            class="relative h-2 w-24 shrink-0 overflow-hidden rounded-full bg-surface-secondary"
+          >
+            <div class="absolute inset-y-0 w-1/3 animate-pulse rounded-full bg-brand" />
+          </div>
+        </Show>
+      );
+    return (
+      <Show
+        when={offer.added()}
+        fallback={
+          <Button
+            variant="tertiary"
+            disabled={busy()}
+            onClick={(event) => {
+              const button = event.currentTarget;
+              const row = button.closest("li")?.querySelector("span") ?? button;
+              offer.add(row.getBoundingClientRect());
+            }}
+          >
+            <Plus aria-hidden="true" />
+            {t("Add")}
+          </Button>
+        }
+      >
+        <Show
+          when={offer.remove}
+          fallback={<span class="text-small text-on-surface-tertiary">{t("Project source")}</span>}
+        >
+          {(remove) => (
+            <Button variant="tertiary" onClick={() => remove()()}>
+              <X aria-hidden="true" />
+              {t("Remove")}
+            </Button>
+          )}
+        </Show>
+      </Show>
+    );
+  };
+
+  /**
+   * The Add dropdown (the panel variant): what is downloaded, then what is
+   * available, each A–Z, one line a language — "Name (code)" and its action.
+   * Add makes it a tab (and flies it there) and turns into Remove; Remove
+   * takes it off the tabs and turns back into Add; Download runs a bar, and
+   * the language moves up to Downloaded when it lands.
+   */
   const LanguageList = () => (
     <div
       data-testid="language-list"
-      class="scrollbar-padded flex min-h-0 flex-1 flex-col overflow-y-auto pb-6"
+      class="scrollbar-padded flex max-h-[min(70vh,32rem)] flex-col overflow-y-auto py-2"
     >
-      <ListHeading>{t("Add a Reference Language")}</ListHeading>
+      <h3 class="px-4 pt-2 pb-1 text-smallest font-semibold text-on-surface-secondary">
+        {t("Downloaded")}
+      </h3>
+      <Show when={downloaded().length === 0}>
+        <p class="px-4 py-2 text-small text-on-surface-tertiary">{t("Nothing downloaded yet.")}</p>
+      </Show>
+      <ul>
+        <For each={downloaded()}>
+          {(offer) => (
+            <li
+              data-testid={`language-offer-${offer.key}`}
+              class="flex min-h-12 items-center gap-3 px-4 text-small text-on-surface-primary"
+            >
+              <span class="min-w-0 flex-1 truncate" title={offer.name}>
+                {offer.name}
+              </span>
+              {offerAction(offer)}
+            </li>
+          )}
+        </For>
+      </ul>
+      <h3 class="px-4 pt-2 pb-1 text-smallest font-semibold text-on-surface-secondary">
+        {t("Available")}
+      </h3>
       <Show when={gateways() === undefined}>
-        <p class="py-3 text-small text-on-surface-tertiary">{t("Loading the list…")}</p>
+        <p class="px-4 py-2 text-small text-on-surface-tertiary">{t("Loading the list…")}</p>
       </Show>
       <Show when={notesFailure()}>
         {(failure) => (
-          <p role="status" class="py-3 text-small text-on-surface-tertiary">
+          <p role="status" class="px-4 py-2 text-small text-on-surface-tertiary">
             {failure().offline
               ? t("You are offline. Open this list again to retry.")
               : t("Could not read the list. Open this list again to retry.")}
@@ -1079,52 +1160,17 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
         )}
       </Show>
       <ul>
-        <For each={offers()}>
+        <For each={available()}>
           {(offer) => (
-            <ListRow testId={`language-offer-${offer.key}`} name={offer.name}>
-              {offer.kind === "held" ? (
-                <Show
-                  when={!offer.added()}
-                  fallback={
-                    <Button variant="tertiary" disabled>
-                      <Check aria-hidden="true" />
-                      {t("Added")}
-                    </Button>
-                  }
-                >
-                  <Button
-                    disabled={busy()}
-                    onClick={(event) => {
-                      const button = event.currentTarget;
-                      const row = button.closest("li")?.querySelector("span") ?? button;
-                      offer.add(row.getBoundingClientRect());
-                    }}
-                  >
-                    <Plus aria-hidden="true" />
-                    {t("Add")}
-                  </Button>
-                </Show>
-              ) : (
-                <Show
-                  when={offer.pulling()}
-                  fallback={
-                    <Button onClick={() => offer.download()}>
-                      <Download aria-hidden="true" />
-                      {t("Download")}
-                    </Button>
-                  }
-                >
-                  {/* No byte count to show, so the bar runs until the copy lands. */}
-                  <div
-                    role="progressbar"
-                    aria-label={t("Downloading {name}", { name: offer.name })}
-                    class="relative h-2 w-32 shrink-0 overflow-hidden rounded-full bg-surface-secondary"
-                  >
-                    <div class="absolute inset-y-0 w-1/3 animate-pulse rounded-full bg-brand" />
-                  </div>
-                </Show>
-              )}
-            </ListRow>
+            <li
+              data-testid={`language-offer-${offer.key}`}
+              class="flex min-h-12 items-center gap-3 px-4 text-small text-on-surface-primary"
+            >
+              <span class="min-w-0 flex-1 truncate" title={offer.name}>
+                {offer.name}
+              </span>
+              {offerAction(offer)}
+            </li>
           )}
         </For>
       </ul>
@@ -1198,7 +1244,6 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
                     }
                     code={entry.resource.language ?? entry.resource.title}
                     active={
-                      !managing() &&
                       props.heart?.active !== true &&
                       shown()?.entry.resource.id === entry.resource.id
                     }
@@ -1219,7 +1264,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
                     name={heart().name}
                     code={heart().code}
                     refining
-                    active={heart().active && !managing()}
+                    active={heart().active}
                     onSelect={() => {
                       setManaging(false);
                       heart().onActivate(true);
@@ -1228,23 +1273,30 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
                 )}
               </Show>
             </div>
-            <IconButton
-              variant={managing() ? "outlined" : "quiet"}
-              data-testid="reference-add"
-              aria-pressed={managing() ? "true" : "false"}
-              label={managing() ? t("Close the language list") : t("Add a gateway language")}
-              icon={managing() ? <X /> : <Plus />}
-              onClick={() => manage(!managing())}
-            />
+            <Popover
+              label={t("Add a reference language")}
+              side="bottom"
+              align="start"
+              variant="menu"
+              class="w-96 p-0"
+              fitViewport
+              open={managing()}
+              onOpenChange={manage}
+              trigger={
+                <Button variant="tertiary" data-testid="reference-add">
+                  <Plus aria-hidden="true" />
+                  {t("Add")}
+                </Button>
+              }
+            >
+              <LanguageList />
+            </Popover>
             {props.trailing}
           </div>
           <Show when={fetching() !== ""}>
             <p role="status" class="text-small text-on-surface-secondary">
               {t("Getting {language}…", { language: fetching() })}
             </p>
-          </Show>
-          <Show when={managing()}>
-            <LanguageList />
           </Show>
         </Show>
 
@@ -1279,7 +1331,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
           when={shown()}
           keyed
           fallback={
-            <Show when={!loading() && props.heart?.active !== true && !managing()}>
+            <Show when={!loading() && props.heart?.active !== true}>
               <EmptyState
                 icon={<BookMarked size={22} />}
                 title={
@@ -1297,13 +1349,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
           }
         >
           {(held) => (
-            <div
-              class={
-                props.heart?.active === true || managing()
-                  ? "hidden"
-                  : "flex min-h-0 flex-1 flex-col"
-              }
-            >
+            <div class={props.heart?.active === true ? "hidden" : "flex min-h-0 flex-1 flex-col"}>
               <ResourcePane
                 resource={held.entry.resource}
                 role={held.entry.role}
@@ -1317,13 +1363,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
         <Show when={props.editor !== undefined}>
           {/* Hidden rather than unmounted, so switching tabs keeps the
               editor's place; the reference pane above does the same. */}
-          <div
-            class={
-              props.heart?.active === true && !managing()
-                ? "flex min-h-0 flex-1 flex-col"
-                : "hidden"
-            }
-          >
+          <div class={props.heart?.active === true ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
             {props.editor}
           </div>
         </Show>

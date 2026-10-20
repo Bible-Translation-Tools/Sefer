@@ -9,7 +9,7 @@ import { languageName, languageTag } from "#app/language";
 import { useShell } from "#app/ProjectContext";
 import { REFERENCE_WIDTH } from "#app/settings";
 import { BookEditor } from "#app/ui/BookEditor";
-import { DelayedSpinner, IconButton, Resizable, cx } from "#app/ui/primitives";
+import { Button, DelayedSpinner, Resizable, cx } from "#app/ui/primitives";
 import { RecoveryBanner } from "#app/ui/recovery/RecoveryBanner";
 import { AlignedProvider } from "#app/ui/workspace/aligned";
 import { layout } from "#app/ui/workspace/layoutTweak";
@@ -160,13 +160,15 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
                             </Show>
                           }
                           trailing={
-                            <IconButton
-                              variant="quiet"
+                            <Button
+                              variant="tertiary"
                               data-testid="refine-split"
-                              label={t("Move the gateway languages to their own panel")}
-                              icon={<Columns2 />}
+                              title={t("Move the gateway languages to their own panel")}
                               onClick={() => shell.setReferenceSplit(true)}
-                            />
+                            >
+                              <Columns2 aria-hidden="true" />
+                              {t("Split")}
+                            </Button>
                           }
                         />
                       }
@@ -210,13 +212,15 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
                                   active
                                 />
                               </div>
-                              <IconButton
-                                variant="quiet"
+                              <Button
+                                variant="tertiary"
                                 data-testid="refine-join"
-                                label={t("Join the gateway languages back into this panel")}
-                                icon={<Combine />}
+                                title={t("Join the gateway languages back into this panel")}
                                 onClick={() => shell.setReferenceSplit(false)}
-                              />
+                              >
+                                <Combine aria-hidden="true" />
+                                {t("Join")}
+                              </Button>
                             </div>
                             <div class="flex min-h-0 flex-1 flex-col">
                               <Show when={book().id} keyed>
