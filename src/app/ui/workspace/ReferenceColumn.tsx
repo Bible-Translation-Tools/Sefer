@@ -43,7 +43,6 @@ import Check from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronUp from "lucide-solid/icons/chevron-up";
 import Download from "lucide-solid/icons/download";
-import Minus from "lucide-solid/icons/minus";
 import PanelLeftClose from "lucide-solid/icons/panel-left-close";
 import Plus from "lucide-solid/icons/plus";
 import Trash from "lucide-solid/icons/trash-2";
@@ -75,7 +74,7 @@ import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
 import { ResourceCard, ResourcePane } from "../kinds/registry";
 import { listProjects, type ProjectSummary } from "../landing/summaries";
-import { Button, EmptyState, IconButton, Menu, MenuItem, MenuLabel } from "../primitives";
+import { Button, EmptyState, IconButton, Menu, MenuItem, MenuLabel, cx } from "../primitives";
 
 /**
  * The roles the column shows, in the order it shows them: every role some
@@ -160,7 +159,10 @@ export function LanguageTab(props: {
   readonly refining?: boolean;
   readonly testId?: string;
   readonly onSelect?: () => void;
+  /** Takes it off the tabs: an × on the tab while it is the active one. */
+  readonly onClose?: () => void;
 }) {
+  const closable = (): boolean => props.active && props.onClose !== undefined;
   // The label is two layers in one grid cell: an invisible copy of the full
   // name, which gives the tab its natural width and shrinks when the strip is
   // short of room, and the visible text over it. The name shows while the copy
@@ -182,34 +184,53 @@ export function LanguageTab(props: {
     },
   );
   return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={props.active ? "true" : "false"}
-      data-testid={props.testId}
+    <div
       data-current={props.active ? "" : undefined}
-      title={props.name}
-      class="-mb-px flex h-12 min-w-0 shrink cursor-pointer items-center gap-2 border-b-2 px-6 text-small font-semibold transition-colors data-current:border-brand data-current:text-brand not-data-current:border-transparent not-data-current:text-on-surface-primary not-data-current:hover:bg-surface-secondary"
-      onClick={() => props.onSelect?.()}
+      class="-mb-px flex h-12 min-w-0 shrink items-center border-b-2 text-small font-semibold transition-colors data-current:border-brand data-current:text-brand not-data-current:border-transparent not-data-current:text-on-surface-primary not-data-current:hover:bg-surface-secondary"
     >
-      <span class="grid min-w-0">
-        <span
-          ref={setGhost}
-          aria-hidden="true"
-          class="invisible col-start-1 row-start-1 min-w-0 overflow-hidden whitespace-nowrap"
+      <button
+        type="button"
+        role="tab"
+        aria-selected={props.active ? "true" : "false"}
+        data-testid={props.testId}
+        title={props.name}
+        class={cx(
+          "flex h-full min-w-0 cursor-pointer items-center gap-2",
+          closable() ? "ps-6 pe-2" : "px-6",
+        )}
+        onClick={() => props.onSelect?.()}
+      >
+        <span class="grid min-w-0">
+          <span
+            ref={setGhost}
+            aria-hidden="true"
+            class="invisible col-start-1 row-start-1 min-w-0 overflow-hidden whitespace-nowrap"
+          >
+            {props.name}
+          </span>
+          <span class="col-start-1 row-start-1 truncate text-center">
+            {fits() ? props.name : props.code}
+          </span>
+        </span>
+        <Show when={props.refining === true}>
+          <span class="shrink-0 rounded-full bg-brand-light px-2 py-0.5 text-smallest font-medium text-brand">
+            {t("Refinement")}
+          </span>
+        </Show>
+      </button>
+      <Show when={closable()}>
+        <button
+          type="button"
+          data-testid={props.testId === undefined ? undefined : `${props.testId}-close`}
+          aria-label={t("Remove {name} from the tabs", { name: props.name })}
+          title={t("Remove {name} from the tabs", { name: props.name })}
+          class="me-4 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md hover:bg-surface-secondary"
+          onClick={() => props.onClose?.()}
         >
-          {props.name}
-        </span>
-        <span class="col-start-1 row-start-1 truncate text-center">
-          {fits() ? props.name : props.code}
-        </span>
-      </span>
-      <Show when={props.refining === true}>
-        <span class="shrink-0 rounded-full bg-brand-light px-2 py-0.5 text-smallest font-medium text-brand">
-          {t("Refinement")}
-        </span>
+          <X aria-hidden="true" class="size-5" />
+        </button>
       </Show>
-    </button>
+    </div>
   );
 }
 
@@ -440,16 +461,35 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       });
   };
 
-  /** Downloads a gateway text into the Library (once per device), then shows it. */
-  const fetchText = (entry: CatalogueEntry): void => {
+  /** Downloads in flight from the panel's language list, by catalogue id or repository. */
+  const [pulling, setPulling] = createSignal<ReadonlySet<string>>(new Set(), {
+    name: "referencePulling",
+  });
+  const pull = (key: string, on: boolean): void => {
+    setPulling((held) => {
+      const next = new Set(held);
+      if (on) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  };
+
+  /**
+   * Downloads a gateway text into the Library (once per device), then shows
+   * it — or, from the panel's language list (`keep`), leaves it there to Add.
+   */
+  const fetchText = (entry: CatalogueEntry, keep = false): void => {
     const name = entry.anglicizedName || entry.naturalName;
     const operation = services.composition.observability.operation("import.remote", {
       "import.source": "reference",
       "import.host": services.hostInfo.kind(),
       "catalogue.type": entry.type,
     });
-    setBusy(true);
-    setFetching(name);
+    if (keep) pull(entry.id, true);
+    else {
+      setBusy(true);
+      setFetching(name);
+    }
     void services
       .run(
         Effect.provideService(
@@ -461,15 +501,18 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       // oxlint-disable-next-line solid/reactivity -- a promise continuation: runs once, when the copy is here
       .then((resource) => {
         operation.end("passed", { "import.phase": "complete" });
-        show(resource);
+        if (!keep) show(resource);
       })
       .catch((cause: unknown) => {
         operation.end(remoteVerdict(remoteReasonOf(cause)));
         shell.report(t("could not add {name}: {reason}", { name, reason: describe(cause) }));
       })
       .finally(() => {
-        setBusy(false);
-        setFetching("");
+        if (keep) pull(entry.id, false);
+        else {
+          setBusy(false);
+          setFetching("");
+        }
       });
   };
 
@@ -515,17 +558,22 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
   };
 
   /** Downloads reference material into the Library (once per device), then shows it. */
-  const fetchHelp = (help: HelpText): void => {
-    setBusy(true);
-    setFetching(
-      t("Translation Notes · {language}", { language: help.languageName || help.language }),
-    );
+  const fetchHelp = (help: HelpText, keep = false): void => {
+    if (!keep) {
+      setBusy(true);
+      setFetching(
+        t("Translation Notes · {language}", { language: help.languageName || help.language }),
+      );
+    }
     void downloadHelp(services, help)
       // oxlint-disable-next-line solid/reactivity -- a promise continuation: runs once, when the copy is here
-      .then((resource) => show(resource))
+      .then((resource) => {
+        if (!keep) show(resource);
+      })
       // The toast has said why; nothing more to do here.
       .catch(() => undefined)
       .finally(() => {
+        if (keep) return;
         setBusy(false);
         setFetching("");
       });
@@ -882,156 +930,124 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     </li>
   );
 
-  /** On the tabs or off them: one button that flips. */
-  const TabToggle = (toggleProps: { readonly inTabs: boolean; readonly onToggle: () => void }) => (
-    <Button
-      variant={toggleProps.inTabs ? "tertiary" : "secondary"}
-      aria-pressed={toggleProps.inTabs ? "true" : "false"}
-      disabled={busy()}
-      onClick={() => toggleProps.onToggle()}
-    >
-      <Show when={toggleProps.inTabs} fallback={<Plus aria-hidden="true" />}>
-        <Minus aria-hidden="true" />
-      </Show>
-      {toggleProps.inTabs ? t("Remove") : t("Add")}
-    </Button>
-  );
+  /** A row of the add list: what it is called, how to sort it, and what its button does. */
+  type Offer =
+    | {
+        readonly kind: "held";
+        readonly key: string;
+        readonly name: string;
+        readonly add: () => void;
+      }
+    | {
+        readonly kind: "download";
+        readonly key: string;
+        readonly name: string;
+        readonly download: () => void;
+        readonly pulling: () => boolean;
+      };
+  const byName = (a: Offer, b: Offer): number => a.name.localeCompare(b.name);
+  /**
+   * What the add list offers: everything on this device that is not a tab
+   * yet (and the reader's other projects), A–Z, then everything to download,
+   * A–Z. A download stays in the list once it lands, now with Add.
+   */
+  const offers = (): readonly Offer[] => {
+    const held: Offer[] = [
+      ...installed()
+        .filter((resource) => tabOf(resource) === undefined)
+        .map((resource): Offer => ({
+          kind: "held",
+          key: resource.id,
+          name: nameOf(resource),
+          add: () => show(resource),
+        })),
+      ...otherProjects().map((row): Offer => ({
+        kind: "held",
+        key: row.root,
+        name:
+          row.languageTag === "" ? row.name : `${row.language || row.name} (${row.languageTag})`,
+        add: () => showProject(row),
+      })),
+    ];
+    const toGet: Offer[] = [
+      ...downloadable().map((entry): Offer => ({
+        kind: "download",
+        key: entry.id,
+        name: `${entry.anglicizedName || entry.naturalName} (${entry.code})`,
+        download: () => fetchText(entry, true),
+        pulling: () => pulling().has(entry.id),
+      })),
+      ...helps().map((help): Offer => ({
+        kind: "download",
+        key: help.repository,
+        name: t("Translation Notes · {language}", {
+          language: `${help.languageName || help.language} (${help.language})`,
+        }),
+        download: () => fetchHelp(help, true),
+        pulling: () => helpDownloads().has(help.repository),
+      })),
+    ];
+    return [...held.sort(byName), ...toGet.sort(byName)];
+  };
 
   /**
-   * The panel's language list (the panel variant's "+"): the texts on this
-   * device, each added as a tab or taken off the tabs, the reader's other
-   * projects, then the gateway languages and Translation Notes to download.
-   * Taking a text off the tabs leaves it on this device; a text the project
-   * DECLARES cannot be taken off — it is what shows when nothing is picked.
+   * The panel's add list (the panel variant's "+"): one list under one title,
+   * what is on this device first, then what can be downloaded — each A–Z.
+   * Add makes it a tab and takes it out of the list; Download turns into a
+   * progress bar and leaves the row, now with Add, when it lands. Taking a
+   * text off the tabs is the × on its tab.
    */
   const LanguageList = () => (
     <div
       data-testid="language-list"
-      class="scrollbar-padded flex min-h-0 flex-1 flex-col gap-12 overflow-y-auto pb-6"
+      class="scrollbar-padded flex min-h-0 flex-1 flex-col overflow-y-auto pb-6"
     >
-      <section class="flex flex-col">
-        {/* Everything on this device, and the reader's other projects, as one
-          list: each is on this project's tabs or not. */}
-        <ListHeading>{t("Your languages")}</ListHeading>
-        <Show when={installed().length === 0 && otherProjects().length === 0}>
-          <p class="py-3 text-small text-on-surface-tertiary">
-            {t("No gateway languages yet. Download one below.")}
+      <ListHeading>{t("Add a Reference Language")}</ListHeading>
+      <Show when={gateways() === undefined}>
+        <p class="py-3 text-small text-on-surface-tertiary">{t("Loading the list…")}</p>
+      </Show>
+      <Show when={notesFailure()}>
+        {(failure) => (
+          <p role="status" class="py-3 text-small text-on-surface-tertiary">
+            {failure().offline
+              ? t("You are offline. Open this list again to retry.")
+              : t("Could not read the list. Open this list again to retry.")}
           </p>
-        </Show>
-        <ul>
-          <For each={installed()}>
-            {(resource) => (
-              <ListRow
-                testId={`language-row-${resource.language ?? resource.id}`}
-                name={nameOf(resource)}
-              >
+        )}
+      </Show>
+      <ul>
+        <For each={offers()}>
+          {(offer) => (
+            <ListRow testId={`language-offer-${offer.key}`} name={offer.name}>
+              {offer.kind === "held" ? (
+                <Button disabled={busy()} onClick={() => offer.add()}>
+                  <Plus aria-hidden="true" />
+                  {t("Add")}
+                </Button>
+              ) : (
                 <Show
-                  when={tabOf(resource)?.declared !== true}
+                  when={offer.pulling()}
                   fallback={
-                    <span class="text-small text-on-surface-tertiary">{t("Project source")}</span>
+                    <Button onClick={() => offer.download()}>
+                      <Download aria-hidden="true" />
+                      {t("Download")}
+                    </Button>
                   }
                 >
-                  <TabToggle
-                    inTabs={tabOf(resource) !== undefined}
-                    onToggle={() => {
-                      const entry = tabOf(resource);
-                      if (entry === undefined) show(resource);
-                      else unpick(entry);
-                    }}
-                  />
+                  {/* No byte count to show, so the bar runs until the copy lands. */}
+                  <div
+                    role="progressbar"
+                    aria-label={t("Downloading {name}", { name: offer.name })}
+                    class="relative h-2 w-32 shrink-0 overflow-hidden rounded-full bg-surface-secondary"
+                  >
+                    <div class="absolute inset-y-0 w-1/3 animate-pulse rounded-full bg-brand" />
+                  </div>
                 </Show>
-              </ListRow>
-            )}
-          </For>
-          <For each={otherProjects()}>
-            {(row) => (
-              <ListRow
-                testId={`pick-${row.folder}`}
-                name={
-                  row.languageTag === ""
-                    ? row.name
-                    : `${row.language || row.name} (${row.languageTag})`
-                }
-              >
-                <TabToggle inTabs={false} onToggle={() => showProject(row)} />
-              </ListRow>
-            )}
-          </For>
-        </ul>
-      </section>
-
-      <section class="flex flex-col">
-        <ListHeading>{t("Available to download")}</ListHeading>
-        <Show
-          when={gateways() !== undefined}
-          fallback={
-            <p class="py-3 text-small text-on-surface-tertiary">{t("Loading the list…")}</p>
-          }
-        >
-          <ul>
-            <For each={downloadable()}>
-              {(entry) => (
-                <ListRow
-                  testId={`pick-${entry.code}`}
-                  name={`${entry.anglicizedName || entry.naturalName} (${entry.code})`}
-                >
-                  <Button disabled={busy()} onClick={() => fetchText(entry)}>
-                    <Download aria-hidden="true" />
-                    {t("Download")}
-                  </Button>
-                </ListRow>
               )}
-            </For>
-          </ul>
-        </Show>
-      </section>
-
-      <section class="flex flex-col">
-        <ListHeading>{t("Translation Notes")}</ListHeading>
-        <Show when={notesFailure()}>
-          {(failure) => (
-            <p role="status" class="py-3 text-small text-on-surface-tertiary">
-              {failure().offline
-                ? t("You are offline. Open this list again to retry.")
-                : t("Could not read the list. Open this list again to retry.")}
-            </p>
+            </ListRow>
           )}
-        </Show>
-        <Show when={notes()?.state === "loading"}>
-          <p class="py-3 text-small text-on-surface-tertiary">{t("Loading the list…")}</p>
-        </Show>
-        <ul>
-          <For each={heldHelps()}>
-            {(resource) => (
-              <ListRow
-                testId="reference-held-notes"
-                name={`${languageName(resource.language) ?? resource.title} (${resource.language ?? ""})`}
-              >
-                <Button variant="tertiary" onClick={() => removeNotes(resource)}>
-                  <Trash aria-hidden="true" />
-                  {t("Remove from device")}
-                </Button>
-              </ListRow>
-            )}
-          </For>
-          <For each={helps()}>
-            {(help) => (
-              <ListRow
-                testId={`pick-help-${help.repository}`}
-                name={`${help.languageName || help.language} (${help.language})`}
-              >
-                <Button
-                  disabled={busy() || helpDownloads().has(help.repository)}
-                  onClick={() => fetchHelp(help)}
-                >
-                  <Download aria-hidden="true" />
-                  {helpDownloads().has(help.repository) ? t("Downloading…") : t("Download")}
-                </Button>
-              </ListRow>
-            )}
-          </For>
-        </ul>
-      </section>
+        </For>
+      </ul>
     </div>
   );
 
@@ -1110,6 +1126,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
                       setManaging(false);
                       props.heart?.onActivate(false);
                     }}
+                    onClose={entry.declared ? undefined : () => unpick(entry)}
                   />
                 )}
               </For>
