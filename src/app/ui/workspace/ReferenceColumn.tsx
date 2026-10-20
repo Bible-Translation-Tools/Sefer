@@ -173,8 +173,8 @@ export function LanguageTab(props: {
   readonly onSelect?: () => void;
   /** Takes it off the tabs: an × on the tab while it is the active one. */
   readonly onClose?: () => void;
-  /** The text it shows, for the add list's flight to it. */
-  readonly resourceId?: string;
+  /** The language it stands for, for the add list's flight to it. */
+  readonly languageKey?: string;
 }) {
   const closable = (): boolean => props.onClose !== undefined;
   // The label is two layers in one grid cell: an invisible copy of the full
@@ -200,7 +200,7 @@ export function LanguageTab(props: {
   return (
     <div
       data-current={props.active ? "" : undefined}
-      data-tab-resource={props.resourceId}
+      data-tab-language={props.languageKey}
       class="-mb-px flex h-12 min-w-0 shrink items-center rounded-t-[12px] border-b-2 text-small font-semibold transition-colors data-current:border-brand data-current:text-brand not-data-current:border-transparent not-data-current:text-on-surface-primary not-data-current:hover:bg-surface-secondary"
     >
       <button
@@ -442,6 +442,43 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     ];
   };
 
+  /**
+   * A text's LANGUAGE, as the panel variant groups by it: one tab, and one
+   * row in the Add dropdown, per language, however many texts it has (ULB,
+   * UDB, Notes…). Lower-cased tag; the id when a text names no language.
+   */
+  const languageOf = (resource: Resource): string =>
+    (resource.language ?? resource.id).toLowerCase();
+  /** The text last on show in each language, so returning to its tab returns to it. */
+  const [lastIn, setLastIn] = createSignal<Readonly<Record<string, string>>>(
+    {},
+    { name: "referenceLastIn" },
+  );
+  /** The tabs: the bound texts grouped by language, in the order they are bound. */
+  const languageTabs = createMemo(
+    (): readonly { readonly key: string; readonly entries: readonly Entry[] }[] => {
+      const groups = new Map<string, Entry[]>();
+      for (const entry of entries()) {
+        const key = languageOf(entry.resource);
+        const held = groups.get(key);
+        if (held === undefined) groups.set(key, [entry]);
+        else held.push(entry);
+      }
+      return [...groups].map(([key, grouped]) => ({ key, entries: grouped }));
+    },
+    { name: "referenceLanguageTabs" },
+  );
+  /** The text a language's tab opens on: the last one shown in it, else its scripture. */
+  const openingOf = (group: readonly Entry[], key: string): Entry | undefined =>
+    group.find((entry) => entry.resource.id === lastIn()[key]) ??
+    group.find((entry) => isBible(entry.resource)) ??
+    group[0];
+  /** Takes every picked text in a language off the tabs; declared ones stay. */
+  const unpickLanguage = (key: string): void => {
+    for (const entry of entries())
+      if (languageOf(entry.resource) === key && !entry.declared) unpick(entry);
+  };
+
   /** Which text the column shows, by resource id; the first when none was chosen. */
   const [chosen, setChosen] = createSignal<string | undefined>(undefined, {
     name: "referenceShown",
@@ -452,6 +489,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     const project = shell.project();
     if (project === undefined) return;
     setChosen(resource.id);
+    setLastIn((held) => ({ ...held, [languageOf(resource)]: resource.id }));
     // The joined panel: what was just chosen is what goes on show.
     props.heart?.onActivate(false);
     if (entries().some((entry) => entry.resource.id === resource.id)) return;
@@ -668,8 +706,6 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     if (open) offer();
   };
   /** The entry a resource is a tab as, if it is one. */
-  const tabOf = (resource: Resource): Entry | undefined =>
-    entries().find((entry) => entry.resource.id === resource.id);
   // The joined panel: with no gateway tabs left, the heart language is the one
   // on show — not an empty pane behind a tab that no longer exists.
   createEffect(
@@ -951,6 +987,8 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
         readonly add: (from: DOMRect) => void;
         /** Takes it off the tabs again; absent where that cannot be done. */
         readonly remove?: () => void;
+        /** `false` while every text it has on the tabs is one the project declares. */
+        readonly removable?: () => boolean;
       }
     | {
         readonly kind: "download";
@@ -964,8 +1002,8 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
   const [aside, setAside] = createSignal<HTMLElement>();
   const tabIds = (): ReadonlySet<string> =>
     new Set(
-      [...(aside()?.querySelectorAll<HTMLElement>("[data-tab-resource]") ?? [])].map(
-        (tab) => tab.dataset.tabResource ?? "",
+      [...(aside()?.querySelectorAll<HTMLElement>("[data-tab-language]") ?? [])].map(
+        (tab) => tab.dataset.tabLanguage ?? "",
       ),
     );
   /**
@@ -979,8 +1017,8 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     if (globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true) return;
     let tries = 0;
     const look = (): void => {
-      const tab = [...(aside()?.querySelectorAll<HTMLElement>("[data-tab-resource]") ?? [])].find(
-        (each) => which(each.dataset.tabResource ?? ""),
+      const tab = [...(aside()?.querySelectorAll<HTMLElement>("[data-tab-language]") ?? [])].find(
+        (each) => which(each.dataset.tabLanguage ?? ""),
       );
       if (tab !== undefined) flyCard(from, tab, label);
       else if ((tries += 1) < 60) setTimeout(look, 50);
@@ -994,55 +1032,69 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
    * download, A–Z. A download stays in the list once it lands, now with Add.
    */
   const offers = (): readonly Offer[] => {
-    const held: Offer[] = [
-      ...installed().map((resource): Offer => ({
+    // One row per LANGUAGE on this device, whatever texts it holds; it opens
+    // on its scripture. Removing takes all of its texts off the tabs.
+    const languages = new Map<string, Resource[]>();
+    for (const resource of installed()) {
+      const key = languageOf(resource);
+      const held = languages.get(key);
+      if (held === undefined) languages.set(key, [resource]);
+      else held.push(resource);
+    }
+    const labelOf = (key: string, fallback: string): string =>
+      `${languageName(key) ?? fallback} (${key})`;
+    const held: Offer[] = [...languages].map(([key, texts]): Offer => {
+      const name = labelOf(key, texts[0]?.title ?? key);
+      const inTabs = (): readonly Entry[] =>
+        entries().filter((entry) => languageOf(entry.resource) === key);
+      return {
         kind: "held",
-        key: resource.id,
-        name: nameOf(resource),
-        added: () => tabOf(resource) !== undefined,
+        key,
+        name,
+        added: () => inTabs().length > 0,
         add: (from) => {
-          show(resource);
-          flyToTab(from, nameOf(resource), (id) => id === resource.id);
+          const opening = texts.find(isBible) ?? texts[0];
+          if (opening === undefined) return;
+          show(opening);
+          flyToTab(from, name, (id) => id === key);
         },
-        remove: () => {
-          const entry = tabOf(resource);
-          if (entry !== undefined && !entry.declared) unpick(entry);
+        remove: () => unpickLanguage(key),
+        removable: () => !inTabs().every((entry) => entry.declared),
+      };
+    });
+    for (const row of otherProjects()) {
+      const key = (row.languageTag || row.root).toLowerCase();
+      if (languages.has(key)) continue;
+      languages.set(key, []);
+      const name = row.languageTag === "" ? row.name : labelOf(key, row.language || row.name);
+      held.push({
+        kind: "held",
+        key,
+        name,
+        added: () => false,
+        add: (from) => {
+          const before = tabIds();
+          showProject(row);
+          flyToTab(from, name, (id) => !before.has(id));
         },
-      })),
-      ...otherProjects().map((row): Offer => {
-        const name =
-          row.languageTag === "" ? row.name : `${row.language || row.name} (${row.languageTag})`;
-        return {
-          kind: "held",
-          key: row.root,
-          name,
-          added: () => false,
-          add: (from) => {
-            const before = tabIds();
-            showProject(row);
-            flyToTab(from, name, (id) => !before.has(id));
-          },
-        };
-      }),
-    ];
-    const toGet: Offer[] = [
-      ...downloadable().map((entry): Offer => ({
-        kind: "download",
-        key: entry.id,
-        name: `${entry.anglicizedName || entry.naturalName} (${entry.code})`,
-        download: () => fetchText(entry, true),
-        pulling: () => pulling().has(entry.id),
-      })),
-      ...helps().map((help): Offer => ({
-        kind: "download",
-        key: help.repository,
-        name: t("Translation Notes · {language}", {
-          language: `${help.languageName || help.language} (${help.language})`,
-        }),
-        download: () => fetchHelp(help, true),
-        pulling: () => helpDownloads().has(help.repository),
-      })),
-    ];
+      });
+    }
+    // Languages to download: one row each, never one already on this device.
+    const offered = new Set<string>();
+    const toGet: Offer[] = downloadable().flatMap((entry): Offer[] => {
+      const key = entry.code.toLowerCase();
+      if (languages.has(key) || offered.has(key)) return [];
+      offered.add(key);
+      return [
+        {
+          kind: "download",
+          key: entry.id,
+          name: `${entry.anglicizedName || entry.naturalName} (${entry.code})`,
+          download: () => fetchText(entry, true),
+          pulling: () => pulling().has(entry.id),
+        },
+      ];
+    });
     return [...held.sort(byName), ...toGet.sort(byName)];
   };
   const downloaded = (): readonly Offer[] => offers().filter((offer) => offer.kind === "held");
@@ -1055,6 +1107,69 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
    * progress bar and leaves the row, now with Add, when it lands. Taking a
    * text off the tabs is the × on its tab.
    */
+  /**
+   * The panel variant's choice of text WITHIN a language tab: every text on
+   * this device in that language — its scriptures, its Translation Notes… —
+   * and, to download, the notes this language has and the device does not.
+   */
+  const ResourcePicker = (pickerProps: { readonly resource: Resource }) => {
+    const key = (): string => languageOf(pickerProps.resource);
+    const texts = (): readonly Resource[] =>
+      installed().filter((each) => languageOf(each) === key());
+    const notesHere = (): readonly HelpText[] =>
+      helps().filter((help) => help.language.toLowerCase() === key());
+    return (
+      <Menu
+        label={t("Resource")}
+        onOpenChange={(open) => {
+          if (open) offer();
+        }}
+        side="bottom"
+        align="start"
+        class="w-80"
+        fitViewport
+        trigger={
+          <button
+            type="button"
+            data-testid="resource-picker"
+            class="flex min-h-12 w-full max-w-sm cursor-pointer items-center gap-3 rounded-lg px-3 text-start text-small font-semibold text-on-surface-primary transition-colors hover:bg-surface-secondary"
+          >
+            <span class="min-w-0 flex-1 truncate">{pickerProps.resource.title}</span>
+            <ChevronDown aria-hidden="true" class="size-5 shrink-0" />
+          </button>
+        }
+      >
+        <For each={texts()}>
+          {(text) => (
+            <MenuItem class={ROW} onSelect={() => show(text)}>
+              <span class="min-w-0 flex-1 truncate">{text.title}</span>
+              <Show when={text.id === pickerProps.resource.id}>
+                <Check aria-label={t("Showing")} class="size-5 shrink-0 text-brand" />
+              </Show>
+            </MenuItem>
+          )}
+        </For>
+        <For each={notesHere()}>
+          {(help) => (
+            <MenuItem class={ROW} onSelect={() => fetchHelp(help)}>
+              <span class="min-w-0 flex-1 truncate">{t("Translation Notes")}</span>
+              <Show
+                when={helpDownloads().has(help.repository)}
+                fallback={<Download aria-hidden="true" class="size-5 shrink-0" />}
+              >
+                <span
+                  role="status"
+                  aria-label={t("Downloading")}
+                  class="size-5 shrink-0 animate-spin rounded-full border-2 border-on-surface-tertiary border-t-transparent"
+                />
+              </Show>
+            </MenuItem>
+          )}
+        </For>
+      </Menu>
+    );
+  };
+
   /** One row's action: Add, Remove, Download, or the bar while it downloads. */
   const offerAction = (offer: Offer): JSX.Element => {
     if (offer.kind === "download")
@@ -1097,15 +1212,13 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
         }
       >
         <Show
-          when={offer.remove}
+          when={offer.remove !== undefined && offer.removable?.() !== false}
           fallback={<span class="text-small text-on-surface-tertiary">{t("Project source")}</span>}
         >
-          {(remove) => (
-            <Button variant="tertiary" onClick={() => remove()()}>
-              <X aria-hidden="true" />
-              {t("Remove")}
-            </Button>
-          )}
+          <Button variant="tertiary" onClick={() => offer.remove?.()}>
+            <X aria-hidden="true" />
+            {t("Remove")}
+          </Button>
         </Show>
       </Show>
     );
@@ -1233,27 +1346,29 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
             class="flex shrink-0 items-center gap-controls border-b border-surface-border"
           >
             <div class="flex min-w-0 items-end">
-              <For each={entries()}>
-                {(entry) => (
+              <For each={languageTabs()}>
+                {(group) => (
                   <LanguageTab
-                    testId={`language-tab-${entry.resource.language ?? entry.resource.id}`}
-                    name={
-                      isBible(entry.resource)
-                        ? (languageName(entry.resource.language) ?? entry.resource.title)
-                        : entry.resource.title
-                    }
-                    code={entry.resource.language ?? entry.resource.title}
+                    testId={`language-tab-${group.key}`}
+                    name={languageName(group.key) ?? group.entries[0]?.resource.title ?? group.key}
+                    code={group.key}
                     active={
                       props.heart?.active !== true &&
-                      shown()?.entry.resource.id === entry.resource.id
+                      shown() !== undefined &&
+                      languageOf(shown()!.entry.resource) === group.key
                     }
                     onSelect={() => {
-                      setChosen(entry.resource.id);
+                      const opening = openingOf(group.entries, group.key);
+                      if (opening !== undefined) setChosen(opening.resource.id);
                       setManaging(false);
                       props.heart?.onActivate(false);
                     }}
-                    onClose={entry.declared ? undefined : () => unpick(entry)}
-                    resourceId={entry.resource.id}
+                    onClose={
+                      group.entries.every((entry) => entry.declared)
+                        ? undefined
+                        : () => unpickLanguage(group.key)
+                    }
+                    languageKey={group.key}
                   />
                 )}
               </For>
@@ -1349,7 +1464,12 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
           }
         >
           {(held) => (
-            <div class={props.heart?.active === true ? "hidden" : "flex min-h-0 flex-1 flex-col"}>
+            <div
+              class={props.heart?.active === true ? "hidden" : "flex min-h-0 flex-1 flex-col gap-3"}
+            >
+              <Show when={props.variant === "panel"}>
+                <ResourcePicker resource={held.entry.resource} />
+              </Show>
               <ResourcePane
                 resource={held.entry.resource}
                 role={held.entry.role}
