@@ -201,8 +201,8 @@ class NoteSurfaces {
     const note = structureAt(this.#view.state).notes.find((held) => held.from === at);
     if (note === undefined) return;
     const doc = docText(this.#view.state);
-    const set = (cls: string, text: string): void => {
-      const span = row.querySelector<HTMLElement>(`.${cls}`);
+    const set = (className: string, text: string): void => {
+      const span = row.querySelector<HTMLElement>(`.${className}`);
       if (span !== null && span.textContent !== text) span.textContent = text;
     };
     set("usfm-note-ref", noteApparatusText(doc, note, NOTE_PART.ORIGIN));

@@ -57,11 +57,11 @@ interface FrontRow {
   readonly valueFrom: number;
 }
 
-function frontMatterRows(state: EditorState, s: DocStructure): FrontRow[] {
+function frontMatterRows(state: EditorState, structure: DocStructure): FrontRow[] {
   const out: FrontRow[] = [];
   const doc = state.doc;
-  for (let i = 0; i < s.lines.length; i++) {
-    const line = s.lines.at(i);
+  for (let i = 0; i < structure.lines.length; i++) {
+    const line = structure.lines.at(i);
     const marker = line.marker;
     if (marker === null) {
       if (doc.sliceString(line.from, line.to).trim() === "") continue;
@@ -180,9 +180,9 @@ export const focusFrontMatter = StateEffect.define<null>();
 
 function cardDecorations(state: EditorState): DecorationSet {
   if (!isVisual(state)) return Decoration.none;
-  const s = state.field(structureField, false);
-  if (s === undefined) return Decoration.none;
-  const rows = frontMatterRows(state, s);
+  const structure = state.field(structureField, false);
+  if (structure === undefined) return Decoration.none;
+  const rows = frontMatterRows(state, structure);
   if (rows.length === 0) return Decoration.none;
   const from = rows[0].from;
   const to = rows[rows.length - 1].to;

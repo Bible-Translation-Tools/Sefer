@@ -25,8 +25,8 @@ const WORD = /[\p{L}\p{N}'’‐-]/u;
 const isWordChar = (state: EditorState, at: number): boolean =>
   at >= 0 && at < state.doc.length && WORD.test(state.doc.sliceString(at, at + 1));
 
-function wordBoundaryAt(state: EditorState, s: DocStructure, pos: number): number {
-  const line = s.lines.maybe(state.doc.lineAt(pos).number - 1);
+function wordBoundaryAt(state: EditorState, structure: DocStructure, pos: number): number {
+  const line = structure.lines.maybe(state.doc.lineAt(pos).number - 1);
   const wrapper = line?.words.find((w) => pos > w.from && pos < w.to);
   if (wrapper) return wrapper.to;
   if (!isWordChar(state, pos - 1) || !isWordChar(state, pos)) return pos;
@@ -36,11 +36,11 @@ function wordBoundaryAt(state: EditorState, s: DocStructure, pos: number): numbe
   return at;
 }
 
-function nextVerseNumber(s: DocStructure, pos: number): string {
-  const chapter = chapterContaining(s.chapters, pos);
+function nextVerseNumber(structure: DocStructure, pos: number): string {
+  const chapter = chapterContaining(structure.chapters, pos);
   const floor = chapter === null ? 0 : chapter.from;
   let last = 0;
-  for (const v of s.verses) {
+  for (const v of structure.verses) {
     if (v.markerFrom > pos) break;
     if (v.markerFrom < floor || v.num === null) continue;
     const digits = /(\d+)\D*$/.exec(v.num);
@@ -58,10 +58,10 @@ function nextVerseNumber(s: DocStructure, pos: number): string {
  */
 export function insertVerse(structureAt: GetStructure): StateCommand {
   return ({ state, dispatch }) => {
-    const s = structureAt(state);
+    const structure = structureAt(state);
     const sel = state.selection.main;
-    const at = sel.empty ? wordBoundaryAt(state, s, sel.from) : sel.to;
-    const num = nextVerseNumber(s, at);
+    const at = sel.empty ? wordBoundaryAt(state, structure, sel.from) : sel.to;
+    const num = nextVerseNumber(structure, at);
     const pad = at > 0 && !/\s/.test(state.doc.sliceString(at - 1, at)) ? " " : "";
     const insert = `${pad}\\v ${num} `;
     const numFrom = at + pad.length + 3;
@@ -88,9 +88,9 @@ function insertBlock(
   pick: (current: string | null) => string,
 ): StateCommand {
   return ({ state, dispatch }) => {
-    const s = structureAt(state);
+    const structure = structureAt(state);
     const sel = state.selection.main;
-    const block = blockAt(s, sel.from);
+    const block = blockAt(structure, sel.from);
     const marker = pick(block === null ? null : block.kind);
     const nlch = nl(state);
 
@@ -129,7 +129,8 @@ function insertBlock(
 const POETRY_LEVELS = ["q1", "q2"];
 
 const nextPoetryLevel = (current: string | null): string => {
-  const at = current === null ? -1 : POETRY_LEVELS.indexOf(current === "q" ? "q1" : current);
+  const level = current === "q" ? "q1" : current;
+  const at = level === null ? -1 : POETRY_LEVELS.indexOf(level);
   return POETRY_LEVELS[(at + 1) % POETRY_LEVELS.length] ?? "q1";
 };
 

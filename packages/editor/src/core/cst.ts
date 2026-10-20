@@ -40,8 +40,11 @@ const IN_WRAPPER = 4;
 const ROLE_VERSE = 1;
 const ROLE_CHAPTER = 2;
 
-const roleName = (r: number): "verse" | "chapter" | null =>
-  r === ROLE_VERSE ? "verse" : r === ROLE_CHAPTER ? "chapter" : null;
+function roleName(role: number): "verse" | "chapter" | null {
+  if (role === ROLE_VERSE) return "verse";
+  if (role === ROLE_CHAPTER) return "chapter";
+  return null;
+}
 
 export interface NodeFacts {
   id: number;
@@ -189,13 +192,13 @@ export function scanCst(doc: string, analysis: Analysis): CstScan {
   for (let id = 0; id < nodeCount; id++) {
     const r = rows.seek(id);
     const token = r.token;
-    const ctx = r.ctx;
+    const context = r.ctx;
     const close = r.reason;
     const childFrom = r.childFrom;
     const childTo = r.childTo;
     const parent = id === 0 ? NONE : tree.parent(id);
     const inherited = parent === NONE ? 0 : nodeFlags[parent];
-    nodeCtx[id] = ctx;
+    nodeCtx[id] = context;
     nodeFlags[id] = inherited & ~IN_WRAPPER;
     nodeBlockEnd[id] = parent === NONE ? 0 : nodeBlockEnd[parent];
 
@@ -214,7 +217,7 @@ export function scanCst(doc: string, analysis: Analysis): CstScan {
 
     shape.markerKind = marker?.kind ?? 0;
     shape.category = marker?.category ?? 0;
-    shape.ctx = ctx;
+    shape.ctx = context;
     shape.close = close;
     shape.ws = marker?.ws ?? 0;
     shape.unknown = markerIdx === 0;
@@ -359,26 +362,23 @@ export function notePartsOf(
     for (let i = 0, n = node.childCount(); i < n; i++) {
       const child = node.child(i);
       if (child.isNode) {
-        // SAFETY: `isNode` is the reader's discriminator; true means NodeView.
-        walk(child as NodeView, false);
+        walk(child, false);
         continue;
       }
-      // SAFETY: the `isNode` branch above returned, so this child is a token.
-      const t = child as TokenView;
-      const s = t.span();
+      const span = child.span();
       if (isNote && i === 0) continue;
-      if (s.from >= extentEnd) continue;
-      const part = notePartOf(shapeAt(t.id));
+      if (span.from >= extentEnd) continue;
+      const part = notePartOf(shapeAt(child.id));
       if (part === NOTE_PART.ORIGIN || part === NOTE_PART.BODY) {
-        if (run && run.kind === part && run.to === s.from) run.to = s.to;
+        if (run && run.kind === part && run.to === span.from) run.to = span.to;
         else {
           flush();
-          run = { kind: part, from: s.from, to: s.to };
+          run = { kind: part, from: span.from, to: span.to };
         }
         continue;
       }
       flush();
-      if (s.to > s.from) out.push({ kind: part, from: s.from, to: s.to });
+      if (span.to > span.from) out.push({ kind: part, from: span.from, to: span.to });
     }
   };
   walk(note, true);

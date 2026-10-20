@@ -95,7 +95,7 @@ export interface Book {
     trust?: Trust,
   ): Result.Result<Receipt, Refusal>;
   /** Synchronous fan-out in subscription order, after acceptance. */
-  changes(fn: ChangeListener): () => void;
+  changes(listener: ChangeListener): () => void;
   /** CodeMirror history when instantiated; `null` for the plain Book. */
   history(): History | null;
 }
@@ -139,7 +139,7 @@ const applyAll = (source: Source, changes: readonly Change[]): Result.Result<Sou
  * listener's throw hide the edit from the rest.
  */
 export const makeListeners = (): {
-  add: (fn: ChangeListener) => () => void;
+  add: (listener: ChangeListener) => () => void;
   publish: (receipt: Receipt, changes: readonly Change[]) => void;
 } => {
   const set = new Set<ChangeListener>();

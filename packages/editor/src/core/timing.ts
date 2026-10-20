@@ -32,10 +32,10 @@ export function closeGesture(): Gesture | null {
 }
 
 export function span(name: string, note: string | (() => string) = ""): () => number {
-  const t0 = performance.now();
+  const startedAt = performance.now();
   if (bucket === null)
     return () => {
-      const ms = +(performance.now() - t0).toFixed(3);
+      const ms = +(performance.now() - startedAt).toFixed(3);
       derived?.(name, typeof note === "function" ? note() : note, ms);
       return ms;
     };
@@ -43,7 +43,7 @@ export function span(name: string, note: string | (() => string) = ""): () => nu
   performance.mark(`${mark}-start`);
   const frame = stack ? stack.push(0) - 1 : -1;
   return () => {
-    const ms = +(performance.now() - t0).toFixed(3);
+    const ms = +(performance.now() - startedAt).toFixed(3);
     performance.mark(`${mark}-end`);
     try {
       performance.measure(name, `${mark}-start`, `${mark}-end`);

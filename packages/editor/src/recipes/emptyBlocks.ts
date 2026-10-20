@@ -89,15 +89,15 @@ export function blockIsEmpty(state: EditorState, from: number, to: number): bool
 
 function ghosts(state: EditorState): DecorationSet {
   if (!isVisual(state) || !annotatingEmptyBlocks(state)) return Decoration.none;
-  const s = structureAt(state);
-  const win = renderRangeAt(state) ?? { from: 0, to: state.doc.length };
+  const structure = structureAt(state);
+  const windowRange = renderRangeAt(state) ?? { from: 0, to: state.doc.length };
   const name = state.facet(blockNamer);
   const out = [];
-  for (let i = 0; i < s.blocks.length; i++) {
-    if (s.blocks.toAt(i) < win.from) continue;
-    if (s.blocks.fromAt(i) > win.to) break;
-    if (!NAMEABLE.has(s.blocks.clsAt(i))) continue;
-    const b = s.blocks.at(i);
+  for (let i = 0; i < structure.blocks.length; i++) {
+    if (structure.blocks.toAt(i) < windowRange.from) continue;
+    if (structure.blocks.fromAt(i) > windowRange.to) break;
+    if (!NAMEABLE.has(structure.blocks.clsAt(i))) continue;
+    const b = structure.blocks.at(i);
     if (!blockIsEmpty(state, b.contentFrom, b.to)) continue;
     out.push(
       Decoration.widget({ widget: new GhostWidget(name(b.kind)), side: 1 }).range(b.contentFrom),
@@ -111,11 +111,11 @@ function ghosts(state: EditorState): DecorationSet {
  * are drawn from, for a caller that wants to COUNT them or go to one.
  */
 export function emptyBlocks(state: EditorState): readonly { from: number; marker: string }[] {
-  const s = structureAt(state);
+  const structure = structureAt(state);
   const out: { from: number; marker: string }[] = [];
-  for (let i = 0; i < s.blocks.length; i++) {
-    if (!NAMEABLE.has(s.blocks.clsAt(i))) continue;
-    const b = s.blocks.at(i);
+  for (let i = 0; i < structure.blocks.length; i++) {
+    if (!NAMEABLE.has(structure.blocks.clsAt(i))) continue;
+    const b = structure.blocks.at(i);
     if (blockIsEmpty(state, b.contentFrom, b.to)) out.push({ from: b.contentFrom, marker: b.kind });
   }
   return out;

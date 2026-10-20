@@ -69,7 +69,7 @@ export const CLASS_KEYS: readonly ClassKey[] = [
   "sidebar",
 ];
 
-const cellKey = (c: Cell) => `${c.paint}×${c.mutability}`;
+const cellKey = (cell: Cell) => `${cell.paint}×${cell.mutability}`;
 
 const STRUCK: Record<string, string> = {
   "none×direct":
@@ -80,7 +80,7 @@ const STRUCK: Record<string, string> = {
   "ambient×trusted-only": "unused",
 };
 
-const isLawful = (c: Cell) => !(cellKey(c) in STRUCK);
+const isLawful = (cell: Cell) => !(cellKey(cell) in STRUCK);
 
 export type WidgetKey = "versePip" | "join" | "joinSigil";
 
@@ -225,9 +225,9 @@ export type OwnedSetName = keyof typeof OWNED_SETS;
 // SAFETY: `OwnedSetName` is `keyof typeof OWNED_SETS`, so the object's own keys are exactly that type; `Object.keys` only widens it to string.
 const OWNED_SET_NAMES = Object.keys(OWNED_SETS) as OwnedSetName[];
 
-export function setsPaintedBy(cls: ClassKey): OwnedSetName[] {
+export function setsPaintedBy(classKey: ClassKey): OwnedSetName[] {
   // SAFETY: every value of OWNED_SETS is an OwnedSet; the assertion only recovers the shared shape the literal's inferred type split per key.
-  return OWNED_SET_NAMES.filter((k) => (OWNED_SETS[k] as OwnedSet).painting.includes(cls));
+  return OWNED_SET_NAMES.filter((k) => (OWNED_SETS[k] as OwnedSet).painting.includes(classKey));
 }
 
 export type AssignmentDelta = Partial<Record<ClassKey, Partial<Cell>>>;
@@ -348,17 +348,17 @@ export function assignmentAt(state: EditorState): Assignment {
   return a;
 }
 
-export const rowAt = (state: EditorState, cls: ClassKey): RegistryRow =>
-  assignmentAt(state).rows[cls];
+export const rowAt = (state: EditorState, classKey: ClassKey): RegistryRow =>
+  assignmentAt(state).rows[classKey];
 
 export const keyboardMutable = (row: RegistryRow) =>
   row.cell.mutability === "direct" || row.typable === true;
 
-export const pipActive = (state: EditorState, cls: ClassKey) =>
-  assignmentAt(state).clamped.some((c) => c.cls === cls && c.to === "pip");
+export const pipActive = (state: EditorState, classKey: ClassKey) =>
+  assignmentAt(state).clamped.some((c) => c.cls === classKey && c.to === "pip");
 
 export const ownershipOf = (row: RegistryRow): OwnershipBit | undefined =>
   row.ownership === "DISSOLVE" && row.cell.mutability === "immortal" ? undefined : row.ownership;
 
-export const paintsItsOwnLineAmbient = (cls: ClassKey): boolean =>
-  cls === "block.heading" || cls === "block.front" || cls === "block.meta";
+export const paintsItsOwnLineAmbient = (classKey: ClassKey): boolean =>
+  classKey === "block.heading" || classKey === "block.front" || classKey === "block.meta";

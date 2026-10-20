@@ -13,9 +13,9 @@ import {
 import { keyboardMutable, rowAt } from "./registry";
 import { note } from "./trace";
 
-const endsALine = (s: DocStructure, pos: number): boolean => {
-  const i = lineIndexAt(s, pos);
-  return i >= 0 && s.lines.toAt(i) === pos;
+const endsALine = (structure: DocStructure, pos: number): boolean => {
+  const i = lineIndexAt(structure, pos);
+  return i >= 0 && structure.lines.toAt(i) === pos;
 };
 
 const mergedPairs = (out: readonly number[]): number[] => {
@@ -57,7 +57,7 @@ export function refuseKeystrokesInsideHiddenMarkup(
       hi === lo
     )
       return true;
-    const s = structureAt(state);
+    const structure = structureAt(state);
     const doc = state.doc;
     const out: number[] = [];
     const push = (from: number, to: number) => {
@@ -86,8 +86,8 @@ export function refuseKeystrokesInsideHiddenMarkup(
     const inMarkup = (p: number) =>
       hits.some((h) => h.target.hiddenSpans.some((sp) => sp.from <= p && sp.to > p));
     const ordinary = (p: number) => !isHidden(p) && !inMarkup(p);
-    const softLeft = (p: number) => p > 0 && ordinary(p - 1) && !endsALine(s, p - 1);
-    const softRight = (p: number) => p < doc.length && ordinary(p) && !endsALine(s, p);
+    const softLeft = (p: number) => p > 0 && ordinary(p - 1) && !endsALine(structure, p - 1);
+    const softRight = (p: number) => p < doc.length && ordinary(p) && !endsALine(structure, p);
     let breakFirst = true;
     let breakLast = true;
     tr.changes.iterChanges((_fA, _tA, _fB, _tB, ins) => {

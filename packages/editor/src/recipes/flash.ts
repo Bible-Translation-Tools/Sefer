@@ -1,6 +1,8 @@
 import { StateEffect, StateField, type Extension } from "@codemirror/state";
 import { Decoration, EditorView, type DecorationSet } from "@codemirror/view";
 
+import { rangeDecorations } from "./rangeDecorations";
+
 export interface FlashRange {
   readonly from: number;
   readonly to: number;
@@ -12,15 +14,9 @@ const SPAN = Decoration.mark({ class: "usfm-flash" });
 const LINE = Decoration.line({ class: "usfm-focus" });
 
 const decorationsFor = (
-  doc: { length: number; lineAt: (at: number) => { from: number } },
+  doc: Parameters<typeof rangeDecorations>[0],
   range: FlashRange,
-): DecorationSet => {
-  const from = Math.max(0, Math.min(range.from, doc.length));
-  const to = Math.max(from, Math.min(range.to, doc.length));
-  return to > from
-    ? Decoration.set([SPAN.range(from, to)], true)
-    : Decoration.set([LINE.range(doc.lineAt(from).from)], true);
-};
+): DecorationSet => rangeDecorations(doc, range, SPAN, LINE);
 
 const flashField = StateField.define<DecorationSet>({
   create: () => Decoration.none,

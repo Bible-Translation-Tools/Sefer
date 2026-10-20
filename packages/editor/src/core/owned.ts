@@ -102,13 +102,13 @@ const SET_OF_CLASS: ReadonlyMap<ClassKey, OwnedSetName> = new Map(
 const byWholeSpan = (x: ResolvedOwnedTarget, y: ResolvedOwnedTarget): number =>
   x.wholeSpan.from - y.wholeSpan.from || x.wholeSpan.to - y.wholeSpan.to;
 
-export function buildOwnedIndex(s: DocStructure, plan: DocPlan, a: Assignment): OwnedIndex {
+export function buildOwnedIndex(structure: DocStructure, plan: DocPlan, a: Assignment): OwnedIndex {
   const rows = a.rows;
-  const paint: PaintIndex = paintOver(s, plan);
+  const paint: PaintIndex = paintOver(structure, plan);
   const docLen = plan.docLen;
-  const lines = s.lines;
-  const blocks = s.blocks;
-  const verses = s.verses;
+  const lines = structure.lines;
+  const blocks = structure.blocks;
+  const verses = structure.verses;
   let nextId = 0;
 
   interface Extra {
@@ -123,21 +123,21 @@ export function buildOwnedIndex(s: DocStructure, plan: DocPlan, a: Assignment): 
 
   const make = (
     out: ResolvedOwnedTarget[],
-    cls: ClassKey,
+    classKey: ClassKey,
     anchor: PlanSpan,
     wholeSpan: PlanSpan,
     paintedSpans: readonly PlanSpan[],
     hiddenSpans: readonly PlanSpan[],
     extra: Extra = {},
   ): void => {
-    const set = SET_OF_CLASS.get(cls);
+    const set = SET_OF_CLASS.get(classKey);
     if (!set) return;
-    const row = rows[cls];
+    const row = rows[classKey];
     const facts: TargetFacts = {
       // SAFETY: `OwnedSetId` is a branded number; this counter is the only thing that mints one, which is what the brand exists to say.
       id: nextId++ as OwnedSetId,
       set,
-      cls,
+      cls: classKey,
       anchor,
       wholeSpan,
       paintedSpans: paintedSpans.length ? paintedSpans : NONE,
@@ -147,7 +147,7 @@ export function buildOwnedIndex(s: DocStructure, plan: DocPlan, a: Assignment): 
       mutability: row.cell.mutability,
       stop: row.cell.stop === true,
       policy: ownershipOf(row) ?? null,
-      paintsOwnLine: paintsItsOwnLineAmbient(cls),
+      paintsOwnLine: paintsItsOwnLineAmbient(classKey),
       empty: extra.empty === true,
       mergeTargetPolicy: extra.mergeTargetPolicy ?? null,
       typable: extra.typable ?? null,
@@ -160,25 +160,25 @@ export function buildOwnedIndex(s: DocStructure, plan: DocPlan, a: Assignment): 
     else out.push({ ...facts, form: "ambient" });
   };
 
-  const slotTarget = (out: ResolvedOwnedTarget[], cls: ClassKey, r: ResolvedSlot): void => {
+  const slotTarget = (out: ResolvedOwnedTarget[], classKey: ClassKey, r: ResolvedSlot): void => {
     const whole = { from: r.from, to: r.to };
     if (r.form === "elided") {
-      make(out, cls, whole, whole, NONE, [whole]);
+      make(out, classKey, whole, whole, NONE, [whole]);
       return;
     }
     if (r.form === "pip") {
-      make(out, cls, whole, whole, [whole], NONE);
+      make(out, classKey, whole, whole, [whole], NONE);
       return;
     }
     if (r.form === "box") {
       const at = r.box ?? r.to;
-      make(out, cls, { from: at, to: at }, whole, NONE, r.hidden, { box: at });
+      make(out, classKey, { from: at, to: at }, whole, NONE, r.hidden, { box: at });
       return;
     }
     const digits = r.digits ?? whole;
     const hidden = r.delimiter ? [...r.hidden, r.delimiter] : r.hidden;
-    make(out, cls, digits, whole, [digits], hidden, {
-      typable: rows[cls].typable === true && r.digits ? r.digits : null,
+    make(out, classKey, digits, whole, [digits], hidden, {
+      typable: rows[classKey].typable === true && r.digits ? r.digits : null,
       delimiter: r.delimiter,
     });
   };
@@ -220,8 +220,8 @@ export function buildOwnedIndex(s: DocStructure, plan: DocPlan, a: Assignment): 
     const from = blocks.fromAt(j);
     const contentFrom = blocks.contentFromAt(j);
     if (contentFrom <= from) return;
-    const rb = plan.block(j);
-    const cls = blocks.clsAt(j);
+    const resolvedBlock = plan.block(j);
+    const classKey = blocks.clsAt(j);
     const chrome = { from, to: contentFrom };
     const scope = { from, to: blocks.toAt(j) };
     const headTo = lines.toAt(head);
@@ -232,33 +232,31 @@ export function buildOwnedIndex(s: DocStructure, plan: DocPlan, a: Assignment): 
       j > 0 && blocks.fromAt(j - 1) <= behindBreak && blocks.toAt(j - 1) >= behindBreak
         ? blocks.clsAt(j - 1)
         : null;
-    const above = rb.startsLine
-      ? head >= 1
-        ? (holder ?? lines.maybe(head - 1)?.cls ?? null)
-        : null
-      : (holder ?? lines.maybe(head)?.cls ?? null);
+    let above: ClassKey | null;
+    if (!resolvedBlock.startsLine) above = holder ?? lines.maybe(head)?.cls ?? null;
+    else if (head >= 1) above = holder ?? lines.maybe(head - 1)?.cls ?? null;
+    else above = null;
     const mergeTargetPolicy = above ? (ownershipOf(rows[above]) ?? null) : null;
-    const takesItsBreak = rb.startsLine && from > 0;
-    const whole = takesItsBreak
-      ? { from: from - 1, to: contentFrom }
-      : soleLine
-        ? { from, to: Math.min(scope.to + 1, docLen) }
-        : { from, to: contentFrom };
-    const drawn = rb.breakAt === null ? {} : { box: rb.breakAt };
-    if (!rb.paints) {
-      make(out, cls, chrome, whole, NONE, [whole], { empty, scope, mergeTargetPolicy });
+    const takesItsBreak = resolvedBlock.startsLine && from > 0;
+    let whole: { from: number; to: number };
+    if (takesItsBreak) whole = { from: from - 1, to: contentFrom };
+    else if (soleLine) whole = { from, to: Math.min(scope.to + 1, docLen) };
+    else whole = { from, to: contentFrom };
+    const drawn = resolvedBlock.breakAt === null ? {} : { box: resolvedBlock.breakAt };
+    if (!resolvedBlock.paints) {
+      make(out, classKey, chrome, whole, NONE, [whole], { empty, scope, mergeTargetPolicy });
       return;
     }
     if (empty) {
       const edges: PlanSpan[] = [];
       if (takesItsBreak) edges.push({ from: from - 1, to: from });
       const below = Math.min(headTo + 1, docLen);
-      const swallowed = rb.reflow.some(
+      const swallowed = resolvedBlock.reflow.some(
         (r) => r.kind === "hide" && r.from <= contentFrom && r.to >= below,
       );
       if ((takesItsBreak || soleLine) && below > contentFrom && !swallowed)
         edges.push({ from: contentFrom, to: below });
-      make(out, cls, chrome, whole, edges, [chrome], {
+      make(out, classKey, chrome, whole, edges, [chrome], {
         empty,
         scope,
         mergeTargetPolicy,
@@ -267,13 +265,13 @@ export function buildOwnedIndex(s: DocStructure, plan: DocPlan, a: Assignment): 
       return;
     }
     if (takesItsBreak) {
-      make(out, cls, chrome, whole, [{ from: from - 1, to: from }], [chrome], {
+      make(out, classKey, chrome, whole, [{ from: from - 1, to: from }], [chrome], {
         scope,
         mergeTargetPolicy,
       });
       return;
     }
-    make(out, cls, chrome, whole, NONE, [chrome], { scope, mergeTargetPolicy, ...drawn });
+    make(out, classKey, chrome, whole, NONE, [chrome], { scope, mergeTargetPolicy, ...drawn });
   };
 
   const firstVerseFrom = (pos: number): number => {
@@ -300,27 +298,27 @@ export function buildOwnedIndex(s: DocStructure, plan: DocPlan, a: Assignment): 
 
   const resolveRow = (i: number): readonly ResolvedOwnedTarget[] => {
     const l = lines.at(i);
-    const rl = plan.line(i + 1);
+    const resolvedLine = plan.line(i + 1);
     const out: ResolvedOwnedTarget[] = [];
     for (let k = firstVerseFrom(l.from); k < verses.length && verses[k].markerFrom <= l.to; k++)
       slotTarget(out, "slot.v", plan.verse(k));
-    if (rl.slot) slotTarget(out, "slot.c", rl.slot);
-    const c = rl.standalone;
+    if (resolvedLine.slot) slotTarget(out, "slot.c", resolvedLine.slot);
+    const c = resolvedLine.standalone;
     const held = c !== null && (paint.joinOver(c.from)?.from ?? c.from) < c.from;
     if (c && !held) {
       const head = { from: c.from, to: c.to };
       if (c.form === "point") make(out, "standalone", head, head, [head], NONE);
       else make(out, "standalone", head, head, NONE, [head]);
     }
-    for (const m of rl.marks) {
+    for (const m of resolvedLine.marks) {
       const span = { from: m.from, to: m.to };
-      const cls: ClassKey = m.kind;
-      if (m.form === "point") make(out, cls, span, span, [span], NONE);
-      else make(out, cls, span, span, NONE, [span]);
+      const classKey: ClassKey = m.kind;
+      if (m.form === "point") make(out, classKey, span, span, [span], NONE);
+      else make(out, classKey, span, span, NONE, [span]);
     }
     for (const n of l.notes) {
-      const r = plan.noteAt.get(n.from);
-      if (r) noteTarget(out, r);
+      const resolved = plan.noteAt.get(n.from);
+      if (resolved) noteTarget(out, resolved);
     }
     for (const w of l.words) {
       const r = plan.wordAt.get(w.from);
@@ -366,12 +364,12 @@ export function buildOwnedIndex(s: DocStructure, plan: DocPlan, a: Assignment): 
         else hi = mid;
       }
       for (let k = lo - 1; k >= 0 && list[k].from + widest >= from; k--)
-        if (list[k].to > from) out.add(lineIndexAt(s, list[k].from));
+        if (list[k].to > from) out.add(lineIndexAt(structure, list[k].from));
     };
   };
 
-  const straddlingNotes = straddleOver(s.notes);
-  const straddlingWords = straddleOver(s.words);
+  const straddlingNotes = straddleOver(structure.notes);
+  const straddlingWords = straddleOver(structure.words);
 
   const nearMemo: (readonly ResolvedOwnedTarget[] | undefined)[] = Array.from(
     { length: lines.length },
@@ -401,7 +399,7 @@ export function buildOwnedIndex(s: DocStructure, plan: DocPlan, a: Assignment): 
   };
 
   const localAt = (pos: number): readonly ResolvedOwnedTarget[] => {
-    const i = lineIndexAt(s, pos);
+    const i = lineIndexAt(structure, pos);
     return i < 0 ? NO_TARGETS : nearAt(i);
   };
 
@@ -431,13 +429,13 @@ export function buildOwnedIndex(s: DocStructure, plan: DocPlan, a: Assignment): 
     let width = Infinity;
     let edge = -1;
     for (const t of localAt(byte)) {
-      const sp = t.wholeSpan;
-      if (sp.from > byte || sp.to <= byte) continue;
-      const w = sp.to - sp.from;
-      if (w > width || (w === width && sp.from < edge)) continue;
+      const span = t.wholeSpan;
+      if (span.from > byte || span.to <= byte) continue;
+      const w = span.to - span.from;
+      if (w > width || (w === width && span.from < edge)) continue;
       best = t;
       width = w;
-      edge = sp.from;
+      edge = span.from;
     }
     return best;
   };
@@ -460,12 +458,12 @@ export function buildOwnedIndex(s: DocStructure, plan: DocPlan, a: Assignment): 
   const paints = (byte: number): boolean => !paint.hidden(byte, byte + 1) && !hides(byte);
 
   const endsALine = (byte: number): boolean => {
-    const i = lineIndexAt(s, byte);
+    const i = lineIndexAt(structure, byte);
     return i >= 0 && lines.toAt(i) === byte;
   };
 
   const startsALine = (pos: number): boolean => {
-    const i = lineIndexAt(s, pos);
+    const i = lineIndexAt(structure, pos);
     return i >= 0 && lines.fromAt(i) === pos;
   };
 
@@ -498,13 +496,13 @@ export function buildOwnedIndex(s: DocStructure, plan: DocPlan, a: Assignment): 
         break;
       }
       if (paints(p - 1)) {
-        const brk = endsALine(p - 1);
+        const lineBreak = endsALine(p - 1);
         behind =
           ofPainted(p - 1) ??
-          (brk && !paint.joined(p - 1) && startsALine(p)
+          (lineBreak && !paint.joined(p - 1) && startsALine(p)
             ? (ofWhole(p - 1) ?? ofHead(p, pos))
             : null);
-        kind = brk ? "break" : "glyph";
+        kind = lineBreak ? "break" : "glyph";
         at = p;
         break;
       }
@@ -532,13 +530,13 @@ export function buildOwnedIndex(s: DocStructure, plan: DocPlan, a: Assignment): 
         break;
       }
       if (paints(p)) {
-        const brk = endsALine(p);
+        const lineBreak = endsALine(p);
         ahead =
           ofPainted(p) ??
-          (brk && !paint.joined(p) && startsALine(p + 1)
+          (lineBreak && !paint.joined(p) && startsALine(p + 1)
             ? (ofWhole(p) ?? ofHeadAhead(p + 1))
             : null);
-        kind = brk ? "break" : "glyph";
+        kind = lineBreak ? "break" : "glyph";
         at = p;
         break;
       }
@@ -568,8 +566,8 @@ export function buildOwnedIndex(s: DocStructure, plan: DocPlan, a: Assignment): 
       const found = new Map<OwnedSetId, ResolvedOwnedTarget>();
       for (let round = 0; round < 8; round++) {
         const before = found.size;
-        const a = lineIndexAt(s, lo);
-        const b = lineIndexAt(s, hi - 1);
+        const a = lineIndexAt(structure, lo);
+        const b = lineIndexAt(structure, hi - 1);
         if (a >= 0)
           for (let i = Math.max(0, a); i <= Math.min(lines.length - 1, Math.max(a, b)); i++)
             for (const t of nearAt(i))

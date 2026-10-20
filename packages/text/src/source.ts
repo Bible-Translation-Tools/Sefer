@@ -78,13 +78,13 @@ const hasByteOrderMark = (bytes: Uint8Array): boolean =>
  */
 export const dominantEol = (text: string): SourceForm["eol"] => {
   let crlf = 0;
-  let lf = 0;
+  let lineFeeds = 0;
   for (let index = 0; index < text.length; index += 1) {
     if (text.charCodeAt(index) !== 0x0a) continue;
     if (text.charCodeAt(index - 1) === 0x0d) crlf += 1;
-    else lf += 1;
+    else lineFeeds += 1;
   }
-  return crlf > lf ? "crlf" : "lf";
+  return crlf > lineFeeds ? "crlf" : "lf";
 };
 
 /**

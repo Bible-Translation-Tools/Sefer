@@ -79,17 +79,19 @@ const ms = (value: number): string => value.toFixed(1);
 
 const FLOOR = 0.05;
 
-const noteOf = (m: Omit<Measured, "note">): string => {
-  const parts = [`gesture=${ms(m.gesture)}ms`];
-  if (m.render !== null)
-    parts.push(`${m.renderSource === "event" ? "input" : "render"}=${ms(m.render)}ms`);
-  parts.push(`analyzes=${m.analyzes}`);
-  if (m.browser >= FLOOR) parts.push(`browser=${ms(m.browser)}`);
-  const spans = [...m.totals]
+const noteOf = (measured: Omit<Measured, "note">): string => {
+  const parts = [`gesture=${ms(measured.gesture)}ms`];
+  if (measured.render !== null)
+    parts.push(
+      `${measured.renderSource === "event" ? "input" : "render"}=${ms(measured.render)}ms`,
+    );
+  parts.push(`analyzes=${measured.analyzes}`);
+  if (measured.browser >= FLOOR) parts.push(`browser=${ms(measured.browser)}`);
+  const spans = [...measured.totals]
     .filter(([, total]) => total.ms >= FLOOR)
     .sort((a, b) => b[1].ms - a[1].ms);
   for (const [name, total] of spans) parts.push(`${name}=${ms(total.ms)}`);
-  if (m.other >= FLOOR) parts.push(`other=${ms(m.other)}`);
+  if (measured.other >= FLOOR) parts.push(`other=${ms(measured.other)}`);
   return parts.join(" ");
 };
 
@@ -179,7 +181,7 @@ const afterPaint = (
   });
 };
 
-export function keystrokeMeter(sink: (m: Measured) => void): Meter {
+export function keystrokeMeter(sink: (measured: Measured) => void): Meter {
   let live = false;
   let analyzed = 0;
   let began = 0;
@@ -226,11 +228,11 @@ export function keystrokeMeter(sink: (m: Measured) => void): Meter {
     setTimeout(settle, 0);
   };
 
-  const shut = (u: { docChanged: boolean; transactions: readonly unknown[] }) => {
+  const shut = (update: { docChanged: boolean; transactions: readonly unknown[] }) => {
     if (!live) return;
-    if (u.transactions.length === 0) return;
+    if (update.transactions.length === 0) return;
     updates++;
-    docChanged ||= u.docChanged;
+    docChanged ||= update.docChanged;
     last = performance.now();
   };
 

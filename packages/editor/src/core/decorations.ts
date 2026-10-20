@@ -25,14 +25,14 @@ class JoinWidget extends WidgetType {
     super();
     this.glyph = glyph;
   }
-  eq(o: JoinWidget) {
-    return o.glyph === this.glyph;
+  eq(other: JoinWidget) {
+    return other.glyph === this.glyph;
   }
   toDOM() {
-    const s = document.createElement("span");
-    s.className = "usfm-join";
-    s.textContent = this.glyph;
-    return s;
+    const span = document.createElement("span");
+    span.className = "usfm-join";
+    span.textContent = this.glyph;
+    return span;
   }
   ignoreEvent() {
     return false;
@@ -45,13 +45,13 @@ class EmptySlotWidget extends WidgetType {
     super();
     this.kind = kind;
   }
-  eq(o: EmptySlotWidget) {
-    return o.kind === this.kind;
+  eq(other: EmptySlotWidget) {
+    return other.kind === this.kind;
   }
   toDOM() {
-    const s = document.createElement("span");
-    s.className = `usfm-slot usfm-slot-${this.kind}`;
-    return s;
+    const span = document.createElement("span");
+    span.className = `usfm-slot usfm-slot-${this.kind}`;
+    return span;
   }
   ignoreEvent() {
     return false;
@@ -76,15 +76,15 @@ class PipWidget extends WidgetType {
     super();
     this.name = name;
   }
-  eq(o: PipWidget) {
-    return o.name === this.name;
+  eq(other: PipWidget) {
+    return other.name === this.name;
   }
   toDOM() {
-    const s = document.createElement("span");
-    s.className = "usfm-pip";
-    s.title = `\\${this.name}`;
-    s.textContent = this.name.endsWith("-s") ? "⟦" : "⟧";
-    return s;
+    const span = document.createElement("span");
+    span.className = "usfm-pip";
+    span.title = `\\${this.name}`;
+    span.textContent = this.name.endsWith("-s") ? "⟦" : "⟧";
+    return span;
   }
   ignoreEvent() {
     return false;
@@ -97,15 +97,15 @@ class VersePipWidget extends WidgetType {
     super();
     this.num = num;
   }
-  eq(o: VersePipWidget) {
-    return o.num === this.num;
+  eq(other: VersePipWidget) {
+    return other.num === this.num;
   }
   toDOM() {
-    const s = document.createElement("span");
-    s.className = "usfm-verse-pip";
-    s.title = `verse ${this.num}`;
-    s.textContent = this.num;
-    return s;
+    const span = document.createElement("span");
+    span.className = "usfm-verse-pip";
+    span.title = `verse ${this.num}`;
+    span.textContent = this.num;
+    return span;
   }
   ignoreEvent() {
     return false;
@@ -128,19 +128,19 @@ class CallerWidget extends WidgetType {
     this.kind = kind;
     this.at = at;
   }
-  eq(o: CallerWidget) {
-    return o.mark === this.mark && o.kind === this.kind && o.at === this.at;
+  eq(other: CallerWidget) {
+    return other.mark === this.mark && other.kind === this.kind && other.at === this.at;
   }
   toDOM(view: EditorView) {
-    const s = document.createElement("span");
-    s.className = `usfm-caller usfm-caller-${this.kind}`;
-    s.textContent = this.mark;
-    s.title = "click to read this note at the foot of the chapter";
-    s.onmousedown = (e) => {
+    const span = document.createElement("span");
+    span.className = `usfm-caller usfm-caller-${this.kind}`;
+    span.textContent = this.mark;
+    span.title = "click to read this note at the foot of the chapter";
+    span.onmousedown = (e) => {
       e.preventDefault();
       toggleNote(view, this.at, "caller");
     };
-    return s;
+    return span;
   }
   ignoreEvent() {
     return false;
@@ -180,10 +180,10 @@ class NotesWidget extends WidgetType {
     super();
     this.notes = notes;
   }
-  eq(o: NotesWidget) {
+  eq(other: NotesWidget) {
     return (
-      o.notes.length === this.notes.length &&
-      o.notes.every((n, i) => n.mark === this.notes[i].mark && n.body === this.notes[i].body)
+      other.notes.length === this.notes.length &&
+      other.notes.every((n, i) => n.mark === this.notes[i].mark && n.body === this.notes[i].body)
     );
   }
   toDOM(view: EditorView) {
@@ -228,8 +228,8 @@ class NotesWidget extends WidgetType {
       const row = rows[i];
       if (row.dataset.noteRow !== String(n.from)) return;
       const open = row.querySelector(".usfm-note-edit")?.firstChild != null;
-      const set = (cls: string, text: string) => {
-        const el = row.querySelector<HTMLElement>(`.${cls}`);
+      const set = (className: string, text: string) => {
+        const el = row.querySelector<HTMLElement>(`.${className}`);
         if (el && el.textContent !== text && !open) el.textContent = text;
       };
       set("usfm-note-mark", n.mark);
@@ -255,8 +255,8 @@ class NotesWidget extends WidgetType {
 export type NoteGesture = "caller" | "back" | "edit";
 
 let toggleNote: (view: EditorView, at: number, how: NoteGesture) => void = () => {};
-export function setNoteToggler(fn: typeof toggleNote) {
-  toggleNote = fn;
+export function setNoteToggler(toggle: typeof toggleNote) {
+  toggleNote = toggle;
 }
 
 export const DEFAULT_BUILD_OPTS: BuildOpts = {};
@@ -277,43 +277,46 @@ export interface BuildOpts {
 }
 
 function narrow(
-  win: { from: number; to: number } | null | undefined,
+  windowRange: { from: number; to: number } | null | undefined,
   range: { from: number; to: number } | null | undefined,
 ): { from: number; to: number } | null {
-  if (!win) return range ?? null;
-  if (!range) return win;
-  return { from: Math.max(win.from, range.from), to: Math.min(win.to, range.to) };
+  if (!windowRange) return range ?? null;
+  if (!range) return windowRange;
+  return { from: Math.max(windowRange.from, range.from), to: Math.min(windowRange.to, range.to) };
 }
 
 function windowLines(
-  s: DocStructure,
-  win: { from: number; to: number } | null,
+  structure: DocStructure,
+  windowRange: { from: number; to: number } | null,
 ): { readonly first: number; readonly last: number } {
-  if (win === null) return { first: 0, last: s.lines.length - 1 };
-  return { first: Math.max(0, lineIndexAt(s, win.from)), last: lineIndexAt(s, win.to) };
+  if (windowRange === null) return { first: 0, last: structure.lines.length - 1 };
+  return {
+    first: Math.max(0, lineIndexAt(structure, windowRange.from)),
+    last: lineIndexAt(structure, windowRange.to),
+  };
 }
 
 type TokenRows = NonNullable<DocStructure["analysis"]>["dish"]["tokens"]["rows"];
 
 function forTokensIn(
   rows: TokenRows,
-  win: { from: number; to: number } | null,
+  windowRange: { from: number; to: number } | null,
   visit: (kindBits: number, markerIdx: number, from: number, to: number) => void,
 ): void {
   let first = 0;
-  if (win !== null) {
+  if (windowRange !== null) {
     let low = 0;
     let high = rows.length;
     while (low < high) {
       const mid = (low + high) >> 1;
-      if (rows.seek(mid).start <= win.from) low = mid + 1;
+      if (rows.seek(mid).start <= windowRange.from) low = mid + 1;
       else high = mid;
     }
     first = Math.max(0, low - 1);
   }
   for (let i = first, n = rows.length; i < n; i++) {
     const token = rows.seek(i);
-    if (win !== null && token.start > win.to) break;
+    if (windowRange !== null && token.start > windowRange.to) break;
     visit(token.kind, token.marker, token.start, token.end);
   }
 }
@@ -325,12 +328,12 @@ export interface BuildResult {
 
 class BreakWidget extends WidgetType {
   readonly cls: string;
-  constructor(cls: string) {
+  constructor(className: string) {
     super();
-    this.cls = cls;
+    this.cls = className;
   }
-  eq(o: BreakWidget) {
-    return o.cls === this.cls;
+  eq(other: BreakWidget) {
+    return other.cls === this.cls;
   }
   toDOM() {
     const el = document.createElement("span");
@@ -348,14 +351,24 @@ type Pending = { from: number; to: number; deco: Decoration };
 const UNIT = { usfmUnit: true } as Record<string, unknown>;
 const HIDDEN = Decoration.replace(UNIT);
 
-export function isUnit(d: Decoration) {
-  // SAFETY: `spec` is `any` in CodeMirror's types; this reads one optional flag and compares it to `true`, so a spec without it answers false.
-  return (d.spec as { usfmUnit?: boolean }).usfmUnit === true;
+type DecorationSpec = {
+  usfmUnit?: boolean;
+  usfmIsolate?: boolean;
+  widget?: unknown;
+  block?: boolean;
+  class?: string;
+  attributes?: unknown;
+};
+
+// SAFETY: `spec` is `any` in CodeMirror's types; every read of it goes through here and compares optional fields, so a spec without them answers false or undefined.
+const specOf = (deco: Decoration): DecorationSpec => deco.spec;
+
+export function isUnit(deco: Decoration) {
+  return specOf(deco).usfmUnit === true;
 }
 
-export function isInvisible(d: Decoration) {
-  // SAFETY: as `isUnit` — three optional fields read off an `any` spec.
-  const spec = d.spec as { usfmUnit?: boolean; widget?: unknown; block?: boolean };
+export function isInvisible(deco: Decoration) {
+  const spec = specOf(deco);
   return spec.usfmUnit === true && spec.widget === undefined;
 }
 
@@ -372,16 +385,15 @@ const NUM_ISOLATE: Record<"v" | "c", Decoration> = {
   }),
 };
 
-export function isIsolate(d: Decoration) {
-  // SAFETY: as `isUnit` — one optional flag read off an `any` spec.
-  return (d.spec as { usfmIsolate?: boolean }).usfmIsolate === true;
+export function isIsolate(deco: Decoration) {
+  return specOf(deco).usfmIsolate === true;
 }
 
 const DELIMITER = Decoration.mark({ class: "usfm-delim" });
 
 export function buildRegular(
   doc: string,
-  s: DocStructure,
+  structure: DocStructure,
   plan: DocPlan,
   opts: BuildOpts,
 ): BuildResult {
@@ -390,9 +402,11 @@ export function buildRegular(
   const join = plan.joinWidget
     ? Decoration.replace({ widget: WIDGETS[plan.joinWidget](""), ...UNIT })
     : HIDDEN;
-  const win = narrow(opts.window, opts.range);
+  const windowRange = narrow(opts.window, opts.range);
   const outside = (from: number, to: number) =>
-    win !== null && win !== undefined && (to < win.from || from > win.to);
+    windowRange !== null &&
+    windowRange !== undefined &&
+    (to < windowRange.from || from > windowRange.to);
   const hide = (from: number, to: number) => {
     if (to > from) add.push({ from, to, deco: HIDDEN });
   };
@@ -420,13 +434,13 @@ export function buildRegular(
       });
   };
 
-  const rows = windowLines(s, win);
+  const rows = windowLines(structure, windowRange);
   for (let row = rows.first; row <= rows.last; row++) {
-    const l = s.lines.at(row);
+    const l = structure.lines.at(row);
     if (outside(l.from, l.to)) continue;
-    const rl = plan.line(l.n);
+    const resolvedLine = plan.line(l.n);
     if (l.cls === "block.meta" || l.cls === "block.front") {
-      if (rl.paints)
+      if (resolvedLine.paints)
         add.push({
           from: l.from,
           to: l.from,
@@ -434,18 +448,19 @@ export function buildRegular(
             class: l.cls === "block.meta" ? "usfm-meta" : `usfm-front usfm-${l.marker}`,
           }),
         });
-      hideAll(rl.hidden);
+      hideAll(resolvedLine.hidden);
     } else if (l.cls === "block.heading") {
-      hideAll(rl.hidden);
-    } else if (rl.standalone) {
-      if (rl.standalone.form === "hidden") hide(rl.standalone.from, rl.standalone.to);
-    } else if (rl.slot) {
-      if (rl.paints)
+      hideAll(resolvedLine.hidden);
+    } else if (resolvedLine.standalone) {
+      if (resolvedLine.standalone.form === "hidden")
+        hide(resolvedLine.standalone.from, resolvedLine.standalone.to);
+    } else if (resolvedLine.slot) {
+      if (resolvedLine.paints)
         add.push({ from: l.from, to: l.from, deco: Decoration.line({ class: "usfm-chap" }) });
-      slot(rl.slot);
+      slot(resolvedLine.slot);
     }
 
-    for (const m of rl.marks) {
+    for (const m of resolvedLine.marks) {
       if (m.form !== "point") {
         hide(m.from, m.to);
         continue;
@@ -463,28 +478,31 @@ export function buildRegular(
     }
 
     for (const wd of l.words) {
-      const w = plan.wordAt.get(wd.from);
-      if (!w) continue;
-      hideAll(w.hidden);
-      if (w.scope)
+      const resolvedWord = plan.wordAt.get(wd.from);
+      if (!resolvedWord) continue;
+      hideAll(resolvedWord.hidden);
+      if (resolvedWord.scope)
         add.push({
-          from: w.scope.from,
-          to: w.scope.to,
-          deco: Decoration.mark({ class: "usfm-word", attributes: { "data-w": String(w.from) } }),
+          from: resolvedWord.scope.from,
+          to: resolvedWord.scope.to,
+          deco: Decoration.mark({
+            class: "usfm-word",
+            attributes: { "data-w": String(resolvedWord.from) },
+          }),
         });
     }
   }
 
-  for (let k = 0; k < s.verses.length; k++) {
-    const v = s.verses[k];
+  for (let k = 0; k < structure.verses.length; k++) {
+    const v = structure.verses[k];
     if (outside(v.markerFrom, v.contentFrom)) continue;
     slot(plan.verse(k));
   }
 
   if (opts.highlight) {
     const needle = opts.highlight.toLowerCase();
-    const lo = win ? Math.max(0, win.from - needle.length) : 0;
-    const hi = win ? Math.min(doc.length, win.to + needle.length) : doc.length;
+    const lo = windowRange ? Math.max(0, windowRange.from - needle.length) : 0;
+    const hi = windowRange ? Math.min(doc.length, windowRange.to + needle.length) : doc.length;
     const hay = doc.slice(lo, hi).toLowerCase();
     for (let i = hay.indexOf(needle); i >= 0; i = hay.indexOf(needle, i + needle.length)) {
       add.push({
@@ -502,35 +520,36 @@ export function buildRegular(
     });
   }
 
-  for (let i = 0; i < s.blocks.length; i++) {
-    if (outside(s.blocks.fromAt(i), s.blocks.toAt(i))) continue;
-    const b = s.blocks.at(i);
-    const rb = plan.block(i);
-    for (const r of rb.reflow) {
+  for (let i = 0; i < structure.blocks.length; i++) {
+    if (outside(structure.blocks.fromAt(i), structure.blocks.toAt(i))) continue;
+    const b = structure.blocks.at(i);
+    const resolvedBlock = plan.block(i);
+    for (const r of resolvedBlock.reflow) {
       if (r.kind === "hide") {
         add.push({ from: r.from, to: r.to, deco: HIDDEN });
         continue;
       }
       add.push({ from: r.from, to: r.to, deco: join });
     }
-    joined += rb.joined;
+    joined += resolvedBlock.joined;
     const head = b.cls === "block.heading" ? " usfm-head" : "";
-    const cls = rb.paints ? `usfm-block usfm-${b.kind}${head}` : "";
-    if (rb.startsLine) {
-      if (cls) add.push({ from: b.from, to: b.from, deco: Decoration.line({ class: cls }) });
+    const className = resolvedBlock.paints ? `usfm-block usfm-${b.kind}${head}` : "";
+    if (resolvedBlock.startsLine) {
+      if (className)
+        add.push({ from: b.from, to: b.from, deco: Decoration.line({ class: className }) });
       continue;
     }
-    if (rb.headHidden) hide(rb.headHidden.from, rb.headHidden.to);
-    if (rb.breakAt !== null)
+    if (resolvedBlock.headHidden) hide(resolvedBlock.headHidden.from, resolvedBlock.headHidden.to);
+    if (resolvedBlock.breakAt !== null)
       add.push({
-        from: rb.breakAt,
-        to: rb.breakAt,
-        deco: Decoration.widget({ widget: new BreakWidget(cls), side: -1 }),
+        from: resolvedBlock.breakAt,
+        to: resolvedBlock.breakAt,
+        deco: Decoration.widget({ widget: new BreakWidget(className), side: -1 }),
       });
-    if (rb.inblk)
+    if (resolvedBlock.inblk)
       add.push({
-        from: rb.inblk.from,
-        to: rb.inblk.to,
+        from: resolvedBlock.inblk.from,
+        to: resolvedBlock.inblk.to,
         deco: Decoration.mark({ class: `usfm-inblk usfm-${b.kind}` }),
       });
   }
@@ -572,12 +591,12 @@ export function buildRegular(
     });
   }
 
-  return finish(add, doc, opts, { joined, blocks: s.blocks.length });
+  return finish(add, doc, opts, { joined, blocks: structure.blocks.length });
 }
 
 export function buildNoteApparatus(
   doc: string,
-  s: DocStructure,
+  structure: DocStructure,
   range: { from: number; to: number },
 ): DecorationSet {
   const add: Pending[] = [];
@@ -595,7 +614,7 @@ export function buildNoteApparatus(
 
   let nested: string | null = null;
   let at = range.from;
-  const parts = s.notes
+  const parts = structure.notes
     .filter((n) => n.to > range.from && n.from < range.to)
     .flatMap((n) => n.parts);
   for (const part of parts) {
@@ -631,8 +650,7 @@ export function buildNoteApparatus(
   const builder = new RangeSetBuilder<Decoration>();
   let lastTo = -1;
   for (const d of add) {
-    // SAFETY: one optional field read off CodeMirror's `any` spec; an absent `class` is exactly the case being tested for.
-    if (d.to > d.from && (d.deco.spec as { class?: string }).class === undefined) {
+    if (d.to > d.from && specOf(d.deco).class === undefined) {
       if (d.from < lastTo) continue;
       lastTo = d.to;
     }
@@ -641,13 +659,14 @@ export function buildNoteApparatus(
   return builder.finish();
 }
 
-export function buildUsfm(doc: string, s: DocStructure, opts: BuildOpts): BuildResult {
+export function buildUsfm(doc: string, structure: DocStructure, opts: BuildOpts): BuildResult {
   const add: Pending[] = [];
-  const win = narrow(opts.window, opts.range);
-  const outside = (from: number, to: number) => win !== null && (to < win.from || from > win.to);
-  const rows = windowLines(s, win);
+  const windowRange = narrow(opts.window, opts.range);
+  const outside = (from: number, to: number) =>
+    windowRange !== null && (to < windowRange.from || from > windowRange.to);
+  const rows = windowLines(structure, windowRange);
   for (let row = rows.first; row <= rows.last; row++) {
-    const l = s.lines.at(row);
+    const l = structure.lines.at(row);
     if (outside(l.from, l.to)) continue;
     if (l.marker)
       add.push({
@@ -656,16 +675,16 @@ export function buildUsfm(doc: string, s: DocStructure, opts: BuildOpts): BuildR
         deco: Decoration.line({ class: `usfm-src usfm-src-${l.marker}` }),
       });
   }
-  const dish = s.analysis?.dish;
+  const dish = structure.analysis?.dish;
   if (dish) {
-    forTokensIn(dish.tokens.rows, win, (kindBits, markerIdx, from, to) => {
+    forTokensIn(dish.tokens.rows, windowRange, (kindBits, markerIdx, from, to) => {
       if (to <= from || outside(from, to)) return;
       const kind = kindBits & ~TOKEN_SPELLING_BIT;
-      const cls = tokenClass(kind, classWordOf(markerIdx, kindBits));
-      if (cls) add.push({ from, to, deco: Decoration.mark({ class: cls }) });
+      const className = tokenClass(kind, classWordOf(markerIdx, kindBits));
+      if (className) add.push({ from, to, deco: Decoration.mark({ class: className }) });
     });
   }
-  return finish(add, doc, opts, { joined: 0, blocks: s.blocks.length });
+  return finish(add, doc, opts, { joined: 0, blocks: structure.blocks.length });
 }
 
 function tokenClass(kind: number, cls: number): string | null {
@@ -704,9 +723,8 @@ function finish(
 
   add.sort((a, b) => a.from - b.from || a.deco.startSide - b.deco.startSide || a.to - b.to);
 
-  const isReplace = (d: Decoration) => {
-    // SAFETY: two optional fields read off CodeMirror's `any` spec.
-    const spec = d.spec as { class?: string; attributes?: unknown };
+  const isReplace = (deco: Decoration) => {
+    const spec = specOf(deco);
     return spec.class === undefined && spec.attributes === undefined;
   };
   const builder = new RangeSetBuilder<Decoration>();
@@ -716,9 +734,7 @@ function finish(
     let { from, to } = d;
     if (to > from && isReplace(d.deco)) {
       if (from < lastTo) {
-        // SAFETY: one optional field read off CodeMirror's `any` spec.
-        const spec = d.deco.spec as { widget?: unknown };
-        if (spec.widget !== undefined || to <= lastTo) continue;
+        if (specOf(d.deco).widget !== undefined || to <= lastTo) continue;
         from = lastTo;
       }
       lastTo = to;

@@ -50,22 +50,22 @@ export const usfmModeProjection: Extension = Prec.lowest(
 const planCache = new WeakMap<EditorState, DocPlan>();
 
 export function planAt(state: EditorState): DocPlan {
-  const s = state.field(structureField);
+  const structure = state.field(structureField);
   let p = planCache.get(state);
   if (!p) {
-    p = resolvePlan(s, assignmentAt(state));
+    p = resolvePlan(structure, assignmentAt(state));
     planCache.set(state, p);
   }
-  if (p.revision !== s.revision)
-    throw new Error(`stale plan: revision ${p.revision} over a fold at ${s.revision}`);
+  if (p.revision !== structure.revision)
+    throw new Error(`stale plan: revision ${p.revision} over a fold at ${structure.revision}`);
   return p;
 }
 
 export function caretClipAt(st: EditorState): ClipRange {
-  const win = editableClipAt(st);
-  if (!win) return null;
-  const from = canonicalCaret(st, structureAt(st), win.from, PAINT_PORT);
-  return { from: Math.max(win.from, Math.min(from, win.to)), to: win.to };
+  const windowRange = editableClipAt(st);
+  if (!windowRange) return null;
+  const from = canonicalCaret(st, structureAt(st), windowRange.from, PAINT_PORT);
+  return { from: Math.max(windowRange.from, Math.min(from, windowRange.to)), to: windowRange.to };
 }
 
 interface Built {
@@ -76,15 +76,15 @@ interface Built {
 }
 
 function buildInner(state: EditorState): Built {
-  const t0 = performance.now();
+  const startedAt = performance.now();
   const done = span("decorate", () => (state.facet(modeFacet) === "regular" ? "visual" : "usfm"));
-  const s = state.field(structureField);
+  const structure = state.field(structureField);
   const doc = docText(state);
   const opts = buildOptsAt(state);
   const r =
     state.facet(modeFacet) === "regular"
-      ? buildRegular(doc, s, planAt(state), opts)
-      : buildUsfm(doc, s, opts);
+      ? buildRegular(doc, structure, planAt(state), opts)
+      : buildUsfm(doc, structure, opts);
   const units: { from: number; to: number; deco: Decoration }[] = [];
   const isos: { from: number; to: number; deco: Decoration }[] = [];
   const b = new RangeSetBuilder<Decoration>();
@@ -104,7 +104,7 @@ function buildInner(state: EditorState): Built {
     set: r.set,
     atomic: b.finish(),
     isolates: iso.finish(),
-    stats: { ...r.stats, ms: +(performance.now() - t0).toFixed(2) },
+    stats: { ...r.stats, ms: +(performance.now() - startedAt).toFixed(2) },
   };
 }
 

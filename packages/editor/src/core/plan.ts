@@ -118,7 +118,7 @@ export interface DocPlan {
   readonly line: (n: number) => ResolvedLine;
   readonly block: (i: number) => ResolvedBlock;
   readonly verse: (k: number) => ResolvedSlot;
-  readonly atomic: (l: DocLine) => readonly PlanSpan[];
+  readonly atomic: (line: DocLine) => readonly PlanSpan[];
   readonly targets: () => OwnedIndex;
 }
 
@@ -157,43 +157,43 @@ class Spans {
   }
 }
 
-function resolveNote(n: NoteRange, rows: Registry): ResolvedNote {
-  const paint = (cls: ClassKey): PaintReach => rows[cls].cell.paint;
-  const head = { from: n.from, to: n.to, kind: n.kind, parts: n.parts, mark: "" };
+function resolveNote(note: NoteRange, rows: Registry): ResolvedNote {
+  const paint = (classKey: ClassKey): PaintReach => rows[classKey].cell.paint;
+  const head = { from: note.from, to: note.to, kind: note.kind, parts: note.parts, mark: "" };
   if (paint("note.markup") === "none" && paint("note.body") === "none") {
     return paint("note.caller") === "none"
-      ? { ...head, form: "elided", point: null, hidden: [{ from: n.from, to: n.to }] }
-      : { ...head, form: "collapsed", point: { from: n.from, to: n.to }, hidden: [] };
+      ? { ...head, form: "elided", point: null, hidden: [{ from: note.from, to: note.to }] }
+      : { ...head, form: "collapsed", point: { from: note.from, to: note.to }, hidden: [] };
   }
   const hidden = new Spans();
-  const take = (from: number, to: number, cls: ClassKey) => {
-    if (paint(cls) === "none") hidden.push(from, to);
+  const take = (from: number, to: number, classKey: ClassKey) => {
+    if (paint(classKey) === "none") hidden.push(from, to);
   };
-  let at = n.from;
-  for (const p of n.parts) {
-    if (p.from >= n.to) break;
-    const to = Math.min(p.to, n.to);
+  let at = note.from;
+  for (const p of note.parts) {
+    if (p.from >= note.to) break;
+    const to = Math.min(p.to, note.to);
     if (to <= at) continue;
     take(at, p.from, "note.markup");
     take(Math.max(at, p.from), to, partClass(p.kind));
     at = to;
   }
-  take(at, n.to, "note.markup");
+  take(at, note.to, "note.markup");
   return { ...head, form: "expanded", point: null, hidden: hidden.out };
 }
 
-function resolveWord(w: WordRange, rows: Registry, mask: (pos: number) => number): ResolvedWord {
+function resolveWord(word: WordRange, rows: Registry, mask: (pos: number) => number): ResolvedWord {
   const paint = rows.char.cell.paint;
   const hidden = new Spans();
   if (paint !== "point") {
-    hidden.push(mask(w.from), w.surfaceFrom);
-    hidden.push(mask(w.attrFrom), w.attrTo);
-    hidden.push(mask(w.attrTo), w.to);
+    hidden.push(mask(word.from), word.surfaceFrom);
+    hidden.push(mask(word.attrFrom), word.attrTo);
+    hidden.push(mask(word.attrTo), word.to);
   }
   return {
-    from: w.from,
-    to: w.to,
-    scope: paint === "ambient" ? { from: w.surfaceFrom, to: w.surfaceTo } : null,
+    from: word.from,
+    to: word.to,
+    scope: paint === "ambient" ? { from: word.surfaceFrom, to: word.surfaceTo } : null,
     hidden: hidden.out,
   };
 }
@@ -231,13 +231,13 @@ class PlanLine implements ResolvedLine {
 
   get marks(): readonly ResolvedMark[] {
     if (this.#marks) return this.#marks;
-    const l = this.#line;
+    const line = this.#line;
     const out: ResolvedMark[] = [];
-    for (const m of l.milestones)
+    for (const m of line.milestones)
       out.push({ from: m.from, to: m.to, kind: "milestone", name: m.name, form: this.#milestone });
-    for (const b of l.breaks)
+    for (const b of line.breaks)
       out.push({ from: b.from, to: b.to, kind: "optbreak", name: "", form: this.#optbreak });
-    for (const m of l.standalones)
+    for (const m of line.standalones)
       out.push({
         from: m.from,
         to: m.to,
@@ -250,29 +250,30 @@ class PlanLine implements ResolvedLine {
   }
 }
 
-function ownedIndexOf(s: DocStructure, plan: DocPlan, a: Assignment): OwnedIndex {
-  if (!armed()) return buildOwnedIndex(s, plan, a);
+function ownedIndexOf(structure: DocStructure, plan: DocPlan, a: Assignment): OwnedIndex {
+  if (!armed()) return buildOwnedIndex(structure, plan, a);
   const done = span("index", "build");
   try {
-    return buildOwnedIndex(s, plan, a);
+    return buildOwnedIndex(structure, plan, a);
   } finally {
     done();
   }
 }
 
-export function resolvePlan(s: DocStructure, a: Assignment): DocPlan {
+export function resolvePlan(structure: DocStructure, a: Assignment): DocPlan {
   const rows = a.rows;
-  const paint = (cls: ClassKey): PaintReach => rows[cls].cell.paint;
-  const pipped = (cls: ClassKey): boolean => a.clamped.some((c) => c.cls === cls && c.to === "pip");
+  const paint = (classKey: ClassKey): PaintReach => rows[classKey].cell.paint;
+  const pipped = (classKey: ClassKey): boolean =>
+    a.clamped.some((c) => c.cls === classKey && c.to === "pip");
 
   const notes: ResolvedNote[] = [];
   const noteAt = new Map<number, ResolvedNote>();
   const atomicNotes: ResolvedNote[] = [];
-  for (const n of s.notes) {
-    const r = resolveNote(n, rows);
-    notes.push(r);
-    noteAt.set(r.from, r);
-    if (r.form !== "expanded") atomicNotes.push(r);
+  for (const n of structure.notes) {
+    const resolved = resolveNote(n, rows);
+    notes.push(resolved);
+    noteAt.set(resolved.from, resolved);
+    if (resolved.form !== "expanded") atomicNotes.push(resolved);
   }
 
   const mask = (pos: number): number => {
@@ -283,19 +284,20 @@ export function resolvePlan(s: DocStructure, a: Assignment): DocPlan {
 
   const words: ResolvedWord[] = [];
   const wordAt = new Map<number, ResolvedWord>();
-  for (const w of s.words) {
+  for (const w of structure.words) {
     const r = resolveWord(w, rows, mask);
     words.push(r);
     wordAt.set(r.from, r);
   }
 
   const chapterOf = new Map<number, number>();
-  s.chapters.forEach((ch, i) => {
-    const last = Math.min(ch.lastLine, s.lines.length);
+  structure.chapters.forEach((ch, i) => {
+    const last = Math.min(ch.lastLine, structure.lines.length);
     if (ch.line > last) return;
-    const lo = s.lines.fromAt(ch.line - 1);
-    const hi = s.lines.toAt(last - 1);
-    for (const note of s.notes) if (note.from >= lo && note.from <= hi) chapterOf.set(note.from, i);
+    const lo = structure.lines.fromAt(ch.line - 1);
+    const hi = structure.lines.toAt(last - 1);
+    for (const note of structure.notes)
+      if (note.from >= lo && note.from <= hi) chapterOf.set(note.from, i);
   });
   const shown = new Map<number, ResolvedNote[]>();
   for (const r of notes) {
@@ -307,11 +309,11 @@ export function resolvePlan(s: DocStructure, a: Assignment): DocPlan {
     shown.set(key, list);
   }
   const apparatus: ResolvedApparatus[] = [];
-  s.chapters.forEach((ch, i) => {
+  structure.chapters.forEach((ch, i) => {
     const list = shown.get(i);
-    const lastLine = Math.min(ch.lastLine, s.lines.length);
+    const lastLine = Math.min(ch.lastLine, structure.lines.length);
     if (!list || !list.length || lastLine < 1) return;
-    apparatus.push({ at: s.lines.toAt(lastLine - 1), chapter: ch, notes: list });
+    apparatus.push({ at: structure.lines.toAt(lastLine - 1), chapter: ch, notes: list });
   });
 
   const chromeHidden = paint("chrome") === "none";
@@ -325,7 +327,9 @@ export function resolvePlan(s: DocStructure, a: Assignment): DocPlan {
   const joinKind: ReflowKind = joinWidget ? "join" : "hide";
   const pipV = pipped("slot.v");
   const pipC = pipped("slot.c");
-  const docLen = s.analysis?.docLen ?? (s.lines.length ? s.lines.toAt(s.lines.length - 1) : 0);
+  const docLen =
+    structure.analysis?.docLen ??
+    (structure.lines.length ? structure.lines.toAt(structure.lines.length - 1) : 0);
 
   const slotOf = (
     kind: "v" | "c",
@@ -336,10 +340,10 @@ export function resolvePlan(s: DocStructure, a: Assignment): DocPlan {
     contentFrom: number,
     num: string | null,
   ): ResolvedSlot => {
-    const cls: ClassKey = kind === "v" ? "slot.v" : "slot.c";
-    const residual = rows[cls].residual ? (rows[cls].widget ?? null) : null;
+    const classKey: ClassKey = kind === "v" ? "slot.v" : "slot.c";
+    const residual = rows[classKey].residual ? (rows[classKey].widget ?? null) : null;
     const head = { kind, from, to: contentFrom, num, residual };
-    if (paint(cls) === "none")
+    if (paint(classKey) === "none")
       return {
         ...head,
         form: "elided",
@@ -370,33 +374,53 @@ export function resolvePlan(s: DocStructure, a: Assignment): DocPlan {
     };
   };
 
-  const verses: (ResolvedSlot | null)[] = Array.from({ length: s.verses.length }, () => null);
+  const verses: (ResolvedSlot | null)[] = Array.from(
+    { length: structure.verses.length },
+    () => null,
+  );
   const verse = (k: number): ResolvedSlot => {
     let r = verses[k];
     if (!r) {
-      const v: VerseRow = s.verses[k];
-      r = slotOf("v", v.markerFrom, v.markerTo, v.numFrom, v.numTo, v.contentFrom, v.num);
+      const verse: VerseRow = structure.verses[k];
+      r = slotOf(
+        "v",
+        verse.markerFrom,
+        verse.markerTo,
+        verse.numFrom,
+        verse.numTo,
+        verse.contentFrom,
+        verse.num,
+      );
       verses[k] = r;
     }
     return r;
   };
 
-  const resolveLine = (l: DocLine): ResolvedLine => {
+  const resolveLine = (line: DocLine): ResolvedLine => {
     let hidden: readonly PlanSpan[] = NO_SPANS;
     let paints = false;
     let slot: ResolvedSlot | null = null;
     let standalone: ResolvedStandalone | null = null;
-    if (paintsItsOwnLine(l)) {
-      paints = paint(l.cls) !== "none";
-      if (chromeHidden && l.contentFrom > l.from) hidden = [{ from: l.from, to: l.contentFrom }];
-    } else if (l.cls === "standalone") {
-      standalone = { from: l.from, to: l.contentFrom, form: standaloneForm };
-    } else if (l.cls === "slot.c") {
-      slot = slotOf("c", l.from, l.markerEnd, l.numFrom, l.numTo, l.contentFrom, l.num);
+    if (paintsItsOwnLine(line)) {
+      paints = paint(line.cls) !== "none";
+      if (chromeHidden && line.contentFrom > line.from)
+        hidden = [{ from: line.from, to: line.contentFrom }];
+    } else if (line.cls === "standalone") {
+      standalone = { from: line.from, to: line.contentFrom, form: standaloneForm };
+    } else if (line.cls === "slot.c") {
+      slot = slotOf(
+        "c",
+        line.from,
+        line.markerEnd,
+        line.numFrom,
+        line.numTo,
+        line.contentFrom,
+        line.num,
+      );
       paints = slot.form !== "elided";
     }
     return new PlanLine(
-      l,
+      line,
       hidden,
       paints,
       slot,
@@ -407,11 +431,11 @@ export function resolvePlan(s: DocStructure, a: Assignment): DocPlan {
     );
   };
 
-  const lines: (ResolvedLine | null)[] = Array.from({ length: s.lines.length }, () => null);
+  const lines: (ResolvedLine | null)[] = Array.from({ length: structure.lines.length }, () => null);
   const line = (n: number): ResolvedLine => {
     let r = lines[n - 1];
     if (!r) {
-      r = resolveLine(s.lines.at(n - 1));
+      r = resolveLine(structure.lines.at(n - 1));
       lines[n - 1] = r;
     }
     return r;
@@ -427,8 +451,8 @@ export function resolvePlan(s: DocStructure, a: Assignment): DocPlan {
     let prevEnd = -1;
     let joined = 0;
     let gapTo = -1;
-    const swallow = (l: DocLine) => {
-      push(prevEnd >= 0 ? prevEnd : l.from, Math.min(l.to + 1, docLen), "hide");
+    const swallow = (line: DocLine) => {
+      push(prevEnd >= 0 ? prevEnd : line.from, Math.min(line.to + 1, docLen), "hide");
       prevEnd = -1;
     };
     const closeGap = (to: number) => {
@@ -445,9 +469,9 @@ export function resolvePlan(s: DocStructure, a: Assignment): DocPlan {
       gapTo = -1;
       prevEnd = -1;
     };
-    const invisible = (l: DocLine) =>
-      isBlankLine(l) ||
-      (l.cls === "standalone" && standaloneForm === "hidden" && l.contentFrom >= l.to);
+    const invisible = (line: DocLine) =>
+      isBlankLine(line) ||
+      (line.cls === "standalone" && standaloneForm === "hidden" && line.contentFrom >= line.to);
     for (const l of rows2) {
       if (opensAParagraph(l)) {
         trailGap();
@@ -479,8 +503,8 @@ export function resolvePlan(s: DocStructure, a: Assignment): DocPlan {
       prevEnd = breaks ? l.to : -1;
     }
     trailGap();
-    const at = lineIndexAt(s, b.from);
-    const startsLine = at >= 0 && s.lines.fromAt(at) === b.from;
+    const at = lineIndexAt(structure, b.from);
+    const startsLine = at >= 0 && structure.lines.fromAt(at) === b.from;
     const paints = paint(b.cls) !== "none";
     return {
       reflow,
@@ -496,11 +520,14 @@ export function resolvePlan(s: DocStructure, a: Assignment): DocPlan {
     };
   };
 
-  const blocks: (ResolvedBlock | null)[] = Array.from({ length: s.blocks.length }, () => null);
+  const blocks: (ResolvedBlock | null)[] = Array.from(
+    { length: structure.blocks.length },
+    () => null,
+  );
   const block = (i: number): ResolvedBlock => {
     let r = blocks[i];
     if (!r) {
-      r = resolveBlock(s.blocks.at(i));
+      r = resolveBlock(structure.blocks.at(i));
       blocks[i] = r;
     }
     return r;
@@ -524,7 +551,7 @@ export function resolvePlan(s: DocStructure, a: Assignment): DocPlan {
 
   let targetIndex: OwnedIndex | null = null;
   const plan: DocPlan = {
-    revision: s.revision,
+    revision: structure.revision,
     docLen,
     joinWidget,
     notes,
@@ -536,7 +563,7 @@ export function resolvePlan(s: DocStructure, a: Assignment): DocPlan {
     block,
     verse,
     atomic,
-    targets: () => (targetIndex ??= ownedIndexOf(s, plan, a)),
+    targets: () => (targetIndex ??= ownedIndexOf(structure, plan, a)),
   };
   return plan;
 }

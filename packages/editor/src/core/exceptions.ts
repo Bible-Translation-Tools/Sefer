@@ -1,7 +1,7 @@
 import { isDesignatorLine, type Block, type DocStructure } from "./docStructure";
 
-function lastVerseOpeningAtOrBefore(s: DocStructure, pos: number): number {
-  const verses = s.verses;
+function lastVerseOpeningAtOrBefore(structure: DocStructure, pos: number): number {
+  const verses = structure.verses;
   let lo = 0;
   let hi = verses.length;
   while (lo < hi) {
@@ -12,16 +12,16 @@ function lastVerseOpeningAtOrBefore(s: DocStructure, pos: number): number {
   return lo - 1;
 }
 
-export function inDesignatorDelimiter(s: DocStructure, pos: number): boolean {
-  const k = lastVerseOpeningAtOrBefore(s, pos);
+export function inDesignatorDelimiter(structure: DocStructure, pos: number): boolean {
+  const k = lastVerseOpeningAtOrBefore(structure, pos);
   if (k >= 0) {
-    const v = s.verses[k];
-    if (v.num !== null && pos >= v.numTo && pos < v.contentFrom) return true;
+    const verse = structure.verses[k];
+    if (verse.num !== null && pos >= verse.numTo && pos < verse.contentFrom) return true;
   }
-  const i = s.lines.indexAt(pos);
+  const i = structure.lines.indexAt(pos);
   if (i < 0) return false;
-  const l = s.lines.at(i);
-  return isDesignatorLine(l) && l.num !== null && pos >= l.numTo && pos < l.contentFrom;
+  const line = structure.lines.at(i);
+  return isDesignatorLine(line) && line.num !== null && pos >= line.numTo && pos < line.contentFrom;
 }
 
 const DEFAULT_BLOCK = "p";

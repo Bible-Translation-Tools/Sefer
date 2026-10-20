@@ -86,19 +86,17 @@ export const readingLayer: Extension = [
   decoField,
 ];
 
-const changeVerdict = (out: boolean | readonly number[]): [TraceVerdict, string | undefined] =>
-  out === true
-    ? ["passed", undefined]
-    : out === false
-      ? ["refused", "vetoed the whole transaction"]
-      : ["passed", `guarding ${out.length / 2} range(s)`];
+function changeVerdict(out: boolean | readonly number[]): [TraceVerdict, string | undefined] {
+  if (out === true) return ["passed", undefined];
+  if (out === false) return ["refused", "vetoed the whole transaction"];
+  return ["passed", `guarding ${out.length / 2} range(s)`];
+}
 
-const transactionVerdict = (tr: Transaction, out: unknown): [TraceVerdict, string | undefined] =>
-  out === tr
-    ? ["passed", undefined]
-    : Array.isArray(out) && out.length === 0
-      ? ["refused", "dropped the transaction"]
-      : ["rewrote", undefined];
+function transactionVerdict(tr: Transaction, out: unknown): [TraceVerdict, string | undefined] {
+  if (out === tr) return ["passed", undefined];
+  if (Array.isArray(out) && out.length === 0) return ["refused", "dropped the transaction"];
+  return ["rewrote", undefined];
+}
 
 function install(
   rules: readonly PhaseRule[],

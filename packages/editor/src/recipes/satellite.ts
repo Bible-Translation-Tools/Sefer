@@ -65,14 +65,14 @@ const caretSettled: Extension = EditorState.transactionFilter.of((tr) =>
 const rangeEdgesSettled: Extension = EditorState.transactionFilter.of((tr) => {
   if (!tr.selection || tr.docChanged || !structured(tr.state) || !isVisual(tr.state)) return tr;
   const sel = tr.state.selection.main;
-  const win = satelliteRange(tr.state);
-  if (win === null) return tr;
-  let edge = win.to;
-  if (win.to < tr.state.doc.length)
-    while (edge > win.from && tr.state.doc.sliceString(edge - 1, edge) === "\n") edge--;
+  const windowRange = satelliteRange(tr.state);
+  if (windowRange === null) return tr;
+  let edge = windowRange.to;
+  if (windowRange.to < tr.state.doc.length)
+    while (edge > windowRange.from && tr.state.doc.sliceString(edge - 1, edge) === "\n") edge--;
   const lo = Math.min(sel.anchor, sel.head);
   const hi = Math.max(sel.anchor, sel.head);
-  if (lo > win.from && hi < edge) return tr;
+  if (lo > windowRange.from && hi < edge) return tr;
   const stops = stopsIn(tr.state, structureAt(tr.state), PAINT_PORT);
   const inward = (pos: number, toward: "forward" | "backward", limit: number): number => {
     if (stops.isStop(pos)) return pos;
@@ -85,11 +85,11 @@ const rangeEdgesSettled: Extension = EditorState.transactionFilter.of((tr) => {
   };
   if (sel.empty) {
     let at = lo;
-    if (lo <= win.from) at = inward(lo, "forward", edge);
-    else if (hi >= edge) at = inward(hi, "backward", win.from);
+    if (lo <= windowRange.from) at = inward(lo, "forward", edge);
+    else if (hi >= edge) at = inward(hi, "backward", windowRange.from);
     return at === lo ? tr : [tr, { selection: { anchor: at }, sequential: true }];
   }
-  const from = lo <= win.from ? inward(lo, "forward", hi) : lo;
+  const from = lo <= windowRange.from ? inward(lo, "forward", hi) : lo;
   const to = hi >= edge ? inward(hi, "backward", from) : hi;
   if (from === lo && to === hi) return tr;
   const forward = sel.head >= sel.anchor;
@@ -398,7 +398,7 @@ export function mountSatellite(opts: SatelliteOptions): Satellite {
     },
   });
 
-  const sat: Satellite = {
+  const satellite: Satellite = {
     view,
     get range() {
       return view.state.field(scope);
@@ -416,5 +416,5 @@ export function mountSatellite(opts: SatelliteOptions): Satellite {
     });
   });
   done();
-  return sat;
+  return satellite;
 }

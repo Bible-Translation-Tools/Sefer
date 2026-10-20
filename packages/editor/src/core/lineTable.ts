@@ -28,8 +28,8 @@ export const NO_LINES: LineTable = {
   *[Symbol.iterator]() {},
 };
 
-function openerOfLine(f: Fold, from: number, to: number): number {
-  const cst = f.cst;
+function openerOfLine(fold: Fold, from: number, to: number): number {
+  const cst = fold.cst;
   const { startAt, endAt, kindAt } = cst;
   for (let i = cst.firstTokenFrom(from); i < cst.count && startAt[i] <= to; i++) {
     if (kindAt[i] === TOKEN.NEWLINE) return -1;
@@ -58,8 +58,8 @@ class Line implements DocLine {
   #breaks = NO_BREAKS;
   #standalones = NO_STANDALONES;
 
-  constructor(f: Fold, n: number, from: number, to: number) {
-    this.#f = f;
+  constructor(fold: Fold, n: number, from: number, to: number) {
+    this.#f = fold;
     this.n = n;
     this.from = from;
     this.to = to;
@@ -188,8 +188,8 @@ export class Lines implements LineTable {
   readonly #to: Uint32Array;
   #memo: (Line | undefined)[] | null = null;
 
-  constructor(f: Fold, from: Uint32Array, to: Uint32Array, count: number) {
-    this.#f = f;
+  constructor(fold: Fold, from: Uint32Array, to: Uint32Array, count: number) {
+    this.#f = fold;
     this.#from = from;
     this.#to = to;
     this.length = count;
@@ -236,9 +236,10 @@ export class Lines implements LineTable {
   }
 }
 
-export const isBlankLine = (l: DocLine): boolean => l.to === l.from;
+export const isBlankLine = (line: DocLine): boolean => line.to === line.from;
 
-export const isDesignatorLine = (l: DocLine): boolean => l.cls === "slot.v" || l.cls === "slot.c";
+export const isDesignatorLine = (line: DocLine): boolean =>
+  line.cls === "slot.v" || line.cls === "slot.c";
 
 /**
  * Is this line's marker one that must start its line — a Paragraph or Header
@@ -248,10 +249,10 @@ export const isDesignatorLine = (l: DocLine): boolean => l.cls === "slot.v" || l
  * it is part of it. A `\v`, a `\c`, a milestone, a character marker or a note
  * may follow text directly, and the newline before one is only a line break.
  */
-export const bindsToItsLine = (l: DocLine): boolean =>
-  l.cls === "blank" || l.cls.startsWith("block.");
+export const bindsToItsLine = (line: DocLine): boolean =>
+  line.cls === "blank" || line.cls.startsWith("block.");
 
-export const opensAParagraph = (l: DocLine): boolean =>
-  l.marker !== null && (l.cls === "block.para" || l.cls === "blank");
+export const opensAParagraph = (line: DocLine): boolean =>
+  line.marker !== null && (line.cls === "block.para" || line.cls === "blank");
 
-export const paintsItsOwnLine = (l: DocLine): boolean => paintsItsOwnLineAmbient(l.cls);
+export const paintsItsOwnLine = (line: DocLine): boolean => paintsItsOwnLineAmbient(line.cls);

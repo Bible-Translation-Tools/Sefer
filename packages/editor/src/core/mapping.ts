@@ -494,33 +494,39 @@ export function rowForToken(t: TokenShape): Row<TokenShape> {
   return TOKEN_FALLBACK;
 }
 
-function rowForNodeLinear(n: NodeShape): Row<NodeShape> {
-  for (const r of NODE_ROWS) if (!r.when || r.when(n)) return r;
+function rowForNodeLinear(node: NodeShape): Row<NodeShape> {
+  for (const r of NODE_ROWS) if (!r.when || r.when(node)) return r;
   return NODE_FALLBACK;
 }
 
 const NODE_ROW_MEMO = new Map<number, Row<NodeShape>>();
 
-function nodeShapeKey(n: NodeShape): number {
-  if (n.markerKind >>> 4 || n.category >>> 5 || n.ctx >>> 5 || n.close >>> 2 || n.ws >>> 3)
+function nodeShapeKey(node: NodeShape): number {
+  if (
+    node.markerKind >>> 4 ||
+    node.category >>> 5 ||
+    node.ctx >>> 5 ||
+    node.close >>> 2 ||
+    node.ws >>> 3
+  )
     return -1;
   return (
-    n.markerKind |
-    (n.category << 4) |
-    (n.ctx << 9) |
-    (n.close << 14) |
-    (n.unknown ? 1 << 16 : 0) |
-    (n.crossesLine ? 1 << 17 : 0) |
-    (n.ws << 18)
+    node.markerKind |
+    (node.category << 4) |
+    (node.ctx << 9) |
+    (node.close << 14) |
+    (node.unknown ? 1 << 16 : 0) |
+    (node.crossesLine ? 1 << 17 : 0) |
+    (node.ws << 18)
   );
 }
 
-export function rowForNode(n: NodeShape): Row<NodeShape> {
-  const key = nodeShapeKey(n);
-  if (key < 0) return rowForNodeLinear(n);
+export function rowForNode(node: NodeShape): Row<NodeShape> {
+  const key = nodeShapeKey(node);
+  if (key < 0) return rowForNodeLinear(node);
   const held = NODE_ROW_MEMO.get(key);
   if (held !== undefined) return held;
-  const row = rowForNodeLinear(n);
+  const row = rowForNodeLinear(node);
   NODE_ROW_MEMO.set(key, row);
   return row;
 }
@@ -556,8 +562,8 @@ export const containsBlocks = (row: AnyRow): boolean => row.contains === true;
 
 export const isPoetryBlock = (row: AnyRow): boolean => row.poetry === true;
 
-export const chromeEndsAtMarkerToken = (cls: ClassKey): boolean =>
-  cls === "slot.v" || cls === "slot.c";
+export const chromeEndsAtMarkerToken = (classKey: ClassKey): boolean =>
+  classKey === "slot.v" || classKey === "slot.c";
 
 export const MARKUP_TOKEN_KINDS: ReadonlySet<number> = new Set<number>([
   TokenKind.Marker,

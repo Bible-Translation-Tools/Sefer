@@ -29,34 +29,34 @@ function spaceBefore(state: EditorState, at: number): string {
   return next === "" || next === "\\" || /\s/.test(next) ? "" : " ";
 }
 
-function weld(s: DocStructure, state: EditorState, from: number, to: number): string {
-  return atContentHead(s, state, from) ? spaceBefore(state, to) : "";
+function weld(structure: DocStructure, state: EditorState, from: number, to: number): string {
+  return atContentHead(structure, state, from) ? spaceBefore(state, to) : "";
 }
 
-const startsALine = (s: DocStructure, pos: number): boolean => {
-  const i = lineIndexAt(s, pos);
-  return i >= 0 && s.lines.fromAt(i) === pos;
+const startsALine = (structure: DocStructure, pos: number): boolean => {
+  const i = lineIndexAt(structure, pos);
+  return i >= 0 && structure.lines.fromAt(i) === pos;
 };
 
-const anchoredBack = (s: DocStructure, sp: PlanSpan, stop = false): PlanSpan => {
-  if (sp.from <= 0 || !startsALine(s, sp.from)) return sp;
-  if (stop) return { from: sp.from - 1, to: sp.to };
-  const line = s.lines.maybe(lineIndexAt(s, sp.from));
-  return line !== null && bindsToItsLine(line) ? { from: sp.from - 1, to: sp.to } : sp;
+const anchoredBack = (structure: DocStructure, span: PlanSpan, stop = false): PlanSpan => {
+  if (span.from <= 0 || !startsALine(structure, span.from)) return span;
+  if (stop) return { from: span.from - 1, to: span.to };
+  const line = structure.lines.maybe(lineIndexAt(structure, span.from));
+  return line !== null && bindsToItsLine(line) ? { from: span.from - 1, to: span.to } : span;
 };
 
 function reachesImmortal(
-  ix: OwnedIndex,
-  s: DocStructure,
+  targets: OwnedIndex,
+  structure: DocStructure,
   from: number,
   to: number,
 ): "none" | "pass" | "stop" {
   const lo = Math.min(from, to);
   const hi = Math.max(from, to);
   let met: "none" | "pass" = "none";
-  for (const h of ix.targetsIn(lo, hi + 1).hits) {
+  for (const h of targets.targetsIn(lo, hi + 1).hits) {
     if (h.target.mutability !== "immortal") continue;
-    const a = anchoredBack(s, h.target.wholeSpan, h.target.stop);
+    const a = anchoredBack(structure, h.target.wholeSpan, h.target.stop);
     if (a.to <= lo || a.from >= hi) continue;
     if (h.target.stop) return "stop";
     met = "pass";
@@ -66,9 +66,9 @@ function reachesImmortal(
 
 function immortalGuard(
   state: EditorState,
-  s: DocStructure,
-  ix: OwnedIndex,
-  r: PaintPort,
+  structure: DocStructure,
+  targets: OwnedIndex,
+  paint: PaintPort,
   at: number,
   back: boolean,
   raw: (tr: Transaction) => void,
@@ -77,24 +77,24 @@ function immortalGuard(
     const met: ("pass" | "stop")[] = [];
     tr.changes.iterChanges((fromA, toA) => {
       if (toA <= fromA) return;
-      const here = reachesImmortal(ix, s, fromA, toA);
+      const here = reachesImmortal(targets, structure, fromA, toA);
       if (here !== "none") met.push(here);
     });
     if (met.includes("stop")) return;
-    if (met.length > 0) consumePress(state, s, r, at, back, raw);
+    if (met.length > 0) consumePress(state, structure, paint, at, back, raw);
     else raw(tr);
   };
 }
 
 function consumePress(
   state: EditorState,
-  s: DocStructure,
-  r: PaintPort,
+  structure: DocStructure,
+  paint: PaintPort,
   at: number,
   back: boolean,
   dispatch: (tr: Transaction) => void,
 ): boolean {
-  const to = lawfulStop(state, s, r, at, back);
+  const to = lawfulStop(state, structure, paint, at, back);
   if (to !== null && to !== at)
     dispatch(
       state.update({
@@ -209,8 +209,8 @@ const cellSay = (t: ResolvedOwnedTarget): CellSay => cellRuleFor(t).name;
 
 const cellVerdict = (t: ResolvedOwnedTarget): Verdict | null => cellRuleFor(t).say(t);
 
-function backspaceAt(ix: OwnedIndex, pos: number): Verdict {
-  const a = ix.addressedBackward(pos);
+function backspaceAt(targets: OwnedIndex, pos: number): Verdict {
+  const a = targets.addressedBackward(pos);
   const t = a.target;
   const onePaint = (say: string): Verdict =>
     a.at < pos || a.kind !== "glyph"
@@ -252,8 +252,8 @@ function backspaceAt(ix: OwnedIndex, pos: number): Verdict {
   return whole("delete.usfm.owned", "own-whole", `take own(${t.set}) whole`);
 }
 
-function deleteAt(ix: OwnedIndex, pos: number): Verdict {
-  const a = ix.addressedForward(pos);
+function deleteAt(targets: OwnedIndex, pos: number): Verdict {
+  const a = targets.addressedForward(pos);
   const t = a.target;
   const onePaint = (say: string): Verdict =>
     a.at > pos || a.kind !== "glyph"
@@ -331,8 +331,9 @@ function commit(press: Press, v: Verdict): boolean {
     // at a locked `\v 3` opening its line is the newline that anchors the
     // paragraph (visible as its indent, so taken as the paragraph's). It only
     // moves the caret when that is immortal too, or nothing (Will, 2026-09-30).
-    const past =
-      v.span === undefined ? lawfulStop(state, s, r, at, back) : back ? v.span.from : v.span.to;
+    let past: number | null;
+    if (v.span === undefined) past = lawfulStop(state, s, r, at, back);
+    else past = back ? v.span.from : v.span.to;
     if (press.passed !== true && past !== null && past !== at) {
       const onward: Press = { ...press, at: past, passed: true };
       const next = back ? backspaceAt(ix, past) : deleteAt(ix, past);
@@ -365,48 +366,60 @@ function commit(press: Press, v: Verdict): boolean {
   return true;
 }
 
-export function guardedBackspace(
+function guardedPress(
   structureAt: GetStructure,
   plansAt: GetPlan,
-  r: PaintPort = NO_PAINT,
+  paint: PaintPort,
+  back: boolean,
 ): StateCommand {
   return ({ state, dispatch: raw }) => {
     const sel = state.selection.main;
     if (!sel.empty || !isVisual(state)) return false;
-    const ix = plansAt(state).targets();
-    const press: Press = { state, s: structureAt(state), ix, r, at: sel.from, back: true, raw };
-    return commit(press, backspaceAt(ix, sel.from));
+    const targets = plansAt(state).targets();
+    const press: Press = {
+      state,
+      s: structureAt(state),
+      ix: targets,
+      r: paint,
+      at: sel.from,
+      back,
+      raw,
+    };
+    return commit(press, back ? backspaceAt(targets, sel.from) : deleteAt(targets, sel.from));
   };
+}
+
+export function guardedBackspace(
+  structureAt: GetStructure,
+  plansAt: GetPlan,
+  paint: PaintPort = NO_PAINT,
+): StateCommand {
+  return guardedPress(structureAt, plansAt, paint, true);
 }
 
 export function guardedDelete(
   structureAt: GetStructure,
   plansAt: GetPlan,
-  r: PaintPort = NO_PAINT,
+  paint: PaintPort = NO_PAINT,
 ): StateCommand {
-  return ({ state, dispatch: raw }) => {
-    const sel = state.selection.main;
-    if (!sel.empty || !isVisual(state)) return false;
-    const ix = plansAt(state).targets();
-    const press: Press = { state, s: structureAt(state), ix, r, at: sel.from, back: false, raw };
-    return commit(press, deleteAt(ix, sel.from));
-  };
+  return guardedPress(structureAt, plansAt, paint, false);
 }
 
 export function mergeParagraphBackwards(structureAt: GetStructure): StateCommand {
   return ({ state, dispatch }) => {
-    const s = structureAt(state);
+    const structure = structureAt(state);
     const sel = state.selection.main;
     if (!sel.empty) return false;
-    const l = lineAt(s, state, sel.from);
-    if (!l || !opensAParagraph(l) || sel.from !== l.contentFrom || l.n <= 1) return false;
-    let prev = l.n - 1;
-    while (prev >= 1 && isBlankLine(s.lines.at(prev - 1))) prev--;
+    const line = lineAt(structure, state, sel.from);
+    if (!line || !opensAParagraph(line) || sel.from !== line.contentFrom || line.n <= 1)
+      return false;
+    let prev = line.n - 1;
+    while (prev >= 1 && isBlankLine(structure.lines.at(prev - 1))) prev--;
     if (prev < 1) return false;
-    const from = s.lines.toAt(prev - 1);
+    const from = structure.lines.toAt(prev - 1);
     dispatch(
       state.update({
-        changes: { from, to: l.contentFrom },
+        changes: { from, to: line.contentFrom },
         selection: { anchor: from },
         userEvent: "delete.usfm.paragraph",
         scrollIntoView: true,
@@ -425,7 +438,12 @@ interface RangePlan {
   readonly around: number;
 }
 
-function rangePlan(ix: OwnedIndex, s: DocStructure, from: number, to: number): RangePlan {
+function rangePlan(
+  targets: OwnedIndex,
+  structure: DocStructure,
+  from: number,
+  to: number,
+): RangePlan {
   let lo = from;
   let hi = to;
   let refused = false;
@@ -433,10 +451,10 @@ function rangePlan(ix: OwnedIndex, s: DocStructure, from: number, to: number): R
   const forced = new Set<number>();
   const seenBreak = new Set<number>();
   const pending = new Map<number, ResolvedOwnedTarget>();
-  for (const h of ix.targetsIn(from, to).hits) pending.set(h.target.id, h.target);
+  for (const h of targets.targetsIn(from, to).hits) pending.set(h.target.id, h.target);
   const consented = (t: ResolvedOwnedTarget) => from <= t.wholeSpan.from && to >= t.wholeSpan.to;
-  const overlaps = (sp: PlanSpan) => sp.to > lo && sp.from < hi;
-  const straddled = (sp: PlanSpan) => overlaps(sp) && (sp.from < lo || sp.to > hi);
+  const overlaps = (span: PlanSpan) => span.to > lo && span.from < hi;
+  const straddled = (span: PlanSpan) => overlaps(span) && (span.from < lo || span.to > hi);
   const wholeOrNothing = (t: ResolvedOwnedTarget): boolean => {
     if (t.typable && t.typable.from <= lo && t.typable.to >= hi) return false;
     if (t.editable.some((span) => span.from <= lo && span.to >= hi)) return false;
@@ -448,13 +466,13 @@ function rangePlan(ix: OwnedIndex, s: DocStructure, from: number, to: number): R
     return !inside || (t.policy === "DISSOLVE" && lo <= t.scope.from && hi >= t.scope.to);
   };
   const ownersOfBreaks = (): void => {
-    const first = lineIndexAt(s, lo);
-    const last = lineIndexAt(s, Math.max(lo, hi - 1));
-    for (let i = Math.max(0, first); first >= 0 && i <= last && i < s.lines.length; i++) {
-      const k = s.lines.toAt(i);
+    const first = lineIndexAt(structure, lo);
+    const last = lineIndexAt(structure, Math.max(lo, hi - 1));
+    for (let i = Math.max(0, first); first >= 0 && i <= last && i < structure.lines.length; i++) {
+      const k = structure.lines.toAt(i);
       if (k < lo || k >= hi || seenBreak.has(k)) continue;
       seenBreak.add(k);
-      const t = ix.addressedForward(k).target;
+      const t = targets.addressedForward(k).target;
       if (!t || settled.has(t.id)) continue;
       pending.set(t.id, t);
       forced.add(t.id);
@@ -481,10 +499,10 @@ function rangePlan(ix: OwnedIndex, s: DocStructure, from: number, to: number): R
   }
   const keep: PlanSpan[] = [];
   let around = 0;
-  for (const h of ix.targetsIn(lo, hi + 1).hits) {
+  for (const h of targets.targetsIn(lo, hi + 1).hits) {
     const t = h.target;
     if (t.mutability !== "immortal" || (consented(t) && t.paint === "none")) continue;
-    const a = anchoredBack(s, t.wholeSpan, t.stop);
+    const a = anchoredBack(structure, t.wholeSpan, t.stop);
     const clipped = { from: Math.max(a.from, lo), to: Math.min(a.to, hi) };
     if (clipped.to <= clipped.from) continue;
     keep.push(clipped);
@@ -589,9 +607,9 @@ export function deleteMarkersWholeOrNotAtAll(
     const pasted = insTexts.length ? insTexts[insTexts.length - 1] : null;
     if (pasted !== null && ranges > 1) return tr;
     const rule = "deleteMarkersWholeOrNotAtAll";
-    const s = structureAt(tr.startState);
-    const plan = rangePlan(plansAt(tr.startState).targets(), s, from, to);
-    const welded = weld(s, tr.startState, plan.lo, plan.hi);
+    const structure = structureAt(tr.startState);
+    const plan = rangePlan(plansAt(tr.startState).targets(), structure, from, to);
+    const welded = weld(structure, tr.startState, plan.lo, plan.hi);
     const joinText = welded || (plan.delimiterGone ? spaceBefore(tr.startState, plan.hi) : "");
     const v = rangeVerdict(plan, { from, to }, pasted, joinText);
     noteTr(tr, { rule, verdict: RANGE_TRACED[v.act], detail: v.say });

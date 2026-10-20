@@ -171,9 +171,10 @@ export function mountReader(options: ReaderOptions): ReaderMount {
       if (seated === undefined || seated === null || !sameSource(seated, analysis)) return false;
       followed = host;
       const detachHost = host.attach((changes) => {
-        const win = satelliteRange(view.state) ?? { from: 0, to: view.state.doc.length };
-        const from = pending === undefined ? win.from : pending.mapPos(win.from, -1);
-        const to = pending === undefined ? win.to : pending.mapPos(win.to, 1);
+        const windowRange = satelliteRange(view.state) ?? { from: 0, to: view.state.doc.length };
+        const from =
+          pending === undefined ? windowRange.from : pending.mapPos(windowRange.from, -1);
+        const to = pending === undefined ? windowRange.to : pending.mapPos(windowRange.to, 1);
         pending = pending === undefined ? changes : pending.compose(changes);
         if (changes.touchesRange(from, to) !== false) {
           if (frame === undefined) frame = requestAnimationFrame(flush);

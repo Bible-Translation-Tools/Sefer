@@ -56,17 +56,17 @@ const slotAt = (
 ):
   | { readonly from: number; readonly to: number; readonly marker: { from: number; to: number } }
   | undefined => {
-  const s = structureAt(state);
+  const structure = structureAt(state);
   const at = (markerFrom: number, place: number) => {
     const spaced = state.doc.sliceString(place, place + 1) === " ";
     const end = spaced ? place + 1 : place;
     return { from: place, to: end, marker: { from: markerFrom, to: end } };
   };
   if (kind === "v") {
-    const v = s.verses.find((row) => row.markerFrom >= from && row.markerFrom <= to);
-    return v === undefined ? undefined : at(v.markerFrom, v.contentFrom);
+    const verse = structure.verses.find((row) => row.markerFrom >= from && row.markerFrom <= to);
+    return verse === undefined ? undefined : at(verse.markerFrom, verse.contentFrom);
   }
-  for (const line of s.lines)
+  for (const line of structure.lines)
     if (line.from >= from && line.from <= to) return at(line.from, line.contentFrom);
   return undefined;
 };

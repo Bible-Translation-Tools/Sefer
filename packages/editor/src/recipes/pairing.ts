@@ -11,6 +11,7 @@ import type { DocStructure } from "../core/docStructure";
 import { structureAt } from "../core/editorState";
 import { blockAt } from "../core/kernel";
 import { blockIsEmpty } from "./emptyBlocks";
+import { rangeDecorations } from "./rangeDecorations";
 
 export interface PairedRange {
   readonly from: number;
@@ -47,18 +48,12 @@ const SPAN = Decoration.mark({ class: "usfm-paired" });
 const LINE = Decoration.line({ class: "usfm-paired-line" });
 
 const decorationsFor = (
-  doc: { length: number; lineAt: (at: number) => { from: number } },
+  doc: Parameters<typeof rangeDecorations>[0],
   range: PairedRange,
-): DecorationSet => {
-  const from = Math.max(0, Math.min(range.from, doc.length));
-  const to = Math.max(from, Math.min(range.to, doc.length));
-  return to > from
-    ? Decoration.set([SPAN.range(from, to)], true)
-    : Decoration.set([LINE.range(doc.lineAt(from).from)], true);
-};
+): DecorationSet => rangeDecorations(doc, range, SPAN, LINE);
 
-const verseRange = (s: DocStructure, pos: number): PairedRange | undefined => {
-  const rows = s.verses;
+const verseRange = (structure: DocStructure, pos: number): PairedRange | undefined => {
+  const rows = structure.verses;
   let at = -1;
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];

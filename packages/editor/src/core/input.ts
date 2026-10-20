@@ -19,10 +19,10 @@ import {
 import type { OwnedIndex } from "./owned";
 import { note, noteTr, tracing } from "./trace";
 
-function designatorAt(s: DocStructure, pos: number): number | null {
-  for (const v of s.verses)
+function designatorAt(structure: DocStructure, pos: number): number | null {
+  for (const v of structure.verses)
     if (v.num !== null && pos > v.numFrom && pos < v.numTo) return v.contentFrom;
-  for (const l of s.lines)
+  for (const l of structure.lines)
     if (isDesignatorLine(l) && l.num !== null && pos > l.numFrom && pos < l.numTo)
       return l.contentFrom;
   return null;
@@ -37,28 +37,28 @@ interface BreakPoint {
 
 function whereALineBreakMayLand(
   state: EditorState,
-  s0: DocStructure,
-  ix: OwnedIndex,
+  structure: DocStructure,
+  targets: OwnedIndex,
   sel: SelectionRange,
 ): BreakPoint {
   if (!sel.empty) return { at: sel.from, above: false, travels: false, why: "range" };
 
-  const b = blockAt(s0, sel.from);
+  const b = blockAt(structure, sel.from);
   if (b && sel.from === b.contentFrom && b.contentFrom > b.from)
     return { at: b.from, above: true, travels: true, why: "content-head" };
 
-  const num = designatorAt(s0, sel.from);
+  const num = designatorAt(structure, sel.from);
   if (num) return { at: num, above: false, travels: false, why: "after-designator" };
 
-  const line = s0.lines.maybe(state.doc.lineAt(sel.from).number - 1);
+  const line = structure.lines.maybe(state.doc.lineAt(sel.from).number - 1);
   const inside = line?.words.find((w) => sel.from > w.from && sel.from < w.to);
   if (inside) return { at: inside.to, above: false, travels: false, why: "after-wrapper" };
 
-  const prev = ix.addressedBackward(sel.from);
+  const prev = targets.addressedBackward(sel.from);
   if (prev.kind === "box" && prev.at === sel.from && prev.target)
     return { at: prev.target.wholeSpan.from, above: true, travels: true, why: "box-travels" };
 
-  const held = s0.lines.maybe(state.doc.lineAt(prev.at).number - 1);
+  const held = structure.lines.maybe(state.doc.lineAt(prev.at).number - 1);
   const straddled = held?.words.find((w) => prev.at > w.from && prev.at < w.to);
   const v = straddled ? straddled.from : prev.at;
   if (prev.kind !== "none" && v < sel.from) {
@@ -66,7 +66,7 @@ function whereALineBreakMayLand(
     let at = v;
     if (!above) {
       let u = v;
-      while (u < sel.from && inDesignatorDelimiter(s0, u)) u++;
+      while (u < sel.from && inDesignatorDelimiter(structure, u)) u++;
       if (u === sel.from && u > v) at = u;
     }
     return { at, above, travels: false, why: at === v ? "eject" : "eject-past-delimiter" };
@@ -81,56 +81,62 @@ export function guardedEnter(structureAt: GetStructure, plansAt: GetPlan): State
     if (!isVisual(state)) return false;
     const sel = state.selection.main;
     if (tracing(state)) {
-      const b0 = blockAt(structureAt(state), sel.from);
-      const ln = state.doc.lineAt(sel.from);
+      const block = blockAt(structureAt(state), sel.from);
+      const docLine = state.doc.lineAt(sel.from);
       note(state, {
         rule: "guardedEnter",
         verdict: "passed",
         detail:
-          `at ${sel.from} L${ln.number}:${sel.from - ln.from}` +
-          ` block=${b0 ? `${b0.kind}[${b0.from},${b0.contentFrom},${b0.to})` : "NONE"}` +
+          `at ${sel.from} L${docLine.number}:${sel.from - docLine.from}` +
+          ` block=${block ? `${block.kind}[${block.from},${block.contentFrom},${block.to})` : "NONE"}` +
           ` ctx=${JSON.stringify(state.doc.sliceString(Math.max(0, sel.from - 12), sel.from) + "|" + state.doc.sliceString(sel.from, sel.from + 12))}`,
       });
     }
     if (!state.facet(newlineIsABreak)) {
-      const s0 = structureAt(state);
-      const bp = whereALineBreakMayLand(state, s0, plansAt(state).targets(), sel);
-      const kind = blockKindForEnter(blockAt(s0, sel.from));
+      const structure = structureAt(state);
+      const breakPoint = whereALineBreakMayLand(state, structure, plansAt(state).targets(), sel);
+      const kind = blockKindForEnter(blockAt(structure, sel.from));
       const nlch = nl(state);
-      const insert = bp.above ? `\\${kind} ${nlch}` : `${nlch}\\${kind} `;
-      const to = sel.empty ? bp.at : sel.to;
+      const insert = breakPoint.above ? `\\${kind} ${nlch}` : `${nlch}\\${kind} `;
+      const to = sel.empty ? breakPoint.at : sel.to;
       note(state, {
         rule: "guardedEnter",
         verdict: "rewrote",
-        detail: `${bp.why} — put [${bp.at}${to === bp.at ? "" : `,${to}`}]=${JSON.stringify(insert)}`,
+        detail: `${breakPoint.why} — put [${breakPoint.at}${to === breakPoint.at ? "" : `,${to}`}]=${JSON.stringify(insert)}`,
       });
       dispatch(
         state.update({
-          changes: { from: bp.at, to, insert },
+          changes: { from: breakPoint.at, to, insert },
           selection: {
-            anchor: bp.travels
+            anchor: breakPoint.travels
               ? sel.from + insert.length
-              : bp.at + insert.length - (bp.above ? nlch.length : 0),
+              : breakPoint.at + insert.length - (breakPoint.above ? nlch.length : 0),
           },
-          userEvent: bp.travels ? "input.usfm.paragraphAbove" : "input.usfm.paragraph",
+          userEvent: breakPoint.travels ? "input.usfm.paragraphAbove" : "input.usfm.paragraph",
           scrollIntoView: true,
         }),
       );
       return true;
     }
     const s = structureAt(state);
-    const l = lineAt(s, state, sel.from);
+    const line = lineAt(s, state, sel.from);
     const insert = nl(state);
-    if (l && l.marker && sel.empty && sel.from === chromeEnd(l) && l.contentFrom > l.from) {
+    if (
+      line &&
+      line.marker &&
+      sel.empty &&
+      sel.from === chromeEnd(line) &&
+      line.contentFrom > line.from
+    ) {
       note(state, {
         rule: "guardedEnter",
         verdict: "rewrote",
-        detail: `line-above — put [${l.from}]=${JSON.stringify(insert)}`,
+        detail: `line-above — put [${line.from}]=${JSON.stringify(insert)}`,
       });
       dispatch(
         state.update({
-          changes: { from: l.from, insert },
-          selection: { anchor: l.from + insert.length },
+          changes: { from: line.from, insert },
+          selection: { anchor: line.from + insert.length },
           userEvent: "input.usfm.lineAbove",
           scrollIntoView: true,
         }),
@@ -157,8 +163,8 @@ export function guardedEnter(structureAt: GetStructure, plansAt: GetPlan): State
 export function keepPoetryMarkersAtTheStartOfTheirLine(structureAt: GetStructure): TransactionRule {
   return (tr) => {
     if (!tr.docChanged || !isVisual(tr.startState) || isTrusted(tr)) return tr;
-    const s = structureAt(tr.startState);
-    const blocks = s.blocks;
+    const structure = structureAt(tr.startState);
+    const blocks = structure.blocks;
     const firstBlockAtOrAfter = (pos: number): number => {
       let lo = 0;
       let hi = blocks.length;
@@ -207,12 +213,12 @@ export function refuseMarkupPastedInsideAWord(
   return (tr) => {
     if (!tr.docChanged || isTrusted(tr) || !isVisual(tr.startState)) return tr;
     if (!tr.isUserEvent("input.paste")) return tr;
-    const s = structureAt(tr.startState);
+    const structure = structureAt(tr.startState);
     let veto = false;
     const after = tr.newDoc.toString();
     tr.changes.iterChanges((fromA, _tA, fromB, toB, ins) => {
       if (veto || !ins.length) return;
-      const line = s.lines.maybe(tr.startState.doc.lineAt(fromA).number - 1);
+      const line = structure.lines.maybe(tr.startState.doc.lineAt(fromA).number - 1);
       if (!line?.words.some((w) => fromA > w.from && fromA < w.to)) return;
       if (marksUp(after, fromB, toB)) veto = true;
     });
@@ -275,11 +281,11 @@ export function supplyTheDelimiterAMarkerIsMissing(structureAt: GetStructure): T
   return (tr) => {
     if (!tr.docChanged || isTrusted(tr) || !isVisual(tr.startState)) return tr;
     if (!tr.isUserEvent("input")) return tr;
-    const s = structureAt(tr.startState);
+    const structure = structureAt(tr.startState);
     let fix: number | null = null;
     tr.changes.iterChanges((fromA, toA, _fB, _tB, ins) => {
       if (fix || fromA !== toA || !ins.length) return;
-      if (!atContentHead(s, tr.startState, fromA)) return;
+      if (!atContentHead(structure, tr.startState, fromA)) return;
       if (!/^\S/.test(ins.toString())) return;
       fix = fromA;
     });
@@ -302,8 +308,8 @@ export function supplyTheDelimiterAMarkerIsMissing(structureAt: GetStructure): T
 
 export function setBlockMarker(structureAt: GetStructure, marker: string): StateCommand {
   return ({ state, dispatch }) => {
-    const s = structureAt(state);
-    const b = blockAt(s, state.selection.main.from);
+    const structure = structureAt(state);
+    const b = blockAt(structure, state.selection.main.from);
     if (!b) return false;
     const head = b.lines[0];
     const changes = opensAParagraph(head)

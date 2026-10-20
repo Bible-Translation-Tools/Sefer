@@ -36,14 +36,14 @@ export const newlineIsABreak = Facet.define<boolean, boolean>({ combine: (v) => 
 
 export const isVisual = (state: EditorState) => state.facet(modeFacet) === "regular";
 
-export const lineAt = (s: DocStructure, state: EditorState, pos: number): DocLine | null =>
-  s.lines.maybe(state.doc.lineAt(pos).number - 1);
+export const lineAt = (structure: DocStructure, state: EditorState, pos: number): DocLine | null =>
+  structure.lines.maybe(state.doc.lineAt(pos).number - 1);
 
 export interface PaintPort {
   hidden: (state: EditorState, from: number, to: number) => boolean;
   draws: (state: EditorState, pos: number) => boolean;
   joined: (state: EditorState, pos: number) => boolean;
-  atomic: (state: EditorState, l: DocLine) => readonly { from: number; to: number }[];
+  atomic: (state: EditorState, line: DocLine) => readonly { from: number; to: number }[];
 }
 
 const NO_ATOMS: readonly { from: number; to: number }[] = [];
@@ -57,14 +57,15 @@ export const NO_PAINT: PaintPort = {
 
 export type ChromeRange = { from: number; to: number; lean: "fwd" | "back" };
 
-export function chromeForCaret(l: DocLine): ChromeRange[] {
+export function chromeForCaret(line: DocLine): ChromeRange[] {
   const out: ChromeRange[] = [];
-  if (l.marker) {
-    if (isDesignatorLine(l)) {
-      out.push({ from: l.from, to: l.markerEnd, lean: "fwd" });
-    } else if (l.contentFrom > l.from) out.push({ from: l.from, to: l.contentFrom, lean: "fwd" });
+  if (line.marker) {
+    if (isDesignatorLine(line)) {
+      out.push({ from: line.from, to: line.markerEnd, lean: "fwd" });
+    } else if (line.contentFrom > line.from)
+      out.push({ from: line.from, to: line.contentFrom, lean: "fwd" });
   }
-  for (const wd of l.words) {
+  for (const wd of line.words) {
     out.push({ from: wd.from, to: wd.surfaceFrom, lean: "fwd" });
     out.push({ from: wd.attrFrom, to: wd.to, lean: "back" });
   }
@@ -75,17 +76,17 @@ export function nl(_state: EditorState) {
   return "\n";
 }
 
-export function blockAt(s: DocStructure, pos: number): Block | null {
-  const blocks = s.blocks;
+export function blockAt(structure: DocStructure, pos: number): Block | null {
+  const blocks = structure.blocks;
   for (let i = 0; i < blocks.length; i++)
     if (pos >= blocks.fromAt(i) && pos <= blocks.toAt(i)) return blocks.at(i);
   return null;
 }
 
-export function chromeEnd(l: DocLine): number {
-  if (!l.marker) return l.from;
-  if (isDesignatorLine(l)) return l.markerEnd;
-  return l.contentFrom;
+export function chromeEnd(line: DocLine): number {
+  if (!line.marker) return line.from;
+  if (isDesignatorLine(line)) return line.markerEnd;
+  return line.contentFrom;
 }
 
 function aBlockOpensAt(blocks: BlockTable, pos: number): boolean {
@@ -94,11 +95,11 @@ function aBlockOpensAt(blocks: BlockTable, pos: number): boolean {
   return false;
 }
 
-export function atContentHead(s: DocStructure, state: EditorState, pos: number): boolean {
-  const l = s.lines.maybe(state.doc.lineAt(pos).number - 1);
+export function atContentHead(structure: DocStructure, state: EditorState, pos: number): boolean {
+  const line = structure.lines.maybe(state.doc.lineAt(pos).number - 1);
   const head =
-    (l && l.marker && pos === l.contentFrom && l.contentFrom > l.from) ||
-    aBlockOpensAt(s.blocks, pos);
+    (line && line.marker && pos === line.contentFrom && line.contentFrom > line.from) ||
+    aBlockOpensAt(structure.blocks, pos);
   if (!head) return false;
   return pos > 0 && !/\s/.test(state.doc.sliceString(pos - 1, pos));
 }
