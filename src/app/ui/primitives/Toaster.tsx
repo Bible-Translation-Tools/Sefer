@@ -12,6 +12,7 @@ import LoaderCircle from "lucide-solid/icons/loader-circle";
 import X from "lucide-solid/icons/x";
 import { For, Show } from "solid-js";
 
+import { Button } from "./Button";
 import { cx } from "./cx";
 import { IconButton } from "./IconButton";
 import { dismiss, toastList, type Toast } from "./toasts";
@@ -59,6 +60,20 @@ export function Toaster() {
                 )}
               </Show>
             </div>
+            <Show when={toast.action}>
+              {(action) => (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    dismiss(toast.id);
+                    action().onPress();
+                  }}
+                >
+                  {action().label}
+                </Button>
+              )}
+            </Show>
             <Show when={toast.dismissible}>
               <IconButton
                 label="Dismiss"

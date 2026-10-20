@@ -306,6 +306,8 @@ export interface Shell {
   readonly suppress: (finding: Finding, rung: Rung) => Promise<void>;
   /** Takes a suppression back, by its identity. */
   readonly unsuppress: (id: string) => Promise<void>;
+  /** Which rung hides a suppressed finding. */
+  readonly suppressedBy: (finding: Finding) => Rung | undefined;
 
   /**
    * Something moved, and this says what — the one door the shell's stores are
@@ -1521,6 +1523,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     suppressedFindings,
     suppress: (target, rung) => suppressions.suppress(target, rung),
     unsuppress: (id) => suppressions.unsuppress(id),
+    suppressedBy: (target) => suppressions.rungOf(target),
     report,
     paletteOpen,
     setPaletteOpen: (open) => {

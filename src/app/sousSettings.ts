@@ -71,6 +71,30 @@ export const withSetting = (
     : { ...rest, [key]: value };
 };
 
+/**
+ * The switch that turns off the check a Sous finding came from, by the
+ * finding's code (`corpusCode` in `#core/findings/finding`): "Turn off this
+ * check". A hygiene finding has none; it is always reported.
+ */
+const CHECK_SWITCHES: Readonly<Record<string, SousSettingKey>> = {
+  "sous.convention.Placement": "placement",
+  "sous.convention.RunShape": "run_shape",
+  "sous.convention.ExactNeighbor": "exact_neighbor",
+  "sous.convention.PooledNeighbor": "pooled_neighbor",
+  "sous.convention.Rarity": "rarity",
+  "sous.convention.Casing": "casing",
+  "sous.convention.WordLength": "word_length",
+  "sous.convention.Doubled": "doubled",
+  "sous.convention.LetterRun": "letter_runs",
+  "sous.convention.SentenceStart": "sentence_start",
+  "sous.convention.BookRate": "book_rate",
+  "sous.source-copy": "source_copy",
+  "sous.length-proportionality": "lengths_enabled",
+};
+
+export const checkSwitchOf = (code: string): SousSettingKey | undefined =>
+  CHECK_SWITCHES[code] ?? (code.startsWith("sous.presence.") ? "presence" : undefined);
+
 /** The headings for kitchen's three groups, in display order. */
 export const SOUS_GROUPS = {
   rules: {

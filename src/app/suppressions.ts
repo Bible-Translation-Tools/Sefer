@@ -38,6 +38,8 @@ export interface SuppressionStore {
   prune(): Promise<void>;
   suppress(finding: Finding, rung: Rung): Promise<void>;
   unsuppress(id: string): Promise<void>;
+  /** Which rung hides this finding, if any: "Bring back" says what it will undo. */
+  rungOf(finding: Finding): Rung | undefined;
   /** Back to none, when the project closes. */
   clear(): void;
 }
@@ -100,6 +102,14 @@ export const makeSuppressionStore = (options: {
     unsuppress: async (id) => {
       const next = withoutSuppression(held, id);
       if (next !== held) await save(pruned(next));
+    },
+    rungOf: (finding) => {
+      const keys = finding.suppression;
+      if (keys === undefined) return undefined;
+      if (held.here.has(keys.here)) return "here";
+      if (keys.everywhere !== undefined && held.everywhere.has(keys.everywhere))
+        return "everywhere";
+      return undefined;
     },
     clear: () => {
       root = undefined;

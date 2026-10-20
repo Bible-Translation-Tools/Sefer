@@ -31,6 +31,13 @@ export interface Toast {
    * toast would leave a permanent undismissable card on the screen.
    */
   readonly dismissible: boolean;
+  /** One button beside the words, such as Undo; pressing it also closes the toast. */
+  readonly action?: ToastAction;
+}
+
+export interface ToastAction {
+  readonly label: string;
+  readonly onPress: () => void;
 }
 
 export interface ToastOptions {
@@ -41,6 +48,7 @@ export interface ToastOptions {
   /** Milliseconds; `false` keeps it until something closes it. Default 5000. */
   readonly autoClose?: number | false;
   readonly dismissible?: boolean;
+  readonly action?: ToastAction;
 }
 
 const [list, setList] = createSignal<readonly Toast[]>([], { name: "toasts" });
@@ -82,6 +90,7 @@ const show = (options: ToastOptions, loading = false): string => {
     message: options.message,
     loading,
     dismissible: options.dismissible ?? true,
+    ...(options.action === undefined ? {} : { action: options.action }),
   };
   setList((held) => [...held.filter((each) => each.id !== id), toast]);
   arm(id, loading ? false : options.autoClose);

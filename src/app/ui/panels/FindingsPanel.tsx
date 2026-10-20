@@ -89,6 +89,7 @@ import {
 import { createFindingsFilter, VIEWS, type FindingsView } from "./findingsFilter";
 import { FindingsFilters } from "./FindingsFilters";
 import { SousSentence } from "./SousSentence";
+import { SuppressActions } from "./SuppressActions";
 
 /** One finding's line in a card header, before it has been measured. */
 const LINE_HEIGHT = 30;
@@ -103,6 +104,13 @@ export function FindingsPanel() {
   const [note, setNote] = createSignal("");
   const [cursor, setCursor] = createSignal(0, { name: "findingsCursor" });
   const [settingsOpen, setSettingsOpen] = createSignal(false, { name: "findingsSettingsOpen" });
+  /** The list is what the reader marked fine, not what is left to look at. */
+  const [showingSuppressed, setShowingSuppressed] = createSignal(false, {
+    name: "findingsShowingSuppressed",
+  });
+  const hiddenCount = createMemo(() => shell.suppressedFindings().length, {
+    name: "findingsHiddenCount",
+  });
   /**
    * The source text beside each finding's verse, as Find shows it: read-only,
    * and optional. Choosing one (or none) binds the project's source, and the
@@ -172,7 +180,7 @@ export function FindingsPanel() {
   const pool = createMemo(
     (): readonly Finding[] => {
       if (shell.project() === undefined) return [];
-      const listed = shell.findings();
+      const listed = showingSuppressed() ? shell.suppressedFindings() : shell.findings();
       const only = pattern();
       // A pattern is not one of `FindingsFilter`'s fields and should not become
       // one: it is an address another screen hands over for one visit, not a
@@ -516,6 +524,7 @@ export function FindingsPanel() {
             {(comparison) => <SearchDialog queries={comparison()} />}
           </Show>
           <div class="flex items-center gap-controls">
+            <SuppressActions finding={finding} />
             <Show when={finding.details !== undefined}>
               <Button
                 size="sm"
@@ -640,6 +649,20 @@ export function FindingsPanel() {
             <span class="text-small text-on-surface-tertiary" data-findings-count={summary().shown}>
               {t("{shown} of {total} shown", { shown: summary().shown, total: summary().total })}
             </span>
+            <Show when={hiddenCount() > 0 || showingSuppressed()}>
+              <Button
+                size="sm"
+                variant={showingSuppressed() ? "secondary" : "tertiary"}
+                aria-pressed={showingSuppressed() ? "true" : "false"}
+                data-findings-hidden={hiddenCount()}
+                title={t("Findings you marked fine, on this device")}
+                onClick={() => setShowingSuppressed((on) => !on)}
+              >
+                {showingSuppressed()
+                  ? t("Back to findings")
+                  : t("{count} marked fine", { count: hiddenCount() })}
+              </Button>
+            </Show>
             <SegmentedControl<FindingsView>
               label={t("Group findings by")}
               items={VIEWS.map((view) => ({ value: view.value, label: t(view.label) }))}
