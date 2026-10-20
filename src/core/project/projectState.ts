@@ -13,8 +13,9 @@
  * a pick never erases the name. Keys this build does not know are kept as
  * they were: a newer build may have written them.
  *
- * A team fact (an approval, a suppression) does NOT belong here: this file
- * never reaches a teammate (`planning/items/2026-10-06-project-state-and-suppressions.mdx`).
+ * Suppressions and key-term approvals are this device's too, but each has its
+ * own file beside this one (`./deviceFile.ts`), so neither's format is tied
+ * to the other's (`planning/items/2026-10-06-project-state-and-suppressions.mdx`).
  */
 
 import { Effect, FileSystem, type PlatformError } from "effect";

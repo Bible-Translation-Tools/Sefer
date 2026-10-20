@@ -322,6 +322,7 @@ One `Finding` shape over engine diagnostics and project checks, with a semantic 
 ### Constraints and known bugs
 
 - The inventory only lists characters the engine made a claim about; it waits on the Sous census.
+- Suppressions (2026-10-20, branch `suppressions`): Fine here, Always allow and Turn off on a Sous finding, kept per device in `.sefer/sous-chef-suppressions.json` by kitchen's identities and left out of the list, the squiggles and the counts. Lint findings cannot be suppressed until kitchen ask 15. → [findings](architecture/findings.md#suppressions-this-is-fine)
 - A Sous finding's message is kitchen's descriptor rendered through its English ICU catalog (`src/core/findings/messages.ts`, `intl-messageformat`, locale `en`), the first time it is read. Onion's messages are still the engine's catalogue strings, and there is no second language yet.
 
 ### Ideas / future
@@ -681,7 +682,7 @@ Tailwind over semantic tokens, a primitives inventory, and corvu only inside `pr
 ### Constraints and known bugs
 
 - The guide is a fixture.
-- Approvals and which verses were edited are held in memory for the session: each term's row counts its core verses approved, and nothing keeps them across a reload. Where they live for good is the approvals-and-suppressions decision.
+- Approvals are kept per device in `.sefer/key-term-approvals.json` (2026-10-20, branch `suppressions`), keyed by term id and verse, read when `/terms` opens. Each stores the verse's hash when its card opened and at approval; the state is derived from those and the text now (`#core/stet/approvals`), so a verse edited after approval shows Changed since approved, and restoring the text restores the approval. A term row counts the approvals on its curated verses, from the file. Which verses were edited in the session is still held in memory.
 - A card's edit is a provisional session (PR #5, 2026-10-08): every keystroke lands in the Book, Save changes keeps it in the working text, and Cancel, Escape or a press into another card dispatches the inverse of the card's own changes (`ownEcho`); undo after a Cancel brings the text back. A buffer in front of the Book with its own history is the alternative still being weighed. → [stet](architecture/stet.md)
 - A guide occurrence is an Address, mapped onto the project by Location's `resolve`: a verse inside a bridge is found, a hole in a verse list is missing, and missing verses are skipped.
 - A bridge target card shows "No source text bound": the source reading is looked up by the card's `sid` (`JUD 1:1-2`), not the guide's (`JUD 1:2`). Not new.

@@ -2,7 +2,7 @@
 id: 6c8936de-cbb7-450c-a5cc-ae6d62d13f65
 title: "Suppressions and key-term approvals"
 kind: idea
-status: planned
+status: in-progress
 created: 2026-10-06
 updated: 2026-10-20
 priority: 0
@@ -14,6 +14,58 @@ State that belongs to a project and outlives a session: proofreading suppression
 is fine here") and key-term approvals. Reference picks are already built this way (per device,
 `.sefer/project.json`). Today approvals live in memory for the session and nothing persists
 suppressions.
+
+## Built, 2026-10-20 (branch `suppressions`, not merged)
+
+Five commits, each driven on the fixture (small-nt) with agent-browser:
+
+- **Core and store** (b7fbd48). `src/core/findings/suppressions.ts`: the file, the keys
+  (kitchen's `sous-identity`), pruning on text. `corpusReader` splits each book into shown and
+  suppressed, so the list, the squiggles and the bell agree. `src/app/suppressions.ts` reads the
+  file before `attach`, writes through `src/core/project/deviceFile.ts`, prunes after.
+- **The panel** (f37ab6b). Fine here on a Sous line; Always allow and Turn off behind More, each
+  with its line; "N marked fine" lists them with Show again; Undo on every answer (toasts gained
+  an action). Driven: 28 → 27 and back; Always allow "Z" 27 → 26; Turn off 26 → 8 and back.
+- **Approvals** (21ba111). `src/core/stet/approvals.ts` and `src/app/approvals.ts`, read when
+  `/terms` opens. Driven: Approve 0/1 → 1/1; an edit saved shows Changed since approved and
+  Approve again; Cancel restores text and state; Approve again records Approved with edits.
+- **The tutorial** (c9dcb00), six stops, second in Settings' Tutorials; and a fix for the terms
+  page throwing on first render after a reload.
+- **Docs**: findings.md "Suppressions", services.md.
+
+**Corrected by the code:**
+
+- **Proofreading settings are global**, not per project (`settings.ts`). So Turn off says "in
+  every project".
+- **The introduction's reference is `GEN 0`**: the existing machine spelling (`addressCode`),
+  not a new one.
+- **A term row's count reads the file**: a term not open has no text on screen to say whether a
+  verse changed since. Only the open term's cards show Changed since approved.
+
+**Not driven:** persistence across a reload (the fixture is in memory and reseeds), and the
+needs-re-check state. Both want a real project: on the branch, on `x-en-ulb`.
+
+<Followup id="tests-wanted">
+
+Tests we'd want once behaviour is locked (no tests now, by the standing rule):
+
+- **Keys** (`suppressions.ts`, pure): `siteKeyOf` names the verse by `addressCode` for a verse,
+  a segment, a bridge, a list (its hull), text before verse 1 (`PSA 3`) and the introduction
+  (`GEN 0`); the ordinal counts identical texts earlier in the raw USFM, markers included.
+- **Survival**: a suppression survives an edit elsewhere in the verse and a settings change that
+  moves which rule reports the site; it does not survive editing the flagged text, renumbering
+  the verse, or an identical text added earlier in it.
+- **Pruning** (`staleHere`): drops a `here` entry whose text is gone; keeps one whose book is
+  not held; never drops `everywhere`; never prunes because a check is off.
+- **The split** (`corpusReader`): with suppressions, `of`, `all`, `totals` and `suppressed`
+  agree; with none, `totals` converts nothing.
+- **The file**: an unreadable file is never saved over; an unknown version reads as unreadable.
+- **Approvals** (`approvals.ts`, pure): `stateOf` for every arm of the machine, including a
+  header mismatch (needs re-check) and an edit undone (back to approved).
+- **Driven, once**: Fine here survives a reload on a real (OPFS) project; the tutorial's six
+  stops.
+
+</Followup>
 
 ## Where it lives: this device, for now
 
@@ -111,7 +163,7 @@ algorithm in the header, so a change marks entries "needs re-check" rather than 
   },
 }} />
 
-<Followup id="persist-approvals">Persist key-term approvals as above, with the "changed since approved" badge.</Followup>
+<Followup id="persist-approvals" done>Persist key-term approvals as above, with the "changed since approved" badge.</Followup>
 
 ## Proofreading suppressions: the keys
 
@@ -242,7 +294,7 @@ Will, 2026-10-20: suppressions come first, before form mode or anything else new
 version is **Fine here** on the finding; **Always allow** and **Turn off this check** sit behind
 More, and the tutorial says why.
 
-<Followup id="tutorial">
+<Followup id="tutorial" done>
 
 A tutorial for the PO and the designer on the tour machine (`src/app/tour/tours/`), walking a
 real finding: Fine here, the hidden count, where suppressions are listed and how one comes back,
@@ -335,4 +387,4 @@ findings, sharing with the team).
 
 <Followup id="flood-offer">**Later, not in the first version** (Will, 2026-10-20: it is just turning off the rule, which may move closer to the findings row itself). When a project has unusually many doubled-word findings, offer: "this language may repeat words on purpose; turn off doubled-word checks?" One comparison on Sefer's side, no engine change; it is "Turn off this check" offered before the reader goes looking. From kitchen's 2026-09-29 handoff, the one part of it Sefer has not built.</Followup>
 
-<Followup id="suppressions">Build suppressions: the ladder on a finding (fine here as `v1:s`, always allow as `v1:p`, turn off in Sous settings; onion once ask 15 ships), no note yet; the `{ shown, suppressed }` partition in core; text-based pruning; a count of hidden findings in the panel.</Followup>
+<Followup id="suppressions" done>Build suppressions: the ladder on a finding (fine here as `v1:s`, always allow as `v1:p`, turn off in Sous settings; onion once ask 15 ships), no note yet; the `{ shown, suppressed }` partition in core; text-based pruning; a count of hidden findings in the panel.</Followup>
