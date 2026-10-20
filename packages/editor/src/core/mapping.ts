@@ -1,13 +1,3 @@
-/**
- * One projection-free classification table: token or node shape → `ClassKey`.
- *
- * First match wins, rows are bucketed by token kind, and NOTHING here knows
- * about presentation. That separation is the point: `registry.ts` decides how a
- * class paints and whether it may be edited, and it can be re-decided per mode
- * without touching a single classification. A shape this table cannot rule on
- * becomes a named `unmapped` row rather than a guess.
- */
-
 import {
   Category,
   ClosingBehavior,
@@ -99,14 +89,6 @@ const MARKER_KINDS: readonly number[] = [
   TokenKind.Milestone,
 ];
 
-/**
- * The engine's `standalone` extension category, read off the marker row: a
- * milestone that takes no closer. No spec milestone is bare (`\ts`, `\qt` and
- * the rest close with `\*`), so this is exactly the template a registered
- * standalone marker resolves to — the same test onion's own walker makes. The
- * editor never names the marker; which markers are registered is the
- * application's policy (`src/app/legacyMarkers.ts`).
- */
 const standaloneRow = (idx: number): boolean => {
   const row = MARKERS[idx];
   return (
@@ -211,11 +193,6 @@ const TOKEN_ROWS: readonly Row<TokenShape>[] = [
       "a ClosingMarker that closes no node prints raw; a P5 leak with no row",
     ),
   },
-  // An unknown marker is PASSTHROUGH, like a standalone one (Will,
-  // 2026-09-25): invisible, immutable, the caret goes around it and the
-  // paragraph flows through it. The engine still reports it as a finding, and
-  // USFM mode shows it as written. A marker the project registered is not
-  // unknown: it has its category's row (a legacy \\s5 is standalone).
   {
     id: "unknown.line",
     kinds: MARKER_KINDS,

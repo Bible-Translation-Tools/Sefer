@@ -1,32 +1,3 @@
-/**
- * An Address: a place in scripture that belongs to no particular text.
- *
- *     LUK            the book
- *     LUK intro      what comes before its first chapter
- *     MAT 2-4        whole chapters, one or several
- *     LUK 1:1-2      verses — a single verse is a range with equal ends
- *     MAT 1:20-2:3   and a range may cross a chapter
- *
- * No offsets, no text, no hash. An Address says where; it does not claim that
- * any text has the place. Whether this project's Luke has verse 1:80 is a
- * question for `resolve`, over one text's TOC, and "no" is an honest answer
- * rather than a malformed Address.
- *
- * Every verse Address is a range, so there is no "single verse" kind to keep
- * apart from a "range" kind; `from` and `to` are equal. Two points rather than
- * `chapter` plus `verseStart`/`verseEnd`, because `MAT 1:20-2:3` cannot be
- * turned into a list without knowing how many verses chapter 1 has, and that
- * is versification: it differs by text.
- *
- * Front matter is `intro`, never chapter 0. The machine spelling (U23003's
- * basic reference, below) writes it as chapter 0; nothing in Sefer compares a
- * chapter with 0.
- *
- * A segment (`3a`) is a coordinate: `3a` and `3b` are different places and
- * `3` covers both. Segments order by their letters, the way U23003 proposes
- * them (`a`-`z`).
- */
-
 import type { BookId } from "../book";
 
 export interface Point {
@@ -82,11 +53,6 @@ export const comparePoints = (a: Point, b: Point): number =>
 
 const pointText = (point: Point): string => `${point.verse}${point.segment ?? ""}`;
 
-/**
- * The coordinates after the book: `1:1-2`, `1:20-2:3`, `2-4`, `3`. Empty for
- * a whole book. The ASCII hyphen, as Will asked and as U23003 writes it; a
- * typographic dash is the renderer's business, not the Address's.
- */
 const coordinates = (address: Address, intro: string): string => {
   switch (address.kind) {
     case "book":

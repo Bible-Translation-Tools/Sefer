@@ -1,12 +1,3 @@
-/**
- * Caret motion and the settlement phase: every arrow, Home/End and word jump
- * consumes `stops.ts`, and every transaction ends with the caret on a legal
- * position.
- *
- * Motion is a command (the user asked) and settlement is a rule (the editor
- * insists); both are here so the definition of "legal" is read from one place.
- */
-
 import {
   EditorSelection,
   EditorState,

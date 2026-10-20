@@ -1,14 +1,3 @@
-/**
- * The rule order, as data: admission → normalization → protection →
- * settlement.
- *
- * Two of CodeMirror's hooks are involved, and they run in opposite directions;
- * `compose.install` is the only place that knows it. Naming every rule and
- * listing them in one array is what makes `omit` possible, what lets a trace say
- * which door a keystroke went through, and what makes the order reviewable
- * without reading the implementations.
- */
-
 import { settleTheCaretOnALegalPosition } from "./caret";
 import { pullSelectionsIntoTheClip, refuseEditsOutsideTheClip, surfaceRangeAt } from "./clip";
 import { deleteMarkersWholeOrNotAtAll } from "./deletion";
@@ -46,8 +35,6 @@ export interface PhaseRule {
 }
 
 export const PHASES = [
-  // A satellite's edit is judged with that satellite's range installed
-  // (`surfaceRange`, empty on the canonical state), and nothing waives it.
   {
     phase: "admission",
     name: "refuseEditsOutsideTheSurface",

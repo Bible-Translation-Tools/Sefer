@@ -1,18 +1,3 @@
-/**
- * `Analysis` — the one value every consumer of the engine reads, plus the pure
- * helpers that read it.
- *
- * This file is the vocabulary half of the Galley seam. `galley.ts` owns the
- * wasm handle and the single `analyze` call; everything downstream (the
- * editor's fold, findings, fixes, project analysis) imports FROM HERE and
- * never from the engine package. That is why its types are re-exported below:
- * the pinned build is regenerated upstream, and one import site to re-point
- * is the whole cost of moving to a new tag.
- *
- * Nothing here allocates a fiber or touches the wasm wall. These are the
- * functions the keystroke path calls, so they are plain and synchronous.
- */
-
 import { declaredVersion } from "@wycliffeassociates/scripture-kitchen/reader";
 import type { Dish, DiagnosticView } from "@wycliffeassociates/scripture-kitchen/reader";
 import {
@@ -23,7 +8,6 @@ import {
   TokenKind,
 } from "@wycliffeassociates/scripture-kitchen/reader";
 
-// The reader's surface, re-exported so the engine has exactly one importer.
 export {
   Category,
   CloseReason,
@@ -119,15 +103,6 @@ export const toLf = (text: string): { readonly text: string; readonly changed: b
   if (!text.includes("\r")) return { text, changed: false };
   return { text: text.replace(/\r\n?/g, "\n"), changed: true };
 };
-
-// ---------------------------------------------------------------------------
-// Token and marker classification
-//
-// A "class word" packs what a consumer asks of a marker — its coarse family in
-// the low three bits, orthogonal facts above them — into one integer, so the
-// editor's per-token pass reads one number instead of resolving a table row
-// and branching on `kind`, `category` and spelling separately.
-// ---------------------------------------------------------------------------
 
 /** `TokenKind` under the names the editor's tables use. */
 export const TOKEN = {
@@ -271,14 +246,6 @@ export interface NotePart {
   readonly to: number;
 }
 
-// ---------------------------------------------------------------------------
-// Diagnostics
-//
-// A `DiagnosticView` is a cursor, not a value: these read one and hand back
-// something a UI can hold. No text crosses the wasm wall to render a message —
-// the caller supplies `slice` over the document it already has.
-// ---------------------------------------------------------------------------
-
 export type Severity = "error" | "warning" | "info" | "hint";
 
 export const diagnosticName = (finding: DiagnosticView): string => finding.code().name;
@@ -316,10 +283,6 @@ export const diagnosticSeverity = (
       return null;
   }
 };
-
-// ---------------------------------------------------------------------------
-// The book's own name
-// ---------------------------------------------------------------------------
 
 const headings = new WeakMap<Dish, string | null>();
 

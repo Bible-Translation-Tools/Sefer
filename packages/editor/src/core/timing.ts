@@ -1,20 +1,3 @@
-/**
- * Local spans: `span(name, note)` returns the closer, and the whole thing is
- * inert until the keystroke meter opens a gesture.
- *
- * Deliberately not Effect and deliberately not Observability: these spans wrap
- * work inside `changeFilter` and `transactionFilter`, thousands of times per
- * paragraph typed. `armed()` is false outside a metered gesture, and then a span is
- * two `performance.now()` calls and no allocation. `packages/editor/src/observability.ts`
- * is the one bridge to Sefer's ring, and it forwards verdicts, not spans.
- *
- * `onDerived` is how these spans reach the transaction trace
- * (`core/instrument.ts`): a span here cannot see an `EditorState`, so instead
- * of plumbing one through every derivation the closer calls back and the entry
- * lands on whichever trace is open. Registered once, at module load; when no
- * trace is open the callback returns immediately.
- */
-
 export interface SpanTotal {
   ms: number;
   n: number;
@@ -26,12 +9,6 @@ let seq = 0;
 let bucket: Map<string, SpanTotal> | null = null;
 let stack: number[] | null = null;
 
-/**
- * A closed span, for whoever is assembling the wider picture. ONE listener —
- * `core/instrument.ts` — because this is a bridge, not a bus. Called for every
- * span, armed or not, so the trace sees the derivation pipeline without the
- * `performance.mark` machinery being switched on.
- */
 type Derived = (name: string, note: string, ms: number) => void;
 
 let derived: Derived | null = null;

@@ -1,24 +1,3 @@
-/**
- * The token and node planes: `scanCst` turns one `Analysis` into flat typed
- * arrays the rest of the editor indexes into.
- *
- * Why planes and not objects: the reader hands out cursors over wasm memory, and
- * a keystroke asks thousands of small questions (what kind is the token at this
- * offset, where does it end, what shape is its node). One pass into
- * `Int32Array`s answers all of them in constant time and allocates nothing per
- * question.
- *
- * These planes are a CACHE over the Galley reader, not a second reader. Every
- * value is read through `TokenRow`/`NodeRow`/`Tree`/`Toc`; nothing here knows a
- * byte offset or a stride, so a wire change lands in scripture-kitchen's
- * generated reader and reaches this file as a type error, not a misread. What
- * the planes add is Sefer's own: line openings, note/origin/wrapper scope,
- * block extents, designator roles and the `mapping.ts` rows.
- *
- * TODO: pin with a test once editor behaviour is locked. The planes must agree
- * with the reader they cache (spans, kinds, owners) on a real fixture.
- */
-
 import {
   type Analysis,
   type NodeView,
@@ -130,10 +109,6 @@ export function scanCst(doc: string, analysis: Analysis): CstScan {
       startAt[i] = from;
       endAt[i] = to;
       flagsAt[i] = flags;
-      // A passthrough marker — standalone, or one the engine does not know
-      // (row 0) — is a point inside its line, like a milestone; it is found by
-      // its row rather than its token kind, which it shares with every other
-      // marker. The mapping's row decides what it is; this only gathers.
       const passthrough =
         isMarkerKind(kind) &&
         (r.marker === 0 || (kind === TOKEN.MARKER && STANDALONE_ROWS[r.marker]));
@@ -154,11 +129,6 @@ export function scanCst(doc: string, analysis: Analysis): CstScan {
   const payloadEnd = (i: number): number =>
     (flagsAt[i] & TOKEN_DELIMITER_FOLDED) !== 0 ? endAt[i] - 1 : endAt[i];
 
-  /**
-   * Horizontal whitespace of either shape the engine names: a `Pad` token, or
-   * a `Text` token carrying `TOKEN_BLANK`. Wider than `TokenView.isBlank()`,
-   * which is the flag alone; Sefer's line walks treat both as nothing to open.
-   */
   const isHorizontalSpace = (i: number): boolean =>
     kindAt[i] === TOKEN.PAD || (flagsAt[i] & TOKEN_BLANK) !== 0;
 
@@ -171,11 +141,6 @@ export function scanCst(doc: string, analysis: Analysis): CstScan {
   }
   lineTo[lineCount - 1] = doc.length;
 
-  /**
-   * The first token that starts at or after `pos` (`count` when none does).
-   * Not `Tree.tokenAt`, which answers the token CONTAINING an offset and
-   * throws outside the document.
-   */
   const firstTokenFrom = (pos: number): number => {
     let lo = 0;
     let hi = count;
@@ -384,8 +349,6 @@ export function notePartsOf(
   extentEnd: number,
   shapeAt: (i: number) => TokenShape,
 ): NotePart[] {
-  // A run is grown in place as adjacent spans of the same part are met, so
-  // the accumulator is mutable where the published `NotePart` is not.
   const out: NotePart[] = [];
   let run: { kind: number; from: number; to: number } | null = null;
   const flush = () => {

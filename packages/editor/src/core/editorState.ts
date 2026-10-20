@@ -1,15 +1,3 @@
-/**
- * The state-derived products: the plan, the paint index, the decoration set, and
- * the caret clip — each cached per `EditorState`.
- *
- * Caching per state rather than per revision is the whole trick: CodeMirror
- * gives a new state object for every transaction and shares it with every
- * reader, so a `WeakMap` keyed on it is a memo with exactly the right lifetime
- * and no invalidation logic to get wrong. A build that throws is caught and
- * recorded (`stateFailed`) rather than taking the view down: a broken paint is a
- * visible defect, an exception in a state field is a dead editor.
- */
-
 import {
   EditorState,
   type Extension,

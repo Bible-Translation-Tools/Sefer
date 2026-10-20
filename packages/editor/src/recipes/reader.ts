@@ -1,32 +1,3 @@
-/**
- * The reader: a read-only view of ONE range of a text, painted exactly as the
- * editor paints it.
- *
- * This is what an excerpt card shows until the reader asks to edit it — Zed's
- * multibuffer shape, a small piece of the file. It is the editor's READING half
- * over the book's text (the structure, the projection, the decorations; the
- * same `usfm-p`, verse pips and chapter rules) with the satellite's own clip
- * over it, so a card in Find reads like the page it came from and not like a
- * flattened quotation of it.
- *
- * It is not a satellite: nothing here writes, so there is no Funnel and no seat.
- * An excerpt list must not seat every book it shows — a seat is an editor-
- * backed Book with a journal behind it — and a card that is only being read
- * needs none of that. Edit swaps this view for a satellite over the same range
- * (`ExcerptEditor`), at the same place, in the same projection: to the reader
- * one surface became writable.
- *
- * Read-only is said TWICE, as `reference.ts` says it: `EditorState.readOnly`
- * for commands, `EditorView.editable` so the browser never composes into it.
- *
- * ## One parse, one structure, per book
- *
- * The caller hands over the book's `Analysis`, and the analyzer answers with it
- * — the view's document IS that analysis' text, so no card ever parses. The
- * editor's `DocStructure` built over it is lent to every later view of the same
- * analysis (`borrowedStructure`), so forty cards over one book build it once.
- */
-
 import { type ChangeSet, Compartment, EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { sameSource, type Analysis } from "@sefer/text/engine/analysis";
@@ -52,7 +23,6 @@ import {
 } from "./satellite";
 import { giveBack, takeView } from "./viewPool";
 
-/** How long typing must pause before a card the typing did not touch catches up. */
 const CATCH_UP_MS = 400;
 
 export interface ReaderOptions {
@@ -106,7 +76,6 @@ const sameMarks = (a: readonly MarkedRange[], b: readonly MarkedRange[]): boolea
     );
   });
 
-/** The structure first built over each parse, lent to every later reader of it. */
 const lent = new WeakMap<Analysis, DocStructure>();
 
 export function mountReader(options: ReaderOptions): ReaderMount {
@@ -114,27 +83,18 @@ export function mountReader(options: ReaderOptions): ReaderMount {
   const projection = new Compartment();
   const { analysis } = options;
   const text = analysis.text;
-  /** The seat this view follows, while it follows one. */
   let followed: Funnel | undefined;
 
   const state = EditorState.create({
     doc: text,
     extensions: [
-      // The document never changes, so it is always the text this parse
-      // describes; anything else asked of it would be a bug upstream.
       analyzer.of(() => analysis),
-      // The seat's parse first, while following one: after a published
-      // change it is the only parse that describes this document.
       borrowedStructure.of(() => followed?.structure() ?? null),
       borrowedStructure.of(() => lent.get(analysis) ?? null),
       readingLayer,
       viewLayer(),
       projection.of(policyView(options.policy, options.surface)),
       clipped(clipSpanOf(text, options.range)),
-      // The render window starts as the clip. Left to itself it starts as
-      // nothing, which the decorator reads as "the whole document" — every
-      // card decorated its whole book, and then again once the view reported
-      // its viewport. Seeded, a card decorates the lines it shows.
       renderRangeField.init(() => wholeLinesOf(text, options.range)),
       markedRanges(options.marks),
       EditorState.readOnly.of(true),
@@ -148,10 +108,6 @@ export function mountReader(options: ReaderOptions): ReaderMount {
   options.parent.appendChild(view.dom);
   done();
 
-  // What the view was last given, so a caller that re-sends the same value —
-  // every Solid effect runs once on mount with what the view was built with —
-  // costs nothing. A reconfigure rebuilds every decoration, and on a list that
-  // mounts a card per frame while scrolling that was the largest single cost.
   let policy = options.policy;
   let clip = clipSpanOf(text, options.range);
   let marks = options.marks;
@@ -195,7 +151,6 @@ export function mountReader(options: ReaderOptions): ReaderMount {
       view.dispatch({ effects: projection.reconfigure(policyView(next, options.surface)) });
     },
     reclip: (range: { readonly from: number; readonly to: number }) => {
-      // A range is in the canonical text's coordinates: catch up first.
       flush();
       const next = clipSpan(view.state.doc, range);
       if (next.from === clip.from && next.to === clip.to) return;
@@ -212,14 +167,10 @@ export function mountReader(options: ReaderOptions): ReaderMount {
       stop();
       if (following === undefined) return true;
       const host = funnelOf(following);
-      // The engine's hash and length, not a compare of the two texts: a whole
-      // book per card, for every card, each time a book is seated.
       const seated = host.structure().analysis;
       if (seated === undefined || seated === null || !sameSource(seated, analysis)) return false;
       followed = host;
       const detachHost = host.attach((changes) => {
-        // Where this card's clip is, in the coordinates the change is in:
-        // the view has not applied what is still pending.
         const win = satelliteRange(view.state) ?? { from: 0, to: view.state.doc.length };
         const from = pending === undefined ? win.from : pending.mapPos(win.from, -1);
         const to = pending === undefined ? win.to : pending.mapPos(win.to, 1);

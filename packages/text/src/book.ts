@@ -1,21 +1,3 @@
-// book.ts
-//
-// The Book port: one addressable USFM document and the ONE write path into
-// its canonical text. Every module that edits — keyboard, paste, satellite
-// windows, fixes, search-and-replace, revert, recovery, multi-book operations —
-// ends in `book.apply(changes, origin, trust)`. There is no second write path,
-// which is what lets Save, Recovery, ProjectAnalysis and the UI subscribe once
-// and trust that they saw every edit.
-//
-// Two implementations satisfy the port: the plain in-memory Book here (text
-// held as a `Source`; no rules, no history) and the editor-backed Book in
-// `@sefer/editor`, whose canonical text is a CodeMirror state and whose `apply`
-// runs the editing phases before accepting. Readers cannot tell them apart.
-//
-// Publication is synchronous and explicit — a Set of subscribers run in order
-// after acceptance, never a bus or an async queue — because the keystroke path
-// (phases → analyze → mutate → publish) must finish inside one frame.
-
 import { Data, Result } from "effect";
 
 import {
@@ -130,34 +112,23 @@ export const identifyBook = (text: string, path: string): BookId =>
   ID_MARKER.exec(text)?.[1] ?? fileStem(path);
 
 export const asChangeList = (changes: Change | readonly Change[]): readonly Change[] =>
-  // SAFETY: the parameter is a Change or a readonly Change[]; when it is not an
-  // array it can only be the single Change.
+  // SAFETY: the parameter is a Change or a readonly Change[]; when it is not an array it can only be the single Change.
   Array.isArray(changes) ? changes : [changes as Change];
 
 const refuse = (error: SourceChangeError): Refusal =>
   new Refusal({ rule: "source.apply", reason: error.reason, description: error.description });
 
-/**
- * Applies a change list to a Source. The list is in before-text coordinates,
- * so it is applied back to front: each later range is untouched by the
- * splices before it. Overlapping ranges are refused as out of range once the
- * earlier splice has moved them.
- */
 const applyAll = (source: Source, changes: readonly Change[]): Result.Result<Source, Refusal> => {
   const ordered = [...changes].sort((a, b) => b.from - a.from);
   let current = source;
   for (const change of ordered) {
     const next = applyChange(current, change);
     if (Result.isFailure(next)) return Result.fail(refuse(next.failure));
-    // Each splice counts one revision in Source; a Book edit is one revision,
-    // so the loop keeps the text and lets the caller stamp it once below.
     current = { text: next.success.text, stamp: source.stamp, form: source.form };
   }
   return Result.succeed({
     text: current.text,
     stamp: { revision: source.stamp.revision + 1, length: current.text.length },
-    // The disk form is a property of the bytes, not of the edit: it survives
-    // every apply and is only ever set by `decode`.
     form: source.form,
   });
 };

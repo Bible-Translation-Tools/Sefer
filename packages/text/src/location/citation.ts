@@ -1,50 +1,3 @@
-/**
- * Reading a Citation: what somebody wrote, and the Addresses they meant.
- *
- *     "Luke 3"                     LUK 3
- *     "luk 3.1", "Lucas 3:1"       LUK 3:1
- *     "Mat 1:1,3"                  MAT 1:1 and MAT 1:3
- *     "Mat 1:1,3; 2:4-6; Mrk 3:1"  four Addresses; book and chapter carry forward
- *     "MAT 2-4"                    chapters 2 to 4
- *     "MAT 1:20-2:3"               one range across a chapter
- *     "1 John 2:3a"                a segment is a coordinate
- *     "Luke intro", "LUK 0"        the introduction
- *
- * The grammar, English by default:
- *
- *     citation := group (";" group)*
- *     group    := [book] [items]              a group with no book inherits one
- *     items    := item ("," item)*
- *     item     := ref ["-" ref]               "-", "–" or "—"
- *     ref      := number [(":" | ".") verse]
- *     verse    := digits segment?             segment: letters or marks, "3a"
- *
- * A bare number means whatever the ref before it in the same group was
- * refining, which is U23003's "contextual reference": after `1:5` a `23` is a
- * verse, after `5` it is a chapter. A `;` starts a new chapter group, so the
- * number after it is a chapter again. The list is kept as written — `1:1,2`
- * stays two Addresses rather than becoming `1:1-2`, because a consumer can
- * coalesce and cannot un-merge.
- *
- * TWO grammars share this code, and the difference is the input, not the
- * rules. `navigation` is the palette's and the sidebar's: a book word may be a
- * prefix ("phil"), and in an input with no `:` or `.` anywhere the first `,`
- * separates chapter from verse, because "luk 3,1" is what one keyboard
- * tradition types for 3:1 and a navigation box only ever wants one place.
- * `prose` is for a word in a sentence: only a full name, id or registered
- * abbreviation is a book, and `,` is always a list. Not written yet, because
- * its one consumer (comments) is not; the option is here so the grammar has
- * one home when it is.
- *
- * Two kinds of failure, kept apart on purpose. This parser only ever says
- * INVALID — not a Citation at all: an unknown book word, verse 0, a range that
- * runs backwards. A real Address the text lacks ("Romans" in a project without
- * Romans, Luke 30) parses fine; resolution answers "missing" for it, which is
- * a different message to the person.
- *
- * Pure: text and a catalogue in, a value out. Pinned by `citation.test.ts`.
- */
-
 import type { BookId } from "../book";
 import {
   chaptersAddress,
@@ -96,18 +49,12 @@ class Invalid {
 
 const DASHES = /[-–—]/;
 
-/** One ref: a number, or a number and a verse. */
 interface Ref {
   readonly chapter?: number;
   readonly number: number;
   readonly segment?: string;
 }
 
-/**
- * The refs half of a group, as tokens: numbers (with their segment), `:`,
- * `,` and `-`. Whitespace separates nothing and is dropped; anything else is
- * malformed.
- */
 type Token =
   | { readonly kind: "number"; readonly value: number; readonly segment?: string }
   | { readonly kind: "colon" | "comma" | "dash" };
@@ -143,11 +90,6 @@ const tokenize = (refs: string): Token[] => {
   return tokens;
 };
 
-/**
- * Reads `ref` at `at`: `n` or `n:v`. A bare number is refined by `context` —
- * the chapter the group is currently inside, when the ref before it named a
- * verse — so it is a verse there and a chapter otherwise.
- */
 const readRef = (
   tokens: readonly Token[],
   at: number,
@@ -178,7 +120,6 @@ const readRef = (
       next: at + 1,
     };
   }
-  // A chapter carries no segment: `\c 12b` is not a chapter number either.
   if (first.segment !== undefined) throw new Invalid("malformed");
   return { ref: { number: first.value }, next: at + 1 };
 };
@@ -189,7 +130,6 @@ const pointOf = (ref: Ref): Point => ({
   ...(ref.segment === undefined ? {} : { segment: ref.segment }),
 });
 
-/** One item, `ref` or `ref-ref`, as an Address. */
 const itemAddress = (book: BookId, start: Ref, end: Ref | undefined): Address => {
   const chapterOnly = (ref: Ref): boolean => ref.chapter === undefined;
 
@@ -206,16 +146,12 @@ const itemAddress = (book: BookId, start: Ref, end: Ref | undefined): Address =>
     if (end.number < start.number) throw new Invalid("backwards");
     return chaptersAddress(book, start.number, end.number);
   }
-  // A chapter at one end and a verse at the other (`2-3:4`): the chapter end
-  // stands for its first verse, which is where a chapter starts. The other way
-  // round cannot arise — a bare number after a verse is read as a verse.
   const from = pointOf(start);
   const to = pointOf(end);
   if (comparePoints(to, from) < 0) throw new Invalid("backwards");
   return versesAddress(book, from, to);
 };
 
-/** The items of one group, reading context left to right. */
 const readItems = (book: BookId, tokens: readonly Token[]): Address[] => {
   const out: Address[] = [];
   let at = 0;
@@ -239,12 +175,6 @@ const readItems = (book: BookId, tokens: readonly Token[]): Address[] => {
   return out;
 };
 
-/**
- * Where the numbers start: the first digit after the first letter. The
- * letter matters because a book's name can start with one — the `1` of
- * "1 John 2:3" is part of the name, and only a digit after the name has begun
- * is a coordinate.
- */
 const splitGroup = (group: string): { readonly words: string; readonly refs: string } => {
   const letter = group.search(/\p{L}/u);
   if (letter < 0) return { words: "", refs: group };
@@ -260,7 +190,6 @@ const splitGroup = (group: string): { readonly words: string; readonly refs: str
 export const citationWords = (input: string): string =>
   splitGroup(input.split(";")[0] ?? "").words.trim();
 
-/** The book the words name, and whether they end with a word for "introduction". */
 const readBook = (
   words: string,
   catalogue: NameCatalogue,
@@ -268,8 +197,6 @@ const readBook = (
 ): { readonly book: BookId; readonly intro: boolean } => {
   const match: BookMatch = options.grammar === "navigation" ? "prefix" : "exact";
   const whole = matchBook(words, catalogue, match, options.held);
-  // An exact name wins over reading the last word as "intro": a book could be
-  // called something that ends in one.
   if (whole !== undefined && matchBook(words, catalogue, "exact") !== undefined) {
     return { book: whole, intro: false };
   }
@@ -282,10 +209,6 @@ const readBook = (
   throw new Invalid("unknown-book", words.trim());
 };
 
-/**
- * In navigation, "luk 3,1" means 3:1: with no `:` or `.` anywhere, a group's
- * first `,` is the chapter-verse separator. Everywhere else `,` is a list.
- */
 const looseComma = (tokens: Token[], text: string): Token[] => {
   if (/[:.]/.test(text)) return tokens;
   const comma = tokens.findIndex((token) => token.kind === "comma");

@@ -1,14 +1,3 @@
-/**
- * The row vocabulary of the fold: what a line, block, chapter, verse, note and
- * word ARE, as interfaces, plus the mutable `Fold` scratch record the builders
- * fill in.
- *
- * Types only (and one throw). It exists so `docStructure.ts` can build the
- * typed-array columns while `lineTable.ts`, `blockTable.ts`, `notes.ts` and
- * `designators.ts` each own one lazy row class over them — the tables are the
- * data, these are the shapes a reader sees.
- */
-
 import type { NotePart } from "@sefer/text/engine/analysis";
 
 import type { CstScan } from "./cst";

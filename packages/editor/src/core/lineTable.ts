@@ -1,13 +1,3 @@
-/**
- * The line table: one lazy `DocLine` per document line, over the columns
- * `buildStructure` filled.
- *
- * Rows are built on demand and memoized, because a chapter of Psalms is a few
- * hundred lines and a keystroke reads three of them. Also holds the small
- * predicates every consumer asks of a line — is it blank, does it open a
- * paragraph, does it paint its own line.
- */
-
 import { TOKEN } from "@sefer/text/engine/analysis";
 
 import { spellingAt } from "./cst";

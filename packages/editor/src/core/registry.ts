@@ -1,14 +1,3 @@
-/**
- * Policy as data: for each `ClassKey`, how it paints and how mutable it is —
- * the class table, as a record.
- *
- * `PROJECTIONS` are deltas over the default registry, so a mode ("usfm",
- * "hide-notes", "lock-structure") is a small patch and not a code path. No rule
- * anywhere branches on a projection name; they read `rowAt(state, cls)`. The
- * struck combinations are listed rather than merely unused, so an assignment
- * that reaches an unlawful cell is a caught error and not a strange screen.
- */
-
 import { Facet, type EditorState } from "@codemirror/state";
 
 export type PaintReach = "point" | "boundary" | "ambient" | "none";
@@ -226,9 +215,6 @@ export const OWNED_SETS = {
   char: { painting: ["char"], hidden: ["chrome"] },
   note: { painting: ["note.caller"], hidden: ["note.markup", "note.body"] },
   standalone: { painting: ["standalone"], hidden: [] },
-  // The one newline a paragraph shows as a space where it flows through blank
-  // lines and passthrough lines (`plan.ts`'s held gap). The set is the space
-  // the reader sees, so it owns the lines it holds: taking the space takes them.
   join: { painting: ["newline.inside"], hidden: ["standalone"] },
   milestone: { painting: ["milestone"], hidden: [] },
   optbreak: { painting: ["optbreak"], hidden: [] },
@@ -236,13 +222,11 @@ export const OWNED_SETS = {
 
 export type OwnedSetName = keyof typeof OWNED_SETS;
 
-// SAFETY: `OwnedSetName` is `keyof typeof OWNED_SETS`, so the object's own
-// keys are exactly that type; `Object.keys` only widens it to string.
+// SAFETY: `OwnedSetName` is `keyof typeof OWNED_SETS`, so the object's own keys are exactly that type; `Object.keys` only widens it to string.
 const OWNED_SET_NAMES = Object.keys(OWNED_SETS) as OwnedSetName[];
 
 export function setsPaintedBy(cls: ClassKey): OwnedSetName[] {
-  // SAFETY: every value of OWNED_SETS is an OwnedSet; the assertion only
-  // recovers the shared shape the literal's inferred type split per key.
+  // SAFETY: every value of OWNED_SETS is an OwnedSet; the assertion only recovers the shared shape the literal's inferred type split per key.
   return OWNED_SET_NAMES.filter((k) => (OWNED_SETS[k] as OwnedSet).painting.includes(cls));
 }
 
@@ -262,9 +246,7 @@ export interface Assignment {
 class UnclampableDelta extends Error {}
 
 const clone = (r: Registry): Registry => {
-  // SAFETY: the loop immediately below assigns every CLASS_KEYS entry, and
-  // `Registry` is `Record<ClassKey, RegistryRow>` — so the record is total
-  // before it is read.
+  // SAFETY: the loop immediately below assigns every CLASS_KEYS entry, and `Registry` is `Record<ClassKey, RegistryRow>` — so the record is total before it is read.
   const out = {} as Registry;
   for (const k of CLASS_KEYS) out[k] = { ...r[k], cell: { ...r[k].cell } };
   return out;
@@ -276,8 +258,7 @@ function resolve(base: Registry, deltas: readonly AssignmentDelta[]): Assignment
 
   const hidden = new Set<ClassKey>();
   for (const d of deltas)
-    // SAFETY: `AssignmentDelta` is `Partial<Record<ClassKey, …>>`, so its own
-    // keys are ClassKeys; `d[k]` below is checked for undefined anyway.
+    // SAFETY: `AssignmentDelta` is `Partial<Record<ClassKey, …>>`, so its own keys are ClassKeys; `d[k]` below is checked for undefined anyway.
     for (const k of Object.keys(d) as ClassKey[]) {
       const patch = d[k];
       if (!patch) continue;
@@ -326,8 +307,7 @@ function resolve(base: Registry, deltas: readonly AssignmentDelta[]): Assignment
 
 export const PROJECTIONS: Record<string, AssignmentDelta> = {
   default: {},
-  // SAFETY: built from CLASS_KEYS with a `Partial<Cell>` value per key, which
-  // is what AssignmentDelta is; `Object.fromEntries` loses only the key type.
+  // SAFETY: built from CLASS_KEYS with a `Partial<Cell>` value per key, which is what AssignmentDelta is; `Object.fromEntries` loses only the key type.
   usfm: Object.fromEntries(
     CLASS_KEYS.map((k) => [k, { paint: "point", mutability: "direct" }]),
   ) as AssignmentDelta,
@@ -350,11 +330,6 @@ export const PROJECTIONS: Record<string, AssignmentDelta> = {
   },
   "hide-notes": { "note.caller": { paint: "none" } },
   "hide-verse-numbers": { "slot.v": { paint: "none" } },
-  // A verse number as a pip no key takes: hidden and immortal, which the pip
-  // clamp draws as the verse pip and keeps immortal. For a surface whose place
-  // IS its verse — a card — where renumbering or deleting a verse would leave
-  // the card pointing at nothing. A press stops at it rather than going past
-  // into the verse beside: on a card that is context, not the card's text.
   "lock-verse-numbers": { "slot.v": { paint: "none", mutability: "immortal", stop: true } },
 };
 

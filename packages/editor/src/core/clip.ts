@@ -1,23 +1,3 @@
-/**
- * The clip: which chapter is visible and which part of it is editable, plus the
- * two rules that enforce it.
- *
- * A clip is Sefer's answer to "one chapter at a time" — the editor holds the
- * WHOLE book, and the clip hides and protects everything outside the picked
- * chapter. Admission refuses edits outside it; settlement pulls a stray
- * selection back in. Both read the same extents, so what is guarded and what is
- * shown cannot drift apart.
- *
- * The two rules take the range as a function, and the chapter clip is only one
- * of their callers: a satellite's range is guarded by the same pair — the
- * change half by the Book, over `surfaceRange` (`refuseEditsOutsideTheSurface`
- * in `phases.ts`), the selection half by the satellite itself
- * (`recipes/satellite.ts`). The difference is trust. The chapter clip is the
- * canonical editor's view choice, so a trusted edit (a fix, the front matter
- * card) may write outside it; a satellite's range is what that surface IS, so
- * nothing waives it — `{ trustWaives: false }`.
- */
-
 import { EditorState, Facet, MapMode, StateEffect, StateField, type Text } from "@codemirror/state";
 
 import { type ChapterRow, type DocStructure, structureField } from "./docStructure";

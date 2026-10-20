@@ -131,11 +131,9 @@ export interface OffsetMap {
 }
 
 export const offsetMap = (raw: string): OffsetMap => {
-  // Where each dropped character sits in the raw text, in order.
   const dropped: number[] = [];
   if (raw.charCodeAt(0) === 0xfeff) dropped.push(0);
   for (let at = raw.indexOf("\r\n"); at !== -1; at = raw.indexOf("\r\n", at + 2)) dropped.push(at);
-  /** How many dropped characters sit before `raw`. */
   const before = (offset: number): number => {
     let lo = 0;
     let hi = dropped.length;
@@ -149,8 +147,6 @@ export const offsetMap = (raw: string): OffsetMap => {
   return {
     toCanonical: (offset) => offset - before(offset),
     toRaw: (offset) => {
-      // The k-th dropped character shifts every canonical offset at or past
-      // `dropped[k] - k` by one more; that sequence never decreases.
       let lo = 0;
       let hi = dropped.length;
       while (lo < hi) {

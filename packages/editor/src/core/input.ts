@@ -1,14 +1,3 @@
-/**
- * Normalization rules for text arriving from the keyboard and the clipboard, and
- * the two commands that insert structure.
- *
- * Each rule is named for what it does and nothing else: supply the delimiter a
- * typed marker is missing, refuse a bare backslash, refuse a paste that would
- * add a chapter, refuse markup pasted inside a word, keep a poetry marker at the
- * start of its line. They are separate because a user can turn one off (`omit`)
- * and because a trace should say which one spoke.
- */
-
 import { EditorState, type SelectionRange, type StateCommand } from "@codemirror/state";
 
 import { isDesignatorLine, opensAParagraph, type DocStructure } from "./docStructure";

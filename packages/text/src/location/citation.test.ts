@@ -1,12 +1,3 @@
-/**
- * The Citation parser, as a table: what somebody writes, and the Addresses it
- * means. The one test file the build-out rule allows in Sefer (Will,
- * 2026-09-24), because most of the application stands on this answer.
- *
- * Addresses are written in their U23003 spelling (`addressCode`) so each row
- * reads as the specification it is.
- */
-
 import { describe, expect, test } from "vitest";
 
 import { addressCode } from "./address";
@@ -59,7 +50,6 @@ describe("ranges", () => {
     ["Luke 1:1—2", ["LUK 1:1-2"]],
     ["Mat 2-4", ["MAT 2-4"]],
     ["Mat 1:20-2:3", ["MAT 1:20-2:3"]],
-    // A bare chapter at the start of a range stands for its first verse.
     ["Mat 2-3:4", ["MAT 2:1-3:4"]],
   ])("%s", (text, expected) => {
     expect(read(text)).toEqual(expected);
@@ -69,11 +59,9 @@ describe("ranges", () => {
 describe("lists: book and chapter carry forward", () => {
   test.each([
     ["Mat 1:1,3", ["MAT 1:1", "MAT 1:3"]],
-    // Kept as written: a consumer can coalesce, and cannot un-merge.
     ["Mat 1:1,2", ["MAT 1:1", "MAT 1:2"]],
     ["Mat 1:5-23", ["MAT 1:5-23"]],
     ["Mat 1:1,3; 2:4-6; Mrk 3:1", ["MAT 1:1", "MAT 1:3", "MAT 2:4-6", "MRK 3:1"]],
-    // After `;` a bare number is a chapter again.
     ["Mat 1:1; 3", ["MAT 1:1", "MAT 3"]],
     ["Mat 1:20-2:3, 5", ["MAT 1:20-2:3", "MAT 2:5"]],
     ["Mat 5, 7", ["MAT 5", "MAT 7"]],
@@ -137,8 +125,6 @@ describe("navigation reads loosely", () => {
   });
 
   test("an exact name beats another book's prefix", () => {
-    // "jude" is a prefix of Judges, which comes first in the canon; the
-    // exact name must still win.
     expect(read("jude")).toEqual(["JUD"]);
     expect(read("John")).toEqual(["JHN"]);
   });

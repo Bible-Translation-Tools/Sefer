@@ -1,15 +1,3 @@
-/**
- * A card's editor: a satellite over one stretch of an editor-backed Book,
- * mounted whole — the projection, the reading layer, the clip, the marks, a
- * live diff, Escape, where the caret starts, and the Book held while it lives.
- *
- * Every surface that edits a stretch of a book in place — Find's cards, Key
- * terms, Review's live pane and its cards — is this one mount with different
- * options, so a host composes no CodeMirror of its own (planning item
- * "embeddable editor"). Edits go through the Book's funnel and are judged by
- * the Book under the card's policy, as a satellite's always are.
- */
-
 import { ChangeSet, Compartment, Prec, StateField, type Extension } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 

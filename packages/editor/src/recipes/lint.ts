@@ -1,25 +1,3 @@
-/**
- * Sink 1 of the diagnostics fan-out: the engine's
- * diagnostics as inline marks and gutter actions.
- *
- * TWO sources, one linter. Galley's per-book diagnostics are rebuilt from the
- * CURRENT state's analysis every keystroke, so an inline mark cannot be stale —
- * the freshness discipline the other sinks need is bought here by not caching.
- * Sous's corpus findings cannot be rebuilt here at all: they are whole-corpus
- * products that arrive from `ProjectAnalysis` long after the keystroke that
- * provoked them, so they are PUSHED into `sousField` and are dropped, never
- * shifted, the moment the document moves. That keeps the corpus half entirely
- * off the keystroke hot path: a keystroke costs one synchronous engine parse and
- * one field reset, and no corpus work at all.
- *
- * A finding whose span is entirely inside hidden markup is dropped by default,
- * whichever producer said so: it reads as an underline on nothing. That test
- * consults the paint index, not the decoration set.
- *
- * A fix carries the stamp of the text it was computed from and is discarded if
- * the document moved under it. Sous findings never carry one — they measure.
- */
-
 import { type Diagnostic as CmDiagnostic, forceLinting, linter } from "@codemirror/lint";
 import { StateEffect, StateField, type EditorState, type Extension } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
@@ -54,23 +32,11 @@ interface Finding {
   fixLabel: string | null;
   fix: { from: number; to: number; insert: string }[] | null;
   hidden: boolean;
-  /** Moved onto an empty number's place (`SLOT_FINDINGS`): the space after its box. */
   point: boolean;
   line: number;
   stamp: EngineStamp;
 }
 
-/**
- * Findings drawn where the reader can act on them, not dropped as hidden: an
- * empty verse or chapter number. Its marker is hidden in regular mode, so the
- * finding's span is too, and the default hidden test would drop it — leaving an
- * empty number the reader can neither see flagged nor explain. So these are a
- * named exception by default: the finding becomes a point at the empty number's
- * box, and the Fix is the engine's own removal of the marker.
- *
- * The wording is Sefer's until kitchen's catalogue carries it; it moves there
- * with the copy and i18n pass.
- */
 const SLOT_FINDINGS: Readonly<Record<string, { kind: "v" | "c"; message: string }>> = {
   "verse-without-designator": {
     kind: "v",
@@ -82,12 +48,6 @@ const SLOT_FINDINGS: Readonly<Record<string, { kind: "v" | "c"; message: string 
   },
 };
 
-/**
- * An empty number's place for a marker inside `[from, to]`: where the number
- * goes (the box, where its content starts), the one space after it that is the
- * finding's underline, and the whole marker as the Fix removes it — `\v` and
- * the space that was its number's delimiter, as Backspace at the box does.
- */
 const slotAt = (
   state: EditorState,
   kind: "v" | "c",
@@ -111,7 +71,6 @@ const slotAt = (
   return undefined;
 };
 
-/** What the Fix says when the engine offers none for an empty number. */
 const SLOT_FIX_LABEL: Readonly<Record<"v" | "c", string>> = {
   v: "remove the verse marker",
   c: "remove the chapter marker",
@@ -119,12 +78,6 @@ const SLOT_FIX_LABEL: Readonly<Record<"v" | "c", string>> = {
 
 export type HiddenTest = (state: EditorState, from: number, to: number) => boolean;
 
-/**
- * The default hidden test: the paint index. In regular mode a diagnostic can
- * sit entirely inside markup the reader cannot see, and an underline on
- * nothing is noise — so a finding is marked `hidden` when the painter covered
- * its whole span, and `usfmLinter` drops those by default.
- */
 const hiddenByPaint: HiddenTest = (state, from, to) => PAINT_PORT.hidden(state, from, to);
 
 function findings(state: EditorState, isHidden?: HiddenTest): Finding[] {
@@ -150,8 +103,6 @@ function findings(state: EditorState, isHidden?: HiddenTest): Finding[] {
       second: f.second(),
       message:
         slot !== undefined && asSlot !== undefined ? asSlot.message : diagnosticMessage(f, slice),
-      // The engine's own fix when it offers one; for an empty number with none,
-      // the deliberate delete itself: the marker and its space.
       fixLabel:
         slot !== undefined && asSlot !== undefined && f.fix() === null
           ? SLOT_FIX_LABEL[asSlot.kind]
@@ -167,10 +118,6 @@ function findings(state: EditorState, isHidden?: HiddenTest): Finding[] {
     });
   }
   done();
-  // An empty number's forced space is its delimiter-to-be, not surplus: the
-  // engine's "reducible whitespace" there would offer to delete it and turn
-  // `\v  the` into `\v the`, verse "the". Dropped where it touches an empty
-  // number's place.
   const places = out.filter((f) => f.point);
   return places.length === 0
     ? out
@@ -186,10 +133,6 @@ function applyFix(
   fix: { from: number; to: number; insert: string }[],
   stamp?: EngineStamp,
 ): boolean {
-  // A fix carries the stamp of the text it was computed from. Re-analysing the
-  // live document is the cheap way to prove it still describes this text — the
-  // engine's own hash, not a length, so an equal-length edit under the
-  // tooltip is caught.
   if (
     stamp !== undefined &&
     !stampMatches(stamp, analyzed(view.state.facet(analyzer), view.state.doc.toString()))
@@ -252,21 +195,8 @@ export interface CorpusAction {
 
 const NO_CORPUS: readonly CorpusFinding[] = [];
 
-/** Replace the corpus findings shown for the book in this state. */
 const setCorpusFindings = StateEffect.define<readonly CorpusFinding[]>();
 
-/**
- * Sink 1's second source: the Sous findings for the instantiated book.
- *
- * Held rather than computed, because no amount of work in this process can
- * produce them — they are a whole-corpus product. Through an edit they follow
- * the one rule a card's marks do (`core/forward.ts`): a finding the edit did
- * not touch is mapped and stays where its text went; one it touched goes, since
- * it no longer describes what was just typed. The next publication, within the
- * scheduler's quiet window, paints what is true — including what the edit
- * introduced. (They used to be dropped wholesale, so every underline in the
- * book blinked out on each keystroke.)
- */
 const sousField = StateField.define<readonly CorpusFinding[]>({
   create: () => NO_CORPUS,
   update(held, tr) {
@@ -275,7 +205,6 @@ const sousField = StateField.define<readonly CorpusFinding[]>({
   },
 });
 
-/** What the linter is currently showing from the corpus half. */
 const corpusFindings = (state: EditorState): readonly CorpusFinding[] =>
   state.field(sousField, false) ?? NO_CORPUS;
 
@@ -321,13 +250,9 @@ export function usfmLinter(
           const stamp = f.stamp;
           out.push({
             from: f.from,
-            // A slot finding covers the one space after the empty number's box,
-            // so hovering the box reaches it; it draws nothing (`usfm-lint-slot`).
             to: f.point ? f.to : Math.max(f.to, f.from + 1),
             severity: f.severity,
             source: `onion/${f.name}`,
-            // An empty number's finding draws nothing of its own: the box is
-            // the mark, and the range only keeps the hover and the Fix on it.
             markClass: f.point
               ? "usfm-lint-slot"
               : (SEVERITY_CLASS[f.severity] ?? "usfm-lint-info"),
@@ -337,9 +262,6 @@ export function usfmLinter(
                 ? undefined
                 : [
                     {
-                      // "Fix: <label>" so the button says what it will do; the
-                      // catalogue's label on its own reads as one more noun in
-                      // a tooltip that is already mostly nouns.
                       name: `Fix: ${f.fixLabel ?? "repair"}`,
                       markClass: "usfm-fix-action",
                       apply(target) {
@@ -351,8 +273,6 @@ export function usfmLinter(
         }
         const length = view.state.doc.length;
         for (const f of corpusFindings(view.state)) {
-          // A publication whose offsets run past this document describes text
-          // this view does not hold. Dropped, never clamped.
           if (f.from < 0 || f.to > length || f.from > f.to) continue;
           if (suppressHidden() && isHidden(view.state, f.from, f.to)) continue;
           out.push({
@@ -362,8 +282,6 @@ export function usfmLinter(
             source: `sous/${f.code}`,
             markClass: SEVERITY_CLASS[f.severity] ?? "usfm-lint-info",
             message: f.message,
-            // Sous measures; it never offers an edit (`fixes.preview` refuses
-            // it `NotEngineFix`). Its buttons are the host's answers to it.
             actions: f.actions?.map((action) => ({
               name: action.name,
               apply: () => action.run(),
@@ -374,12 +292,6 @@ export function usfmLinter(
       },
       {
         delay: 150,
-        // The second source moves without a document change, and a document
-        // change is the only thing the lint plugin watches by default. This is
-        // the hook that makes `sousField` a lint input. A reconfiguration (the
-        // Regular/USFM projection) changes what is hidden by paint, so what is
-        // drawn must be decided again; without it marks hidden in one mode
-        // stayed hidden after the switch (found by the hub's fork, 2026-10-15).
         needsRefresh: (update) =>
           update.state.field(sousField, false) !== update.startState.field(sousField, false) ||
           update.transactions.some((tr) => tr.reconfigured),

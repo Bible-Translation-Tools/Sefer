@@ -1,14 +1,3 @@
-/**
- * The named editor gestures, as one lookup.
- *
- * The shell has a `Book`, not an `EditorView` — nothing above `@sefer/editor`
- * imports CodeMirror — so a command in `src/app/commands.ts` asks for a gesture
- * BY NAME and `EditorBook.perform` runs it against whichever seat is canonical
- * (the bound view when there is one, the held state when there is not). That is
- * the same door `undo`/`redo` already go through, which is why an insertion is
- * one Undo step whether it came from the palette, a key, or a toolbar button.
- */
-
 import type { StateCommand } from "@codemirror/state";
 
 import { structureAt } from "./editorState";
@@ -23,10 +12,6 @@ import {
 
 export type { EditorAction } from "./insert";
 
-/**
- * Focusing the card is not a document change, so it dispatches an effect and
- * reports true; a state with no card (headless, USFM mode) simply drops it.
- */
 const editFrontMatter: StateCommand = ({ state, dispatch }) => {
   dispatch(state.update({ effects: focusFrontMatter.of(null) }));
   return true;

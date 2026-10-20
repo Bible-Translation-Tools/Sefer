@@ -1,31 +1,3 @@
-/**
- * Location: where an Address is in ONE text, and what Address an offset is in.
- *
- *     resolve(toc, LUK 3:1)        → found 1204..1388, covers LUK 3:1
- *     resolve(toc, LUK 1:2)        → found over `\v 1-2`, covers LUK 1:1-2
- *     resolve(toc, LUK 1:3a)       → found over `\v 3a`, covers LUK 1:3a
- *     resolve(toc, LUK 1:2)        → missing verse, when the text has `\v 1,3`
- *     resolve(toc, LUK 30:1)       → missing chapter
- *     addressAt(LUK, toc, 1300)    → LUK 3:1
- *
- * Every answer comes from the TOC of the one text being asked about, which the
- * engine built; nothing here reads USFM. The TOC arrives as `TocView`, a plain
- * shape `core/galley` adapts the engine's rows into, so this module imports no
- * engine and runs anywhere core runs.
- *
- * The CALLER proves the TOC describes the text its offsets will index — an
- * exact analysis, a matching engine stamp. A TOC of different text answers
- * confidently and wrongly, and nothing here can tell.
- *
- * Extents are STRUCTURAL: a verse runs from its `\v` marker to the next verse
- * marker or the end of its chapter, so a section heading before verse 4 sits
- * inside verse 3's extent. A content-only extent (the words, without the
- * heading) is a second, differently named answer to add when a quotation or a
- * preview needs it — never the same unlabelled `from`/`to`.
- *
- * Offsets are UTF-16 code units, half-open.
- */
-
 import type { BookId } from "../book";
 import {
   bookAddress,
@@ -117,10 +89,6 @@ export interface TocUnit extends Span {
 
 type Unit = TocUnit;
 
-/**
- * One list per TOC, built on first ask: an excerpt list steps through the
- * same book's units for every card, and `addressAt` walks them per call.
- */
 const unitLists = new WeakMap<TocView, readonly Unit[]>();
 
 /** Every unit of `toc`, in source order. Tiling: each ends where the next begins. */
@@ -174,11 +142,6 @@ const buildUnits = (toc: TocView): readonly Unit[] => {
 
 const compareSegments = (a: string, b: string): number => a.localeCompare(b, "en");
 
-/**
- * Where two places END, in order: a whole verse runs past every one of its
- * segments, so `14` ends after `14b` — the reverse of how `comparePoints`
- * orders the two as starts.
- */
 const compareEnds = (a: Point, b: Point): number => {
   if (a.chapter !== b.chapter || a.verse !== b.verse) return comparePoints(a, b);
   if (a.segment === undefined) return b.segment === undefined ? 0 : 1;
@@ -247,8 +210,6 @@ const sameAddress = (a: Address, b: Address): boolean => JSON.stringify(a) === J
 export const addressAt = (book: BookId, toc: TocView, offset: number): Address | undefined => {
   if (!Number.isInteger(offset) || offset < 0 || offset > toc.length) return undefined;
   const all = units(toc);
-  // The last unit starting at or before the offset. Units tile, so that is
-  // the one containing it (or ending at it, for the final caret).
   const found = all[unitIndexAt(all, offset)];
   return found === undefined ? undefined : unitAddress(book, toc, found);
 };
@@ -268,16 +229,6 @@ export const lastVerseOf = (toc: TocView, chapter: number): number | undefined =
   return last;
 };
 
-/**
- * Every Address a selection covers, in order and without repeats. Half-open:
- * a selection ending exactly where a verse begins does not include that
- * verse. An empty selection asks `addressAt(from)`. Gaps between the places
- * are not filled in — two verses a selection touches are two Addresses, never
- * one range asserting it covered what lies between.
- *
- * Not exported yet: `resolve` is its only caller until a selection needs its
- * Addresses (a comment anchor, a Find hit over several verses).
- */
 const addressesCovering = (book: BookId, toc: TocView, span: Span): readonly Address[] => {
   if (span.from === span.to) {
     const one = addressAt(book, toc, span.from);
@@ -339,16 +290,6 @@ const oneChapter = (toc: TocView, number: number): Endpoint => {
     : { kind: "unit", unit: only, coarser: false };
 };
 
-/**
- * How one member meets one point of the same chapter.
- *
- * - `whole`: it covers the point entirely.
- * - `part`: the point is a whole verse and the member only some of it — `\v
- *   3a` for verse 3.
- * - `coarser`: the point is a segment and the member covers its whole verse,
- *   so the text cannot say where the segment is.
- * - `none`.
- */
 type Meet = "whole" | "part" | "coarser" | "none";
 
 const meet = (member: TocMember, point: Point): Meet => {
@@ -363,10 +304,6 @@ const meet = (member: TocMember, point: Point): Meet => {
   return cutAtStart || cutAtEnd ? "whole" : "coarser";
 };
 
-/**
- * The best any of a verse's members does: one member covering it wins. A
- * verse without members covers its hull whole.
- */
 const meetVerse = (verse: TocVerse, point: Point): Meet => {
   if (verse.members === undefined) {
     if (point.verse < verse.first || point.verse > verse.last) return "none";
@@ -381,12 +318,6 @@ const meetVerse = (verse: TocVerse, point: Point): Meet => {
   return best;
 };
 
-/**
- * Where one point is: the one unit covering it, or — for a whole verse the
- * text divides into segments (`\v 3a` … `\v 3b`) — the span from its first
- * segment to its last. Two units covering it, or two segments naming the same
- * part, is malformed text and ambiguous.
- */
 const oneVerse = (book: BookId, toc: TocView, all: readonly Unit[], point: Point): Endpoint => {
   const chapter = oneChapter(toc, point.chapter);
   if (chapter.kind !== "unit") return chapter;
@@ -467,8 +398,6 @@ export const resolve = (toc: TocView, address: Address): Resolution => {
       const last = covered[covered.length - 1];
       let covers: Address = address;
       if (first?.kind === "verses" && last?.kind === "verses") {
-        // The earliest start and the latest end, which a list can put apart
-        // from the first and last Address: `\v 1,3,5` then `\v 2,4` is 1-5.
         let from = first.from;
         let to = first.to;
         for (const one of covered) {

@@ -1,14 +1,3 @@
-/**
- * The positional paint index: `hidden(from, to)`, `draws(pos)`, `joined(pos)`,
- * `joinOver(pos)`, `atomic(line)`.
- *
- * A plan says what each row draws; this answers the same questions BY POSITION,
- * which is what the caret, the deletion rules and the linter actually ask. Built
- * over one structure and plan, cached per state (`paintAt`), and deliberately
- * independent of the decoration set — a rule that consulted the decorations
- * would be reading the screen instead of the model.
- */
-
 import { lineIndexAt, type DocStructure } from "./docStructure";
 import type { DocPlan, PlanSpan } from "./plan";
 
@@ -74,9 +63,6 @@ export function paintOver(s: DocStructure, plan: DocPlan): PaintIndex {
 
   const NONE: readonly { from: number; to: number }[] = [];
   const heads = overLines((n) => plan.line(n).hidden);
-  // What a line hides that is not its opener's chrome: a standalone marker
-  // that opens it, and any point mark (milestone, optional break, standalone)
-  // the assignment does not draw.
   const marks = overLines((n) => {
     const rl = plan.line(n);
     const c = rl.standalone;
@@ -85,8 +71,6 @@ export function paintOver(s: DocStructure, plan: DocPlan): PaintIndex {
     return hiddenMarks.length ? [...own, ...hiddenMarks] : own;
   });
 
-  // Triples: a join's newline `from, to`, and where the lines it holds end —
-  // the hide span `closeGap` pushes right after it, or the join's own end.
   const joinMemo: (number[] | null)[] = Array.from({ length: blocks.length }, () => null);
   const blockJoins = (i: number): number[] => {
     let g = joinMemo[i];

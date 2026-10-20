@@ -1,14 +1,3 @@
-/**
- * Owned targets: the per-line index of things that belong to the markup rather
- * than to the prose — a marker, a delimiter, a hidden box, a join.
- *
- * Everything a deletion or a caret move needs to know about a position comes
- * from here: `addressedBackward`/`addressedForward` say what a key press would
- * be addressing, and `targetsIn` says what a range would take. Built lazily per
- * line (and memoized per row), because a keystroke touches three lines and a
- * book has thousands.
- */
-
 import { NOTE_PART } from "@sefer/text/engine/analysis";
 
 import { lineIndexAt, type DocStructure } from "./docStructure";
@@ -51,19 +40,12 @@ interface TargetFacts {
   readonly scope: PlanSpan | null;
   readonly paint: PaintReach;
   readonly mutability: Mutability;
-  /** An immortal a press stops at rather than passes (`Cell.stop`). */
   readonly stop: boolean;
   readonly policy: OwnershipBit | null;
   readonly paintsOwnLine: boolean;
   readonly empty: boolean;
   readonly mergeTargetPolicy: OwnershipBit | null;
   readonly typable: PlanSpan | null;
-  /**
-   * Spans of free text inside the set that a range may edit without taking
-   * the set: an open note's body, where the policy lets it be written
-   * (`note.body` direct — the note editor's). A deletion wholly inside one is
-   * an edit of that text; one that reaches markup is judged as before.
-   */
   readonly editable: readonly PlanSpan[];
   readonly delimiter: PlanSpan | null;
 }
@@ -112,8 +94,7 @@ const complement = (whole: PlanSpan, holes: readonly PlanSpan[]): PlanSpan[] => 
 const SET_OF_CLASS: ReadonlyMap<ClassKey, OwnedSetName> = new Map(
   CLASS_KEYS.flatMap((cls) => {
     const named = setsPaintedBy(cls);
-    // SAFETY: `named.length` is checked, so `named[0]` is present; the
-    // assertion only fixes the tuple shape `new Map` wants.
+    // SAFETY: `named.length` is checked, so `named[0]` is present; the assertion only fixes the tuple shape `new Map` wants.
     return named.length ? [[cls, named[0]] as [ClassKey, OwnedSetName]] : [];
   }),
 );
@@ -153,8 +134,7 @@ export function buildOwnedIndex(s: DocStructure, plan: DocPlan, a: Assignment): 
     if (!set) return;
     const row = rows[cls];
     const facts: TargetFacts = {
-      // SAFETY: `OwnedSetId` is a branded number; this counter is the only
-      // thing that mints one, which is what the brand exists to say.
+      // SAFETY: `OwnedSetId` is a branded number; this counter is the only thing that mints one, which is what the brand exists to say.
       id: nextId++ as OwnedSetId,
       set,
       cls,
@@ -212,8 +192,6 @@ export function buildOwnedIndex(s: DocStructure, plan: DocPlan, a: Assignment): 
     else if (r.form === "elided") make(out, "note.caller", anchor, whole, NONE, r.hidden);
     else
       make(out, "note.caller", anchor, whole, complement(whole, r.hidden), r.hidden, {
-        // Without this the whole open note was one point-painted set, and a
-        // Backspace anywhere in its text took the note with it (2026-10-15).
         editable:
           rows["note.body"].cell.mutability === "direct"
             ? r.parts
@@ -327,11 +305,7 @@ export function buildOwnedIndex(s: DocStructure, plan: DocPlan, a: Assignment): 
     for (let k = firstVerseFrom(l.from); k < verses.length && verses[k].markerFrom <= l.to; k++)
       slotTarget(out, "slot.v", plan.verse(k));
     if (rl.slot) slotTarget(out, "slot.c", rl.slot);
-    // A standalone marker is the marker's own span: what an immortal cell
-    // keeps when a range deletion writes around it. Its line's newline is the
-    // paragraph's, not the marker's.
     const c = rl.standalone;
-    // A standalone line a join holds is the join's, not its own set.
     const held = c !== null && (paint.joinOver(c.from)?.from ?? c.from) < c.from;
     if (c && !held) {
       const head = { from: c.from, to: c.to };
@@ -354,9 +328,6 @@ export function buildOwnedIndex(s: DocStructure, plan: DocPlan, a: Assignment): 
     }
     for (let j = firstBlockFrom(l.from); j < blocks.length && blocks.fromAt(j) <= l.to; j++)
       blockTarget(out, j, i);
-    // A join on this line's newline: the space, and the lines it holds hidden
-    // behind it. Its anchor is all of it, so a key that reaches the space takes
-    // the whole gap at once — the newline alone would change nothing on screen.
     const join = paint.joinOver(l.to);
     if (join && join.from === l.to) {
       const space = { from: join.from, to: join.from + 1 };

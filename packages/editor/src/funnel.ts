@@ -1,30 +1,3 @@
-/**
- * Funnel — the port a satellite submits an edit through.
- *
- * Every surface that is NOT the canonical seat — a Find or Key terms excerpt,
- * the note editor — needs three things and no more: the text as it stands, a
- * way to offer changes, and a way to hear the changes that were accepted (its
- * own included, coming back). That is this interface. It exists so those
- * surfaces depend on a small port rather than on the editor-backed Book, and
- * so the answer to "how does this edit reach the file?" is always the same:
- * the Book's own phases, then its one publication.
- *
- * An edit travels with its surface's TERMS — the projection it was made in,
- * the mode, and the range the surface covers — and the Book judges it under
- * them (`EditorBook.applyFrom`). One judge, the same rules as the canonical
- * editor, and nothing trusted: a surface that shows a footnote's body is
- * judged as a surface that shows it, rather than by the canonical projection,
- * which hides it.
- *
- * `Receive` hands out CodeMirror's `ChangeSet` rather than `Change[]` because
- * a borrowing surface must MAP its own caret and its own range through the
- * same change description the canonical state used — `ChangeSet.mapPos` is
- * that, and rebuilding it from offsets would be a second, subtly different
- * mapping. The Book port's own `changes(fn)` publishes core `Change[]`, for
- * readers that hold no CodeMirror state at all. Both fire from the same
- * publication.
- */
-
 import { Annotation, type ChangeSet, type EditorState, type Text } from "@codemirror/state";
 import type { Origin, Receipt, Refusal } from "@sefer/text/book";
 import type { Change } from "@sefer/text/source";
@@ -122,7 +95,6 @@ export const changesOf = (changes: ChangeSet): Change[] => {
   return out;
 };
 
-/** The funnels the package made, so a `Following` handed back can be trusted. */
 const made = new WeakSet<Following>();
 
 /** Records a funnel the package made. */

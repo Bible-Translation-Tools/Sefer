@@ -1,14 +1,3 @@
-/**
- * Protection: markers are deleted whole or not at all.
- *
- * The interesting part is the shape, not the policy — a deletion is planned over
- * a WIDENED range (what the keystroke actually addresses, including the markup
- * that owns the glyph next to it), a verdict is taken over the ORIGINAL range
- * (what the user consented to), and the result is one of pass, refuse,
- * write-around or rewrite. Backspace and Delete are two dispatchers over the
- * same target data and share one commit shell, so the two keys cannot disagree.
- */
-
 import {
   EditorState,
   findClusterBreak,
@@ -49,16 +38,6 @@ const startsALine = (s: DocStructure, pos: number): boolean => {
   return i >= 0 && s.lines.fromAt(i) === pos;
 };
 
-/**
- * A set's span with the newline before it, when that newline is the set's: a
- * marker that must start its line (`bindsToItsLine` — a paragraph or heading)
- * owns the break that puts it there. A `\v` that happens to open its line does
- * not: `for me.\v 7 You` is valid USFM, so the newline before a locked verse
- * is a join the press may take (`…for me.\v 7 You`), not part of the verse —
- * unless the lock is a STOP (`Cell.stop`, a card's verse numbers), where the
- * number is the boundary between the card's verse and its context and the
- * break that opens its line is part of that boundary.
- */
 const anchoredBack = (s: DocStructure, sp: PlanSpan, stop = false): PlanSpan => {
   if (sp.from <= 0 || !startsALine(s, sp.from)) return sp;
   if (stop) return { from: sp.from - 1, to: sp.to };
@@ -66,7 +45,6 @@ const anchoredBack = (s: DocStructure, sp: PlanSpan, stop = false): PlanSpan => 
   return line !== null && bindsToItsLine(line) ? { from: sp.from - 1, to: sp.to } : sp;
 };
 
-/** Whether a cut meets an immortal, and if so whether a press passes it or stops there. */
 function reachesImmortal(
   ix: OwnedIndex,
   s: DocStructure,
@@ -102,7 +80,6 @@ function immortalGuard(
       const here = reachesImmortal(ix, s, fromA, toA);
       if (here !== "none") met.push(here);
     });
-    // A stop is a wall: the press neither cuts nor carries the caret past it.
     if (met.includes("stop")) return;
     if (met.length > 0) consumePress(state, s, r, at, back, raw);
     else raw(tr);
@@ -134,7 +111,6 @@ type Verdict =
   | {
       readonly act: "consume";
       readonly say: string;
-      /** The immortal set met, in USFM terms: where a press continues past it. */
       readonly span?: PlanSpan;
     }
   | { readonly act: "default"; readonly say: string }
@@ -145,7 +121,6 @@ type Verdict =
       readonly event: string;
       readonly seal: string | null;
       readonly say: string;
-      /** Where the caret goes, when the cut knows better than "the same distance past it". */
       readonly caret?: number;
     };
 
@@ -254,11 +229,6 @@ function backspaceAt(ix: OwnedIndex, pos: number): Verdict {
       null,
       `shorten the ${t.set}'s number rather than take it whole`,
     );
-    // The last digit: the number is now EMPTY, and its delimiter becomes the
-    // text's leading space. The caret goes to the empty number's place, before
-    // that space — where a typed digit refills it (`\v 7 the`) and the next
-    // Backspace addresses the box and takes the marker — not the same distance
-    // past the cut, which is after the space, inside the verse's words.
     return cut.act === "cut" && t.typable.to - t.typable.from === 1
       ? { ...cut, caret: t.typable.from }
       : cut;
@@ -322,7 +292,6 @@ function deleteAt(ix: OwnedIndex, pos: number): Verdict {
   return whole("delete.usfm.owned", "own-whole", `take own(${t.set}) whole`);
 }
 
-/** The one grapheme before (`back`) or after `at`, within its line; none at a line's edge. */
 function oneCluster(
   state: EditorState,
   at: number,
@@ -335,17 +304,14 @@ function oneCluster(
   return back ? { from: other, to: at } : { from: at, to: other };
 }
 
-/** One Backspace or Delete, and everything its verdict is carried out against. */
 interface Press {
   readonly state: EditorState;
   readonly s: DocStructure;
   readonly ix: OwnedIndex;
   readonly r: PaintPort;
-  /** Where the press is addressed from: the caret, or the far side of an immortal. */
   readonly at: number;
   readonly back: boolean;
   readonly raw: (tr: Transaction) => void;
-  /** Already carried past one immortal: meeting a second only moves the caret. */
   readonly passed?: boolean;
 }
 
@@ -371,8 +337,6 @@ function commit(press: Press, v: Verdict): boolean {
       const onward: Press = { ...press, at: past, passed: true };
       const next = back ? backspaceAt(ix, past) : deleteAt(ix, past);
       if (next.act === "cut") return commit(onward, next);
-      // "Default" there is one ordinary character: the press takes it, as it
-      // would have had the caret started there.
       const one = next.act === "default" ? oneCluster(state, past, back) : null;
       if (one !== null)
         return commit(
@@ -383,9 +347,6 @@ function commit(press: Press, v: Verdict): boolean {
     return consumePress(state, s, r, at, back, dispatch);
   }
   if (v.act === "default") return false;
-  // An empty number's marker goes with the one space that was its delimiter
-  // (the text's leading space once the digits went): otherwise `\v` left
-  // `Euphrates—\n the`, a double space where the verse used to be.
   const to =
     v.event === "delete.usfm.anchored" && state.doc.sliceString(v.to, v.to + 1) === " "
       ? v.to + 1
@@ -522,11 +483,6 @@ function rangePlan(ix: OwnedIndex, s: DocStructure, from: number, to: number): R
   let around = 0;
   for (const h of ix.targetsIn(lo, hi + 1).hits) {
     const t = h.target;
-    // Immortal is immortal: a range writes around it even when it covers it
-    // whole. The one exception is a set the surface does not draw — a
-    // passthrough like `\s5` — which a covering delete still takes, because
-    // writing around an invisible marker loses its terminator (`\s5lways`) and
-    // keeps what the reader could not see (editor.md, "Passthrough markers").
     if (t.mutability !== "immortal" || (consented(t) && t.paint === "none")) continue;
     const a = anchoredBack(s, t.wholeSpan, t.stop);
     const clipped = { from: Math.max(a.from, lo), to: Math.min(a.to, hi) };

@@ -1,14 +1,3 @@
-/**
- * Structure and plan into CodeMirror decorations — the whole of what the reader
- * actually sees.
- *
- * Two builders, because the two modes are genuinely different pictures:
- * `buildRegular` hides markup and draws widgets in its place; `buildUsfm` shows
- * the source with syntax classes. Both emit atomic ranges and bidi isolates
- * alongside the visible set, because a hidden marker the caret can walk into and
- * an RTL verse that reorders its own markup are the same class of bug.
- */
-
 import { RangeSetBuilder } from "@codemirror/state";
 import {
   Decoration,
@@ -164,7 +153,6 @@ export function noteApparatusText(doc: string, note: NoteRange, part: number): s
   return out.replace(/\s+/g, " ").trim();
 }
 
-/** What an empty note body says, so that there is something to click. */
 const EMPTY_NOTE_BODY = "Add note text";
 
 /**
@@ -207,14 +195,10 @@ class NotesWidget extends WidgetType {
       row.dataset.noteRow = String(n.from);
       row.title = "click the note to edit it, or its number to go back to the text";
       row.onmousedown = (e) => {
-        // SAFETY: a mousedown on a rendered row always targets an element
-        // inside it; `closest` is the only thing read from it.
+        // SAFETY: a mousedown on a rendered row always targets an element inside it; `closest` is the only thing read from it.
         const target = e.target as HTMLElement;
-        // An open editor owns its own clicks, and so does the Done button.
         if (target.closest(".usfm-note-edit") || target.closest(".usfm-note-done")) return;
         e.preventDefault();
-        // The BODY is the note itself, so clicking it means "let me write
-        // this"; the mark and the reference are the pointer back to the text.
         toggleNote(view, n.from, target.closest(".usfm-note-body") === null ? "back" : "edit");
       };
       for (const [cls, text] of [
@@ -301,14 +285,6 @@ function narrow(
   return { from: Math.max(win.from, range.from), to: Math.min(win.to, range.to) };
 }
 
-/**
- * WHEN to draw, once for both modes: the lines a window covers, and the
- * tokens. Regular mode jumped to the window's first line and stopped at its
- * last while USFM walked every line and every token of the book and skipped
- * the ones outside; now both take the window's rows from `lineIndexAt`, and
- * tokens by a binary search on their starts (they ascend, and tile the
- * document). WHAT to draw stays each mode's own.
- */
 function windowLines(
   s: DocStructure,
   win: { from: number; to: number } | null,
@@ -326,7 +302,6 @@ function forTokensIn(
 ): void {
   let first = 0;
   if (win !== null) {
-    // The last token starting at or before the window: it may run into it.
     let low = 0;
     let high = rows.length;
     while (low < high) {
@@ -369,16 +344,12 @@ class BreakWidget extends WidgetType {
 
 type Pending = { from: number; to: number; deco: Decoration };
 
-// Decoration specs are untyped bags (CodeMirror types `spec` as `any`), so
-// the editor's own flags are read back through the narrow shapes below rather
-// than trusted. SAFETY: this literal IS the spec, written here and nowhere
-// else; the assertion only widens it to what `Decoration.replace` accepts.
+// SAFETY: this literal IS the spec, written here and nowhere else; the assertion only widens it to what `Decoration.replace` accepts.
 const UNIT = { usfmUnit: true } as Record<string, unknown>;
 const HIDDEN = Decoration.replace(UNIT);
 
 export function isUnit(d: Decoration) {
-  // SAFETY: `spec` is `any` in CodeMirror's types; this reads one optional
-  // flag and compares it to `true`, so a spec without it answers false.
+  // SAFETY: `spec` is `any` in CodeMirror's types; this reads one optional flag and compares it to `true`, so a spec without it answers false.
   return (d.spec as { usfmUnit?: boolean }).usfmUnit === true;
 }
 
@@ -445,8 +416,6 @@ export function buildRegular(
       add.push({
         from: r.box,
         to: r.box,
-        // AFTER the number's place (side 1), so the caret there sits on the
-        // box's left edge — inside the outline — rather than past it.
         deco: Decoration.widget({ widget: new EmptySlotWidget(r.kind), side: 1 }),
       });
   };
@@ -469,8 +438,6 @@ export function buildRegular(
     } else if (l.cls === "block.heading") {
       hideAll(rl.hidden);
     } else if (rl.standalone) {
-      // A standalone marker draws nothing; "point" (a projection that shows
-      // it) leaves the marker's own text on the page.
       if (rl.standalone.form === "hidden") hide(rl.standalone.from, rl.standalone.to);
     } else if (rl.slot) {
       if (rl.paints)
@@ -586,7 +553,6 @@ export function buildRegular(
   const clip = opts.clip;
   for (const ap of plan.apparatus) {
     if (outside(ap.chapter.from, ap.chapter.to)) continue;
-    // Drawn where it is anchored, so shown only when that point is in the clip.
     if (clip !== null && clip !== undefined && (ap.at < clip.from || ap.at > clip.to)) continue;
     add.push({
       from: ap.at,
@@ -665,8 +631,7 @@ export function buildNoteApparatus(
   const builder = new RangeSetBuilder<Decoration>();
   let lastTo = -1;
   for (const d of add) {
-    // SAFETY: one optional field read off CodeMirror's `any` spec; an absent
-    // `class` is exactly the case being tested for.
+    // SAFETY: one optional field read off CodeMirror's `any` spec; an absent `class` is exactly the case being tested for.
     if (d.to > d.from && (d.deco.spec as { class?: string }).class === undefined) {
       if (d.from < lastTo) continue;
       lastTo = d.to;

@@ -39,7 +39,6 @@
  * They stay on the local trace.
  */
 
-/** The verdicts a host's event ring records. */
 type RingVerdict =
   | "ready"
   | "passed"
@@ -50,12 +49,10 @@ type RingVerdict =
   | "unavailable"
   | "failed";
 
-/** How much the host wants recorded. */
 type Level = "off" | "verdicts" | "spans" | "all";
 
 type Attrs = Readonly<Record<string, string | number | boolean>>;
 
-/** The operations the editor opens. */
 type EditorOperationName = "editor.mutation" | "editor.selection" | "editor.render";
 
 interface Operation {
@@ -88,11 +85,6 @@ import {
   type TraceVerdict,
 } from "./core/instrument";
 
-/**
- * The trace's vocabulary in the ring's. Only `moved` has no counterpart: a
- * settled caret is the editor rewriting the selection the user asked for, so
- * it reads as `rewrote` — the same verdict a rewritten change list gets.
- */
 const VERDICT: Readonly<Record<TraceVerdict, RingVerdict>> = {
   refused: "refused",
   rewrote: "rewrote",
@@ -102,35 +94,13 @@ const VERDICT: Readonly<Record<TraceVerdict, RingVerdict>> = {
   passed: "passed",
 };
 
-// `all` is a level of its own again: it is what turns the derivation pipeline
-// into visible events, and that is several per keystroke.
 const VOLUME: Readonly<Record<Level, number>> = { off: 0, verdicts: 1, spans: 2, all: 3 };
 
 const round = (ms: number): number => Math.round(ms * 1000) / 1000;
 
-/** How long a repaint burst must be quiet before it counts as finished. */
 const BURST_MS = 120;
 
-/**
- * Repaints nobody typed for — a scroll, a resize, a viewport change, or a
- * decoration pass following a gesture that has already painted — coalesced on
- * the TRAILING edge into one `editor.render`.
- *
- * ONE of these for the application, not one per book. A continuous scroll is
- * thousands of view updates and one piece of work, and `onOrphanDerived` holds
- * a single handler anyway — registering per book meant the last book opened
- * won, and every repaint after that was labelled with its id whoever caused
- * it. So the burst names no book: a repaint is not necessarily about one.
- */
 let repaintInto: EditorObservability | null = null;
-/**
- * The trace of the gesture in flight, for work that will FOLLOW it.
- *
- * Read synchronously, inside the gesture — the analysis scheduler is armed
- * from `book.changes`, which runs inside `accept()` — so this is accurate at
- * the only moment it is asked. It is not a propagation mechanism: nothing
- * async may read it, and nothing does.
- */
 let openGesture: string | null = null;
 
 /** The gesture in flight, for whatever the gesture is about to cause. */
@@ -183,13 +153,10 @@ export const annotateRepaint = (
 
 onOrphanDerived(repaint);
 
-// Outcomes outside any transaction go to the same ring as the repaints, as
-// loose notes: they belong to no gesture, and naming one would date them.
 onEditorOutcome((rule, verdict, detail, fields) => {
   repaintInto?.note(rule, verdict, detail, fields);
 });
 
-/** Level `off`: the trace still runs (the refusal slot needs it), silently. */
 const SILENT: TraceEmit = {
   frame: () => () => {},
   step: () => {},
@@ -209,15 +176,6 @@ export const observabilityTracer = (observability: EditorObservability, bookId: 
   const emit: Emitter = (trace) => {
     const volume = VOLUME[observability.level()];
     if (volume === 0) return SILENT;
-    // ONE wide event per transaction. The stages are FIELDS on it, not spans:
-    // a phase rule runs in tens of microseconds and a browser coarsens
-    // `performance.now()` to 100µs unless the page is cross-origin isolated,
-    // so a span per stage reports a number the clock refused to measure —
-    // eleven spans, every one of them 0ms. As attributes the same numbers
-    // still aggregate across a session, which is the question worth asking.
-    // Opened as a selection and renamed at the end if the document changed:
-    // a gesture that turns out to be neither is still a caret move, and the
-    // name a record is written under is decided when the work is done.
     const operation = observability.operation("editor.selection", {
       "book.id": bookId,
       "editor.seq": trace.seq,
@@ -227,11 +185,7 @@ export const observabilityTracer = (observability: EditorObservability, bookId: 
     });
     openGesture = operation.trace;
     const opened = performance.now();
-    // The instrument closes a trace when the NEXT transaction opens, so wall
-    // time from here to `end` is mostly the reader sitting still. The last
-    // thing that actually happened is the honest end of the work.
     let active = opened;
-    // The stage that decided the transaction — the one a `Refusal` names.
     let decided: string | undefined;
     let verdict: RingVerdict = "passed";
     // A gesture is over when it has PAINTED, not when the next one begins.
@@ -245,15 +199,9 @@ export const observabilityTracer = (observability: EditorObservability, bookId: 
     // which `editor.render` already exists to carry.
     let sealed = false;
     const timings: Record<string, string | number | boolean> = {};
-    // The derivation pipeline, summed and counted. The COUNT is the half worth
-    // having: "decorate ran four times" is a fact about the keystroke, where
-    // four separate 0ms spans are four readings the clock refused to take.
     const derived = new Map<string, { ms: number; n: number }>();
 
     const record = (entry: TraceEntry): void => {
-      // Past the paint this gesture is over, and a derivation arriving now is
-      // a repaint that merely followed it — the analysis publishing findings,
-      // say. It belongs to `editor.render`, not to the keystroke.
       if (sealed) {
         if (entry.kind === "derive") repaint(entry.name, entry.detail ?? "", entry.ms);
         return;
@@ -264,9 +212,6 @@ export const observabilityTracer = (observability: EditorObservability, bookId: 
         held.ms = round(held.ms + entry.ms);
         held.n += 1;
         derived.set(entry.name, held);
-        // At `all`, each run is also a point in time on the gesture: WHO
-        // derived what, in what order. The clock cannot size these, but order
-        // and identity are not measurements and survive its floor.
         if (volume > 2)
           operation.note(`derive.${entry.name}`, "passed", entry.detail, {
             "derive.ms": entry.ms,
@@ -281,8 +226,6 @@ export const observabilityTracer = (observability: EditorObservability, bookId: 
       // 100µs floor — and eleven zero fields were half the bytes of every
       // keystroke on disk; an absent phase aggregates as 0 (`// 0` in jq).
       if (volume > 1 && entry.ms > 0) timings[`editor.phase.${entry.name}.ms`] = entry.ms;
-      // A stage that DECIDED is worth its own record at every level; a stage
-      // that passed said nothing a field cannot say.
       if (entry.verdict !== "passed")
         operation.note(`editor.${entry.name}`, VERDICT[entry.verdict], entry.detail);
     };
@@ -294,8 +237,6 @@ export const observabilityTracer = (observability: EditorObservability, bookId: 
         if (sealed) return;
         active = performance.now();
         operation.attr(fields);
-        // The meter reports once the browser has painted, which is the end of
-        // the gesture as a person experienced it.
         if (fields["editor.to_paint_ms"] !== undefined) {
           sealed = true;
           close();
@@ -309,9 +250,6 @@ export const observabilityTracer = (observability: EditorObservability, bookId: 
 
     function close(): void {
       openGesture = null;
-      // A gesture that only moved the caret is not a mutation, and at
-      // `verdicts` it is not worth a record at all: arrow keys, clicks and
-      // drags are the bulk of the volume and almost never the question.
       const mutation = trace.changed;
       if (!mutation && volume < 2) return;
       operation.rename(mutation ? "editor.mutation" : "editor.selection");

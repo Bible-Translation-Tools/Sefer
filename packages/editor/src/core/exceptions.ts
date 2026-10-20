@@ -1,13 +1,3 @@
-/**
- * The handful of named exceptions the rules refer to: inside a designator's
- * delimiter, which block a fresh Enter opens, and what counts as insignificant
- * whitespace.
- *
- * They live together because each is a place where USFM's own spelling rules
- * override the general policy, and a reader deciding whether behaviour is
- * principled or accidental should find all of them in one short file.
- */
-
 import { isDesignatorLine, type Block, type DocStructure } from "./docStructure";
 
 function lastVerseOpeningAtOrBefore(s: DocStructure, pos: number): number {

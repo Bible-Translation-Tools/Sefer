@@ -1,12 +1,3 @@
-/**
- * One lazy verse row: the `\v` designator's number, its delimiter, and the
- * extent of the verse it opens.
- *
- * A designator is the most protected thing on the page — the number IS the
- * address of the text — so its spans are stated once, here, and every rule that
- * guards it reads them rather than re-scanning the line.
- */
-
 import type { VerseRow } from "./fold";
 
 export class Verse implements VerseRow {

@@ -1,11 +1,3 @@
-/**
- * Admission rule: a keystroke may not land inside markup the reader cannot see.
- *
- * Hidden markup has no glyphs to aim at, so a keystroke there is always an
- * accident of mapping rather than an intention. The rule reads the paint index —
- * not the decoration set — and answers in change-filter ranges.
- */
-
 import { surfaceRangeAt } from "./clip";
 import { isUserReplacement } from "./deletion";
 import { lineIndexAt, type DocStructure } from "./docStructure";
@@ -56,13 +48,6 @@ export function refuseKeystrokesInsideHiddenMarkup(
     });
     if (hi < 0 || (deletes && isUserReplacement(tr))) return true;
     const state = tr.startState;
-    // A surface whose whole range is ONE position — the note editor over a
-    // note with nothing in it yet, whose body belongs between the `\ft ` and
-    // the `\f*` — shows exactly one caret, there, and exists to write at it.
-    // That position is inside hidden markup only because the body it marks is
-    // empty (the parse has no body part to paint), so an insertion exactly
-    // there is not a keystroke aimed at nothing. Any other change still meets
-    // the rule, and the surface's own range refuses everything else.
     const surface = surfaceRangeAt(state);
     if (
       !deletes &&

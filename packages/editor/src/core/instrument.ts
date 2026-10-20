@@ -1,38 +1,3 @@
-/**
- * ONE instrument for the whole editor pipeline: per transaction, every stage a
- * keystroke flowed through and what each stage decided.
- *
- * Why this file exists. The editor's decisions are spread across two
- * CodeMirror hooks that run in opposite directions (`changeFilter`,
- * `transactionFilter`), a keymap, and a handful of derived products
- * (scan/index/paint/decorate). Before this, each of them noted a verdict on
- * its own and a reader had to reassemble the order by eye. A `Trace` is that
- * reassembly done once, at the only place that can do it cheaply: the frame
- * that opens around each rule.
- *
- * The shape:
- *
- *   - `tracer` is a Facet, not a module global, because two states (a book and
- *     a satellite over it) trace separately, and because the test harness wants a
- *     flat sink while the app wants the Observability bridge.
- *   - `Tracer.begin(state, origin)` opens one `Trace` per transaction. The
- *     trace is keyed on the *start* state's identity: a command reads that
- *     state, then the filters run against it, so a whole gesture — command,
- *     admission, normalization, protection, settlement — lands in one trace
- *     with one correlation id.
- *   - `Trace.stage()` / `Trace.command()` open a frame and return its closer.
- *     A rule's own `note`/`noteTr` call, made INSIDE an open frame, becomes
- *     that frame's verdict — so the rules keep the words they already had and
- *     nothing is recorded twice.
- *   - `makeTracer(emit)` is the single implementation. The pluggable half is
- *     emission: `null` records only the refusal slot, `sinkTracer` feeds the
- *     legacy `TraceSink` (the harness), `observabilityTracer`
- *     (packages/editor/src/observability.ts) writes Sefer's ring.
- *
- * The cost when nobody is watching: `tracing(state)` is one facet read and
- * every call site guards on it. When the facet is null NOTHING is allocated.
- */
-
 import { EditorState, Facet, type Transaction } from "@codemirror/state";
 
 import { onDerived } from "./timing";
@@ -161,13 +126,6 @@ export const tracing = (state: EditorState): boolean => state.facet(tracer) !== 
 let seq = 0;
 let steps = 0;
 
-/**
- * The first refusal since `clearRefusal()`, for `Refusal.rule`.
- *
- * A module slot rather than a lookup on the trace, because `editorBook.apply`
- * asks the question across a dispatch it does not own the trace of, and
- * because it must work whichever tracer is installed.
- */
 let refusal: { rule: string; detail?: string } | null = null;
 
 export const clearRefusal = (): void => {
@@ -258,8 +216,6 @@ export const makeTracer = (emit: Emitter | null): Tracer => ({
       };
       open = held;
       return (verdict, detail) => {
-        // A rule that threw may leave a deeper frame open; unwinding to this
-        // frame's parent is what keeps the stack honest either way.
         open = held.under;
         const said = held.verdict !== null;
         push(
@@ -287,9 +243,6 @@ export const makeTracer = (emit: Emitter | null): Tracer => ({
       step: (s) => {
         const held = open;
         if (held !== null) {
-          // Last word wins, except that `passed` never overwrites a decision:
-          // a rule that says "guarding 3 ranges" then passes is still passing,
-          // but a rule that refuses and then reports a detail stays refused.
           if (held.verdict === null || held.verdict === "passed" || s.verdict !== "passed") {
             held.verdict = s.verdict;
             held.detail = s.detail;
@@ -314,14 +267,9 @@ export const makeTracer = (emit: Emitter | null): Tracer => ({
 /** Refusals only: what `editorBook` installs when it has no Observability. */
 export const localTracer: Tracer = makeTracer(null);
 
-// The open trace, keyed on the state it began from. Transaction filtering is
-// synchronous and single-threaded, so one slot is the whole bookkeeping: the
-// same start state means the same gesture, a different one means the previous
-// gesture is over.
 let key: EditorState | null = null;
 let current: Trace | null = null;
 
-/** Ends the open trace, if any. Called for you; exported for a dev surface. */
 const flushTrace = (): void => {
   current?.end();
   current = null;
@@ -370,23 +318,10 @@ export function note(state: EditorState, s: TraceStep, kind: "rule" | "press" = 
   traceFor(state, kind === "press" ? "press" : "state")?.step(s);
 }
 
-// `compose.install` names the origin when it opens the trace, so this
-// fallback only matters for a `noteTr` that opens one on its own.
 export function noteTr(tr: Transaction, s: TraceStep): void {
   traceFor(tr.startState, "transaction")?.step(s);
 }
 
-/**
- * The derivation pipeline joins the same trace: scan, index, paint, decorate.
- *
- * `core/timing.ts` cannot see an `EditorState`, so it calls back here and the
- * entry lands on whichever trace is open — which, on the keystroke path, is
- * the right one. Nothing is recorded when no trace is open.
- *
- * Two names are skipped because they are already accounted for: `keystroke`
- * belongs to the meter that owns the gesture, and `phase:<phase>` measures
- * exactly what the stage frame around that rule already measured.
- */
 let orphan: ((name: string, detail: string, ms: number) => void) | null = null;
 
 /**
@@ -433,7 +368,7 @@ export const reportOutcome: EditorOutcome = (rule, verdict, detail, fields) => {
     outcome(rule, verdict, detail, fields);
     return;
   }
-  // oxlint-disable-next-line no-console -- no ring is registered: a standalone editor still says it broke
+  // oxlint-disable-next-line no-console
   if (verdict === "failed") console.error(`[${rule}]`, detail);
 };
 

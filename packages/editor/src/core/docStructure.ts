@@ -1,18 +1,3 @@
-/**
- * The fold: one `Analysis` and its text become typed-array tables plus lazy
- * rows.
- *
- * `buildStructure` is the only builder, and it REFUSES a parse that does not
- * describe exactly this text — `describesExactly`, not a length — because every
- * offset below indexes into the string it was told about.
- *
- * `structureField` is the state's memo: by `Text` instance first (CodeMirror
- * shares the instance across non-doc transactions), then the `borrowedStructure`
- * facet (a satellite takes the canonical parse when its text matches), then the
- * last structure built, and only then the engine. That chain is why ten open
- * excerpts over one book cost zero extra parses.
- */
-
 import { EditorState, Facet, StateField, type Text } from "@codemirror/state";
 import {
   type Analysis,
@@ -106,17 +91,14 @@ export function buildStructure(
   const cst = scanCst(doc, analysis);
   const { startAt, endAt, nodes, designatorOf, shapeAt, lineFrom, lineTo, lineCount } = cst;
 
-  // SAFETY: `Fold` is the mutable scratch record the builders below fill in;
-  // the fields are assigned in this literal and by the two table constructors
-  // that follow (`lines`, `blocks`), which is exactly what `Fold` declares.
+  // SAFETY: `Fold` is the mutable scratch record the builders below fill in; the fields are assigned in this literal and by the two table constructors that follow (`lines`, `blocks`), which is exactly what `Fold` declares.
   const f = {
     doc,
     cst,
     clip: clip ?? null,
     chapterOfToken: new Int32Array(cst.count).fill(-1),
     verseOfToken: new Int32Array(cst.count).fill(-1),
-    // SAFETY: empty literals, annotated so the pushes below stay typed; an
-    // empty array cannot be the wrong element type yet.
+    // SAFETY: empty literals, annotated so the pushes below stay typed; an empty array cannot be the wrong element type yet.
     chapters: [] as ChapterRow[],
     // SAFETY: as above.
     verses: [] as VerseRow[],
@@ -206,8 +188,7 @@ export function buildStructure(
     for (let i = 0, n = node.childCount(); i < n; i++) {
       const child = node.child(i);
       if (child.isNode) continue;
-      // SAFETY: `isNode` is the reader's own discriminator — false means this
-      // child is a token, checked one line above.
+      // SAFETY: `isNode` is the reader's own discriminator — false means this child is a token, checked one line above.
       const t = child as TokenView;
       const id = t.id;
       if (i === 0) surfaceFrom = endAt[id];

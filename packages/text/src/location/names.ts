@@ -1,21 +1,3 @@
-/**
- * Which words mean which book: the name catalogue a Citation is read against.
- *
- * Passed in, never global. The words for a book are the canon's English name,
- * its id, whatever THIS PROJECT calls it (a translator on a Spanish project
- * types "Lucas", and `ProjectMetadata` knows that is `LUK` whether the project
- * declared itself in a Scripture Burrito or a Resource Container), and any
- * abbreviation somebody registered. The application builds one catalogue per
- * project, once per metadata change, and hands the same immutable value to
- * every parse; a result is consistent with the one catalogue it was read
- * against, which is what keeps a stale closure from mattering.
- *
- * NOT the books the project holds. "Romans" means `ROM` in a project without
- * Romans; a Citation of it is valid, and resolving it answers "missing". The
- * held set only breaks ties between prefixes, so "phil" in a project with
- * Philemon and no Philippians goes to the book that is there.
- */
-
 import type { BookId } from "../book";
 import { CANON } from "./canon";
 

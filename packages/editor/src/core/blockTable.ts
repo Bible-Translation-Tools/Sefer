@@ -1,11 +1,3 @@
-/**
- * The block table: paragraph-level spans, one lazy `Block` per row.
- *
- * A block is what a `\p`, `\q1` or `\s1` opens and the next block-opener
- * closes — the unit reflow, folding and Enter all reason about. Same shape as
- * the line table and for the same reason: typed-array columns, lazy rows.
- */
-
 import { MARKERS } from "@sefer/text/engine/analysis";
 
 import { spellingAt } from "./cst";

@@ -1,14 +1,3 @@
-/**
- * Satellites: a second surface over ONE range of a book — a note
- * apparatus, a source mirror, a card that is editable in place.
- *
- * A satellite is a reader that may write, and the whole of its discipline is
- * in `dispatch` below: it never keeps its own text. A local edit is turned
- * into changes, submitted through the `Funnel`, and the satellite waits for
- * the canonical Book to hand it back. Its caret is its own across that round
- * trip; its text is not.
- */
-
 import { defaultKeymap } from "@codemirror/commands";
 import {
   EditorState,
@@ -60,68 +49,24 @@ const scope = StateField.define<{ from: number; to: number }>({
 
 export const satelliteRange = (state: EditorState) => state.field(scope, false) ?? null;
 
-/**
- * The range is an EDIT GUARD, not only a clip — and both halves are installed
- * by `mountSatellite`, so no surface can mount without them.
- *
- * `clippedToScope` only hides what is outside the range, and a satellite's
- * document is the whole book: select all, Backspace, and the reader deleted
- * every verse they could not see (Philemon went from 2,679 characters to the
- * 158 the Book's own marker rules protect).
- *
- * The CHANGE half is the Book's: every submit carries the range in its terms
- * (`termsOf`), and the Book's admission refuses whatever part of the change
- * lies outside it (`refuseEditsOutsideTheSurface`, `core/phases.ts`) — which
- * is where every way an edit can arrive passes: a key, a command that edits
- * away from the caret, drag and drop, a paste, a programmatic dispatch. The
- * SELECTION half is the surface's own, because the caret is: it is pulled
- * into the range here, so it never sits where typing would be refused, and
- * select-all selects the range. Both are `core/clip.ts`'s rules, the chapter
- * clip's own pair, over this range; trust waives neither.
- *
- * The canonical text coming home is dispatched with `filter: false`, so the
- * selection rule never sees it.
- */
 const caretKeptInScope: Extension = EditorState.transactionFilter.of(
   pullSelectionsIntoTheClip(satelliteRange, { trustWaives: false }),
 );
 
-/** A satellite that installed the structure (every editable one does) can be settled. */
 const structured = (state: EditorState): boolean =>
   state.field(structureField, false) !== undefined;
 
 const settleAsTheBookDoes = settleTheCaretOnALegalPosition(structureAt, PAINT_PORT);
 
-/**
- * THE BOOK'S SETTLEMENT, over the satellite's own state: the same rule, the
- * same stops, read under the surface's projection and mode — and then the
- * range pulls the caret in, so the rule is the book's and the range is
- * smaller. Before it a satellite had no settlement at all, and its caret
- * rested where the main editor's never could: before a hidden `\v` at a line
- * start, one past a paragraph's end.
- *
- * A local edit is skipped: it is never applied here (it goes to the Book and
- * comes home), and its caret is settled when it does.
- */
 const caretSettled: Extension = EditorState.transactionFilter.of((tr) =>
   tr.docChanged || !structured(tr.state) ? tr : settleAsTheBookDoes(tr),
 );
 
-/**
- * A selection the range cut — select-all, a drag past the edge — ends where
- * the range does, which may be inside hidden markup (the `\v 5 ` a verse line
- * opens with). Each end the range put there is moved onto the nearest stop
- * inside the selection, as the caret would be: the edge of the range is the
- * edge of the document for this surface, and the book's own select-all starts
- * and ends on what a reader can see as well.
- */
 const rangeEdgesSettled: Extension = EditorState.transactionFilter.of((tr) => {
   if (!tr.selection || tr.docChanged || !structured(tr.state) || !isVisual(tr.state)) return tr;
   const sel = tr.state.selection.main;
   const win = satelliteRange(tr.state);
   if (win === null) return tr;
-  // Where the range rule pulls a selection's far end: the range's end, less
-  // the line break a whole-line range closes on.
   let edge = win.to;
   if (win.to < tr.state.doc.length)
     while (edge > win.from && tr.state.doc.sliceString(edge - 1, edge) === "\n") edge--;
@@ -129,10 +74,6 @@ const rangeEdgesSettled: Extension = EditorState.transactionFilter.of((tr) => {
   const hi = Math.max(sel.anchor, sel.head);
   if (lo > win.from && hi < edge) return tr;
   const stops = stopsIn(tr.state, structureAt(tr.state), PAINT_PORT);
-  // Inward only, and never past the other end: a caret the book's settlement
-  // sent to a stop OUTSIDE the range (Home on an excerpt's first row settles
-  // back to the paragraph before it) and the range then pulled to its edge is
-  // settled again, toward the inside.
   const inward = (pos: number, toward: "forward" | "backward", limit: number): number => {
     if (stops.isStop(pos)) return pos;
     const settled = stops.settle(pos, toward);
@@ -161,11 +102,6 @@ const rangeEdgesSettled: Extension = EditorState.transactionFilter.of((tr) => {
   ];
 });
 
-/**
- * What this surface shows, for the Book to judge its edit under: its own
- * projection and mode (whatever `modeView` the caller installed; the default
- * projection in regular mode when it installed none) and its live range.
- */
 const termsOf = (tr: Transaction): SurfaceTerms => {
   const event = tr.annotation(Transaction.userEvent);
   return {
@@ -196,17 +132,8 @@ function collapseOutside(state: EditorState, range: { from: number; to: number }
   const to = Math.max(from, Math.min(range.to, len));
   const first = doc.lineAt(from);
   const last = doc.lineAt(to);
-  // Whole lines outside the range go as blocks, which CodeMirror draws only
-  // between line boundaries; what is left of the first and last lines goes
-  // inline. A card over one verse of a paragraph written on one line
-  // (`\p \v 1 … \v 2 …`) shows that verse, not the paragraph.
   if (first.from > 0) out.push(Decoration.replace({ block: true }).range(0, first.from - 1));
   if (from > first.from) out.push(Decoration.replace({}).range(first.from, from));
-  // Not inclusive at its start: what sits exactly at the range's end — a
-  // widget drawn after the last line (a deleted verse's wording in a diff
-  // card), or text typed at the very end of it — belongs to what is shown,
-  // not to the hidden rest. An inclusive block sorts before every widget at
-  // its position and swallows it.
   if (to < last.to)
     out.push(Decoration.replace({ inclusiveStart: false }).range(Math.max(to, from), last.to));
   if (last.to < len)
@@ -224,8 +151,6 @@ function collapseOutside(state: EditorState, range: { from: number; to: number }
  */
 export const clippedToScope = (): Extension => [
   EditorView.decorations.compute([scope], (state) => collapseOutside(state, state.field(scope))),
-  // The same clip, told to the reading layer's build: what is anchored just
-  // outside it (the previous chapter's notes) is not drawn inside it.
   optsFacet.compute([scope], (state) => ({ ...DEFAULT_BUILD_OPTS, clip: state.field(scope) })),
 ];
 
@@ -347,12 +272,6 @@ const markField = StateField.define<DecorationSet>({
   update(marks, tr) {
     for (const effect of tr.effects) if (effect.is(setMarks)) return decorationsOf(effect.value);
     if (!tr.docChanged) return marks;
-    // A mark whose own text an edit touched no longer describes it — the word
-    // it matched, the finding it flagged, is what the reader just changed. It
-    // goes at once rather than riding along until the screen's next results
-    // arrive; those paint whatever is true. Context shading is not a claim
-    // about the text, and stays.
-    // The one rule for a published range through an edit (`core/forward.ts`).
     const touched = touchedBy(tr.changes);
     return marks.map(tr.changes).update({
       filter: (from, to, value) => value.spec.class === CONTEXT_CLASS || !touched(from, to),
@@ -420,16 +339,12 @@ export function mountSatellite(opts: SatelliteOptions): Satellite {
     extensions: [
       initialRange.of(opts.range),
       scope,
-      // Transaction filters run LAST-registered first, so these three run
-      // settle → pull into the range → settle what the range cut.
       rangeEdgesSettled,
       caretKeptInScope,
       caretSettled,
       borrowedStructure.of(() => opts.host.structure()),
       EditorView.editable.of(opts.editable),
       viewLayer(),
-      // The book's own motion over the stops, and its Backspace and Delete; a
-      // satellite with no structure (none editable today) keeps CodeMirror's.
       Prec.high(
         keymap.of(
           [...motionKeys(), ...deletionKeys()].map((binding) => ({
@@ -444,12 +359,6 @@ export function mountSatellite(opts: SatelliteOptions): Satellite {
         { key: "Mod-Shift-z", run: () => opts.host.redo() },
         { key: "Mod-y", run: () => opts.host.redo() },
       ]),
-      // The browser's own undo, which a key the host declined falls through
-      // to (nothing left to undo), and which the Edit menu sends directly. A
-      // satellite has no history, so the browser's is of this contenteditable's
-      // DOM — and replaying it here made an EDIT out of it: Mod-z past the
-      // bottom of the stack, then Mod-Shift-z, left "you have" as "youfhave".
-      // CodeMirror's `history()` answers the same event for the canonical view.
       EditorView.domEventHandlers({
         beforeinput(event) {
           const undo = event.inputType === "historyUndo";
@@ -461,8 +370,6 @@ export function mountSatellite(opts: SatelliteOptions): Satellite {
         },
       }),
       keymap.of(defaultKeymap),
-      // The Book's tracer: this surface's keypress verdicts go to the ring the
-      // Book's judgement of their edit does, so a card's Backspace is visible.
       Prec.lowest(tracer.of(opts.host.tracer?.() ?? localTracer)),
       ...opts.extensions,
     ],
@@ -478,8 +385,6 @@ export function mountSatellite(opts: SatelliteOptions): Satellite {
         return;
       }
       const done2 = span("satellite-reconcile", opts.label);
-      // The Book broadcasts what it accepted synchronously, inside `submit`,
-      // so an echo that arrives while this is set is this surface's own edit.
       submitting = true;
       let outcome: ReturnType<typeof opts.host.submit>;
       try {
@@ -487,10 +392,6 @@ export function mountSatellite(opts: SatelliteOptions): Satellite {
       } finally {
         submitting = false;
       }
-      // The caret follows an ACCEPTED edit. A refused one left the text as it
-      // was, and `tr.selection` is in the coordinates of a text that never
-      // came to be — past the end of it, for a refused deletion — so the
-      // caret stays where the reader left it.
       if (tr.selection && !(outcome instanceof Refusal))
         self.dispatch({ selection: tr.selection, annotations: fromCanonical.of(true) });
       done2();

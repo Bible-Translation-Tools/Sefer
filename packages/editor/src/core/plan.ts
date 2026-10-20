@@ -1,15 +1,3 @@
-/**
- * The resolved document plan: for each line, block and verse, what is actually
- * drawn and what may actually be edited, given the structure and the current
- * assignment.
- *
- * Lazy per row, memoized, and stamped with the structure's revision — a plan
- * over a stale fold is a bug that would otherwise show up as decorations in the
- * wrong place, so `planAt` asserts the revisions match. This is the layer
- * between "what the text is" (structure) and "what the reader sees" (paint,
- * decorations).
- */
-
 import { NOTE_PART } from "@sefer/text/engine/analysis";
 
 import {
@@ -438,19 +426,11 @@ export function resolvePlan(s: DocStructure, a: Assignment): DocPlan {
     const holdsText = rows2.some((l) => !isBlankLine(l) && l.contentFrom < l.to);
     let prevEnd = -1;
     let joined = 0;
-    // Lines that draw nothing, met AFTER text whose newline is still pending:
-    // blank lines, and a standalone marker alone on its line. Whether they
-    // become one join or trail off the block is known only at the next text
-    // line or the block's end, so they are held rather than swallowed.
     let gapTo = -1;
     const swallow = (l: DocLine) => {
       push(prevEnd >= 0 ? prevEnd : l.from, Math.min(l.to + 1, docLen), "hide");
       prevEnd = -1;
     };
-    // The held gap before a line that draws: ONE join, at the newline right
-    // after the text (so the caret at the text's end is the stop, and typing
-    // there lands in the text), and everything after it hidden. `\v 9 end.`,
-    // a blank line, `\s5`, `\v 10 Next` reads "end. Next".
     const closeGap = (to: number) => {
       if (gapTo < 0) return;
       push(prevEnd, prevEnd + 1, joinKind);
@@ -459,9 +439,6 @@ export function resolvePlan(s: DocStructure, a: Assignment): DocPlan {
       gapTo = -1;
       prevEnd = -1;
     };
-    // A gap nothing follows in this block: hidden up to the last invisible
-    // line's end, and NOT its newline — that newline is the boundary with the
-    // next block, and hiding it would pull the next block onto this line.
     const trailGap = () => {
       if (gapTo < 0) return;
       push(prevEnd, gapTo, "hide");

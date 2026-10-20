@@ -1,24 +1,3 @@
-/**
- * The render window: decorate the visible ranges plus a margin, not the book.
- *
- * A 60,000-line book cannot be decorated per keystroke, and it does not need to
- * be. The plugin widens the viewport by `RENDER_MARGIN` and keeps the range
- * stable until the view leaves it (hysteresis), so scrolling costs one rebuild
- * per screenful rather than one per frame.
- *
- * The window moves at most once a frame (`requestAnimationFrame`): see `sync`.
- *
- * Moving the window can itself move the view. Only the window is decorated, and
- * a decorated stretch is not the height of the same text undecorated (the
- * reading hides markers and joins verses), so after a jump into estimated
- * heights the text above changes height and the same `scrollTop` lands
- * thousands of characters away — further than the margin. Replacing the window
- * then ping-pongs between two ranges forever, each one a microtask, and the tab
- * never paints again. So a move CAUSED by a move (`settling`) takes the union
- * of the two, which only grows and so must come to rest, and past a few of
- * those the next try waits a frame: at worst a flicker, never a hang.
- */
-
 import {
   Annotation,
   type EditorState,
@@ -35,7 +14,6 @@ export interface RenderRange {
 
 const RENDER_MARGIN = 2000;
 
-/** Moves in a row that each follow the last before the next waits a frame. */
 const SETTLE_LIMIT = 4;
 
 function widen(len: number, from: number, to: number, margin = RENDER_MARGIN): RenderRange {
@@ -77,14 +55,12 @@ const union = (a: RenderRange, b: RenderRange): RenderRange => ({
   to: Math.max(a.to, b.to),
 });
 
-/** On the window's own moves, so the update they cause knows it is settling. */
 const windowMove = Annotation.define<true>();
 
 class RenderWindow {
   private view: EditorView;
   private queued = false;
   private gone = false;
-  /** How many moves in a row were each caused by the one before. */
   private settling = 0;
 
   constructor(view: EditorView) {
@@ -120,12 +96,6 @@ class RenderWindow {
       });
       return;
     }
-    // A frame, not a microtask. Run from a microtask, the move was its own
-    // transaction straight after the scroll's update, whose DOM rebuild and
-    // forced selection read laid the page out mid-frame — and after a jump it
-    // decorated around a viewport measured on estimated heights, slid, and
-    // moved again. In the frame it lands beside CodeMirror's own measure,
-    // before paint: one move per jump, and no frame of undecorated text.
     requestAnimationFrame(() => {
       this.queued = false;
       if (this.gone) return;

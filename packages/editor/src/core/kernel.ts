@@ -1,13 +1,3 @@
-/**
- * The small vocabulary every rule and command shares: the `trusted` annotation,
- * the mode and paint ports, and the per-line helpers that need no more than a
- * structure.
- *
- * It exists to break a cycle, and to state the trust rule once: an edit carrying
- * `trusted` came from a fix, a format, a project operation or the canonical text
- * coming back, and the keyboard guards do not apply to it.
- */
-
 import {
   Annotation,
   EditorState,
