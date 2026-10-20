@@ -124,8 +124,8 @@ const duplication = (): { percent: string; groups: number } => {
 const render = (): string => {
   const lines: string[] = [];
   const diagnostics = oxlint();
-  const errors = diagnostics.filter((d) => d.severity === "error").length;
-  const warnings = diagnostics.filter((d) => d.severity !== "error");
+  const errors = diagnostics.filter((diagnostic) => diagnostic.severity === "error").length;
+  const warnings = diagnostics.filter((diagnostic) => diagnostic.severity !== "error");
   const dead = deadCodeIssues();
   const dupes = duplication();
   const config = fallowConfig();
@@ -157,7 +157,7 @@ const render = (): string => {
     }
     for (const rule of [...byRule.keys()].sort()) {
       const files = byRule.get(rule) ?? new Map<string, number>();
-      const total = [...files.values()].reduce((sum, n) => sum + n, 0);
+      const total = [...files.values()].reduce((sum, count) => sum + count, 0);
       lines.push(`**\`${rule}\`** — ${total}`, "");
       for (const file of [...files.keys()].sort()) lines.push(`- \`${file}\` × ${files.get(file)}`);
       lines.push("");
@@ -177,9 +177,11 @@ const render = (): string => {
 
   lines.push("### Fallow configuration exceptions", "");
   lines.push("From `.fallowrc.jsonc`, where each one's reason is written beside it.", "");
-  lines.push(`- **Extra entries:** ${config.entry.map((e) => `\`${e}\``).join(", ") || "none"}`);
   lines.push(
-    `- **Dependencies it cannot see used:** ${config.ignoreDependencies.map((d) => `\`${d}\``).join(", ") || "none"}`,
+    `- **Extra entries:** ${config.entry.map((entry) => `\`${entry}\``).join(", ") || "none"}`,
+  );
+  lines.push(
+    `- **Dependencies it cannot see used:** ${config.ignoreDependencies.map((dependency) => `\`${dependency}\``).join(", ") || "none"}`,
   );
   lines.push("");
   return lines.join("\n");

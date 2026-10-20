@@ -209,21 +209,22 @@ const makeWebGit = (
         prefix: string,
         out: WalkedChange[],
       ): Promise<void> => {
-        const [old, now] = await Promise.all([entries(before), entries(after)]);
-        for (const name of new Set([...old.keys(), ...now.keys()])) {
-          const was = old.get(name);
-          const is = now.get(name);
-          if (was?.id === is?.id && was?.mode === is?.mode) continue;
+        const [entriesBefore, entriesAfter] = await Promise.all([entries(before), entries(after)]);
+        for (const name of new Set([...entriesBefore.keys(), ...entriesAfter.keys()])) {
+          const entryBefore = entriesBefore.get(name);
+          const entryAfter = entriesAfter.get(name);
+          if (entryBefore?.id === entryAfter?.id && entryBefore?.mode === entryAfter?.mode)
+            continue;
           const path = `${prefix}${name}`;
-          if (isTree(was) || isTree(is))
+          if (isTree(entryBefore) || isTree(entryAfter))
             await compare(
-              isTree(was) ? was?.id : undefined,
-              isTree(is) ? is?.id : undefined,
+              isTree(entryBefore) ? entryBefore?.id : undefined,
+              isTree(entryAfter) ? entryAfter?.id : undefined,
               `${path}/`,
               out,
             );
-          if (isFile(is)) out.push({ path, blob: is?.id ?? null });
-          else if (isFile(was)) out.push({ path, blob: null });
+          if (isFile(entryAfter)) out.push({ path, blob: entryAfter?.id ?? null });
+          else if (isFile(entryBefore)) out.push({ path, blob: null });
         }
       };
       type Read = Awaited<ReturnType<typeof git.readCommit>>["commit"];

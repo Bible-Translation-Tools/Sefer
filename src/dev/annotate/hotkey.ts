@@ -62,14 +62,15 @@ const LABELS: Readonly<Record<string, string>> = {
   ArrowRight: "→",
 };
 
+const baseLabel = (hotkey: Hotkey): string => {
+  if (hotkey.code !== null && /^Key[A-Z]$/u.test(hotkey.code)) return hotkey.code.slice(3);
+  if (hotkey.code !== null && /^Digit[0-9]$/u.test(hotkey.code)) return hotkey.code.slice(5);
+  return LABELS[hotkey.key] ?? (hotkey.key.length === 1 ? hotkey.key.toUpperCase() : hotkey.key);
+};
+
 export const describeHotkey = (hotkey: Hotkey | null): string => {
   if (hotkey === null) return "none";
-  const base =
-    hotkey.code !== null && /^Key[A-Z]$/u.test(hotkey.code)
-      ? hotkey.code.slice(3)
-      : hotkey.code !== null && /^Digit[0-9]$/u.test(hotkey.code)
-        ? hotkey.code.slice(5)
-        : (LABELS[hotkey.key] ?? (hotkey.key.length === 1 ? hotkey.key.toUpperCase() : hotkey.key));
+  const base = baseLabel(hotkey);
   return (
     (hotkey.ctrl ? "⌃" : "") +
     (hotkey.alt ? "⌥" : "") +

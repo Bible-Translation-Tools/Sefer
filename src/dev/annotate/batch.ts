@@ -90,7 +90,7 @@ export const renderMarkdown = (
 
   let showing: string | null = null;
 
-  let n = 0;
+  let pinNumber = 0;
 
   for (const comment of comments) {
     if (comment.url !== showing) {
@@ -98,13 +98,13 @@ export const renderMarkdown = (
       lines.push(`## ${comment.url}`, "");
     }
     for (const target of comment.targets) {
-      n += 1;
+      pinNumber += 1;
       const place = target.source ?? target.selector;
       const label = target.nearby === "" ? "" : `  "${target.nearby}"`;
       const data = target.data === "" ? "" : `  [${target.data}]`;
       const selector =
         verbosity === "full" && target.source !== null ? `  · ${target.selector}` : "";
-      lines.push(`[${String(n)}] ${place}${label}${data}${selector}`);
+      lines.push(`[${String(pinNumber)}] ${place}${label}${data}${selector}`);
     }
     for (const line of comment.text.split("\n")) lines.push(`    ${line}`);
     if (verbosity === "full") {

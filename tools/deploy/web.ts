@@ -1,7 +1,7 @@
-import { execFileSync } from "node:child_process";
 import process from "node:process";
 
 import { channelEnv } from "./channels.ts";
+import { run } from "./run.ts";
 
 const ENVIRONMENTS = {
   production: { mode: "production", design: false, release: true },
@@ -14,15 +14,6 @@ type Environment = keyof typeof ENVIRONMENTS;
 const isEnvironment = (value: string): value is Environment => Object.hasOwn(ENVIRONMENTS, value);
 
 const REQUIRED = ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"] as const;
-
-const run = (
-  command: string,
-  args: readonly string[],
-  options: { readonly env?: NodeJS.ProcessEnv } = {},
-): void => {
-  process.stdout.write(`$ ${command} ${args.join(" ")}\n`);
-  execFileSync(command, [...args], { stdio: "inherit", ...options });
-};
 
 const main = (): void => {
   const [name, ...rest] = process.argv.slice(2);

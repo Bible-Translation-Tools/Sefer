@@ -1,7 +1,8 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
+import { listSourceFiles } from "../oxc/sourceFiles.ts";
 import { collectSpecifiers, lineIndex } from "./specifiers.ts";
 
 export interface BoundaryViolation {
@@ -42,23 +43,6 @@ const isNodeSpecifier = (specifier: string): boolean =>
   NODE_ONLY.some((prefix) => specifier.startsWith(prefix));
 
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".mts", ".cts"]);
-
-const listSourceFiles = (directory: string): string[] => {
-  const found: string[] = [];
-  const walk = (current: string): void => {
-    for (const entry of readdirSync(current, { withFileTypes: true })) {
-      const full = path.join(current, entry.name);
-      if (entry.isDirectory()) {
-        walk(full);
-        continue;
-      }
-      if (entry.isFile() && SOURCE_EXTENSIONS.has(path.extname(entry.name))) found.push(full);
-    }
-  };
-  if (!statSync(directory, { throwIfNoEntry: false })?.isDirectory()) return found;
-  walk(directory);
-  return found.sort();
-};
 
 const RAW_QUERY = /\?raw(?:&|$)/;
 
@@ -109,7 +93,7 @@ export const checkCoreBoundary = (options: BoundaryOptions): BoundaryViolation[]
   const label = options.label ?? "core";
   const violations: BoundaryViolation[] = [];
 
-  for (const file of listSourceFiles(coreDir)) {
+  for (const file of listSourceFiles(coreDir, SOURCE_EXTENSIONS)) {
     const source = readFileSync(file, "utf8");
     const positionOf = lineIndex(source);
     const isTest = TEST_FILE.test(file);
@@ -182,7 +166,7 @@ export const checkHostUse = (options: {
   const paths = options.paths ?? {};
   const pathsBase = path.resolve(options.pathsBase ?? from);
   const violations: BoundaryViolation[] = [];
-  for (const file of listSourceFiles(from)) {
+  for (const file of listSourceFiles(from, SOURCE_EXTENSIONS)) {
     if (except.some((directory) => isInside(directory, file))) continue;
     const isTest = TEST_FILE.test(file);
     const source = readFileSync(file, "utf8");
@@ -232,7 +216,7 @@ export const checkReach = (options: ReachOptions): BoundaryViolation[] => {
   const pathsBase = path.resolve(options.pathsBase ?? from);
   const violations: BoundaryViolation[] = [];
 
-  for (const file of listSourceFiles(from)) {
+  for (const file of listSourceFiles(from, SOURCE_EXTENSIONS)) {
     if (except.some((directory) => isInside(directory, file))) continue;
     const source = readFileSync(file, "utf8");
     const positionOf = lineIndex(source);

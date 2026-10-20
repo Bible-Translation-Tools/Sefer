@@ -182,7 +182,7 @@ function Playground() {
                   <Switch
                     class="text-smallest text-on-surface-secondary"
                     checked={dialValue(key) === "true"}
-                    onChange={(on) => setDial(key, String(on))}
+                    onChange={(checked) => setDial(key, String(checked))}
                     label={dial.label}
                   />
                 }

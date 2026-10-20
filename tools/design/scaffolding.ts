@@ -1,30 +1,14 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
 import { lineIndex } from "../oxc/lines.ts";
+import { listSourceFiles } from "../oxc/sourceFiles.ts";
 
 const NEEDLE = "__sefer";
 const DESIGN_CALL = /__sefer\??\.\s*design/u;
 
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx"]);
-
-const listSourceFiles = (directory: string): string[] => {
-  const found: string[] = [];
-  const walk = (current: string): void => {
-    for (const entry of readdirSync(current, { withFileTypes: true })) {
-      const full = path.join(current, entry.name);
-      if (entry.isDirectory()) {
-        walk(full);
-        continue;
-      }
-      if (entry.isFile() && SOURCE_EXTENSIONS.has(path.extname(entry.name))) found.push(full);
-    }
-  };
-  if (!statSync(directory, { throwIfNoEntry: false })?.isDirectory()) return found;
-  walk(directory);
-  return found.sort();
-};
 
 const main = (): void => {
   const root = process.cwd();
@@ -32,7 +16,7 @@ const main = (): void => {
   const dev = path.join(source, "dev");
   const found: string[] = [];
 
-  for (const file of listSourceFiles(source)) {
+  for (const file of listSourceFiles(source, SOURCE_EXTENSIONS)) {
     if (file.startsWith(dev)) continue;
     const text = readFileSync(file, "utf8");
     if (!text.includes(NEEDLE)) continue;

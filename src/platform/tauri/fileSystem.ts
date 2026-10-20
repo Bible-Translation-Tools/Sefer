@@ -82,8 +82,14 @@ const attempt = <A>(
     },
   });
 
+const infoTypeOf = (entry: FileInfo): FileSystem.File.Type => {
+  if (entry.isSymlink) return "SymbolicLink";
+  if (entry.isDirectory) return "Directory";
+  return "File";
+};
+
 const infoOf = (entry: FileInfo): FileSystem.File.Info => ({
-  type: entry.isSymlink ? "SymbolicLink" : entry.isDirectory ? "Directory" : "File",
+  type: infoTypeOf(entry),
   mtime: Option.fromNullOr(entry.mtime),
   atime: Option.fromNullOr(entry.atime),
   birthtime: Option.fromNullOr(entry.birthtime),
@@ -99,14 +105,19 @@ const infoOf = (entry: FileInfo): FileSystem.File.Info => ({
   blocks: Option.none(),
 });
 
+const watchTagOf = (kind: object): FileSystem.WatchEvent["_tag"] => {
+  if ("create" in kind) return "Create";
+  if ("remove" in kind) return "Remove";
+  return "Update";
+};
+
 const watchEventsOf = (event: TauriWatchEvent): FileSystem.WatchEvent[] => {
   const kind = event.type;
   if (kind === "any" || kind === "other") {
     return event.paths.map((path): FileSystem.WatchEvent => ({ _tag: "Update", path }));
   }
   if ("access" in kind) return [];
-  const tag: FileSystem.WatchEvent["_tag"] =
-    "create" in kind ? "Create" : "remove" in kind ? "Remove" : "Update";
+  const tag = watchTagOf(kind);
   return event.paths.map((path) => ({ _tag: tag, path }));
 };
 

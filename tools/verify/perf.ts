@@ -55,10 +55,12 @@ const parseOptions = (argv: readonly string[]): Options => {
   return { chars, runs, warmup, cadence, levels, headed };
 };
 
-const percentile = (values: readonly number[], p: number): number | null => {
+const percentile = (values: readonly number[], percent: number): number | null => {
   if (values.length === 0) return null;
   const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1)] ?? null;
+  return (
+    sorted[Math.min(sorted.length - 1, Math.ceil((percent / 100) * sorted.length) - 1)] ?? null
+  );
 };
 
 const median = (values: readonly (number | null)[]): number | null => {

@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import process from "node:process";
 
 import { channelEnv } from "./channels.ts";
+import { run } from "./run.ts";
 
 const CHANNEL = "dev" as const;
 const MODE = "dev" as const;
@@ -20,15 +21,6 @@ export const aliasFor = (branch: string): string => {
 
 const currentBranch = (): string =>
   execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim();
-
-const run = (
-  command: string,
-  args: readonly string[],
-  options: { readonly env?: NodeJS.ProcessEnv } = {},
-): void => {
-  process.stdout.write(`$ ${command} ${args.join(" ")}\n`);
-  execFileSync(command, [...args], { stdio: "inherit", ...options });
-};
 
 const main = (): void => {
   const rest = process.argv.slice(2);

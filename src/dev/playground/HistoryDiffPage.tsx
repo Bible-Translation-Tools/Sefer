@@ -74,6 +74,11 @@ const labelPath = (path: string): string => {
 const dateLabel = (at: number): string =>
   new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(at);
 const firstLine = (message: string): string => message.split("\n", 1)[0] ?? "(no commit message)";
+const historySourceNote = (source: "index" | "walk" | ""): string => {
+  if (source === "index") return " · from the index";
+  if (source === "walk") return " · walking";
+  return "";
+};
 const Route = getRouteApi("/_app/playground/history-diff");
 
 interface Place {
@@ -812,11 +817,7 @@ function ReadyHistoryDiffPage() {
           <span class="text-smallest text-on-surface-tertiary">
             {commits().length}
             {more()} book-changing commits
-            {historySource() === "index"
-              ? " · from the index"
-              : historySource() === "walk"
-                ? " · walking"
-                : ""}
+            {historySourceNote(historySource())}
             {historyReading()
               ? ` · reading earlier history (${walked().toLocaleString()} commits walked)…`
               : ""}

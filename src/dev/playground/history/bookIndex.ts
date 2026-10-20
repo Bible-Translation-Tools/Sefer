@@ -231,7 +231,7 @@ export const mergeBase = (index: BookIndex, a: string, b: string): IndexedCommit
   const queue = [start];
   const seen = new Set([b]);
   while (queue.length > 0) {
-    queue.sort((x, y) => x.at - y.at);
+    queue.sort((earlier, later) => earlier.at - later.at);
     const commit = queue.pop();
     if (commit === undefined) break;
     if (reach.has(commit.id)) return commit;
