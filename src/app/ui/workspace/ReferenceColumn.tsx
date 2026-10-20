@@ -73,6 +73,7 @@ import { KIND_ROLES, roleFor } from "../../kinds/table";
 import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
 import { ResourceCard, ResourcePane } from "../kinds/registry";
+import { flyCard } from "../landing/downloads";
 import { listProjects, type ProjectSummary } from "../landing/summaries";
 import { Button, EmptyState, IconButton, Menu, MenuItem, MenuLabel, cx } from "../primitives";
 
@@ -161,6 +162,8 @@ export function LanguageTab(props: {
   readonly onSelect?: () => void;
   /** Takes it off the tabs: an × on the tab while it is the active one. */
   readonly onClose?: () => void;
+  /** The text it shows, for the add list's flight to it. */
+  readonly resourceId?: string;
 }) {
   const closable = (): boolean => props.active && props.onClose !== undefined;
   // The label is two layers in one grid cell: an invisible copy of the full
@@ -186,6 +189,7 @@ export function LanguageTab(props: {
   return (
     <div
       data-current={props.active ? "" : undefined}
+      data-tab-resource={props.resourceId}
       class="-mb-px flex h-12 min-w-0 shrink items-center border-b-2 text-small font-semibold transition-colors data-current:border-brand data-current:text-brand not-data-current:border-transparent not-data-current:text-on-surface-primary not-data-current:hover:bg-surface-secondary"
     >
       <button
@@ -945,7 +949,9 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
         readonly kind: "held";
         readonly key: string;
         readonly name: string;
-        readonly add: () => void;
+        readonly added: () => boolean;
+        /** `from`: where the row's name is, for the flight to its tab. */
+        readonly add: (from: DOMRect) => void;
       }
     | {
         readonly kind: "download";
@@ -955,28 +961,66 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
         readonly pulling: () => boolean;
       };
   const byName = (a: Offer, b: Offer): number => a.name.localeCompare(b.name);
+
+  const [aside, setAside] = createSignal<HTMLElement>();
+  const tabIds = (): ReadonlySet<string> =>
+    new Set(
+      [...(aside()?.querySelectorAll<HTMLElement>("[data-tab-resource]") ?? [])].map(
+        (tab) => tab.dataset.tabResource ?? "",
+      ),
+    );
   /**
-   * What the add list offers: everything on this device that is not a tab
-   * yet (and the reader's other projects), A–Z, then everything to download,
-   * A–Z. A download stays in the list once it lands, now with Add.
+   * Flies the added row's name up to its new tab: a ghost from the row to the
+   * tab once the tab is drawn (looked for every 50ms, for up to 3s, since a
+   * pick re-resolves the bindings first). `which` picks the tab; for another
+   * project, whose resource id is not known until it is registered, it is the
+   * tab that was not there before.
+   */
+  const flyToTab = (from: DOMRect, label: string, which: (id: string) => boolean): void => {
+    if (globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true) return;
+    let tries = 0;
+    const look = (): void => {
+      const tab = [...(aside()?.querySelectorAll<HTMLElement>("[data-tab-resource]") ?? [])].find(
+        (each) => which(each.dataset.tabResource ?? ""),
+      );
+      if (tab !== undefined) flyCard(from, tab, label);
+      else if ((tries += 1) < 60) setTimeout(look, 50);
+    };
+    look();
+  };
+
+  /**
+   * What the add list offers: everything on this device (and the reader's
+   * other projects), A–Z — those already a tab say Added — then everything to
+   * download, A–Z. A download stays in the list once it lands, now with Add.
    */
   const offers = (): readonly Offer[] => {
     const held: Offer[] = [
-      ...installed()
-        .filter((resource) => tabOf(resource) === undefined)
-        .map((resource): Offer => ({
-          kind: "held",
-          key: resource.id,
-          name: nameOf(resource),
-          add: () => show(resource),
-        })),
-      ...otherProjects().map((row): Offer => ({
+      ...installed().map((resource): Offer => ({
         kind: "held",
-        key: row.root,
-        name:
-          row.languageTag === "" ? row.name : `${row.language || row.name} (${row.languageTag})`,
-        add: () => showProject(row),
+        key: resource.id,
+        name: nameOf(resource),
+        added: () => tabOf(resource) !== undefined,
+        add: (from) => {
+          show(resource);
+          flyToTab(from, nameOf(resource), (id) => id === resource.id);
+        },
       })),
+      ...otherProjects().map((row): Offer => {
+        const name =
+          row.languageTag === "" ? row.name : `${row.language || row.name} (${row.languageTag})`;
+        return {
+          kind: "held",
+          key: row.root,
+          name,
+          added: () => false,
+          add: (from) => {
+            const before = tabIds();
+            showProject(row);
+            flyToTab(from, name, (id) => !before.has(id));
+          },
+        };
+      }),
     ];
     const toGet: Offer[] = [
       ...downloadable().map((entry): Offer => ({
@@ -1002,7 +1046,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
   /**
    * The panel's add list (the panel variant's "+"): one list under one title,
    * what is on this device first, then what can be downloaded — each A–Z.
-   * Add makes it a tab and takes it out of the list; Download turns into a
+   * Add makes it a tab, flies it up there, and the row then says Added; Download turns into a
    * progress bar and leaves the row, now with Add, when it lands. Taking a
    * text off the tabs is the × on its tab.
    */
@@ -1029,10 +1073,27 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
           {(offer) => (
             <ListRow testId={`language-offer-${offer.key}`} name={offer.name}>
               {offer.kind === "held" ? (
-                <Button disabled={busy()} onClick={() => offer.add()}>
-                  <Plus aria-hidden="true" />
-                  {t("Add")}
-                </Button>
+                <Show
+                  when={!offer.added()}
+                  fallback={
+                    <Button variant="tertiary" disabled>
+                      <Check aria-hidden="true" />
+                      {t("Added")}
+                    </Button>
+                  }
+                >
+                  <Button
+                    disabled={busy()}
+                    onClick={(event) => {
+                      const button = event.currentTarget;
+                      const row = button.closest("li")?.querySelector("span") ?? button;
+                      offer.add(row.getBoundingClientRect());
+                    }}
+                  >
+                    <Plus aria-hidden="true" />
+                    {t("Add")}
+                  </Button>
+                </Show>
               ) : (
                 <Show
                   when={offer.pulling()}
@@ -1062,6 +1123,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
 
   return (
     <aside
+      ref={setAside}
       aria-label={t("Reference texts")}
       class={
         props.variant === "panel"
@@ -1136,6 +1198,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
                       props.heart?.onActivate(false);
                     }}
                     onClose={entry.declared ? undefined : () => unpick(entry)}
+                    resourceId={entry.resource.id}
                   />
                 )}
               </For>
