@@ -76,7 +76,7 @@ export function PanelGutter(props: { readonly showing: boolean }) {
             aria-label={t("Show the books")}
             title={t("Show the books")}
             // 72px app bar + 16px: level with the project card's 64px row.
-            class="fixed start-6 top-[88px] z-30 flex size-16 cursor-pointer items-center justify-center rounded-2xl bg-surface-primary text-on-surface-primary shadow-medium transition-colors hover:bg-surface-secondary"
+            class="fixed start-6 top-[88px] z-30 flex size-16 cursor-pointer items-center justify-center rounded-3xl bg-surface-primary text-on-surface-primary shadow-medium transition-colors hover:bg-surface-secondary"
             onClick={() => shell.setSidebarOpen(true)}
           >
             <BookIcon aria-hidden="true" class="size-6" />
@@ -84,7 +84,7 @@ export function PanelGutter(props: { readonly showing: boolean }) {
         }
       >
         <div class="absolute start-0 top-4 z-10">
-          <PanelToggle class="size-16" />
+          <PanelToggle class="size-16 rounded-3xl!" />
         </div>
       </Show>
     </Show>
