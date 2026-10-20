@@ -27,8 +27,8 @@ import { Result, Schema } from "effect";
 export const APPROVALS_FILE = ".sefer/key-term-approvals.json";
 
 /** What the stored hashes are: Galley's `hash`, over the verse's raw USFM. */
-export const APPROVAL_HASH = "xxh3-64-seed0";
-export const APPROVAL_OVER = "verse-usfm";
+const APPROVAL_HASH = "xxh3-64-seed0";
+const APPROVAL_OVER = "verse-usfm";
 
 const EntrySchema = Schema.Struct({
   term: Schema.String,
@@ -62,7 +62,7 @@ export interface Approvals {
 
 export const NO_APPROVALS: Approvals = { byKey: new Map(), recheck: false };
 
-export const keyOf = (term: string, verse: string): string => `${term}\u0000${verse}`;
+const keyOf = (term: string, verse: string): string => `${term}\u0000${verse}`;
 
 /** The file's text, or `undefined` for one this build cannot read (never saved over). */
 export const decodeApprovals = (text: string): Approvals | undefined => {

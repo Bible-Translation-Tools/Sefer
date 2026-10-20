@@ -104,7 +104,6 @@ export {
   ordinalOf,
   patternIdentity,
   siteIdentityOf,
-  type SiteContext,
 } from "@wycliffeassociates/scripture-kitchen/sous-identity";
 // Sous's judging settings as kitchen generates them: every key, its type, its
 // default and range, and one plain sentence each. Renamed at the seam because
