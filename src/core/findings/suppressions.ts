@@ -131,9 +131,9 @@ const siteFields = (
   if (fields.length !== 5 || fields[0] !== "v1" || fields[1] !== "s") return undefined;
   const [, , ref, siteText, ordinal] = fields;
   if (ref === undefined || siteText === undefined || ordinal === undefined) return undefined;
-  const n = Number(ordinal);
-  if (!Number.isInteger(n) || n < 0) return undefined;
-  return { ref: unescape(ref), siteText: unescape(siteText), ordinal: n };
+  const ordinalNumber = Number(ordinal);
+  if (!Number.isInteger(ordinalNumber) || ordinalNumber < 0) return undefined;
+  return { ref: unescape(ref), siteText: unescape(siteText), ordinal: ordinalNumber };
 };
 
 export const versesOf = (

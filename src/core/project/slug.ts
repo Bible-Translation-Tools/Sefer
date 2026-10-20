@@ -18,8 +18,8 @@ export const mintSlug = (root: string, taken: Readonly<Record<string, string>>):
   for (const [slug, held] of Object.entries(taken)) if (held === root) return slug;
   const base = slugify(nameOfRoot(root));
   if (taken[base] === undefined) return base;
-  for (let n = 2; n < 1000; n += 1) {
-    const candidate = `${base}-${n}`;
+  for (let attempt = 2; attempt < 1000; attempt += 1) {
+    const candidate = `${base}-${attempt}`;
     if (taken[candidate] === undefined) return candidate;
   }
   return `${base}-${Date.now().toString(36)}`;

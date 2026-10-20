@@ -109,12 +109,11 @@ const place = (path: string): Placed => {
   return { kind: "chunk", chapter, first };
 };
 
-const spanKey = (span: Span): string =>
-  span.kind === "book"
-    ? "book"
-    : span.kind === "chapter"
-      ? `chapter ${span.chapter}`
-      : `chunk ${span.chapter}:${span.first}`;
+const spanKey = (span: Span): string => {
+  if (span.kind === "book") return "book";
+  if (span.kind === "chapter") return `chapter ${span.chapter}`;
+  return `chunk ${span.chapter}:${span.first}`;
+};
 
 export const readHelpBook = (files: readonly BookFile[]): BookRead => {
   const skipped: string[] = [];
@@ -142,15 +141,14 @@ export const readHelpBook = (files: readonly BookFile[]): BookRead => {
   }
   for (const [chapter, firsts] of chunkFirsts) spans.push(...closeAtNextSibling(chapter, firsts));
 
-  const order = (span: Span): readonly [number, number, number] =>
-    span.kind === "book"
-      ? [0, 0, 0]
-      : span.kind === "chapter"
-        ? [span.chapter, 0, 0]
-        : [span.chapter, 1, span.first];
+  const order = (span: Span): readonly [number, number, number] => {
+    if (span.kind === "book") return [0, 0, 0];
+    if (span.kind === "chapter") return [span.chapter, 0, 0];
+    return [span.chapter, 1, span.first];
+  };
   spans.sort((a, b) => {
-    const [x, y] = [order(a), order(b)];
-    return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+    const [left, right] = [order(a), order(b)];
+    return left[0] - right[0] || left[1] - right[1] || left[2] - right[2];
   });
 
   const notes: NoteRecord[] = [];

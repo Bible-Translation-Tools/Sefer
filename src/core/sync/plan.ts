@@ -38,8 +38,10 @@ export const emptyPlan: IncomingPlan = {
   clean: true,
 };
 
-const kindOf = (facts: BookFacts): ChangeKind =>
-  !facts.theirs.present ? "deleted" : facts.inBase ? "modified" : "added";
+const kindOf = (facts: BookFacts): ChangeKind => {
+  if (!facts.theirs.present) return "deleted";
+  return facts.inBase ? "modified" : "added";
+};
 
 export const incomingPlan = (
   commits: readonly Commit[],

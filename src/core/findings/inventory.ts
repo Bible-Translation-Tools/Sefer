@@ -16,6 +16,7 @@ import {
   type Pool,
   type Usual,
 } from "../galley";
+import { compareCodeUnits } from "../ordering";
 
 const WORD_CHANNELS: ReadonlySet<Channel> = new Set<Channel>(["Casing", "WordLength", "Doubled"]);
 
@@ -227,7 +228,7 @@ const FORM_NAMES: Record<CasingForm, string> = {
   Uncased: "uncased",
 };
 
-const count = (n: number): string => n.toLocaleString("en");
+const count = (value: number): string => value.toLocaleString("en");
 
 const quoted = (glyph: number): string =>
   glyph === PATTERN_DIGIT_GLYPH ? "a digit" : `“${String.fromCodePoint(glyph)}”`;
@@ -388,7 +389,7 @@ export const inventory = (
       other,
       rows: [...bucket.rows].sort((a, b) => a.pattern - b.pattern),
       flagged: bucket.flagged.sort(
-        (a, b) => (a.bookId < b.bookId ? -1 : a.bookId > b.bookId ? 1 : 0) || a.from - b.from,
+        (a, b) => compareCodeUnits(a.bookId, b.bookId) || a.from - b.from,
       ),
     });
   }

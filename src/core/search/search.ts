@@ -174,19 +174,42 @@ const matcherFor = (query: Query): Result.Result<RegExp, SearchError> => {
   }
 };
 
+const patternToRun = (
+  query: Query,
+  limit: number | undefined,
+): Result.Result<RegExp | null, SearchError> => {
+  if (query.text === "") return Result.succeed(null);
+  const matcher = matcherFor(query);
+  if (Result.isFailure(matcher)) return Result.fail(matcher.failure);
+  if (limit !== undefined && limit <= 0) return Result.succeed(null);
+  return Result.succeed(matcher.success);
+};
+
+function* matchesIn(
+  pattern: RegExp,
+  text: string,
+  wholeWord: boolean,
+): Generator<{ readonly from: number; readonly to: number }> {
+  pattern.lastIndex = 0;
+  for (let match = pattern.exec(text); match !== null; match = pattern.exec(text)) {
+    const from = match.index;
+    const to = from + match[0].length;
+    if (to === from) pattern.lastIndex = from + 1;
+    if (wholeWord && (isWordChar(text, from - 1) || isWordChar(text, to))) continue;
+    yield { from, to };
+  }
+}
+
 export const find = (
   books: readonly Book[],
   query: Query,
   options?: Options,
 ): Result.Result<readonly Hit[], SearchError> => {
-  if (query.text === "") return Result.succeed([]);
-
-  const matcher = matcherFor(query);
-  if (Result.isFailure(matcher)) return Result.fail(matcher.failure);
-  const pattern = matcher.success;
-
+  const prepared = patternToRun(query, options?.limit);
+  if (Result.isFailure(prepared)) return Result.fail(prepared.failure);
+  const pattern = prepared.success;
+  if (pattern === null) return Result.succeed([]);
   const limit = options?.limit;
-  if (limit !== undefined && limit <= 0) return Result.succeed([]);
   const wanted = options?.books === undefined ? null : new Set(options.books);
 
   const hits: Hit[] = [];
@@ -195,23 +218,16 @@ export const find = (
     const { text, stamp } = book.source();
     const addressOf = lazily(() => addressesOf(options?.analysisOf, book.id, book.id, text));
 
-    pattern.lastIndex = 0;
-    for (let match = pattern.exec(text); match !== null; match = pattern.exec(text)) {
-      const from = match.index;
-      const to = from + match[0].length;
-      if (to === from) pattern.lastIndex = from + 1;
-
-      if (query.wholeWord !== true || (!isWordChar(text, from - 1) && !isWordChar(text, to))) {
-        hits.push({
-          bookId: book.id,
-          stamp,
-          from,
-          to,
-          ...withAddress(addressOf(from)),
-          ...previewAt(text, from, to, options?.previewWidth),
-        });
-        if (limit !== undefined && hits.length >= limit) return Result.succeed(hits);
-      }
+    for (const { from, to } of matchesIn(pattern, text, query.wholeWord === true)) {
+      hits.push({
+        bookId: book.id,
+        stamp,
+        from,
+        to,
+        ...withAddress(addressOf(from)),
+        ...previewAt(text, from, to, options?.previewWidth),
+      });
+      if (limit !== undefined && hits.length >= limit) return Result.succeed(hits);
     }
   }
   return Result.succeed(hits);
@@ -223,14 +239,11 @@ export const findInReading = (
   query: Query,
   options?: Options,
 ): Result.Result<readonly Hit[], SearchError> => {
-  if (query.text === "") return Result.succeed([]);
-
-  const matcher = matcherFor(query);
-  if (Result.isFailure(matcher)) return Result.fail(matcher.failure);
-  const pattern = matcher.success;
-
+  const prepared = patternToRun(query, options?.limit);
+  if (Result.isFailure(prepared)) return Result.fail(prepared.failure);
+  const pattern = prepared.success;
+  if (pattern === null) return Result.succeed([]);
   const limit = options?.limit;
-  if (limit !== undefined && limit <= 0) return Result.succeed([]);
   const wanted = options?.books === undefined ? null : new Set(options.books);
 
   const hits: Hit[] = [];
@@ -243,14 +256,7 @@ export const findInReading = (
     const text = reading.text;
     const addressOf = lazily(() => addressesOf(options?.analysisOf, book.id, book.id, source.text));
 
-    pattern.lastIndex = 0;
-    for (let match = pattern.exec(text); match !== null; match = pattern.exec(text)) {
-      const from = match.index;
-      const to = from + match[0].length;
-      if (to === from) pattern.lastIndex = from + 1;
-      if (query.wholeWord === true && (isWordChar(text, from - 1) || isWordChar(text, to)))
-        continue;
-
+    for (const { from, to } of matchesIn(pattern, text, query.wholeWord === true)) {
       const pieces = reading.pieces(from, to);
       const first = pieces[0];
       if (first === undefined) continue;
@@ -335,14 +341,11 @@ export const findInReferences = (
   query: Query,
   options?: Options,
 ): Result.Result<readonly ReferenceHit[], SearchError> => {
-  if (query.text === "") return Result.succeed([]);
-
-  const matcher = matcherFor(query);
-  if (Result.isFailure(matcher)) return Result.fail(matcher.failure);
-  const pattern = matcher.success;
-
+  const prepared = patternToRun(query, options?.limit);
+  if (Result.isFailure(prepared)) return Result.fail(prepared.failure);
+  const pattern = prepared.success;
+  if (pattern === null) return Result.succeed([]);
   const limit = options?.limit;
-  if (limit !== undefined && limit <= 0) return Result.succeed([]);
 
   const hits: ReferenceHit[] = [];
   for (const reference of references) {
@@ -355,14 +358,7 @@ export const findInReferences = (
       addressesOf(options?.analysisOf, reference.id, bookId, reference.text),
     );
 
-    pattern.lastIndex = 0;
-    for (let match = pattern.exec(text); match !== null; match = pattern.exec(text)) {
-      const from = match.index;
-      const to = from + match[0].length;
-      if (to === from) pattern.lastIndex = from + 1;
-      if (query.wholeWord === true && (isWordChar(text, from - 1) || isWordChar(text, to)))
-        continue;
-
+    for (const { from, to } of matchesIn(pattern, text, query.wholeWord === true)) {
       const first = reading.pieces(from, to)[0];
       if (first === undefined) continue;
       hits.push({
@@ -393,23 +389,16 @@ export const findInDocuments = (
   query: Query,
   options?: Pick<Options, "limit" | "previewWidth">,
 ): Result.Result<readonly DocumentHit[], SearchError> => {
-  if (query.text === "") return Result.succeed([]);
-  const matcher = matcherFor(query);
-  if (Result.isFailure(matcher)) return Result.fail(matcher.failure);
-  const pattern = matcher.success;
+  const prepared = patternToRun(query, options?.limit);
+  if (Result.isFailure(prepared)) return Result.fail(prepared.failure);
+  const pattern = prepared.success;
+  if (pattern === null) return Result.succeed([]);
   const limit = options?.limit;
-  if (limit !== undefined && limit <= 0) return Result.succeed([]);
 
   const hits: DocumentHit[] = [];
   for (const document of documents) {
     const { text } = document;
-    pattern.lastIndex = 0;
-    for (let match = pattern.exec(text); match !== null; match = pattern.exec(text)) {
-      const from = match.index;
-      const to = from + match[0].length;
-      if (to === from) pattern.lastIndex = from + 1;
-      if (query.wholeWord === true && (isWordChar(text, from - 1) || isWordChar(text, to)))
-        continue;
+    for (const { from, to } of matchesIn(pattern, text, query.wholeWord === true)) {
       hits.push({
         document: document.id,
         addresses: document.addresses,

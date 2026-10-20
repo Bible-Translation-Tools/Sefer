@@ -110,6 +110,11 @@ const decodeComments = Schema.decodeUnknownResult(Schema.Array(CommentRecord));
 
 type PullValue = typeof PullRecord.Type;
 
+const stateOf = (record: PullValue): Suggestion["state"] => {
+  if (record.merged === true) return "merged";
+  return record.state === "closed" ? "closed" : "open";
+};
+
 const suggestionOf = (record: PullValue): Suggestion => ({
   number: record.number,
   title: record.title ?? "",
@@ -117,7 +122,7 @@ const suggestionOf = (record: PullValue): Suggestion => ({
   updatedAt: record.updated_at ?? "",
   branch: record.head?.ref ?? "",
   head: record.head?.sha,
-  state: record.merged === true ? "merged" : record.state === "closed" ? "closed" : "open",
+  state: stateOf(record),
 });
 
 const sameLogin = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase();

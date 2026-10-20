@@ -79,6 +79,9 @@ const repoOf = (url: string): string => {
   }
 };
 
+const viaFromName = (name: string): "zip" | "folder" =>
+  name.toLowerCase().endsWith(".zip") ? "zip" : "folder";
+
 const originOf = (record: unknown): Option.Option<ProjectOrigin> => {
   if (!isRecord(record)) return Option.none();
   if (record.via === "remote" && typeof record.url === "string") {
@@ -87,12 +90,7 @@ const originOf = (record: unknown): Option.Option<ProjectOrigin> => {
   }
   const first = strings(record.sources).at(0);
   if (first === undefined) return Option.none();
-  const via =
-    record.via === "zip" || record.via === "folder"
-      ? record.via
-      : first.toLowerCase().endsWith(".zip")
-        ? "zip"
-        : "folder";
+  const via = record.via === "zip" || record.via === "folder" ? record.via : viaFromName(first);
   return Option.some({ via, label: lastSegment(first) || first });
 };
 

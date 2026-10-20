@@ -1,4 +1,5 @@
 import type { FormatEdit } from "./format";
+import { isRecord } from "./wire";
 
 export type BlockWhere = "leading" | "inside";
 
@@ -79,17 +80,16 @@ export interface OverlayOptions {
   readonly scope?: { readonly chapter: number } | { readonly sid: string };
 }
 
-const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
-  typeof value === "object" && value !== null;
-
 const num = (value: unknown): number => (typeof value === "number" ? value : 0);
 const flag = (value: unknown): boolean => value === true;
 const text = (value: unknown): string => (typeof value === "string" ? value : "");
 
 const whereOf = (value: unknown): BlockWhere => (value === "inside" ? "inside" : "leading");
 
-const reasonOf = (value: unknown): UnpairedReason =>
-  value === "bridge" ? "bridge" : value === "ambiguous" ? "ambiguous" : "absent";
+const reasonOf = (value: unknown): UnpairedReason => {
+  if (value === "bridge" || value === "ambiguous") return value;
+  return "absent";
+};
 
 const readAddress = (value: unknown): BlockAddress => {
   if (!isRecord(value)) return { sid: "", where: "leading", ordinal: 0, marker: "" };

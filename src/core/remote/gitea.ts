@@ -183,14 +183,14 @@ const base64 = (value: string): string => {
   const bytes = new TextEncoder().encode(value);
   let out = "";
   for (let index = 0; index < bytes.length; index += 3) {
-    const a = bytes[index] ?? 0;
-    const b = bytes[index + 1] ?? 0;
-    const c = bytes[index + 2] ?? 0;
+    const firstByte = bytes[index] ?? 0;
+    const secondByte = bytes[index + 1] ?? 0;
+    const thirdByte = bytes[index + 2] ?? 0;
     const remaining = bytes.length - index;
-    out += ALPHABET[a >> 2] ?? "";
-    out += ALPHABET[((a & 0x03) << 4) | (b >> 4)] ?? "";
-    out += remaining > 1 ? (ALPHABET[((b & 0x0f) << 2) | (c >> 6)] ?? "") : "=";
-    out += remaining > 2 ? (ALPHABET[c & 0x3f] ?? "") : "=";
+    out += ALPHABET[firstByte >> 2] ?? "";
+    out += ALPHABET[((firstByte & 0x03) << 4) | (secondByte >> 4)] ?? "";
+    out += remaining > 1 ? (ALPHABET[((secondByte & 0x0f) << 2) | (thirdByte >> 6)] ?? "") : "=";
+    out += remaining > 2 ? (ALPHABET[thirdByte & 0x3f] ?? "") : "=";
   }
   return out;
 };

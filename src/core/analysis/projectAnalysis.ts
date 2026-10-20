@@ -105,11 +105,11 @@ interface Entry {
 
 const versesIn = (rows: {
   length: number;
-  seek: (n: number) => { first: number; last: number };
+  seek: (index: number) => { first: number; last: number };
 }): number => {
   let verses = 0;
-  for (let n = 0; n < rows.length; n += 1) {
-    const { first, last } = rows.seek(n);
+  for (let index = 0; index < rows.length; index += 1) {
+    const { first, last } = rows.seek(index);
     verses += last >= first && first > 0 ? last - first + 1 : 1;
   }
   return verses;

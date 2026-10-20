@@ -1,6 +1,7 @@
 import { Effect, FileSystem, Option, PlatformError, Result } from "effect";
 
 import { joinPath, lastSegment, normalisePath } from "../fileSystem/path";
+import { compareCodeUnits } from "../ordering";
 import { decodeBurritoMetadata, type BurritoMetadata } from "../resources/burrito";
 import {
   fromBurrito,
@@ -38,7 +39,7 @@ const canonicalOrder = (paths: readonly string[]): readonly string[] =>
     } else if (leftNumber !== undefined) return -1;
     else if (rightNumber !== undefined) return 1;
     if (leftName !== rightName) return leftName < rightName ? -1 : 1;
-    return left < right ? -1 : left > right ? 1 : 0;
+    return compareCodeUnits(left, right);
   });
 
 export type MetadataRefusal = "absent" | "unreadable" | "unparsable" | "notAKnownFormat";

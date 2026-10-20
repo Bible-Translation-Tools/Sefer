@@ -160,22 +160,19 @@ export const overlayBook = (
   }
 };
 
-export const applyOverlay = (
+const applyPreview = (
   preview: FormatPreview,
   book: Book,
+  origin: "overlay" | "format",
 ): Result.Result<Receipt, Refusal> => {
   const current = book.source().stamp;
   if (current.revision !== preview.stamp.revision)
     return Result.fail(staleRefusal(book, preview.stamp, current));
-  return book.apply(preview.changes, "overlay", trustedBy("overlay"));
+  return book.apply(preview.changes, origin, trustedBy(origin));
 };
 
-export const applyFormat = (
-  preview: FormatPreview,
-  book: Book,
-): Result.Result<Receipt, Refusal> => {
-  const current = book.source().stamp;
-  if (current.revision !== preview.stamp.revision)
-    return Result.fail(staleRefusal(book, preview.stamp, current));
-  return book.apply(preview.changes, "format", trustedBy("format"));
-};
+export const applyOverlay = (preview: FormatPreview, book: Book): Result.Result<Receipt, Refusal> =>
+  applyPreview(preview, book, "overlay");
+
+export const applyFormat = (preview: FormatPreview, book: Book): Result.Result<Receipt, Refusal> =>
+  applyPreview(preview, book, "format");

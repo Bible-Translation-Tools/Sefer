@@ -1,11 +1,11 @@
 import { identifyBook } from "@sefer/text/book";
-import { Effect, FileSystem, Result } from "effect";
+import { Effect, FileSystem } from "effect";
 
 import { Galley, toLf } from "../galley";
 import { Git, type ChangedPath, type Commit, type Repo } from "../git/git";
 import type { Project } from "../project/project";
 import { booksByPath } from "./classify";
-import { bookFacts, type BookFacts, type Diff } from "./facts";
+import { bookFacts, diffThrough, type BookFacts } from "./facts";
 import { incomingPlan, type IncomingPlan } from "./plan";
 
 const USFM = /\.usfm$/iu;
@@ -67,10 +67,7 @@ export const surveyIncoming = (
     const git = yield* Git;
     const fileSystem = yield* FileSystem.FileSystem;
     const galley = yield* Galley;
-    const diff: Diff = (before, after) => {
-      const skeleton = galley.diff(before, after);
-      return Result.isSuccess(skeleton) ? skeleton.success : undefined;
-    };
+    const diff = diffThrough(galley);
     const from = options.base?.id ?? options.tracking;
     // SAFETY: the fallback is the empty list, which inhabits `readonly ChangedPath[]`; the annotation only stops TypeScript inferring `never[]` and then rejecting the real answer.
     const empty = [] as readonly ChangedPath[];

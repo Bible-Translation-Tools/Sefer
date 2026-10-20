@@ -1,6 +1,7 @@
 import { Result } from "effect";
 
 import { doorMissing, type EngineDoorMissing } from "./diff";
+import { exportsFunctions } from "./wire";
 
 export interface FormatOptions {
   readonly block_marker_own_line?: boolean;
@@ -63,13 +64,8 @@ interface FormatCapableModule {
   readonly formatEdits?: (text: string, opts: OptsHandle) => EditsHandle;
 }
 
-const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
-  typeof value === "object" && value !== null;
-
 const hasFormat = (module: unknown): module is Required<FormatCapableModule> =>
-  isRecord(module) &&
-  typeof module.formatEdits === "function" &&
-  typeof module.FormatOpts === "function";
+  exportsFunctions(module, "formatEdits", "FormatOpts");
 
 export const readEdits = (held: EditsHandle): readonly FormatEdit[] => {
   const spans = held.spans;

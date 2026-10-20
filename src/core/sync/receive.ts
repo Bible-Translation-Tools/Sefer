@@ -9,6 +9,7 @@ import type { Project } from "../project/project";
 import { Remote } from "../remote/remote";
 import { SaveCoordinator } from "../save/saveCoordinator";
 import { booksByPath, classify, giveBack, handOver, isScripture, unmoved } from "./classify";
+import type { BookFacts } from "./facts";
 import { DEFAULT_OVERLAP, judge, type Overlap } from "./policy";
 import { trackingRef } from "./state";
 
@@ -44,6 +45,13 @@ export interface ReceiveOptions {
 
 const refuse = (refusal: ReceiveRefusal, description: string, books?: readonly string[]) =>
   new ReceiveError({ refusal, description, books });
+
+const reviewRefusal = (review: readonly BookFacts[]) =>
+  refuse(
+    "review",
+    `both sides changed ${review.map((book) => book.bookId).join(", ")}`,
+    review.map((book) => book.bookId),
+  );
 
 const fromPort = (error: {
   readonly reason: string;
@@ -142,14 +150,7 @@ const program = (options: ReceiveOptions) =>
     });
 
     let decided = yield* decide;
-    if (decided.review.length > 0)
-      return yield* Effect.fail(
-        refuse(
-          "review",
-          `both sides changed ${decided.review.map((book) => book.bookId).join(", ")}`,
-          decided.review.map((book) => book.bookId),
-        ),
-      );
+    if (decided.review.length > 0) return yield* Effect.fail(reviewRefusal(decided.review));
 
     const status = yield* Effect.mapError(git.status(repo), fromPort);
     const theirs = new Set(changed.map((entry) => entry.path));
@@ -162,14 +163,7 @@ const program = (options: ReceiveOptions) =>
     let handed = yield* handOver(repo, project, decided.classified, decided.taking, "incoming");
     if (!handed.ok && "moved" in handed) {
       decided = yield* decide;
-      if (decided.review.length > 0)
-        return yield* Effect.fail(
-          refuse(
-            "review",
-            `both sides changed ${decided.review.map((book) => book.bookId).join(", ")}`,
-            decided.review.map((book) => book.bookId),
-          ),
-        );
+      if (decided.review.length > 0) return yield* Effect.fail(reviewRefusal(decided.review));
       handed = yield* handOver(repo, project, decided.classified, decided.taking, "incoming");
     }
     if (!handed.ok)

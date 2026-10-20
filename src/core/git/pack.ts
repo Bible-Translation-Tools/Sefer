@@ -5,6 +5,8 @@
  * the same history is one 2.7 MB pack and its index.
  */
 
+import { compareCodeUnits } from "../ordering";
+
 const TYPE = { commit: 1, tree: 2, blob: 3, ofsDelta: 6 } as const;
 
 export type ObjectType = "commit" | "tree" | "blob";
@@ -49,18 +51,19 @@ const deflate = async (bytes: Uint8Array): Promise<Uint8Array> =>
 
 const CRC_TABLE = (() => {
   const table = new Uint32Array(256);
-  for (let n = 0; n < 256; n++) {
-    let c = n;
-    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    table[n] = c >>> 0;
+  for (let byteValue = 0; byteValue < 256; byteValue++) {
+    let remainder = byteValue;
+    for (let k = 0; k < 8; k++)
+      remainder = remainder & 1 ? 0xedb88320 ^ (remainder >>> 1) : remainder >>> 1;
+    table[byteValue] = remainder >>> 0;
   }
   return table;
 })();
 
 const crc32 = (bytes: Uint8Array): number => {
-  let c = 0xffffffff;
-  for (const byte of bytes) c = (CRC_TABLE[(c ^ byte) & 0xff] ?? 0) ^ (c >>> 8);
-  return (c ^ 0xffffffff) >>> 0;
+  let crc = 0xffffffff;
+  for (const byte of bytes) crc = (CRC_TABLE[(crc ^ byte) & 0xff] ?? 0) ^ (crc >>> 8);
+  return (crc ^ 0xffffffff) >>> 0;
 };
 
 const entryHeader = (type: number, size: number): number[] => {
@@ -76,9 +79,9 @@ const entryHeader = (type: number, size: number): number[] => {
   return out;
 };
 
-const sizeVarint = (n: number): number[] => {
+const sizeVarint = (value: number): number[] => {
   const out: number[] = [];
-  let rest = n;
+  let rest = value;
   do {
     let byte = rest & 0x7f;
     rest = Math.floor(rest / 128);
@@ -88,9 +91,9 @@ const sizeVarint = (n: number): number[] => {
   return out;
 };
 
-const offsetVarint = (n: number): number[] => {
-  const out = [n & 0x7f];
-  let rest = Math.floor(n / 128);
+const offsetVarint = (value: number): number[] => {
+  const out = [value & 0x7f];
+  let rest = Math.floor(value / 128);
   while (rest > 0) {
     rest -= 1;
     out.unshift(0x80 | (rest & 0x7f));
@@ -224,8 +227,8 @@ export const packWriter = (): PackWriter => {
 
     const sorted = [...entries].sort((a, b) => {
       for (let i = 0; i < 20; i++) {
-        const d = (a.id[i] ?? 0) - (b.id[i] ?? 0);
-        if (d !== 0) return d;
+        const difference = (a.id[i] ?? 0) - (b.id[i] ?? 0);
+        if (difference !== 0) return difference;
       }
       return 0;
     });
@@ -267,7 +270,7 @@ export const packWriter = (): PackWriter => {
 export const treeBody = (files: ReadonlyMap<string, string>): Uint8Array =>
   concat(
     [...files]
-      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .sort(([a], [b]) => compareCodeUnits(a, b))
       .flatMap(([name, id]) => [encoder.encode(`100644 ${name}\0`), fromHex(id)]),
   );
 

@@ -306,6 +306,11 @@ export const openProject = (
  */
 const OPEN_CONCURRENCY = 12;
 
+const readBooksInOrder = (paths: readonly string[]) =>
+  Effect.forEach(paths, (path) => Effect.result(openBook(path)), {
+    concurrency: OPEN_CONCURRENCY,
+  });
+
 const openIn = (
   root: string,
   options: OpenProjectOptions,
@@ -339,9 +344,7 @@ const openIn = (
       "project.books": paths.length,
       "file.concurrency": OPEN_CONCURRENCY,
     });
-    const reads = yield* Effect.forEach(paths, (path) => Effect.result(openBook(path)), {
-      concurrency: OPEN_CONCURRENCY,
-    });
+    const reads = yield* readBooksInOrder(paths);
     reading?.();
 
     for (const [index, path] of paths.entries()) {

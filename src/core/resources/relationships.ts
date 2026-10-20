@@ -35,13 +35,13 @@ const related = (
   version: string | undefined,
 ): RelatedResource | undefined => {
   const lang = language.trim().toLowerCase();
-  const res = resource.trim().toLowerCase();
-  if (lang === "" || res === "") return undefined;
+  const resourceName = resource.trim().toLowerCase();
+  if (lang === "" || resourceName === "") return undefined;
   const listed = version?.trim();
   return {
     relation: "source",
     language: lang,
-    resource: res,
+    resource: resourceName,
     ...(listed === undefined || listed === "" ? {} : { version: listed }),
   };
 };

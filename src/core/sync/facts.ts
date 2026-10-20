@@ -1,9 +1,19 @@
+import { Result } from "effect";
+
 import type { DiffSkeleton } from "../galley/diff";
+import type { GalleyService } from "../galley/galley";
 import { deriveDeltaScope } from "../history/delta";
 
 export const FRONT_MATTER = 0;
 
 export type Diff = (before: string, after: string) => DiffSkeleton | undefined;
+
+export const diffThrough =
+  (galley: GalleyService): Diff =>
+  (before, after) => {
+    const skeleton = galley.diff(before, after);
+    return Result.isSuccess(skeleton) ? skeleton.success : undefined;
+  };
 
 export interface SideFact {
   readonly present: boolean;

@@ -156,17 +156,17 @@ const findOptions = (query: FindQuery, scope?: FindScope): Record<string, unknow
 const decodeHits = (bytes: Uint8Array): readonly EngineHit[] => {
   const hits = Hits.open(bytes);
   const out: EngineHit[] = [];
-  for (let n = 0; n < hits.hitCount; n += 1) {
-    const hit = hits.hit(n);
+  for (let hitIndex = 0; hitIndex < hits.hitCount; hitIndex += 1) {
+    const hit = hits.hit(hitIndex);
     const projected = { from: hit.projectedFrom, to: hit.projectedTo };
     const bookId = hits.id(hit.bookIndex);
     const rows = hit.pieces();
     const source: EngineRange[] = [];
-    for (let p = 0; p < rows.length; p += 1) {
-      const piece = rows.seek(p);
+    for (let pieceIndex = 0; pieceIndex < rows.length; pieceIndex += 1) {
+      const piece = rows.seek(pieceIndex);
       source.push({ from: piece.sourceFrom, to: piece.sourceTo });
     }
-    out.push({ bookId, projected, source, preview: hits.preview(n) });
+    out.push({ bookId, projected, source, preview: hits.preview(hitIndex) });
   }
   return out;
 };
@@ -427,12 +427,14 @@ const makeService = (
     markers: readonly ExtensionMarker[],
     opts?: { readonly relaxZPrefix?: boolean },
   ): readonly ExtensionReport[] => {
-    const list = JSON.stringify(markers.map((m) => ({ name: m.name, category: m.category })));
+    const list = JSON.stringify(
+      markers.map((marker) => ({ name: marker.name, category: marker.category })),
+    );
     const reports = wasmModule.setExtensions(list, { relaxZPrefix: opts?.relaxZPrefix === true });
     // SAFETY: the engine answers a JSON array of `{ name, reason }` reports (`onion/src/extensions.rs`); a list report carries no `line`.
     const parsed = JSON.parse(reports) as ExtensionReport[];
     observe?.note("galley.extensions", "ready", undefined, {
-      "galley.extensions": markers.map((m) => m.name).join(",") || "none",
+      "galley.extensions": markers.map((marker) => marker.name).join(",") || "none",
       "galley.extensions_refused": parsed.length,
     });
     return parsed;

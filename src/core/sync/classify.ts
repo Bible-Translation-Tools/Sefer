@@ -5,7 +5,7 @@ import { Effect, FileSystem, Option, Result } from "effect";
 import { Galley, toLf } from "../galley";
 import { Git, repositoryPath, type ChangedPath, type CommitId, type Repo } from "../git/git";
 import type { Project } from "../project/project";
-import { bookFacts, type BookFacts, type Diff } from "./facts";
+import { bookFacts, diffThrough, type BookFacts } from "./facts";
 
 const USFM = /\.usfm$/iu;
 
@@ -54,10 +54,7 @@ export const classify = (
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const galley = yield* Galley;
-    const diff: Diff = (before, after) => {
-      const skeleton = galley.diff(before, after);
-      return Result.isSuccess(skeleton) ? skeleton.success : undefined;
-    };
+    const diff = diffThrough(galley);
     const facts: BookFacts[] = [];
     const stamps = new Map<string, SourceStamp>();
     const theirsTexts = new Map<string, string>();

@@ -1,6 +1,7 @@
 import { Data, Result } from "effect";
 
 import type { EngineRange } from "./galley";
+import { exportsFunctions, isRecord } from "./wire";
 
 export type UnitKind = "shared" | "added" | "deleted" | "coalesced";
 
@@ -102,8 +103,10 @@ export const doorMissing = (operation: string): EngineDoorMissing =>
 
 const SID = /^(\S+) (\d+):(\d+)(?:-(\d+))?(?:_cdup_(\d+))?(?:_dup_(\d+))?$/;
 
-const blockKind = (chapter: number, first: number): BlockKind =>
-  first > 0 ? "verse" : chapter === 0 ? "frontMatter" : "chapterOpen";
+const blockKind = (chapter: number, first: number): BlockKind => {
+  if (first > 0) return "verse";
+  return chapter === 0 ? "frontMatter" : "chapterOpen";
+};
 
 const parseAddr = (sid: string): Addr => {
   const parts = SID.exec(sid);
@@ -164,9 +167,6 @@ interface WireUnit {
 
 const KINDS: readonly UnitKind[] = ["shared", "added", "deleted", "coalesced"];
 const STATUSES: readonly UnitStatus[] = ["unchanged", "modified", "added", "deleted"];
-
-const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
-  typeof value === "object" && value !== null;
 
 const num = (value: unknown): number => (typeof value === "number" ? value : 0);
 const flag = (value: unknown): boolean => value === true;
@@ -306,10 +306,10 @@ interface DiffCapableModule {
 }
 
 const hasDiff = (module: unknown): module is Required<Pick<DiffCapableModule, "diff">> =>
-  isRecord(module) && typeof module.diff === "function";
+  exportsFunctions(module, "diff");
 
 const hasSplices = (module: unknown): module is Required<Pick<DiffCapableModule, "mergeSplices">> =>
-  isRecord(module) && typeof module.mergeSplices === "function";
+  exportsFunctions(module, "mergeSplices");
 
 export interface MergeSplice {
   readonly from: number;
@@ -341,7 +341,7 @@ export const engineMergeSplices = (
 };
 
 const hasMerge = (module: unknown): module is Required<Pick<DiffCapableModule, "merge">> =>
-  isRecord(module) && typeof module.merge === "function";
+  exportsFunctions(module, "merge");
 
 export const engineDiff = (
   module: unknown,

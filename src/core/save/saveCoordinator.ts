@@ -19,6 +19,14 @@ import type { ExternalChange } from "../project/project";
 import { Recovery } from "../recovery/recovery";
 import type { Baseline } from "./baseline";
 
+const takeReason = (
+  expect: SourceStamp | "keep" | undefined,
+  moved: boolean,
+): string | undefined => {
+  if (expect === "keep") return "baseline only";
+  return moved ? "book moved" : undefined;
+};
+
 export interface SaveReceipt {
   readonly bookId: BookId;
   readonly path: string;
@@ -321,15 +329,12 @@ const make = (
           stamp: apply || !moved ? book.source().stamp : disk.stamp,
           savedAt: Date.now(),
         });
-        observability?.note(
-          "baseline.take",
-          moved && expect !== "keep" ? "declined" : "rewrote",
-          expect === "keep" ? "baseline only" : moved ? "book moved" : undefined,
-          {
-            "book.id": book.id,
-            "book.origin": origin,
-          },
-        );
+        const outcome = moved && expect !== "keep" ? "declined" : "rewrote";
+        const reason = takeReason(expect, moved);
+        observability?.note("baseline.take", outcome, reason, {
+          "book.id": book.id,
+          "book.origin": origin,
+        });
         return apply;
       });
 

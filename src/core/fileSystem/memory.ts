@@ -107,8 +107,14 @@ export const makeMemoryFileSystem = (initial?: MemorySeed): MemoryFileSystem => 
     return [...store.keys()].filter((key) => key !== path && key.startsWith(prefix));
   };
 
+  const nameOffset = (path: string): number => {
+    if (path === "/") return 1;
+    if (path === "") return 0;
+    return path.length + 1;
+  };
+
   const childNames = (path: string): string[] => {
-    const offset = path === "/" ? 1 : path === "" ? 0 : path.length + 1;
+    const offset = nameOffset(path);
     return descendants(path)
       .filter((key) => parentPath(key) === path)
       .map((key) => key.slice(offset))
@@ -212,7 +218,7 @@ export const makeMemoryFileSystem = (initial?: MemorySeed): MemoryFileSystem => 
       if (entry.kind !== "directory")
         return systemFailure("BadResource", "readDirectory", resolved, "Not a directory");
       if (options?.recursive !== true) return Effect.succeed(childNames(resolved));
-      const offset = resolved === "/" ? 1 : resolved === "" ? 0 : resolved.length + 1;
+      const offset = nameOffset(resolved);
       return Effect.succeed(
         descendants(resolved)
           .map((key) => key.slice(offset))

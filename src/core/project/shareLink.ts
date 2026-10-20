@@ -128,13 +128,10 @@ export const versionStanding = (
   head: string | undefined,
   base: string | undefined,
   shallow: boolean,
-): VersionStanding =>
-  head === at
-    ? "same"
-    : base === at
-      ? "ahead"
-      : base !== undefined && base === head
-        ? "behind"
-        : base === undefined && shallow
-          ? "unknown"
-          : "other";
+): VersionStanding => {
+  if (head === at) return "same";
+  if (base === at) return "ahead";
+  if (base !== undefined && base === head) return "behind";
+  if (base === undefined && shallow) return "unknown";
+  return "other";
+};

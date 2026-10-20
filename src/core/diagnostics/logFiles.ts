@@ -1,6 +1,7 @@
 import { Effect, type FileSystem, type PlatformError } from "effect";
 
 import { eventLine, type ObservabilityEvent, type ObservabilitySink } from "../observability";
+import { compareCodeUnits } from "../ordering";
 import type { SessionHeader } from "./header";
 
 export interface LogLimits {
@@ -97,7 +98,7 @@ export const listParts = (
       const info = yield* fileSystem.stat(path);
       parts.push({ name, path, bytes: Number(info.size), started });
     }
-    return parts.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    return parts.sort((a, b) => compareCodeUnits(a.name, b.name));
   });
 
 export const pruneLogs = (

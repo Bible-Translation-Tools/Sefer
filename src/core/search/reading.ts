@@ -42,18 +42,18 @@ interface Held {
 const hold = (map: {
   readonly rangeCount: number;
   readonly sourceLen: number;
-  range: (n: number) => { readonly sourceFrom: number; readonly sourceTo: number };
+  range: (rangeIndex: number) => { readonly sourceFrom: number; readonly sourceTo: number };
 }): Omit<Held, "stamp"> => {
   const count = map.rangeCount;
   const from = new Uint32Array(count);
   const to = new Uint32Array(count);
   const starts = new Uint32Array(count);
   let at = 0;
-  for (let n = 0; n < count; n += 1) {
-    const range = map.range(n);
-    from[n] = range.sourceFrom;
-    to[n] = range.sourceTo;
-    starts[n] = at;
+  for (let rangeIndex = 0; rangeIndex < count; rangeIndex += 1) {
+    const range = map.range(rangeIndex);
+    from[rangeIndex] = range.sourceFrom;
+    to[rangeIndex] = range.sourceTo;
+    starts[rangeIndex] = at;
     at += range.sourceTo - range.sourceFrom;
   }
   return { rangeCount: count, from, to, starts, readingLength: at, sourceLen: map.sourceLen };
@@ -74,7 +74,8 @@ const rangeAt = (held: Held, at: number): number => {
 const readingOf = (held: Held, text: string): string => {
   const parts = Array.from<string>({ length: held.rangeCount });
   // SAFETY: the three arrays are `rangeCount` long, built together above.
-  for (let n = 0; n < held.rangeCount; n += 1) parts[n] = text.slice(held.from[n]!, held.to[n]!);
+  for (let rangeIndex = 0; rangeIndex < held.rangeCount; rangeIndex += 1)
+    parts[rangeIndex] = text.slice(held.from[rangeIndex]!, held.to[rangeIndex]!);
   return parts.join("");
 };
 
@@ -115,19 +116,20 @@ const readingsOver = (maskOf: (subject: Subject) => MaskMap | undefined): Readin
         stamp: subject.stamp,
         text: readingOf(map, subject.text),
         toSource: (at) => {
-          const n = rangeAt(map, at);
+          const rangeIndex = rangeAt(map, at);
           // SAFETY: `rangeAt` returns an index into the arrays.
-          return map.from[n]! + (at - map.starts[n]!);
+          return map.from[rangeIndex]! + (at - map.starts[rangeIndex]!);
         },
         pieces: (from, to) => {
           const out: SourceRange[] = [];
           let at = from;
           while (at < to) {
-            const n = rangeAt(map, at);
-            // SAFETY: `n` is in range; the last range ends at the reading's end.
-            const ends = n + 1 < map.rangeCount ? map.starts[n + 1]! : map.readingLength;
+            const rangeIndex = rangeAt(map, at);
+            // SAFETY: `rangeIndex` is in range; the last range ends at the reading's end.
+            const ends =
+              rangeIndex + 1 < map.rangeCount ? map.starts[rangeIndex + 1]! : map.readingLength;
             const take = Math.min(to, ends);
-            const base = map.from[n]! + (at - map.starts[n]!);
+            const base = map.from[rangeIndex]! + (at - map.starts[rangeIndex]!);
             out.push({ from: base, to: base + (take - at) });
             at = take;
           }

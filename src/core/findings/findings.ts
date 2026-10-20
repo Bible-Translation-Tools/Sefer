@@ -1,5 +1,6 @@
 import type { BookId } from "@sefer/text/book";
 
+import { compareCodeUnits } from "../ordering";
 import type { Finding } from "./finding";
 
 export type { Finding } from "./finding";
@@ -22,7 +23,7 @@ export const list = (projectAnalysis: {
         RANK[a.severity] - RANK[b.severity] ||
         a.from - b.from ||
         a.to - b.to ||
-        (a.code < b.code ? -1 : a.code > b.code ? 1 : 0),
+        compareCodeUnits(a.code, b.code),
     );
     out.push(...group);
   }
