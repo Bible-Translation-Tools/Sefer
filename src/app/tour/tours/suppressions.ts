@@ -22,6 +22,30 @@ const toFindings = (context: TourContext): void => {
   });
 };
 
+/**
+ * Findings narrowed to one proofreading check, so the cards on screen have
+ * Fine here and More whatever the reader's own filters say: a convention
+ * finding is the kind that offers all three answers.
+ */
+/** How many are marked fine: step 2 moves on when this goes up, not merely when it is shown. */
+const markedFine = (): number =>
+  Number(
+    document.querySelector<HTMLElement>("[data-findings-hidden]")?.dataset["findingsHidden"] ?? 0,
+  );
+let markedAtStart = 0;
+
+const toProofreading = (context: TourContext): void => {
+  markedAtStart = markedFine();
+  const code = context.shell
+    .findings()
+    .find((finding) => finding.code.startsWith("sous.convention."))?.code;
+  void context.navigate({
+    to: "/project/$slug/findings",
+    params: { slug: context.shell.slug() },
+    search: code === undefined ? {} : { code },
+  });
+};
+
 const toTerms = (context: TourContext): void => {
   void context.navigate({
     to: "/project/$slug/terms",
@@ -60,13 +84,15 @@ export const suppressionsTour: Tour = {
       advance: "user",
     },
     {
+      go: toProofreading,
       ready: () => present("[data-tour=fine-here]"),
+      timeoutMs: 20_000,
       spotlight: {
         anchor: "[data-tour=fine-here]",
         title: "Fine here",
         body: "Press Fine here on a proofreading finding. It hides that one finding at that place, and the toast offers Undo. It is saved against the text itself, not a position: edit elsewhere in the verse and it stays hidden; change the flagged text and the finding comes back, since that is new text to judge. We could add a note saying why it is fine here; we have left that out for now.",
       },
-      advance: () => present("[data-findings-hidden]"),
+      advance: () => markedFine() > markedAtStart,
     },
     {
       ready: () => present("[data-findings-hidden]"),
