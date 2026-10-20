@@ -13,7 +13,7 @@ import { ChangesHistorySidebar } from "../../workspace/ChangesHistorySidebar";
 import { bookCount, changeCount } from "./helpers";
 import type { Prepared } from "./types";
 
-export function BooksSidebar(props: {
+interface BooksSidebarProps {
   readonly books: readonly Prepared[];
   readonly focused: BookId | undefined;
   readonly decidable: boolean;
@@ -26,7 +26,77 @@ export function BooksSidebar(props: {
     units: readonly DecisionUnit[],
     side: MergeSide | undefined,
   ) => void;
-}): JSX.Element {
+}
+
+function BookMenu(props: { readonly sidebar: BooksSidebarProps; readonly held: Prepared }) {
+  return (
+    <Menu
+      label={t("Decide {book}", { book: props.held.book.name })}
+      side="bottom"
+      align="end"
+      class="w-56"
+      trigger={
+        <IconButton
+          size="sm"
+          label={t("Decide all of {book}", { book: props.held.book.name })}
+          icon={<MoreVertical />}
+          data-review-book-menu={props.held.book.bookId}
+        />
+      }
+    >
+      <MenuItem
+        onSelect={() =>
+          props.sidebar.onDecide(props.held.book.bookId, props.held.shown, "baseline")
+        }
+      >
+        {t("Take all of {source}'s", { source: props.sidebar.baselineShort })}
+      </MenuItem>
+      <MenuItem
+        onSelect={() => props.sidebar.onDecide(props.held.book.bookId, props.held.shown, "current")}
+      >
+        {t("Keep all of {source}'s", { source: props.sidebar.currentShort })}
+      </MenuItem>
+      <MenuItem
+        onSelect={() => props.sidebar.onDecide(props.held.book.bookId, props.held.shown, undefined)}
+      >
+        {t("Clear")}
+      </MenuItem>
+    </Menu>
+  );
+}
+
+function BookRow(props: { readonly sidebar: BooksSidebarProps; readonly held: Prepared }) {
+  const here = (): boolean => props.sidebar.focused === props.held.book.bookId;
+  const done = (): boolean =>
+    props.held.shown.length > 0 && props.sidebar.decidedOf(props.held) === props.held.shown.length;
+  return (
+    <li class="flex items-center gap-0.5">
+      <button
+        type="button"
+        data-outline={props.held.book.bookId}
+        data-focused={here() ? "" : undefined}
+        aria-current={here() ? "true" : undefined}
+        class="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-start text-small transition-colors data-focused:bg-sidebar-surface-active data-focused:font-medium data-focused:text-brand not-data-focused:text-sidebar-on-surface not-data-focused:hover:bg-sidebar-surface-hover"
+        onClick={() => props.sidebar.onPick(props.held.book.bookId)}
+      >
+        <Show when={done()} fallback={<BookIcon size={15} aria-hidden="true" class="shrink-0" />}>
+          <CheckIcon size={15} aria-hidden="true" class="shrink-0 text-brand" />
+        </Show>
+        <span class="min-w-0 flex-1 truncate">{props.held.book.name}</span>
+        <span class="shrink-0 text-smallest tabular-nums text-on-surface-tertiary">
+          {props.sidebar.decidable
+            ? `${props.sidebar.decidedOf(props.held)}/${props.held.shown.length}`
+            : String(props.held.shown.length)}
+        </span>
+      </button>
+      <Show when={props.sidebar.decidable && props.held.shown.length > 0}>
+        <BookMenu sidebar={props.sidebar} held={props.held} />
+      </Show>
+    </li>
+  );
+}
+
+export function BooksSidebar(props: BooksSidebarProps): JSX.Element {
   return (
     <ChangesHistorySidebar active="changes" changes={props.books.length}>
       <div class="px-4 pt-3 pb-2">
@@ -43,70 +113,7 @@ export function BooksSidebar(props: {
       </div>
       <nav aria-label={t("Changes")} class="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
         <ul>
-          <For each={props.books}>
-            {(held) => {
-              const here = (): boolean => props.focused === held.book.bookId;
-              const done = (): boolean =>
-                held.shown.length > 0 && props.decidedOf(held) === held.shown.length;
-              return (
-                <li class="flex items-center gap-0.5">
-                  <button
-                    type="button"
-                    data-outline={held.book.bookId}
-                    data-focused={here() ? "" : undefined}
-                    aria-current={here() ? "true" : undefined}
-                    class="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-start text-small transition-colors data-focused:bg-sidebar-surface-active data-focused:font-medium data-focused:text-brand not-data-focused:text-sidebar-on-surface not-data-focused:hover:bg-sidebar-surface-hover"
-                    onClick={() => props.onPick(held.book.bookId)}
-                  >
-                    <Show
-                      when={done()}
-                      fallback={<BookIcon size={15} aria-hidden="true" class="shrink-0" />}
-                    >
-                      <CheckIcon size={15} aria-hidden="true" class="shrink-0 text-brand" />
-                    </Show>
-                    <span class="min-w-0 flex-1 truncate">{held.book.name}</span>
-                    <span class="shrink-0 text-smallest tabular-nums text-on-surface-tertiary">
-                      {props.decidable
-                        ? `${props.decidedOf(held)}/${held.shown.length}`
-                        : String(held.shown.length)}
-                    </span>
-                  </button>
-                  <Show when={props.decidable && held.shown.length > 0}>
-                    <Menu
-                      label={t("Decide {book}", { book: held.book.name })}
-                      side="bottom"
-                      align="end"
-                      class="w-56"
-                      trigger={
-                        <IconButton
-                          size="sm"
-                          label={t("Decide all of {book}", { book: held.book.name })}
-                          icon={<MoreVertical />}
-                          data-review-book-menu={held.book.bookId}
-                        />
-                      }
-                    >
-                      <MenuItem
-                        onSelect={() => props.onDecide(held.book.bookId, held.shown, "baseline")}
-                      >
-                        {t("Take all of {source}'s", { source: props.baselineShort })}
-                      </MenuItem>
-                      <MenuItem
-                        onSelect={() => props.onDecide(held.book.bookId, held.shown, "current")}
-                      >
-                        {t("Keep all of {source}'s", { source: props.currentShort })}
-                      </MenuItem>
-                      <MenuItem
-                        onSelect={() => props.onDecide(held.book.bookId, held.shown, undefined)}
-                      >
-                        {t("Clear")}
-                      </MenuItem>
-                    </Menu>
-                  </Show>
-                </li>
-              );
-            }}
-          </For>
+          <For each={props.books}>{(held) => <BookRow sidebar={props} held={held} />}</For>
         </ul>
       </nav>
     </ChangesHistorySidebar>

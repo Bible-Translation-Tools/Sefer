@@ -23,12 +23,11 @@ export interface SidesInputs {
   readonly setBusy: (busy: string) => void;
 }
 
-export function createSides(inputs: SidesInputs) {
-  const { shell, services, navigate, route, setNote, setBusy } = inputs;
-  const { search, pull, fromCopy, theirsRef } = route;
+function createSideState(inputs: SidesInputs) {
+  const { shell, route } = inputs;
   const version = createRecordedVersion(shell);
-  const shared = createRecordedVersion(shell, "shared", theirsRef);
-  const common = createRecordedVersion(shell, "base", theirsRef);
+  const shared = createRecordedVersion(shell, "shared", route.theirsRef);
+  const common = createRecordedVersion(shell, "base", route.theirsRef);
 
   const [leftId, setLeftId] = createSignal("project", { name: "reviewLeftKind" });
   const [rightId, setRightId] = createSignal(route.initialRightId(), { name: "reviewRightKind" });
@@ -40,6 +39,29 @@ export function createSides(inputs: SidesInputs) {
   const [rightPicked, setRightPicked] = createSignal<CompareSource | undefined>(undefined, {
     name: "reviewRightPicked",
   });
+  return {
+    version,
+    shared,
+    common,
+    leftId,
+    setLeftId,
+    rightId,
+    setRightId,
+    againstShared,
+    againstWriter,
+    leftPicked,
+    setLeftPicked,
+    rightPicked,
+    setRightPicked,
+  };
+}
+
+type SideState = ReturnType<typeof createSideState>;
+
+function createSourceChoices(inputs: SidesInputs, state: SideState) {
+  const { shell, services, route } = inputs;
+  const { pull, fromCopy } = route;
+  const { version, shared } = state;
 
   const sharedLabelWords = (): string | undefined => {
     if (pull() !== undefined) return t("The suggested changes");
@@ -65,6 +87,12 @@ export function createSides(inputs: SidesInputs) {
 
   const choiceOf = (id: string): SourceChoice | undefined =>
     choices().find((choice) => choice.id === id);
+  return { choices, choiceOf };
+}
+
+function createChoices(inputs: SidesInputs, state: SideState) {
+  const { version, shared, leftId, rightId, leftPicked, rightPicked } = state;
+  const { choices, choiceOf } = createSourceChoices(inputs, state);
 
   const sourceFor = (id: string, picked: CompareSource | undefined): CompareSource | undefined => {
     const choice = choiceOf(id);
@@ -96,6 +124,29 @@ export function createSides(inputs: SidesInputs) {
     }
     return undefined;
   };
+  return {
+    choices,
+    choiceOf,
+    left,
+    right,
+    leftShort,
+    rightShort,
+    leftLabel,
+    rightLabel,
+    target,
+    live,
+    waitingFor,
+  };
+}
+
+function createPicking(
+  inputs: SidesInputs,
+  state: SideState,
+  choiceOf: (id: string) => SourceChoice | undefined,
+) {
+  const { setNote, setBusy } = inputs;
+  const { leftId, setLeftId, setRightId } = state;
+  const { leftPicked, setLeftPicked, setRightPicked } = state;
 
   const pick = (side: "left" | "right", id: string): void => {
     const choice = choiceOf(id);
@@ -133,6 +184,18 @@ export function createSides(inputs: SidesInputs) {
       });
   };
 
+  return { pick, ...createSeeing(inputs, state, pick) };
+}
+
+function createSeeing(
+  inputs: SidesInputs,
+  state: SideState,
+  pick: (side: "left" | "right", id: string) => void,
+) {
+  const { shell, services, navigate, route } = inputs;
+  const { search, fromCopy } = route;
+  const { shared, common, leftId, rightId } = state;
+
   const seeShared = (): void => {
     shared.refresh();
     common.refresh();
@@ -151,6 +214,15 @@ export function createSides(inputs: SidesInputs) {
       search: COPY_REVIEW,
     });
   };
+  return { seeShared, seeCopy };
+}
+
+export function createSides(inputs: SidesInputs) {
+  const state = createSideState(inputs);
+  const choices = createChoices(inputs, state);
+  const picking = createPicking(inputs, state, choices.choiceOf);
+  const { version, shared, common, leftId, rightId, leftPicked, rightPicked } = state;
+  const { againstShared, againstWriter } = state;
 
   return {
     version,
@@ -162,20 +234,8 @@ export function createSides(inputs: SidesInputs) {
     rightPicked,
     againstShared,
     againstWriter,
-    choices,
-    choiceOf,
-    left,
-    right,
-    leftShort,
-    rightShort,
-    leftLabel,
-    rightLabel,
-    target,
-    live,
-    waitingFor,
-    pick,
-    seeShared,
-    seeCopy,
+    ...choices,
+    ...picking,
   };
 }
 

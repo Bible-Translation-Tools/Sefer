@@ -17,12 +17,11 @@ export interface SourcesInputs {
   readonly rerunHelps: () => void;
 }
 
-export function createFindSources(inputs: SourcesInputs) {
-  const { shell, scope, rerunHelps } = inputs;
-  const analyze = shell.services.galley.memoize();
+type Shell = ReturnType<typeof useShell>;
 
+function createAnalysisOf(shell: Shell) {
   const referenceParses = new Map<string, Analysis>();
-  const analysisOf = (id: string): Analysis | undefined => {
+  return (id: string): Analysis | undefined => {
     const held = Option.getOrUndefined(shell.services.projectAnalysis.analysis(id));
     if (held !== undefined) return held.analysis;
     const text = shell.services.projectAnalysis.referenceText(id);
@@ -33,29 +32,14 @@ export function createFindSources(inputs: SourcesInputs) {
     referenceParses.set(id, fresh);
     return fresh;
   };
+}
 
-  const occurrencesAt = (addresses: readonly Address[]): readonly Occurrence[] => {
-    const books = readBooks(shell, new Set(addresses.map((address) => address.book)), analyze);
-    return books.flatMap((book) => refOccurrences(book, addresses));
-  };
-
-  const [bound, setBound] = createSignal(Workflows.EMPTY, { name: "boundReferences" });
-  const [rebound, setRebound] = createSignal(0, { name: "findRebound" });
-  const source = createFindSource(() => setRebound((held) => held + 1));
-
-  createEffect(
-    () => ({ id: shell.project()?.root, tick: rebound() }),
-    ({ id }) => {
-      if (id === undefined) {
-        setBound(Workflows.EMPTY);
-        return;
-      }
-      void shell.services.run(Workflows.bindReferences(id)).then(setBound);
-    },
-  );
-
-  const hasReference = (): boolean => bound().ids.length > 0;
-
+function createSearchable(
+  shell: Shell,
+  scope: () => Scope,
+  rerunHelps: () => void,
+  rebound: () => number,
+) {
   const [searchable, setSearchable] = createSignal<readonly Searchable[]>([], {
     name: "findSearchable",
   });
@@ -89,6 +73,38 @@ export function createFindSources(inputs: SourcesInputs) {
       if (now.length > 0 && untrack(scope) === "helps") void untrack(() => rerunHelps());
     },
   );
+  return searchable;
+}
+
+export function createFindSources(inputs: SourcesInputs) {
+  const { shell, scope, rerunHelps } = inputs;
+  const analyze = shell.services.galley.memoize();
+
+  const analysisOf = createAnalysisOf(shell);
+
+  const occurrencesAt = (addresses: readonly Address[]): readonly Occurrence[] => {
+    const books = readBooks(shell, new Set(addresses.map((address) => address.book)), analyze);
+    return books.flatMap((book) => refOccurrences(book, addresses));
+  };
+
+  const [bound, setBound] = createSignal(Workflows.EMPTY, { name: "boundReferences" });
+  const [rebound, setRebound] = createSignal(0, { name: "findRebound" });
+  const source = createFindSource(() => setRebound((held) => held + 1));
+
+  createEffect(
+    () => ({ id: shell.project()?.root, tick: rebound() }),
+    ({ id }) => {
+      if (id === undefined) {
+        setBound(Workflows.EMPTY);
+        return;
+      }
+      void shell.services.run(Workflows.bindReferences(id)).then(setBound);
+    },
+  );
+
+  const hasReference = (): boolean => bound().ids.length > 0;
+
+  const searchable = createSearchable(shell, scope, rerunHelps, rebound);
   const helpsTitle = (): string =>
     searchable()
       .map((each) => each.resource.title)

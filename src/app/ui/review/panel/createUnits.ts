@@ -22,11 +22,17 @@ export interface UnitsInputs {
   readonly nameOf: (bookId: BookId) => string;
 }
 
-export function createUnits(inputs: UnitsInputs) {
+type ReviewBooks = () => readonly ReviewBook[];
+type OriginOf = (
+  bookId: BookId,
+  units: readonly DecisionUnit[],
+) => "there" | "here" | "both" | undefined;
+type Preset = (bookId: BookId, unit: DecisionUnit) => MergeSide | undefined;
+type EffectiveFor = (bookId: BookId, unitId: string) => MergeSide | undefined;
+
+function createReviewedBooks(inputs: UnitsInputs) {
   const { services, nameOf } = inputs;
-  const { pull } = inputs.route;
   const { rightId, againstShared, common } = inputs.sides;
-  const { decisions, decisionFor } = inputs.decisions;
   const { changed, skeletons } = inputs.compare;
 
   const reviewBooks = createMemo(
@@ -59,10 +65,12 @@ export function createUnits(inputs: UnitsInputs) {
     { name: "reviewChangedSince" },
   );
 
-  const originOf = (
-    bookId: BookId,
-    units: readonly DecisionUnit[],
-  ): "there" | "here" | "both" | undefined => originAmong(changedSince().get(bookId), units);
+  const originOf: OriginOf = (bookId, units) => originAmong(changedSince().get(bookId), units);
+  return { reviewBooks, originOf };
+}
+
+function createMineOnly(inputs: UnitsInputs, reviewBooks: ReviewBooks, originOf: OriginOf) {
+  const { pull } = inputs.route;
 
   const mineOnly = createMemo(
     (): ReadonlyMap<BookId, ReadonlySet<string>> => {
@@ -102,15 +110,25 @@ export function createUnits(inputs: UnitsInputs) {
       for (const unit of book.skeleton.units) if (unit.status !== "unchanged") count += 1;
     return count - mineOnlyCount();
   };
+  return { mineOnlyCount, showMine, setShowMine, readerBooks, offeredCount };
+}
 
-  const preset = (bookId: BookId, unit: DecisionUnit): MergeSide | undefined => {
+function createPresets(
+  inputs: UnitsInputs,
+  reviewBooks: ReviewBooks,
+  originOf: OriginOf,
+): { preset: Preset; effectiveFor: EffectiveFor } {
+  const { againstShared } = inputs.sides;
+  const { decisionFor } = inputs.decisions;
+
+  const preset: Preset = (bookId, unit) => {
     if (!againstShared()) return undefined;
     const origin = originOf(bookId, [unit]);
     if (origin === "there") return "baseline";
     return origin === "here" ? "current" : undefined;
   };
 
-  const effectiveFor = (bookId: BookId, unitId: string): MergeSide | undefined => {
+  const effectiveFor: EffectiveFor = (bookId, unitId) => {
     const held = decisionFor(bookId, unitId);
     if (held !== undefined || !againstShared()) return held;
     const unit = reviewBooks()
@@ -118,6 +136,18 @@ export function createUnits(inputs: UnitsInputs) {
       ?.skeleton.units.find((entry) => entry.id === unitId);
     return unit === undefined ? undefined : preset(bookId, unit);
   };
+  return { preset, effectiveFor };
+}
+
+function createTallies(
+  inputs: UnitsInputs,
+  reviewBooks: ReviewBooks,
+  preset: Preset,
+  effectiveFor: EffectiveFor,
+) {
+  const { pull } = inputs.route;
+  const { againstShared } = inputs.sides;
+  const { decisions, decisionFor } = inputs.decisions;
 
   const suggestionTally = (): { readonly offered: number; readonly taken: number } => {
     let offered = 0;
@@ -167,25 +197,20 @@ export function createUnits(inputs: UnitsInputs) {
       }
     return { total, decided };
   };
+  return { declineOnly, undecidedBoth, totals };
+}
+
+export function createUnits(inputs: UnitsInputs) {
+  const { changed } = inputs.compare;
+  const { reviewBooks, originOf } = createReviewedBooks(inputs);
+  const mine = createMineOnly(inputs, reviewBooks, originOf);
+  const { preset, effectiveFor } = createPresets(inputs, reviewBooks, originOf);
+  const tallies = createTallies(inputs, reviewBooks, preset, effectiveFor);
 
   const oneSided = (): readonly BookComparison[] =>
     changed().filter((book) => book.presence !== "both");
 
-  return {
-    reviewBooks,
-    originOf,
-    mineOnlyCount,
-    showMine,
-    setShowMine,
-    readerBooks,
-    offeredCount,
-    preset,
-    effectiveFor,
-    declineOnly,
-    undecidedBoth,
-    totals,
-    oneSided,
-  };
+  return { reviewBooks, originOf, ...mine, preset, effectiveFor, ...tallies, oneSided };
 }
 
 export type Units = ReturnType<typeof createUnits>;

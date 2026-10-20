@@ -19,7 +19,7 @@ export interface CardItem {
   readonly held: Prepared;
 }
 
-export function ChangeCards(props: {
+interface ChangeCardsProps {
   readonly sections: readonly VirtualSection<CardItem>[];
   readonly preparing: boolean;
   readonly views: CardViews;
@@ -51,7 +51,9 @@ export function ChangeCards(props: {
   readonly onEditing: (editing: boolean) => void;
   readonly onRoot: (root: HTMLDivElement) => void;
   readonly onScrollTo: (scrollTo: (key: string) => void) => void;
-}): JSX.Element {
+}
+
+export function ChangeCards(props: ChangeCardsProps): JSX.Element {
   return (
     <div class="flex min-h-0 flex-1" ref={(element) => props.onRoot(element)}>
       <CardList<CardItem>

@@ -17,10 +17,8 @@ export interface PairingInputs {
   readonly sources: FindSources;
 }
 
-export function createFindPairing(inputs: PairingInputs) {
-  const { shell, scope, results, sources } = inputs;
-  const { referenceHits, helpHits } = results;
-  const { analysisOf, source } = sources;
+function createHelpPairing(inputs: PairingInputs) {
+  const { helpHits } = inputs.results;
 
   const helpReadings = createMemo(
     (): ReadonlyMap<string, HelpHit> => {
@@ -33,7 +31,7 @@ export function createFindPairing(inputs: PairingInputs) {
     { name: "helpReadings" },
   );
 
-  const helpPairedOf = (excerpt: Excerpt): Paired | undefined => {
+  return (excerpt: Excerpt): Paired | undefined => {
     const readings = helpReadings();
     for (const key of verseKeys(excerpt.address)) {
       const held = readings.get(key);
@@ -47,6 +45,12 @@ export function createFindPairing(inputs: PairingInputs) {
     }
     return undefined;
   };
+}
+
+function createReferencePairing(inputs: PairingInputs) {
+  const { shell, results, sources } = inputs;
+  const { referenceHits } = results;
+  const { analysisOf } = sources;
 
   const referenceReadings = createMemo(
     (): ReadonlyMap<string, Search.ReferenceHit> => {
@@ -87,7 +91,7 @@ export function createFindPairing(inputs: PairingInputs) {
     return undefined;
   };
 
-  const pairedOf = (excerpt: Excerpt): Paired | undefined => {
+  return (excerpt: Excerpt): Paired | undefined => {
     const held = pairFor(excerpt);
     if (held === undefined) return undefined;
     const book = referenceBook(held);
@@ -100,6 +104,13 @@ export function createFindPairing(inputs: PairingInputs) {
       hits: [{ bookId: book.bookId, from: held.from, to: held.to }],
     };
   };
+}
+
+export function createFindPairing(inputs: PairingInputs) {
+  const { scope, sources } = inputs;
+  const { source } = sources;
+  const helpPairedOf = createHelpPairing(inputs);
+  const pairedOf = createReferencePairing(inputs);
 
   const feedPairedOf = () => {
     if (scope() === "helps") return helpPairedOf;

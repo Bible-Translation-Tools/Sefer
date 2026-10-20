@@ -27,6 +27,93 @@ export interface FindScopeRowProps {
   readonly step: (delta: 1 | -1) => void;
 }
 
+function SourceSwitches(props: { readonly row: FindScopeRowProps }) {
+  return (
+    <div class="flex items-center gap-3" data-tour="find-reference">
+      <props.row.sources.source.Picker />
+      <Switch
+        label={t("Search the source text")}
+        checked={props.row.scope() === "reference"}
+        disabled={!props.row.sources.hasReference()}
+        onChange={(on) => props.row.ask({ scope: on ? "reference" : "project" })}
+      />
+      <Show when={props.row.scope() === "reference"}>
+        <span data-tour="find-expect-toggle">
+          <Switch
+            label={t("Expect…")}
+            checked={props.row.expect.expectShown()}
+            onChange={props.row.expect.toggleExpect}
+          />
+        </span>
+      </Show>
+      <Show when={props.row.sources.searchable().length > 0}>
+        <span data-tour="find-helps">
+          <Switch
+            label={t("Search {title}", { title: props.row.sources.helpsTitle() })}
+            checked={props.row.scope() === "helps"}
+            onChange={(on) => props.row.ask({ scope: on ? "helps" : "project" })}
+          />
+        </span>
+      </Show>
+    </div>
+  );
+}
+
+function MatchCounter(props: { readonly row: FindScopeRowProps }) {
+  return (
+    <div class="ms-auto flex items-center gap-1">
+      <Show
+        when={
+          props.row.scope() === "helps" &&
+          props.row.results.helpHits().length !== props.row.feedHits().length
+        }
+      >
+        <span class="text-smallest tabular-nums text-on-surface-tertiary">
+          {t("{count} in {title}", {
+            count: props.row.results.helpHits().length,
+            title: props.row.sources.helpsTitle(),
+          })}
+        </span>
+      </Show>
+      <Show
+        when={
+          props.row.scope() === "reference" &&
+          props.row.results.referenceHits().length !== props.row.feedHits().length
+        }
+      >
+        <span class="text-smallest tabular-nums text-on-surface-tertiary">
+          {t("{count} in the reference", { count: props.row.results.referenceHits().length })}
+        </span>
+      </Show>
+      <span
+        class="text-small tabular-nums text-on-surface-tertiary"
+        data-count={props.row.feedHits().length}
+      >
+        {props.row.feedHits().length === 0
+          ? t("0 results")
+          : t("{at}/{total}", {
+              at: props.row.results.cursor() + 1,
+              total: props.row.feedHits().length,
+            })}
+      </span>
+      <IconButton
+        size="sm"
+        label={t("Previous match")}
+        icon={<ChevronUpIcon />}
+        disabled={props.row.feedHits().length === 0}
+        onClick={() => props.row.step(-1)}
+      />
+      <IconButton
+        size="sm"
+        label={t("Next match")}
+        icon={<ChevronDownIcon />}
+        disabled={props.row.feedHits().length === 0}
+        onClick={() => props.row.step(1)}
+      />
+    </div>
+  );
+}
+
 export function FindScopeRow(props: FindScopeRowProps) {
   return (
     <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -42,82 +129,8 @@ export function FindScopeRow(props: FindScopeRowProps) {
         hasFocused={props.books.focusedBook() !== undefined}
         disabled={props.scope() === "reference" || props.scope() === "helps"}
       />
-      <div class="flex items-center gap-3" data-tour="find-reference">
-        <props.sources.source.Picker />
-        <Switch
-          label={t("Search the source text")}
-          checked={props.scope() === "reference"}
-          disabled={!props.sources.hasReference()}
-          onChange={(on) => props.ask({ scope: on ? "reference" : "project" })}
-        />
-        <Show when={props.scope() === "reference"}>
-          <span data-tour="find-expect-toggle">
-            <Switch
-              label={t("Expect…")}
-              checked={props.expect.expectShown()}
-              onChange={props.expect.toggleExpect}
-            />
-          </span>
-        </Show>
-        <Show when={props.sources.searchable().length > 0}>
-          <span data-tour="find-helps">
-            <Switch
-              label={t("Search {title}", { title: props.sources.helpsTitle() })}
-              checked={props.scope() === "helps"}
-              onChange={(on) => props.ask({ scope: on ? "helps" : "project" })}
-            />
-          </span>
-        </Show>
-      </div>
-      <div class="ms-auto flex items-center gap-1">
-        <Show
-          when={
-            props.scope() === "helps" && props.results.helpHits().length !== props.feedHits().length
-          }
-        >
-          <span class="text-smallest tabular-nums text-on-surface-tertiary">
-            {t("{count} in {title}", {
-              count: props.results.helpHits().length,
-              title: props.sources.helpsTitle(),
-            })}
-          </span>
-        </Show>
-        <Show
-          when={
-            props.scope() === "reference" &&
-            props.results.referenceHits().length !== props.feedHits().length
-          }
-        >
-          <span class="text-smallest tabular-nums text-on-surface-tertiary">
-            {t("{count} in the reference", { count: props.results.referenceHits().length })}
-          </span>
-        </Show>
-        <span
-          class="text-small tabular-nums text-on-surface-tertiary"
-          data-count={props.feedHits().length}
-        >
-          {props.feedHits().length === 0
-            ? t("0 results")
-            : t("{at}/{total}", {
-                at: props.results.cursor() + 1,
-                total: props.feedHits().length,
-              })}
-        </span>
-        <IconButton
-          size="sm"
-          label={t("Previous match")}
-          icon={<ChevronUpIcon />}
-          disabled={props.feedHits().length === 0}
-          onClick={() => props.step(-1)}
-        />
-        <IconButton
-          size="sm"
-          label={t("Next match")}
-          icon={<ChevronDownIcon />}
-          disabled={props.feedHits().length === 0}
-          onClick={() => props.step(1)}
-        />
-      </div>
+      <SourceSwitches row={props} />
+      <MatchCounter row={props} />
     </div>
   );
 }

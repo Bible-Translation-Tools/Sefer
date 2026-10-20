@@ -26,64 +26,92 @@ export interface CompareInputs {
   readonly setNote: (note: string) => void;
 }
 
-export function createCompare(inputs: CompareInputs) {
-  const { shell, services, setNote } = inputs;
+type Operation = ReturnType<Services["composition"]["observability"]["operation"]>;
+type Computed = {
+  readonly result: CompareResult;
+  readonly skeletons: ReadonlyMap<BookId, SkeletonResult>;
+};
+
+const decidedIn = (decisions: Decisions["decisions"], bookId: BookId): boolean => {
+  for (const key of untrack(decisions).keys()) if (key.startsWith(`${bookId}\0`)) return true;
+  return false;
+};
+
+const inReview = (decisions: Decisions["decisions"], book: BookComparison): boolean =>
+  !book.identical || decidedIn(decisions, book.bookId);
+
+const skeletonsOf = (
+  services: Services,
+  decisions: Decisions["decisions"],
+  found: CompareResult,
+): ReadonlyMap<BookId, SkeletonResult> => {
+  const held = new Map<BookId, SkeletonResult>();
+  for (const book of found.books) {
+    if (!inReview(decisions, book) || book.leftText === undefined || book.rightText === undefined)
+      continue;
+    held.set(
+      book.bookId,
+      diffSkeleton(services.galley, book.bookId, book.rightText, book.leftText, {
+        unchanged: decidedIn(decisions, book.bookId),
+      }),
+    );
+  }
+  return held;
+};
+
+const endComparing = (
+  comparing: Operation,
+  found: CompareResult,
+  held: ReadonlyMap<BookId, SkeletonResult>,
+  units: (attributes: Record<string, number>) => void,
+): void => {
+  let unitCount = 0;
+  let refusedBooks = 0;
+  for (const skeleton of held.values()) {
+    if (Result.isFailure(skeleton)) refusedBooks += 1;
+    else unitCount += skeleton.success.units.filter((unit) => unit.status !== "unchanged").length;
+  }
+  units({ "review.unit_books": held.size });
+  comparing.end(refusedBooks > 0 ? "refused" : "passed", {
+    "review.books": found.books.length,
+    "review.changed": found.changedBooks,
+    "review.left_only": found.leftOnly,
+    "review.right_only": found.rightOnly,
+    "review.unit_books": held.size,
+    "review.units": unitCount,
+    "review.refused_books": refusedBooks,
+  });
+};
+
+const keepSelected = (held: BookId | undefined, found: CompareResult): BookId | undefined =>
+  held !== undefined && found.books.some((book) => book.bookId === held && !book.identical)
+    ? held
+    : (found.books.find((book) => !book.identical)?.bookId ?? found.books[0]?.bookId);
+
+const refuseCompare = (comparing: Operation, compared: () => void, cause: unknown): void => {
+  compared();
+  const reason = reasonOf(cause);
+  comparing.end(reason === undefined ? "failed" : "refused", {
+    "review.reason": reason ?? "unknown",
+  });
+};
+
+interface CompareSetters {
+  readonly setResult: (found: CompareResult | undefined) => void;
+  readonly setSelected: (pick: (held: BookId | undefined) => BookId | undefined) => void;
+  readonly setComparing: (value: boolean) => void;
+}
+
+function createCompareRun(inputs: CompareInputs, setters: CompareSetters) {
+  const { services, setNote } = inputs;
   const { decisions } = inputs.decisions;
-  const {
-    leftId,
-    rightId,
-    leftPicked,
-    rightPicked,
-    version,
-    shared,
-    live,
-    left,
-    right,
-    waitingFor,
-  } = inputs.sides;
-  const [result, setResult] = createSignal<CompareResult | undefined>(undefined, {
-    name: "reviewResult",
-  });
-  const [selected, setSelected] = createSignal<BookId | undefined>(undefined, {
-    name: "reviewBook",
-  });
-  const [comparing, setComparing] = createSignal(false, { name: "reviewComparing" });
-
-  const revisions = (): string => {
-    const project = shell.project();
-    if (project === undefined) return "";
-    return project.books.map((book) => shell.stampOf(book.id)?.revision ?? -1).join(",");
+  const { leftId, rightId, live, left, right, waitingFor } = inputs.sides;
+  const { setResult, setSelected, setComparing } = setters;
+  const state: { running: boolean; again: boolean; computed: Computed | undefined } = {
+    running: false,
+    again: false,
+    computed: undefined,
   };
-
-  let running = false;
-  let again = false;
-
-  const decidedIn = (bookId: BookId): boolean => {
-    for (const key of untrack(decisions).keys()) if (key.startsWith(`${bookId}\0`)) return true;
-    return false;
-  };
-  const inReview = (book: BookComparison): boolean => !book.identical || decidedIn(book.bookId);
-
-  const skeletonsOf = (found: CompareResult): ReadonlyMap<BookId, SkeletonResult> => {
-    const held = new Map<BookId, SkeletonResult>();
-    for (const book of found.books) {
-      if (!inReview(book) || book.leftText === undefined || book.rightText === undefined) continue;
-      held.set(
-        book.bookId,
-        diffSkeleton(services.galley, book.bookId, book.rightText, book.leftText, {
-          unchanged: decidedIn(book.bookId),
-        }),
-      );
-    }
-    return held;
-  };
-
-  let computed:
-    | {
-        readonly result: CompareResult;
-        readonly skeletons: ReadonlyMap<BookId, SkeletonResult>;
-      }
-    | undefined;
 
   const runCompare = (): void => {
     const a = left();
@@ -92,11 +120,11 @@ export function createCompare(inputs: CompareInputs) {
       setResult(undefined);
       return;
     }
-    if (running) {
-      again = true;
+    if (state.running) {
+      state.again = true;
       return;
     }
-    running = true;
+    state.running = true;
     setComparing(true);
     const comparing = services.composition.observability.operation("review.compare", {
       "review.left": leftId(),
@@ -108,55 +136,34 @@ export function createCompare(inputs: CompareInputs) {
       .run(Effect.provideService(compareBooks(a, b), Observability, comparing))
       .then((found) => {
         compared({ "review.books": found.books.length });
-        running = false;
+        state.running = false;
         const units = comparing.span("review.units");
-        const held = skeletonsOf(found);
-        let unitCount = 0;
-        let refusedBooks = 0;
-        for (const skeleton of held.values()) {
-          if (Result.isFailure(skeleton)) refusedBooks += 1;
-          else
-            unitCount += skeleton.success.units.filter(
-              (unit) => unit.status !== "unchanged",
-            ).length;
-        }
-        units({ "review.unit_books": held.size });
-        comparing.end(refusedBooks > 0 ? "refused" : "passed", {
-          "review.books": found.books.length,
-          "review.changed": found.changedBooks,
-          "review.left_only": found.leftOnly,
-          "review.right_only": found.rightOnly,
-          "review.unit_books": held.size,
-          "review.units": unitCount,
-          "review.refused_books": refusedBooks,
-        });
-        computed = { result: found, skeletons: held };
+        const held = skeletonsOf(services, decisions, found);
+        endComparing(comparing, found, held, units);
+        state.computed = { result: found, skeletons: held };
         setComparing(false);
         setNote("");
         setResult(found);
-        setSelected((held) =>
-          held !== undefined && found.books.some((book) => book.bookId === held && !book.identical)
-            ? held
-            : (found.books.find((book) => !book.identical)?.bookId ?? found.books[0]?.bookId),
-        );
-        if (again) {
-          again = false;
+        setSelected((held) => keepSelected(held, found));
+        if (state.again) {
+          state.again = false;
           runCompare();
         }
       })
       .catch((cause: unknown) => {
-        compared();
-        const reason = reasonOf(cause);
-        comparing.end(reason === undefined ? "failed" : "refused", {
-          "review.reason": reason ?? "unknown",
-        });
-        running = false;
-        again = false;
+        refuseCompare(comparing, compared, cause);
+        state.running = false;
+        state.again = false;
         setComparing(false);
         setNote(describe(cause));
       });
   };
 
+  return { runCompare, computed: () => state.computed };
+}
+
+function watchSides(inputs: CompareInputs, revisions: () => string, runCompare: () => void): void {
+  const { leftId, rightId, leftPicked, rightPicked, version, shared, live } = inputs.sides;
   let lastSides: string | undefined;
   let typing: ReturnType<typeof setTimeout> | undefined;
   onCleanup(() => {
@@ -183,12 +190,16 @@ export function createCompare(inputs: CompareInputs) {
       }, TYPING_PAUSE_MS);
     },
   );
+}
 
-  const changed = (): readonly BookComparison[] => {
-    decisions();
-    return result()?.books.filter(inReview) ?? [];
-  };
-
+function createSkeletons(
+  inputs: CompareInputs,
+  result: () => CompareResult | undefined,
+  selected: () => BookId | undefined,
+  computed: () => Computed | undefined,
+) {
+  const { services } = inputs;
+  const { decisions } = inputs.decisions;
   const current = (): BookComparison | undefined => {
     const found = result();
     const bookId = selected();
@@ -199,7 +210,8 @@ export function createCompare(inputs: CompareInputs) {
     (): ReadonlyMap<BookId, SkeletonResult> => {
       const found = result();
       if (found === undefined) return new Map();
-      return computed?.result === found ? computed.skeletons : skeletonsOf(found);
+      const held = computed();
+      return held?.result === found ? held.skeletons : skeletonsOf(services, decisions, found);
     },
     { name: "reviewSkeletons" },
   );
@@ -212,7 +224,7 @@ export function createCompare(inputs: CompareInputs) {
       return (
         skeletons().get(book.bookId) ??
         diffSkeleton(services.galley, book.bookId, book.rightText, book.leftText, {
-          unchanged: decidedIn(book.bookId),
+          unchanged: decidedIn(decisions, book.bookId),
         })
       );
     },
@@ -223,6 +235,40 @@ export function createCompare(inputs: CompareInputs) {
     const found = selectedSkeleton();
     return found !== undefined && Result.isFailure(found) ? found.failure.description : undefined;
   };
+
+  return { skeletons, diffRefusal };
+}
+
+export function createCompare(inputs: CompareInputs) {
+  const { shell } = inputs;
+  const { decisions } = inputs.decisions;
+  const [result, setResult] = createSignal<CompareResult | undefined>(undefined, {
+    name: "reviewResult",
+  });
+  const [selected, setSelected] = createSignal<BookId | undefined>(undefined, {
+    name: "reviewBook",
+  });
+  const [comparing, setComparing] = createSignal(false, { name: "reviewComparing" });
+
+  const revisions = (): string => {
+    const project = shell.project();
+    if (project === undefined) return "";
+    return project.books.map((book) => shell.stampOf(book.id)?.revision ?? -1).join(",");
+  };
+
+  const { runCompare, computed } = createCompareRun(inputs, {
+    setResult,
+    setSelected,
+    setComparing,
+  });
+  watchSides(inputs, revisions, runCompare);
+
+  const changed = (): readonly BookComparison[] => {
+    decisions();
+    return result()?.books.filter((book) => inReview(decisions, book)) ?? [];
+  };
+
+  const { skeletons, diffRefusal } = createSkeletons(inputs, result, selected, computed);
 
   return { result, selected, setSelected, comparing, revisions, changed, skeletons, diffRefusal };
 }

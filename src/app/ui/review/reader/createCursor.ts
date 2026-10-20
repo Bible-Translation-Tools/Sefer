@@ -37,96 +37,104 @@ export interface Cursor {
   readonly setListRoot: (root: HTMLDivElement | undefined) => void;
 }
 
-export function createCursor(options: CursorOptions): Cursor {
-  const { scope, setScope, prepared, selectedBook, observability } = options;
+interface CursorRefs {
+  goTo: ((key: string) => void) | undefined;
+  book: BookDiffApi | undefined;
+  listRoot: HTMLDivElement | undefined;
+  steeredAt: number;
+}
 
-  const [place, setPlace] = createSignal<number | undefined>(undefined, { name: "reviewPlace" });
-  const [opened, setOpened] = createSignal<
-    { readonly unit: DecisionUnit; readonly card: string } | undefined
-  >(undefined, { name: "reviewOpened" });
-  const [activeBook, setActiveBook] = createSignal<BookId | undefined>(undefined, {
-    name: "reviewActiveBook",
-  });
+interface CursorSignals {
+  readonly place: Accessor<number | undefined>;
+  readonly setPlace: (place: number | undefined) => void;
+  readonly opened: Accessor<{ readonly unit: DecisionUnit; readonly card: string } | undefined>;
+  readonly setOpened: (
+    opened: { readonly unit: DecisionUnit; readonly card: string } | undefined,
+  ) => void;
+  readonly setActiveBook: (bookId: BookId | undefined) => void;
+  readonly cardKeys: Accessor<readonly string[]>;
+}
 
-  let goTo: ((key: string) => void) | undefined;
-  let book: BookDiffApi | undefined;
-  let listRoot: HTMLDivElement | undefined;
+const STEER_MS = 800;
 
-  const cardKeys = createMemo(
-    () => prepared().flatMap((held) => held.hunks.map((hunk) => hunk.key)),
-    { name: "reviewCardKeys" },
-  );
+const startOf = (unit: DecisionUnit): number => unit.current?.from ?? unit.place.current;
+const endOf = (unit: DecisionUnit): number => unit.current?.to ?? unit.place.current;
 
-  const stepCards = (delta: 1 | -1): void => {
-    const keysNow = untrack(cardKeys);
-    if (keysNow.length === 0) return;
-    const at = untrack(place);
-    const held = at !== undefined && cardOnScreen(listRoot, keysNow[at]) ? at : undefined;
-    const from = held ?? visibleCardIndex(listRoot, untrack(cardKeys)) ?? 0;
-    const to = stepTarget(held, at, from, delta, keysNow.length - 1);
-    const key = keysNow[to];
-    if (key === undefined) return;
-    goTo?.(key);
+function unitTarget(
+  shown: readonly DecisionUnit[],
+  mid: number | undefined,
+  delta: 1 | -1,
+): number | undefined {
+  if (mid === undefined) return delta > 0 ? 0 : shown.length - 1;
+  const on = shown.findIndex((unit) => startOf(unit) <= mid && mid <= endOf(unit));
+  if (delta > 0) {
+    const found = shown.findIndex((unit, index) => index !== on && startOf(unit) > mid);
+    return found < 0 ? undefined : found;
+  }
+  for (let index = shown.length - 1; index >= 0; index -= 1) {
+    const unit = shown[index];
+    if (unit !== undefined && index !== on && startOf(unit) < mid) return index;
+  }
+  return undefined;
+}
+
+function stepCards(refs: CursorRefs, signals: CursorSignals, delta: 1 | -1): void {
+  const { cardKeys, place, setPlace } = signals;
+  const keysNow = untrack(cardKeys);
+  if (keysNow.length === 0) return;
+  const at = untrack(place);
+  const held = at !== undefined && cardOnScreen(refs.listRoot, keysNow[at]) ? at : undefined;
+  const from = held ?? visibleCardIndex(refs.listRoot, untrack(cardKeys)) ?? 0;
+  const to = stepTarget(held, at, from, delta, keysNow.length - 1);
+  const key = keysNow[to];
+  if (key === undefined) return;
+  refs.goTo?.(key);
+  setPlace(to);
+}
+
+function stepUnits(
+  options: CursorOptions,
+  refs: CursorRefs,
+  signals: CursorSignals,
+  delta: 1 | -1,
+): void {
+  const { setPlace, setOpened } = signals;
+  refs.steeredAt = performance.now();
+  const all = untrack(options.prepared);
+  const held = untrack(options.selectedBook);
+  if (held === undefined) return;
+  const shown = held.shown;
+  const to = unitTarget(shown, refs.book?.middle(), delta);
+  const unit = to === undefined ? undefined : shown[to];
+  if (unit !== undefined && to !== undefined) {
+    refs.book?.showUnit(unit);
     setPlace(to);
-  };
+    return;
+  }
+  const index = all.indexOf(held);
+  for (let other = index + delta; other >= 0 && other < all.length; other += delta) {
+    const next = all[other];
+    const land = delta > 0 ? next?.shown[0] : next?.shown.at(-1);
+    if (next === undefined || land === undefined) continue;
+    setOpened({ unit: land, card: "" });
+    setPlace(delta > 0 ? 0 : next.shown.length - 1);
+    options.onSelect(next.book.bookId);
+    return;
+  }
+  const edge = delta > 0 ? shown.length - 1 : 0;
+  const last = shown[edge];
+  if (last !== undefined) {
+    refs.book?.showUnit(last);
+    setPlace(edge);
+  }
+}
 
-  let steeredAt = 0;
-  const STEER_MS = 800;
-
-  const stepUnits = (delta: 1 | -1): void => {
-    steeredAt = performance.now();
-    const all = untrack(prepared);
-    const held = untrack(selectedBook);
-    if (held === undefined) return;
-    const shown = held.shown;
-    const startOf = (unit: DecisionUnit): number => unit.current?.from ?? unit.place.current;
-    const endOf = (unit: DecisionUnit): number => unit.current?.to ?? unit.place.current;
-    const mid = book?.middle();
-    let to: number | undefined;
-    if (mid === undefined) to = delta > 0 ? 0 : shown.length - 1;
-    else {
-      const on = shown.findIndex((unit) => startOf(unit) <= mid && mid <= endOf(unit));
-      if (delta > 0) {
-        const found = shown.findIndex((unit, index) => index !== on && startOf(unit) > mid);
-        to = found < 0 ? undefined : found;
-      } else {
-        for (let index = shown.length - 1; index >= 0; index -= 1) {
-          const unit = shown[index];
-          if (unit !== undefined && index !== on && startOf(unit) < mid) {
-            to = index;
-            break;
-          }
-        }
-      }
-    }
-    const unit = to === undefined ? undefined : shown[to];
-    if (unit !== undefined && to !== undefined) {
-      book?.showUnit(unit);
-      setPlace(to);
-      return;
-    }
-    const index = all.indexOf(held);
-    for (let other = index + delta; other >= 0 && other < all.length; other += delta) {
-      const next = all[other];
-      const land = delta > 0 ? next?.shown[0] : next?.shown.at(-1);
-      if (next === undefined || land === undefined) continue;
-      setOpened({ unit: land, card: "" });
-      setPlace(delta > 0 ? 0 : next.shown.length - 1);
-      options.onSelect(next.book.bookId);
-      return;
-    }
-    const edge = delta > 0 ? shown.length - 1 : 0;
-    const last = shown[edge];
-    if (last !== undefined) {
-      book?.showUnit(last);
-      setPlace(edge);
-    }
-  };
-
+function createStep(options: CursorOptions, refs: CursorRefs, signals: CursorSignals) {
+  const { scope, observability } = options;
   const step = (delta: 1 | -1): void => {
     const done = observability.span("review.diff.step", scope());
-    if (untrack(scope) === "changes") stepCards(delta);
-    else stepUnits(delta);
+    if (untrack(scope) === "changes") stepCards(refs, signals, delta);
+    else stepUnits(options, refs, signals, delta);
     done();
   };
 
@@ -146,17 +154,15 @@ export function createCursor(options: CursorOptions): Cursor {
     releaseNext();
     releasePrevious();
   });
+  return step;
+}
 
-  const counter = (): string => {
-    const total = scope() === "changes" ? cardKeys().length : (selectedBook()?.shown.length ?? 0);
-    const at = place();
-    return at === undefined
-      ? t("{total} changes", { total })
-      : t("{at} of {total}", { at: at + 1, total });
-  };
+function createPlacing(options: CursorOptions, refs: CursorRefs, signals: CursorSignals) {
+  const { setScope, prepared, selectedBook } = options;
+  const { setPlace, setOpened } = signals;
 
   const placeFrom = (unit: DecisionUnit | undefined): void => {
-    if (performance.now() - steeredAt < STEER_MS) return;
+    if (performance.now() - refs.steeredAt < STEER_MS) return;
     const held = untrack(selectedBook);
     if (held === undefined || unit === undefined) return;
     const from = unit.current?.from ?? 0;
@@ -169,7 +175,7 @@ export function createCursor(options: CursorOptions): Cursor {
   const openInBook = (hunk: Hunk): void => {
     const first = hunk.units[0];
     if (first === undefined) return;
-    steeredAt = performance.now();
+    refs.steeredAt = performance.now();
     setOpened({ unit: first, card: hunk.key });
     options.onSelect(hunk.bookId);
     setScope("book");
@@ -182,15 +188,22 @@ export function createCursor(options: CursorOptions): Cursor {
     const index = held?.shown.findIndex((unit) => chapterOf(unit) === chapter) ?? -1;
     const unit = held?.shown[index];
     if (unit === undefined) return;
-    steeredAt = performance.now();
-    book?.showUnit(unit);
+    refs.steeredAt = performance.now();
+    refs.book?.showUnit(unit);
     setPlace(index);
   };
+
+  return { placeFrom, openInBook, goToChapter };
+}
+
+function createSwitching(options: CursorOptions, refs: CursorRefs, signals: CursorSignals) {
+  const { scope, setScope, selectedBook } = options;
+  const { opened, setPlace, setOpened, setActiveBook } = signals;
 
   const enterBook = (): void => {
     const first = untrack(selectedBook)?.shown[0];
     if (untrack(opened) === undefined && first !== undefined) {
-      steeredAt = performance.now();
+      refs.steeredAt = performance.now();
       setOpened({ unit: first, card: "" });
       setPlace(0);
     }
@@ -201,7 +214,7 @@ export function createCursor(options: CursorOptions): Cursor {
     const card = untrack(opened)?.card;
     setScope("changes");
     setPlace(undefined);
-    if (card !== undefined && card !== "") requestAnimationFrame(() => goTo?.(card));
+    if (card !== undefined && card !== "") requestAnimationFrame(() => refs.goTo?.(card));
   };
 
   const pickBook = (bookId: BookId): void => {
@@ -209,7 +222,46 @@ export function createCursor(options: CursorOptions): Cursor {
     options.onSelect(bookId);
     setPlace(undefined);
     setOpened(undefined);
-    if (untrack(scope) === "changes") goTo?.(bookId);
+    if (untrack(scope) === "changes") refs.goTo?.(bookId);
+  };
+
+  return { enterBook, backToCards, pickBook };
+}
+
+export function createCursor(options: CursorOptions): Cursor {
+  const { scope, prepared, selectedBook } = options;
+
+  const [place, setPlace] = createSignal<number | undefined>(undefined, { name: "reviewPlace" });
+  const [opened, setOpened] = createSignal<
+    { readonly unit: DecisionUnit; readonly card: string } | undefined
+  >(undefined, { name: "reviewOpened" });
+  const [activeBook, setActiveBook] = createSignal<BookId | undefined>(undefined, {
+    name: "reviewActiveBook",
+  });
+
+  const refs: CursorRefs = { goTo: undefined, book: undefined, listRoot: undefined, steeredAt: 0 };
+
+  const cardKeys = createMemo(
+    () => prepared().flatMap((held) => held.hunks.map((hunk) => hunk.key)),
+    { name: "reviewCardKeys" },
+  );
+  const signals: CursorSignals = {
+    place,
+    setPlace,
+    opened,
+    setOpened,
+    setActiveBook,
+    cardKeys,
+  };
+
+  const step = createStep(options, refs, signals);
+
+  const counter = (): string => {
+    const total = scope() === "changes" ? cardKeys().length : (selectedBook()?.shown.length ?? 0);
+    const at = place();
+    return at === undefined
+      ? t("{total} changes", { total })
+      : t("{at} of {total}", { at: at + 1, total });
   };
 
   return {
@@ -220,20 +272,16 @@ export function createCursor(options: CursorOptions): Cursor {
     cardKeys,
     step,
     counter,
-    placeFrom,
-    openInBook,
-    goToChapter,
-    enterBook,
-    backToCards,
-    pickBook,
+    ...createPlacing(options, refs, signals),
+    ...createSwitching(options, refs, signals),
     setGoTo: (next) => {
-      goTo = next;
+      refs.goTo = next;
     },
     setBook: (api) => {
-      book = api;
+      refs.book = api;
     },
     setListRoot: (root) => {
-      listRoot = root;
+      refs.listRoot = root;
     },
   };
 }

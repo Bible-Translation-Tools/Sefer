@@ -24,11 +24,13 @@ import type { FindSearch, Scope } from "#app/ui/find/helpers";
 import { Card, EmptyState, PanelHeader } from "#app/ui/primitives";
 import { ShellGate } from "#app/ui/ShellGate";
 
-function Find() {
-  const shell = useShell();
-  const navigate = useNavigate();
-  const params = Route.useSearch();
+type Params = ReturnType<typeof Route.useSearch>;
 
+function createFindModel(
+  shell: ReturnType<typeof useShell>,
+  navigate: ReturnType<typeof useNavigate>,
+  params: Params,
+) {
   const scope = (): Scope => params().scope ?? "project";
   const asked = (): string => params().q ?? "";
 
@@ -78,6 +80,132 @@ function Find() {
     { kind: "editor", to: feed.openInEditor },
   );
 
+  return {
+    shell,
+    params,
+    scope,
+    asked,
+    ask,
+    query,
+    results,
+    sources,
+    books,
+    replace,
+    commit,
+    expect,
+    feedHits,
+    feed,
+    feedPairedOf,
+    cursorSid,
+    cursorAt,
+    step,
+    mode,
+    card,
+  };
+}
+
+type FindModel = ReturnType<typeof createFindModel>;
+
+function FindControls(props: { readonly model: FindModel }) {
+  return (
+    <Card>
+      <div class="flex flex-col gap-3">
+        <FindSearchBar query={props.model.query} commit={props.model.commit} />
+        <FindScopeRow
+          shell={props.model.shell}
+          scope={props.model.scope}
+          ask={props.model.ask}
+          books={props.model.books}
+          sources={props.model.sources}
+          expect={props.model.expect}
+          results={props.model.results}
+          feedHits={props.model.feedHits}
+          step={props.model.step}
+        />
+      </div>
+    </Card>
+  );
+}
+
+function FindNotices(props: { readonly model: FindModel }) {
+  return (
+    <>
+      <Show when={props.model.scope() === "reference" && props.model.expect.expectShown()}>
+        <FindExpectCard
+          params={props.model.params}
+          ask={props.model.ask}
+          expect={props.model.expect}
+        />
+      </Show>
+
+      <Show
+        when={
+          props.model.replace.replaceEnabled() &&
+          props.model.scope() !== "reference" &&
+          props.model.scope() !== "helps"
+        }
+      >
+        <FindReplaceCard
+          scope={props.model.scope}
+          results={props.model.results}
+          replace={props.model.replace}
+        />
+      </Show>
+
+      <Show when={props.model.results.problem() !== ""}>
+        <p class="rounded-md bg-surface-error px-4 py-3 text-small text-on-surface-error">
+          {props.model.results.problem()}
+        </p>
+      </Show>
+    </>
+  );
+}
+
+function FindResultsList(props: { readonly model: FindModel }) {
+  return (
+    <ExcerptList
+      goneLabel={t("No longer matches")}
+      resultsKey={props.model.asked()}
+      groups={props.model.feed.groups()}
+      views={props.model.feed.views}
+      outline={props.model.feed.outline()}
+      card={props.model.card}
+      seat={props.model.feed.seat}
+      seatedOf={props.model.feed.seatedOf}
+      shownOf={props.model.feed.shownOf}
+      analyze={props.model.feed.analyze}
+      onEdited={props.model.feed.edited}
+      focus={props.model.cursorSid()}
+      activeHit={props.model.cursorAt()}
+      mode={props.model.mode()}
+      pairedOf={props.model.feedPairedOf()}
+      empty={
+        <EmptyState
+          icon={<SearchIcon size={22} />}
+          title={
+            props.model.feedHits().length === 0 && props.model.query.text() !== ""
+              ? t("No matches")
+              : t("Nothing searched yet")
+          }
+          description={
+            props.model.scope() === "reference"
+              ? t("Searching {count} reference book(s); your own verse is the editable one.", {
+                  count: props.model.sources.bound().ids.length,
+                })
+              : t("Results are grouped by verse, one card each, read-only until you edit.")
+          }
+        />
+      }
+    />
+  );
+}
+
+function Find() {
+  const shell = useShell();
+  const navigate = useNavigate();
+  const params = Route.useSearch();
+  const model = createFindModel(shell, navigate, params);
+
   return (
     <main class="flex h-full min-w-0 flex-col gap-4 p-6">
       <PanelHeader title={t("Find")} />
@@ -86,71 +214,9 @@ function Find() {
         when={shell.project()}
         fallback={<p class="text-small text-on-surface-tertiary">{t("Open a project first.")}</p>}
       >
-        <Card>
-          <div class="flex flex-col gap-3">
-            <FindSearchBar query={query} commit={commit} />
-            <FindScopeRow
-              shell={shell}
-              scope={scope}
-              ask={ask}
-              books={books}
-              sources={sources}
-              expect={expect}
-              results={results}
-              feedHits={feedHits}
-              step={step}
-            />
-          </div>
-        </Card>
-
-        <Show when={scope() === "reference" && expect.expectShown()}>
-          <FindExpectCard params={params} ask={ask} expect={expect} />
-        </Show>
-
-        <Show when={replace.replaceEnabled() && scope() !== "reference" && scope() !== "helps"}>
-          <FindReplaceCard scope={scope} results={results} replace={replace} />
-        </Show>
-
-        <Show when={results.problem() !== ""}>
-          <p class="rounded-md bg-surface-error px-4 py-3 text-small text-on-surface-error">
-            {results.problem()}
-          </p>
-        </Show>
-
-        <ExcerptList
-          goneLabel={t("No longer matches")}
-          resultsKey={asked()}
-          groups={feed.groups()}
-          views={feed.views}
-          outline={feed.outline()}
-          card={card}
-          seat={feed.seat}
-          seatedOf={feed.seatedOf}
-          shownOf={feed.shownOf}
-          analyze={feed.analyze}
-          onEdited={feed.edited}
-          focus={cursorSid()}
-          activeHit={cursorAt()}
-          mode={mode()}
-          pairedOf={feedPairedOf()}
-          empty={
-            <EmptyState
-              icon={<SearchIcon size={22} />}
-              title={
-                feedHits().length === 0 && query.text() !== ""
-                  ? t("No matches")
-                  : t("Nothing searched yet")
-              }
-              description={
-                scope() === "reference"
-                  ? t("Searching {count} reference book(s); your own verse is the editable one.", {
-                      count: sources.bound().ids.length,
-                    })
-                  : t("Results are grouped by verse, one card each, read-only until you edit.")
-              }
-            />
-          }
-        />
+        <FindControls model={model} />
+        <FindNotices model={model} />
+        <FindResultsList model={model} />
       </Show>
     </main>
   );

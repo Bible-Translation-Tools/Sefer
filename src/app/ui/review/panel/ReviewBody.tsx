@@ -20,7 +20,7 @@ import type { Units } from "./createUnits";
 import type { Writes } from "./createWrites";
 import { SuggestionHere } from "./SuggestionHere";
 
-export function ReviewBody(props: {
+interface ReviewBodyProps {
   readonly shell: Shell;
   readonly route: ReviewRoute;
   readonly sides: Sides;
@@ -36,39 +36,166 @@ export function ReviewBody(props: {
   readonly usfm: boolean;
   readonly onUsfm: (on: boolean) => void;
   readonly onEditing: (editing: boolean) => void;
-}) {
+}
+
+function ReviewNotices(props: { readonly body: ReviewBodyProps }) {
   return (
     <>
       <SyncLine
         comparison={
-          props.compare.result() === undefined
+          props.body.compare.result() === undefined
             ? undefined
             : {
-                changes: props.units.totals().total,
-                books: props.compare.result()?.changedBooks ?? 0,
-                decided: props.units.totals().decided,
+                changes: props.body.units.totals().total,
+                books: props.body.compare.result()?.changedBooks ?? 0,
+                decided: props.body.units.totals().decided,
               }
         }
-        onSee={props.sides.seeShared}
-        seeing={props.sides.againstShared()}
-        onSeeWriter={() => props.sides.pick("right", "writer")}
-        seeingWriter={props.sides.againstWriter()}
+        onSee={props.body.sides.seeShared}
+        seeing={props.body.sides.againstShared()}
+        onSeeWriter={() => props.body.sides.pick("right", "writer")}
+        seeingWriter={props.body.sides.againstWriter()}
       />
-      <Show when={props.route.pull()}>{(number) => <SuggestionLine number={number()} />}</Show>
-      <Show when={props.route.pull() !== undefined && props.units.mineOnlyCount() > 0}>
+      <Show when={props.body.route.pull()}>{(number) => <SuggestionLine number={number()} />}</Show>
+      <Show when={props.body.route.pull() !== undefined && props.body.units.mineOnlyCount() > 0}>
         <p
           class="flex flex-wrap items-center gap-2 text-smallest text-on-surface-secondary"
-          data-review-mine-only={props.units.mineOnlyCount()}
+          data-review-mine-only={props.body.units.mineOnlyCount()}
         >
           {t(
             "Your editor also has {count} change(s) that are not in this suggestion. They stay as they are.",
-            { count: props.units.mineOnlyCount() },
+            { count: props.body.units.mineOnlyCount() },
           )}
-          <Button size="sm" variant="tertiary" onClick={() => props.units.setShowMine((on) => !on)}>
-            {props.units.showMine() ? t("Hide them") : t("Show them")}
+          <Button
+            size="sm"
+            variant="tertiary"
+            onClick={() => props.body.units.setShowMine((on) => !on)}
+          >
+            {props.body.units.showMine() ? t("Hide them") : t("Show them")}
           </Button>
         </p>
       </Show>
+    </>
+  );
+}
+
+function WaitingStatus(props: { readonly what: string }) {
+  return (
+    <div
+      class="flex items-center justify-center gap-2 py-10 text-small text-on-surface-secondary"
+      role="status"
+      data-review-waiting
+    >
+      <span
+        aria-hidden="true"
+        class="size-4 animate-spin rounded-full border-2 border-on-surface-tertiary border-t-transparent"
+      />
+      {t("Reading {source}…", { source: props.what })}
+    </div>
+  );
+}
+
+function OneSidedNote(props: { readonly body: ReviewBodyProps }) {
+  return (
+    <p class="text-smallest text-on-surface-secondary" data-review-one-sided>
+      <Show
+        when={props.body.emptySide}
+        fallback={t(
+          "Only one side holds {books}. A project's book set is fixed when it opens, so Review cannot add or remove a book yet.",
+          {
+            books:
+              props.body.units.oneSided().length > 6
+                ? t("{count} books", { count: props.body.units.oneSided().length })
+                : props.body.units.oneSided().map(props.body.bookLabel).join(", "),
+          },
+        )}
+      >
+        {(side) => t("{source} holds no books yet.", { source: side() })}
+      </Show>
+    </p>
+  );
+}
+
+function SettledNotice(props: { readonly body: ReviewBodyProps }) {
+  return (
+    <>
+      <Show when={props.body.settled && props.body.decisions.showChoices()}>
+        <p class="flex items-center gap-2 text-smallest text-on-surface-secondary">
+          <Check size={14} aria-hidden="true" class="text-on-surface-success" />
+          {t("Every change is decided.")}
+          <Button
+            size="sm"
+            variant="tertiary"
+            onClick={() => props.body.decisions.setShowChoices(false)}
+          >
+            {t("Hide my choices")}
+          </Button>
+        </p>
+      </Show>
+
+      <Show when={props.body.settled && !props.body.decisions.showChoices()}>
+        <EmptyState
+          icon={<Check size={20} />}
+          title={t("Every change is decided")}
+          description={props.body.form.decidedDescription()}
+          action={
+            <div class="flex flex-wrap justify-center gap-2" data-review-settled>
+              <Show
+                when={
+                  props.body.sides.target() !== undefined &&
+                  (props.body.sides.againstShared() || props.body.form.unsaved().length > 0)
+                }
+              >
+                <Button variant="primary" icon={<Save />} onClick={props.body.form.openRecord}>
+                  {t("Save")}
+                </Button>
+              </Show>
+              <Button variant="tertiary" onClick={() => props.body.decisions.setShowChoices(true)}>
+                {t("Show my choices")}
+              </Button>
+            </div>
+          }
+        />
+      </Show>
+    </>
+  );
+}
+
+function ReaderRegion(props: { readonly body: ReviewBodyProps }) {
+  return (
+    <div
+      class={[
+        "flex min-h-0 flex-1 flex-col",
+        { hidden: props.body.settled && !props.body.decisions.showChoices() },
+      ]}
+      data-review-units={props.body.units.totals().total}
+    >
+      <ReviewReader
+        books={props.body.units.readerBooks()}
+        originOf={props.body.units.originOf}
+        decision={props.body.units.effectiveFor}
+        decide={props.body.writes.decideAny}
+        decidable={props.body.writes.editable()}
+        usfm={props.body.usfm}
+        onUsfm={props.body.onUsfm}
+        currentLabel={props.body.sides.leftLabel()}
+        baselineLabel={props.body.sides.rightLabel()}
+        currentShort={props.body.sides.leftShort()}
+        baselineShort={props.body.sides.rightShort()}
+        selected={props.body.compare.selected()}
+        onSelect={props.body.compare.setSelected}
+        seat={props.body.writes.seatBook}
+        onEdited={(bookId) => props.body.shell.changed({ kind: "book.apply", books: [bookId] })}
+        onEditing={props.body.onEditing}
+      />
+    </div>
+  );
+}
+
+export function ReviewBody(props: ReviewBodyProps) {
+  return (
+    <>
+      <ReviewNotices body={props} />
       <RecoveryBanner />
       <Show
         when={props.compare.result()}
@@ -79,19 +206,7 @@ export function ReviewBody(props: {
             }
             fallback={<EmptyState title={t("Nothing to review yet.")} />}
           >
-            {(what) => (
-              <div
-                class="flex items-center justify-center gap-2 py-10 text-small text-on-surface-secondary"
-                role="status"
-                data-review-waiting
-              >
-                <span
-                  aria-hidden="true"
-                  class="size-4 animate-spin rounded-full border-2 border-on-surface-tertiary border-t-transparent"
-                />
-                {t("Reading {source}…", { source: what() })}
-              </div>
-            )}
+            {(what) => <WaitingStatus what={what()} />}
           </Show>
         }
       >
@@ -123,87 +238,10 @@ export function ReviewBody(props: {
             <SuggestionHere />
           </Show>
           <Show when={props.units.oneSided().length > 0}>
-            <p class="text-smallest text-on-surface-secondary" data-review-one-sided>
-              <Show
-                when={props.emptySide}
-                fallback={t(
-                  "Only one side holds {books}. A project's book set is fixed when it opens, so Review cannot add or remove a book yet.",
-                  {
-                    books:
-                      props.units.oneSided().length > 6
-                        ? t("{count} books", { count: props.units.oneSided().length })
-                        : props.units.oneSided().map(props.bookLabel).join(", "),
-                  },
-                )}
-              >
-                {(side) => t("{source} holds no books yet.", { source: side() })}
-              </Show>
-            </p>
+            <OneSidedNote body={props} />
           </Show>
-          <Show when={props.settled && props.decisions.showChoices()}>
-            <p class="flex items-center gap-2 text-smallest text-on-surface-secondary">
-              <Check size={14} aria-hidden="true" class="text-on-surface-success" />
-              {t("Every change is decided.")}
-              <Button
-                size="sm"
-                variant="tertiary"
-                onClick={() => props.decisions.setShowChoices(false)}
-              >
-                {t("Hide my choices")}
-              </Button>
-            </p>
-          </Show>
-
-          <Show when={props.settled && !props.decisions.showChoices()}>
-            <EmptyState
-              icon={<Check size={20} />}
-              title={t("Every change is decided")}
-              description={props.form.decidedDescription()}
-              action={
-                <div class="flex flex-wrap justify-center gap-2" data-review-settled>
-                  <Show
-                    when={
-                      props.sides.target() !== undefined &&
-                      (props.sides.againstShared() || props.form.unsaved().length > 0)
-                    }
-                  >
-                    <Button variant="primary" icon={<Save />} onClick={props.form.openRecord}>
-                      {t("Save")}
-                    </Button>
-                  </Show>
-                  <Button variant="tertiary" onClick={() => props.decisions.setShowChoices(true)}>
-                    {t("Show my choices")}
-                  </Button>
-                </div>
-              }
-            />
-          </Show>
-          <div
-            class={[
-              "flex min-h-0 flex-1 flex-col",
-              { hidden: props.settled && !props.decisions.showChoices() },
-            ]}
-            data-review-units={props.units.totals().total}
-          >
-            <ReviewReader
-              books={props.units.readerBooks()}
-              originOf={props.units.originOf}
-              decision={props.units.effectiveFor}
-              decide={props.writes.decideAny}
-              decidable={props.writes.editable()}
-              usfm={props.usfm}
-              onUsfm={props.onUsfm}
-              currentLabel={props.sides.leftLabel()}
-              baselineLabel={props.sides.rightLabel()}
-              currentShort={props.sides.leftShort()}
-              baselineShort={props.sides.rightShort()}
-              selected={props.compare.selected()}
-              onSelect={props.compare.setSelected}
-              seat={props.writes.seatBook}
-              onEdited={(bookId) => props.shell.changed({ kind: "book.apply", books: [bookId] })}
-              onEditing={props.onEditing}
-            />
-          </div>
+          <SettledNotice body={props} />
+          <ReaderRegion body={props} />
         </Show>
       </Show>{" "}
     </>

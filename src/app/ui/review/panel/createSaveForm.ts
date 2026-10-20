@@ -22,54 +22,47 @@ export interface SaveFormInputs {
   readonly sides: Sides;
 }
 
-export function createSaveForm(inputs: SaveFormInputs) {
+function sendsLineOf(shell: Shell): string {
+  const facts = collaboration.facts(shell.project()?.root);
+  const copy = facts?.mode === "copy";
+  const name = facts?.sendsTo;
+  if (name === undefined)
+    return copy
+      ? t("This also sends your changes to your copy.")
+      : t("This also sends your changes to the shared project.");
+  return copy
+    ? t("This also sends your changes to your copy, {name}.", { name })
+    : t("This also sends your changes to the shared project, {name}.", { name });
+}
+
+function openRecordWith(
+  inputs: SaveFormInputs,
+  setRecordOpen: (open: boolean) => void,
+  setAuthor: (author: Author | undefined) => void,
+  setSends: (sends: boolean) => void,
+): void {
   const { shell, services } = inputs;
+  setRecordOpen(true);
+  void services.run(personAuthor()).then((found) => setAuthor(Option.getOrUndefined(found)));
+  const project = shell.project();
+  if (project === undefined) return;
+  void services
+    .run(
+      Effect.orElseSucceed(
+        Effect.flatMap(services.git.open(project.root), (repo) => services.remote.origin(repo)),
+        () => Option.none<string>(),
+      ),
+    )
+    .then((origin) =>
+      setSends(
+        Option.isSome(origin) && syncPreferences(services.settings, project.root).sendOnSave,
+      ),
+    );
+}
+
+function createDescriptions(inputs: SaveFormInputs, unsaved: () => readonly unknown[]) {
   const { fromCopy } = inputs.route;
   const { againstShared } = inputs.sides;
-  const [message, setMessage] = createSignal("", { name: "reviewMessage" });
-  const [recordOpen, setRecordOpen] = createSignal(false, { name: "reviewRecordOpen" });
-  const [author, setAuthor] = createSignal<Author | undefined>(undefined, { name: "reviewAuthor" });
-  const [typedName, setTypedName] = createSignal("", { name: "reviewAuthorName" });
-  const [sends, setSends] = createSignal(false, { name: "reviewSends" });
-  const [broughtIn, setBroughtIn] = createSignal(false, { name: "reviewBroughtIn" });
-  const [closeOnSave, setCloseOnSave] = createSignal(true, { name: "reviewCloseSuggestion" });
-  const sendsLine = (): string => {
-    const facts = collaboration.facts(shell.project()?.root);
-    const copy = facts?.mode === "copy";
-    const name = facts?.sendsTo;
-    if (name === undefined)
-      return copy
-        ? t("This also sends your changes to your copy.")
-        : t("This also sends your changes to the shared project.");
-    return copy
-      ? t("This also sends your changes to your copy, {name}.", { name })
-      : t("This also sends your changes to the shared project, {name}.", { name });
-  };
-  const openRecord = (): void => {
-    setRecordOpen(true);
-    void services.run(personAuthor()).then((found) => setAuthor(Option.getOrUndefined(found)));
-    const project = shell.project();
-    if (project === undefined) return;
-    void services
-      .run(
-        Effect.orElseSucceed(
-          Effect.flatMap(services.git.open(project.root), (repo) => services.remote.origin(repo)),
-          () => Option.none<string>(),
-        ),
-      )
-      .then((origin) =>
-        setSends(
-          Option.isSome(origin) && syncPreferences(services.settings, project.root).sendOnSave,
-        ),
-      );
-  };
-
-  const unsaved = () => unsavedChanges(shell);
-
-  const defaultMessage = (): string => {
-    const names = unsaved().map((book) => bookName(book.bookId, metadataOf(shell.project())));
-    return names.length === 0 ? t("Edited") : t("Edited {books}", { books: names.join(", ") });
-  };
 
   const decidedDescription = (): string => {
     if (againstShared())
@@ -94,6 +87,27 @@ export function createSaveForm(inputs: SaveFormInputs) {
           "The project's text is kept as you left it here: your choices, and anything you edited. A passage only the shared project changed, that you didn't choose for, comes in. Everything else it changed arrives too, as one version.",
         );
   };
+  return { decidedDescription, saveDescription };
+}
+
+export function createSaveForm(inputs: SaveFormInputs) {
+  const { shell } = inputs;
+  const [message, setMessage] = createSignal("", { name: "reviewMessage" });
+  const [recordOpen, setRecordOpen] = createSignal(false, { name: "reviewRecordOpen" });
+  const [author, setAuthor] = createSignal<Author | undefined>(undefined, { name: "reviewAuthor" });
+  const [typedName, setTypedName] = createSignal("", { name: "reviewAuthorName" });
+  const [sends, setSends] = createSignal(false, { name: "reviewSends" });
+  const [broughtIn, setBroughtIn] = createSignal(false, { name: "reviewBroughtIn" });
+  const [closeOnSave, setCloseOnSave] = createSignal(true, { name: "reviewCloseSuggestion" });
+  const sendsLine = (): string => sendsLineOf(shell);
+  const openRecord = (): void => openRecordWith(inputs, setRecordOpen, setAuthor, setSends);
+
+  const unsaved = () => unsavedChanges(shell);
+
+  const defaultMessage = (): string => {
+    const names = unsaved().map((book) => bookName(book.bookId, metadataOf(shell.project())));
+    return names.length === 0 ? t("Edited") : t("Edited {books}", { books: names.join(", ") });
+  };
 
   return {
     message,
@@ -113,8 +127,7 @@ export function createSaveForm(inputs: SaveFormInputs) {
     openRecord,
     unsaved,
     defaultMessage,
-    decidedDescription,
-    saveDescription,
+    ...createDescriptions(inputs, unsaved),
   };
 }
 
