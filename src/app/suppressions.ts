@@ -27,6 +27,12 @@ export interface SuppressionStore {
   clear(): void;
 }
 
+const decodeSuppressionsFile = (text: string | undefined) => {
+  if (text === "") return NO_SUPPRESSIONS;
+  if (text === undefined) return undefined;
+  return decodeSuppressions(text);
+};
+
 export const makeSuppressionStore = (options: {
   readonly services: Services;
   readonly changed: (event: ShellEvent) => void;
@@ -69,8 +75,7 @@ export const makeSuppressionStore = (options: {
       const text = await services.run(
         readDeviceFile(services.fileSystem, opened, SOUS_SUPPRESSIONS_FILE),
       );
-      const decoded =
-        text === "" ? NO_SUPPRESSIONS : text === undefined ? undefined : decodeSuppressions(text);
+      const decoded = decodeSuppressionsFile(text);
       writable = decoded !== undefined;
       apply(decoded ?? NO_SUPPRESSIONS);
     },

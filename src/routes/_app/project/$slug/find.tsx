@@ -148,6 +148,11 @@ function Find() {
     return fresh;
   };
 
+  const occurrencesAt = (addresses: readonly Address[]): readonly Occurrence[] => {
+    const books = readBooks(shell, new Set(addresses.map((address) => address.book)), analyze);
+    return books.flatMap((book) => refOccurrences(book, addresses));
+  };
+
   const referenceMatches = createMemo(
     (): readonly Occurrence[] => {
       const wanted = referenceHits();
@@ -155,8 +160,7 @@ function Find() {
       const addresses = wanted.flatMap((hit) => (hit.address === undefined ? [] : [hit.address]));
       if (addresses.length === 0) return [];
 
-      const books = readBooks(shell, new Set(addresses.map((address) => address.book)), analyze);
-      return books.flatMap((book) => refOccurrences(book, addresses));
+      return occurrencesAt(addresses);
     },
     { name: "referenceMatches" },
   );
@@ -165,8 +169,7 @@ function Find() {
     (): readonly Occurrence[] => {
       const addresses = helpHits().flatMap(({ hit }) => hit.addresses);
       if (addresses.length === 0) return [];
-      const books = readBooks(shell, new Set(addresses.map((address) => address.book)), analyze);
-      return books.flatMap((book) => refOccurrences(book, addresses));
+      return occurrencesAt(addresses);
     },
     { name: "helpMatches" },
   );
@@ -286,8 +289,16 @@ function Find() {
     want === "reference" || want === "helps"
       ? undefined
       : scopeBooks(want, projectBooks(), focusedBook(), custom());
-  const signature = (q: Search.Query, want: Scope): string =>
-    JSON.stringify([want, booksFor(want), q.text, q.caseSensitive, q.wholeWord, q.regex, markup()]);
+  const signature = (query: Search.Query, want: Scope): string =>
+    JSON.stringify([
+      want,
+      booksFor(want),
+      query.text,
+      query.caseSensitive,
+      query.wholeWord,
+      query.regex,
+      markup(),
+    ]);
 
   let latest = 0;
   const run = async (over?: Over): Promise<void> => {
@@ -579,11 +590,9 @@ function Find() {
       const split = expectation();
       if (split === undefined) return referenceMatches();
       const shown = showing();
-      return shown === "with"
-        ? split.has
-        : shown === "without"
-          ? split.missing
-          : [...split.missing, ...split.has];
+      if (shown === "with") return split.has;
+      if (shown === "without") return split.missing;
+      return [...split.missing, ...split.has];
     },
     { name: "feedHits" },
   );
@@ -639,6 +648,17 @@ function Find() {
       book,
       hits: [{ bookId: book.bookId, from: held.from, to: held.to }],
     };
+  };
+
+  const feedPairedOf = () => {
+    if (scope() === "helps") return helpPairedOf;
+    if (!source.shown()) return undefined;
+    return scope() === "reference" ? pairedOf : source.pairedOf;
+  };
+
+  const scopeLabel = (): string => {
+    if (scope() === "book") return t("this book");
+    return scope() === "project" ? t("the project") : t("the chosen books");
   };
 
   const pairFor = (excerpt: Excerpt): Search.ReferenceHit | undefined => {
@@ -888,12 +908,7 @@ function Find() {
                     {t("Replace {count} match(es) in {books} book(s) within {scope}.", {
                       count: held.hits.length,
                       books: new Set(held.hits.map((hit) => hit.bookId)).size,
-                      scope:
-                        scope() === "book"
-                          ? t("this book")
-                          : scope() === "project"
-                            ? t("the project")
-                            : t("the chosen books"),
+                      scope: scopeLabel(),
                     })}
                   </p>
                   <p class="text-on-surface-secondary">
@@ -936,15 +951,7 @@ function Find() {
           focus={cursorSid()}
           activeHit={cursorAt()}
           mode={mode()}
-          pairedOf={
-            scope() === "helps"
-              ? helpPairedOf
-              : !source.shown()
-                ? undefined
-                : scope() === "reference"
-                  ? pairedOf
-                  : source.pairedOf
-          }
+          pairedOf={feedPairedOf()}
           empty={
             <EmptyState
               icon={<SearchIcon size={22} />}

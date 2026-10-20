@@ -259,12 +259,11 @@ const diagnosticsText = async (
             }),
           );
   const persist = services.logFiles.status();
-  const missing =
-    read.status.state === "unavailable"
-      ? t("The log files could not be read: {reason}", { reason: read.status.reason })
-      : persist.state === "stopped"
-        ? t("Writing the log stopped this session: {reason}", { reason: persist.reason ?? "" })
-        : undefined;
+  let missing: string | undefined;
+  if (read.status.state === "unavailable")
+    missing = t("The log files could not be read: {reason}", { reason: read.status.reason });
+  else if (persist.state === "stopped")
+    missing = t("Writing the log stopped this session: {reason}", { reason: persist.reason ?? "" });
   const text = renderExport({
     header: sessionHeader(services),
     exported: Date.now(),

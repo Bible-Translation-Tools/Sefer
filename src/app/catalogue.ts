@@ -278,6 +278,14 @@ const graphql = async (
 const typeOf = (owner: string): ProjectType =>
   owner.toLowerCase() === "wa-catalog" ? "gateway" : "translation";
 
+const entryType = (
+  repo: typeof ConsolidatedRepo.Type,
+  facts: LangNameFacts | undefined,
+): ProjectType => {
+  if (facts?.gw === undefined || facts.gw === null) return typeOf(repo.username);
+  return facts.gw ? "gateway" : "translation";
+};
+
 const blankToUndefined = (value: string | null | undefined): string | undefined =>
   value === null || value === undefined || value.trim() === "" ? undefined : value;
 
@@ -294,12 +302,7 @@ const toEntry = (
   alternateNames: facts?.alt ?? [],
   region: blankToUndefined(facts?.lr),
   updated,
-  type:
-    facts?.gw === undefined || facts.gw === null
-      ? typeOf(repo.username)
-      : facts.gw
-        ? "gateway"
-        : "translation",
+  type: entryType(repo, facts),
   owner: repo.username,
   repo: repo.repo_name,
   gitUrl: repo.repo_url,

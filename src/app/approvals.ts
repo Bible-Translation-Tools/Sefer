@@ -23,6 +23,12 @@ export interface ApprovalsHandle {
   unapprove(term: string, verse: string): void;
 }
 
+const decodeApprovalsFile = (text: string | undefined) => {
+  if (text === "") return NO_APPROVALS;
+  if (text === undefined) return undefined;
+  return decodeApprovals(text);
+};
+
 const hex = (value: bigint): string => value.toString(16).padStart(16, "0");
 
 export const createApprovals = (services: Services, root: string): ApprovalsHandle => {
@@ -33,8 +39,7 @@ export const createApprovals = (services: Services, root: string): ApprovalsHand
   const loaded = services
     .run(readDeviceFile(services.fileSystem, root, APPROVALS_FILE))
     .then((text) => {
-      const decoded =
-        text === "" ? NO_APPROVALS : text === undefined ? undefined : decodeApprovals(text);
+      const decoded = decodeApprovalsFile(text);
       writable = decoded !== undefined;
       if (decoded !== undefined) setHeld(decoded);
     });

@@ -211,6 +211,21 @@ export type SettleOutcome =
       readonly description: string;
     };
 
+const sendAfterRecording = (
+  services: Services,
+  project: Project,
+  recorded: Awaited<ReturnType<typeof recordVersion>>,
+  sendTo: string | undefined,
+): Promise<SendOutcome> | undefined => {
+  if (sendTo !== undefined) {
+    if (recorded.kind === "recorded" || recorded.kind === "nothing")
+      return sendNow(services, project, "save", sendTo);
+    return undefined;
+  }
+  if (recorded.kind === "recorded") return sendAfterSave(services, project);
+  return undefined;
+};
+
 export const settleWithShared = async (
   services: Services,
   project: Project,
@@ -225,14 +240,7 @@ export const settleWithShared = async (
   if (received._tag === "Success") {
     const dirty = project.books.filter((book) => services.save.dirty(book));
     const recorded = await recordVersion(services, project, dirty, message, author);
-    const sending =
-      with_.sendTo !== undefined
-        ? recorded.kind === "recorded" || recorded.kind === "nothing"
-          ? sendNow(services, project, "save", with_.sendTo)
-          : undefined
-        : recorded.kind === "recorded"
-          ? sendAfterSave(services, project)
-          : undefined;
+    const sending = sendAfterRecording(services, project, recorded, with_.sendTo);
     if (sending === undefined) void syncWatch.refresh(services, project).catch(() => undefined);
     return { kind: "received", recorded, sending };
   }

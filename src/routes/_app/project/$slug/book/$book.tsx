@@ -23,6 +23,10 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
   const [folded, setFolded] = createSignal(false, { name: "referencesFolded" });
   const collapsed = (): boolean => references() === 0 || folded();
   const shut = (): boolean => !shell.referenceOpen();
+  const panelClass = (): string | undefined => {
+    if (shut()) return "hidden";
+    return collapsed() ? "[flex-basis:13rem]!" : undefined;
+  };
 
   createEffect(
     () => ({ root: props.root, bookId: props.bookId }),
@@ -61,7 +65,7 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
                   initialSize={referenceInitial}
                   minSize={referenceMin}
                   maxSize={referenceMax}
-                  class={shut() ? "hidden" : collapsed() ? "[flex-basis:13rem]!" : undefined}
+                  class={panelClass()}
                 >
                   <Show when={!shut()}>
                     <ReferenceColumn onBound={setReferences} onFolded={setFolded} />

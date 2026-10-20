@@ -364,12 +364,10 @@ export const announceSourceTexts = async (
   const worth = rows.filter((row) => row.outcome !== "held" || row.note !== undefined);
   if (worth.length === 0) return;
   const lines = worth.map((row) => {
-    const said =
-      row.outcome === "failed"
-        ? t("{title} could not be downloaded", { title: row.title })
-        : row.outcome === "pulled"
-          ? t("{title} downloaded", { title: row.title })
-          : t("{title} is already on this device", { title: row.title });
+    let said: string;
+    if (row.outcome === "failed") said = t("{title} could not be downloaded", { title: row.title });
+    else if (row.outcome === "pulled") said = t("{title} downloaded", { title: row.title });
+    else said = t("{title} is already on this device", { title: row.title });
     return row.note === undefined ? said : `${said} (${row.note})`;
   });
   const failed = rows.some((row) => row.outcome === "failed");

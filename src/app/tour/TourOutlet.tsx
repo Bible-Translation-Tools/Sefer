@@ -255,6 +255,15 @@ export function TourOutlet() {
 
   const fixed = () => runningTour()?.fixed === true;
 
+  const stopLabel = () => {
+    if (last()) return t("Close");
+    return workflow() ? t("Stop") : t("Skip tutorial");
+  };
+  const nextLabel = () => {
+    if (last()) return t("Done");
+    return workflow() && !fixed() ? t("Skip") : t("Next");
+  };
+
   const card = (
     title: string,
     body: string,
@@ -356,7 +365,7 @@ export function TourOutlet() {
       </Show>
       <div class="flex items-center justify-between gap-2">
         <Button size="sm" variant="secondary" onClick={stopTour}>
-          {last() ? t("Close") : workflow() ? t("Stop") : t("Skip tutorial")}
+          {stopLabel()}
         </Button>
         <div class="flex gap-2">
           <Show when={(runningTour()?.index ?? 0) > 0}>
@@ -369,7 +378,7 @@ export function TourOutlet() {
             variant="primary"
             onClick={() => (last() ? stopTour() : stepTour(context, 1))}
           >
-            {last() ? t("Done") : workflow() && !fixed() ? t("Skip") : t("Next")}
+            {nextLabel()}
           </Button>
         </div>
       </div>

@@ -186,12 +186,8 @@ const domainLayer = (
 ): Layer.Layer<Exclude<Domain, Observability>, EngineFailure> => {
   const hostInfo = tauri === undefined ? WebHostInfoLive(build) : tauri.TauriHostInfoLive(build);
 
-  const fileSystem =
-    fixture !== undefined
-      ? fixture.FixtureFileSystemLive
-      : tauri === undefined
-        ? OpfsFileSystemLive
-        : tauri.TauriFileSystemLive;
+  const platformFileSystem = tauri === undefined ? OpfsFileSystemLive : tauri.TauriFileSystemLive;
+  const fileSystem = fixture !== undefined ? fixture.FixtureFileSystemLive : platformFileSystem;
 
   const webFetch =
     (appId: string): HttpFetch =>
@@ -347,11 +343,8 @@ export const composeServices = async (
 
   const { galley } = resolved;
   const version = galley.version();
-  const storageKind: Services["storage"] = fixture
-    ? "fixture"
-    : tauri === undefined
-      ? "opfs"
-      : "native";
+  const platformStorage: Services["storage"] = tauri === undefined ? "opfs" : "native";
+  const storageKind: Services["storage"] = fixture ? "fixture" : platformStorage;
   composition.observability.note(
     "shell.services",
     "ready",

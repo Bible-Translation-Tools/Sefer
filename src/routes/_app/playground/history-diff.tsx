@@ -15,12 +15,11 @@ interface HistoryDiffSearch {
   readonly remote?: string;
 }
 
-const stringOr = (value: unknown): string | undefined =>
-  typeof value === "number" && Number.isSafeInteger(value)
-    ? String(value)
-    : typeof value === "string" && value.trim() !== ""
-      ? value.trim()
-      : undefined;
+const stringOr = (value: unknown): string | undefined => {
+  if (typeof value === "number" && Number.isSafeInteger(value)) return String(value);
+  if (typeof value === "string" && value.trim() !== "") return value.trim();
+  return undefined;
+};
 
 export const Route = createFileRoute("/_app/playground/history-diff")({
   beforeLoad: () => {

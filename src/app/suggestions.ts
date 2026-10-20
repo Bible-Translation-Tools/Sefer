@@ -120,16 +120,16 @@ const copyNames = (shared: RemoteRepo): readonly string[] => {
   return [shared.name, owned, `${owned}-2`, `${owned}-3`];
 };
 
-const existingFork = (host: string, me: string, shared: RemoteRepo) =>
+const existingFork = (host: string, username: string, shared: RemoteRepo) =>
   Effect.gen(function* () {
     const gitea = yield* Gitea;
     const listed = yield* Effect.result(gitea.listForks(host, shared.owner, shared.name));
     if (listed._tag === "Success")
       return Option.fromUndefinedOr(
-        listed.success.find((fork) => fork.owner.toLowerCase() === me.toLowerCase()),
+        listed.success.find((fork) => fork.owner.toLowerCase() === username.toLowerCase()),
       );
     for (const name of copyNames(shared)) {
-      const found = yield* gitea.getRepo(host, me, name);
+      const found = yield* gitea.getRepo(host, username, name);
       if (
         Option.isSome(found) &&
         found.value.parent?.fullName.toLowerCase() === shared.fullName.toLowerCase()
@@ -139,12 +139,12 @@ const existingFork = (host: string, me: string, shared: RemoteRepo) =>
     return Option.none<RemoteRepo>();
   });
 
-const copyName = (host: string, me: string, shared: RemoteRepo) =>
+const copyName = (host: string, username: string, shared: RemoteRepo) =>
   Effect.gen(function* () {
     const gitea = yield* Gitea;
     const names = copyNames(shared);
     for (const name of names) {
-      const held = yield* gitea.getRepo(host, me, name);
+      const held = yield* gitea.getRepo(host, username, name);
       if (Option.isNone(held)) return name === shared.name ? undefined : name;
     }
     return yield* Effect.fail(
@@ -175,9 +175,11 @@ export const workInOwnCopy = (services: Services, project: Project): Promise<Cop
           yield* remote.fetch(repo);
           return { kind: "rerooted", shared: parent.fullName } satisfies CopyOutcome;
         }
-        const me = at.me ?? "";
-        const held = yield* existingFork(at.host, me, shared);
-        const renamed = Option.isSome(held) ? undefined : yield* copyName(at.host, me, shared);
+        const username = at.me ?? "";
+        const held = yield* existingFork(at.host, username, shared);
+        const renamed = Option.isSome(held)
+          ? undefined
+          : yield* copyName(at.host, username, shared);
         const copy = Option.isSome(held)
           ? held.value
           : yield* gitea.forkRepo(at.host, at.owner, at.name, renamed);
@@ -256,15 +258,11 @@ const standingOfCopy = (repo: Repo, branch: string) =>
     const copy = yield* tipOf(copyRef(branch));
     const head = yield* tipOf("HEAD");
     const shared = yield* tipOf(trackingRef(branch));
-    const standing: CopyStanding =
-      copy === undefined || (head !== undefined && (yield* within(repo, copy, head)))
-        ? "none"
-        : shared !== undefined && (yield* within(repo, copy, shared))
-          ? "shared"
-          : head !== undefined && (yield* within(repo, head, copy))
-            ? "behind"
-            : "own";
-    return standing;
+    if (copy === undefined || (head !== undefined && (yield* within(repo, copy, head))))
+      return "none";
+    if (shared !== undefined && (yield* within(repo, copy, shared))) return "shared";
+    if (head !== undefined && (yield* within(repo, head, copy))) return "behind";
+    return "own";
   });
 
 const readCopy = (repo: Repo, branch: string) =>
@@ -342,8 +340,10 @@ export const openSuggestions = (
         const at = yield* where(project);
         if (at === undefined) return [];
         const open = yield* (yield* Suggestions).open(at.host, at.owner, at.name);
-        const me = at.me?.toLowerCase();
-        return me === undefined ? open : open.filter((each) => each.author.toLowerCase() !== me);
+        const username = at.me?.toLowerCase();
+        return username === undefined
+          ? open
+          : open.filter((each) => each.author.toLowerCase() !== username);
       }),
       (): readonly Suggestion[] => [],
     ),
@@ -418,14 +418,17 @@ export const mySuggestions = (
       Effect.gen(function* () {
         const at = yield* where(project);
         if (at === undefined || at.me === undefined) return [];
-        const me = at.me;
+        const username = at.me;
         const service = yield* Suggestions;
-        const all = (yield* service.from(at.host, at.owner, at.name, me)).slice(0, MINE_SHOWN);
+        const all = (yield* service.from(at.host, at.owner, at.name, username)).slice(
+          0,
+          MINE_SHOWN,
+        );
         return yield* Effect.forEach(all, (suggestion) =>
           Effect.gen(function* () {
             if (suggestion.state === "open") return { kind: "waiting", suggestion } as const;
             const said = yield* Effect.orElseSucceed(
-              service.noteOn(at.host, at.owner, at.name, suggestion.number, me),
+              service.noteOn(at.host, at.owner, at.name, suggestion.number, username),
               () => undefined,
             );
             const taken = suggestion.state === "merged" || said?.includes(BROUGHT_IN) === true;

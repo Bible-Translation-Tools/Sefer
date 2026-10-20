@@ -511,7 +511,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
       for (const book of ready.books) yield book.source().text;
     });
     gesture.note("project.legacy_markers", "ready", undefined, {
-      "project.legacy_markers": legacy.markers.map((m) => m.name).join(",") || "none",
+      "project.legacy_markers": legacy.markers.map((marker) => marker.name).join(",") || "none",
       "project.legacy_refused": legacy.refused.length,
       "project.legacy_scan_ms": Math.round((performance.now() - started) * 1000) / 1000,
     });
