@@ -1,16 +1,3 @@
-/**
- * The history index, built off the main thread.
- *
- * Building en_ulb's index is a few seconds of inflating and parsing, and a
- * page that does it cannot scroll. A dedicated worker has the same origin and
- * so the same OPFS: it opens the filesystem itself, reads the repository
- * through the pack view, and posts the index back.
- *
- * It takes NO lock. The page asks for it from inside the repository's shared
- * lane and holds that lane until the answer arrives, so no writer runs while
- * it reads; a lock of its own would queue behind a writer that is itself
- * waiting on the page.
- */
 import { Effect, FileSystem } from "effect";
 
 import { nodeFsView } from "#core/fileSystem/nodeView";

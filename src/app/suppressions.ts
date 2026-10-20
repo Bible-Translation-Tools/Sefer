@@ -1,16 +1,3 @@
-/**
- * The open project's proofreading suppressions: read when the project opens,
- * applied to `ProjectAnalysis`, written on every change, and pruned of
- * entries whose text is gone.
- *
- *   Fine here       suppress(finding, "here")         this text at this place
- *   Always allow    suppress(finding, "everywhere")   this exact claim, anywhere
- *   take one back   unsuppress(id)
- *
- * The file and its keys are core's (`#core/findings/suppressions`); this is
- * only the open project's copy and the doors to change it.
- */
-
 import { Effect } from "effect";
 
 import type { Finding } from "#core/findings/finding";
@@ -32,16 +19,11 @@ import type { Services } from "./services";
 import type { ShellEvent } from "./shellEvent";
 
 export interface SuppressionStore {
-  /** Reads the project's file and applies it. Before `attach`, so the first publication is already filtered. */
   load(root: string): Promise<void>;
-  /** Drops entries whose text is gone, once the project's books are analysed. */
   prune(): Promise<void>;
-  /** False when nothing was saved: the file could not be read, so it is left alone. */
   suppress(finding: Finding, rung: Rung): Promise<boolean>;
   unsuppress(id: string): Promise<boolean>;
-  /** Which rung hides this finding, if any: "Bring back" says what it will undo. */
   rungOf(finding: Finding): Rung | undefined;
-  /** Back to none, when the project closes. */
   clear(): void;
 }
 
@@ -52,7 +34,6 @@ export const makeSuppressionStore = (options: {
   const { services, changed } = options;
   let root: string | undefined;
   let held: Suppressions = NO_SUPPRESSIONS;
-  // A file this build could not read is left alone: saving over it would erase it.
   let writable = true;
 
   const apply = (next: Suppressions): void => {
@@ -60,8 +41,6 @@ export const makeSuppressionStore = (options: {
     services.projectAnalysis.setSuppressions(next);
   };
 
-  // One write at a time, in order: every write to the file shares one
-  // temporary name, so two at once could leave the older one on disk.
   let writing: Promise<void> = Promise.resolve();
   const save = async (next: Suppressions): Promise<boolean> => {
     if (root === undefined || !writable) return false;

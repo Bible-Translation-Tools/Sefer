@@ -1,36 +1,3 @@
-/**
- * The Catalogue: the list of projects that exist SOMEWHERE ELSE and could be
- * brought here — for each, a language and the git URL of its repository.
- *
- * It is a port in `src/app` rather than a module in `src/core` because it is
- * not policy — it is two requests against a service Sefer does not own, and
- * core may not name `fetch`. Nothing in `src/core` asks a question this answers.
- *
- * The live source is the Language API's GraphQL endpoint
- * (`VITE_SEFER_CATALOGUE_URL`; see `src/app/env.ts`), prod and dev alike. A
- * build with no URL configured falls back to `SAMPLE_CATALOGUE` so the screen
- * is real in development instead of empty — `catalogueFor` is the one place
- * that decides which, and it says which one it gave you in `source`. The one
- * exception is the Translation Notes list (`listTranslationNotes`), which
- * always reads the production API: see `TRANSLATION_NOTES_API`.
- *
- * A row's git URL names its own server, and that need not be this build's
- * content host: the dev catalogue lists repositories on the production host as
- * well as the dev one. How a browser reaches either is the transport's
- * business (`src/core/remote/transport.ts`), not this file's.
- *
- * ## Two requests, one API
- *
- * The designer's mockup asks for four columns: Code, Language, Region, Date.
- * `vw_consolidated_repos` carries the first two and the repository. The same
- * API holds the rest — `vw_langnames` (region, alternate names, gateway) and
- * `content.modified_on` (the date) — so a second query asks for exactly the
- * codes and content ids the first returned. It is a second REQUEST because
- * GraphQL cannot feed one root field's answer into another's filter; it is not
- * a second service. If it fails the table still draws, without regions,
- * alternates or dates, and the browse records that it was not enriched.
- */
-
 import { Result, Schema } from "effect";
 
 import type { SettingsService } from "#core/host/settings";
@@ -41,40 +8,20 @@ import { catalogueUrlFor } from "./endpoints";
 
 export type ProjectType = "translation" | "gateway";
 
-/** One row of the Find Project table. */
 export interface CatalogueEntry {
-  /** Stable key: `<owner>/<repo>`. */
   readonly id: string;
-  /** BCP-47 tag, the "Code" column. */
   readonly code: string;
-  /** The language's name in the language itself. */
   readonly naturalName: string;
-  /** The language's name in English. */
   readonly anglicizedName: string;
-  /** Every other name the language is known by; searched, never drawn. */
   readonly alternateNames: readonly string[];
-  /** The language's world region, from `vw_langnames`. */
   readonly region: string | undefined;
-  /** ISO-8601 date the catalogue last saw the content change. */
   readonly updated: string | undefined;
   readonly type: ProjectType;
   readonly owner: string;
   readonly repo: string;
-  /**
-   * Where the repository lives: its git URL, on its own server. What
-   * `Download` clones. Empty when the row names no repository.
-   */
   readonly gitUrl: string;
 }
 
-/**
- * `http` — the Language API answered, but not with a 2xx.
- * `payload` — it answered 200 with something the decoder does not understand.
- *
- * Deliberately not called `reason` or `status`: `describe` renders those two
- * fields in place of the message, and the sentence on screen must not change
- * because telemetry learned to tell the failures apart.
- */
 type CatalogueFailure = "http" | "payload";
 
 class CatalogueError extends Error {
@@ -88,19 +35,11 @@ class CatalogueError extends Error {
   }
 }
 
-/**
- * How a failed browse is recorded. The Language API is an outside boundary:
- * a server that answered badly, or did not answer at all (`fetch` rejects
- * with a `TypeError` when offline or refused by CORS), is `unavailable`. A
- * payload the decoder cannot read, or anything else, stays `failed` — that is
- * a contract broken, and worth the alarm.
- */
 export const catalogueVerdict = (cause: unknown): Verdict => {
   if (cause instanceof CatalogueError) return cause.failure === "http" ? "unavailable" : "failed";
   return cause instanceof TypeError ? "unavailable" : "failed";
 };
 
-/** The fields a failed browse carries: which failure, and the HTTP status when there was one. */
 export const catalogueFailureAttrs = (cause: unknown): Attrs => {
   if (!(cause instanceof CatalogueError))
     return { "catalogue.failure": cause instanceof TypeError ? "network" : "unknown" };
@@ -110,75 +49,38 @@ export const catalogueFailureAttrs = (cause: unknown): Attrs => {
   };
 };
 
-/** One read of the catalogue. `enriched` is false when the second query failed. */
 export interface CatalogueRead {
   readonly rows: readonly CatalogueEntry[];
   readonly enriched: boolean;
 }
 
 export interface CatalogueService {
-  /** Which rows these are, so a screen can say "sample data" rather than lie. */
   readonly source: "live" | "sample";
-  /** The endpoint, for the screen's provenance line. */
   readonly origin: string;
   readonly entries: () => Promise<CatalogueRead>;
-  /**
-   * One language's single-book repositories — Writer projects — as book
-   * candidates, one per whole-book USFM rendering. The consolidated
-   * repository is left out: it is what a migration makes.
-   */
   readonly writerBooks: (language: string) => Promise<readonly BookCandidate[]>;
-  /**
-   * The languages with Writer projects whose code or name contains `search`,
-   * one row each. The search runs on the server: every language at once is
-   * thousands of rows, so the screen asks only once two letters are typed.
-   */
   readonly writerLanguages: (search: string) => Promise<readonly WriterLanguage[]>;
 }
 
-/**
- * Translation Notes Sefer can download, one row per language, as the Language
- * API lists them (`listTranslationNotes`). Only TN, by product ruling
- * (2026-10-15): no other help kind is offered until it is asked for.
- */
 export interface HelpText {
-  /** What it is, raw and translated where drawn: "Translation Notes". */
   readonly title: string;
-  /** Its language's tag. */
   readonly language: string;
-  /** The language's name in English; its own name when the API gives no English one. */
   readonly languageName: string;
-  /** The language's name in itself ("" when the API gives none). */
   readonly nationalName: string;
-  /** Which way `nationalName` is written. */
   readonly direction: "ltr" | "rtl";
-  /** Where it is on its host, `Owner/repo`: the key a download is known by. */
   readonly repository: string;
-  /**
-   * Its git URL, on its own server: what Download clones. The row names its
-   * host, as a share link does, so the configured cloud says nothing about
-   * where WA publishes its helps.
-   */
   readonly url: string;
 }
 
-/** One language with single-book Writer projects on WACS. */
 export interface WriterLanguage {
   readonly code: string;
   readonly naturalName: string;
   readonly anglicizedName: string;
   readonly region: string | undefined;
-  /** How many Writer projects (one book each, almost always). */
   readonly projects: number;
-  /** The newest change across them. */
   readonly updated: string | undefined;
 }
 
-/**
- * The live responses, decoded rather than asserted. Unknown keys are dropped,
- * and a nullable field is a fact about the payload, not a failure: one row
- * without a title must not lose the other six hundred.
- */
 const ConsolidatedRepo = Schema.Struct({
   content_id: Schema.NullOr(Schema.String),
   language_ietf: Schema.String,
@@ -206,7 +108,6 @@ const Facts = Schema.Struct({
   data: Schema.Struct({ vw_langnames: Schema.Array(LangName), content: Schema.Array(Content) }),
 });
 
-/** One `content` row of a language's single-book repositories. */
 const WriterContent = Schema.Struct({
   modified_on: Schema.NullOr(Schema.String),
   resource_type: Schema.NullOr(Schema.String),
@@ -246,7 +147,6 @@ const WRITER_BOOKS_QUERY = `query ($lang: String!) {
   }
 }`;
 
-/** What a Writer project is, as a `content` filter: one whole-book USFM, not consolidated. */
 const WRITER_CONTENT = `{
   git_repo: { _not: { topics: { topic: { name: { _eq: "consolidated" } } } } }
   rendered_contents: {
@@ -255,11 +155,6 @@ const WRITER_CONTENT = `{
   }
 }`;
 
-/**
- * Counted on the server (`contents_aggregate`): the rows themselves are 37,000
- * for a one-letter search, and only the count and the newest date are drawn.
- * Alternate names are searched too, as the WACS table does.
- */
 const WRITER_LANGUAGES_QUERY = `query ($s: String!) {
   language(where: { _and: [
     { _or: [
@@ -309,11 +204,6 @@ const Regions = Schema.Struct({
 
 const decodeRegions = Schema.decodeUnknownResult(Regions);
 
-/**
- * Translation Notes published under `WA-Catalog`, the catalogue owner: one
- * repository per language. `resource_type` is reliable for `tn` (probed
- * 2026-10-15: 34 rows on the production API, 33 on dev, every one `*_tn`).
- */
 const TRANSLATION_NOTES_QUERY = `{
   content(where: {
     resource_type: { _eq: "tn" }
@@ -352,10 +242,6 @@ const decodeTranslationNotes = Schema.decodeUnknownResult(TranslationNotes);
 
 const STATUSES: readonly CandidateStatus[] = ["Primary", "Active", "Inactive"];
 
-/**
- * `resource_type` is noisy (empty for some `reg` repositories), so the
- * repository's own name decides when it ends `_text_<resource>`.
- */
 const resourceOf = (repo: string, declared: string | null): string =>
   /_text_([a-z0-9-]+)$/i.exec(repo)?.[1]?.toLowerCase() ??
   (declared === null || declared.trim() === "" ? "reg" : declared.trim().toLowerCase());
@@ -374,7 +260,6 @@ const FACTS_QUERY = `query ($codes: [String!], $ids: [String!]) {
   content(where: { id: { _in: $ids } }) { id modified_on }
 }`;
 
-/** One GraphQL POST. A non-2xx is `http`; GraphQL's own `errors` are `payload`. */
 const graphql = async (
   origin: string,
   query: string,
@@ -390,7 +275,6 @@ const graphql = async (
   return response.json();
 };
 
-/** The fallback owner→type mapping, used when langnames did not answer. */
 const typeOf = (owner: string): ProjectType =>
   owner.toLowerCase() === "wa-catalog" ? "gateway" : "translation";
 
@@ -421,11 +305,6 @@ const toEntry = (
   gitUrl: repo.repo_url,
 });
 
-/**
- * The Language API implementation: the repositories, then the facts about
- * exactly those. No auth, no paging — the whole view arrives at once, which is
- * why the table sorts and filters in memory.
- */
 const languageApiCatalogue = (origin: string): CatalogueService => ({
   source: "live",
   origin,
@@ -472,8 +351,6 @@ const languageApiCatalogue = (origin: string): CatalogueService => ({
         "payload",
       );
     const languages = decoded.success.data.language;
-    // Regions are a second request, as for the WACS table; without them the
-    // rows still draw.
     const regions = await graphql(origin, REGIONS_QUERY, {
       codes: languages.map((language) => language.ietf_code),
     })
@@ -529,11 +406,6 @@ const languageApiCatalogue = (origin: string): CatalogueService => ({
   },
 });
 
-/**
- * Twelve rows that carry every column the mockup draws, so the screen can be
- * built and looked at without a network. They are SAMPLE data and the table
- * says so; nothing here is downloadable, because none of these URLs is real.
- */
 const SAMPLE_CATALOGUE: readonly CatalogueEntry[] = [
   ["en", "English", "English", "Americas", "2026-08-30", "wa-catalog", "en_ulb"],
   [
@@ -573,8 +445,6 @@ const SAMPLE_CATALOGUE: readonly CatalogueEntry[] = [
   type: typeOf(owner),
   owner,
   repo,
-  // Deliberately empty: a sample row must not offer a download that would
-  // clone a repository that does not exist.
   gitUrl: "",
   alternateNames: [],
 }));
@@ -583,21 +453,12 @@ const sampleCatalogue = (): CatalogueService => ({
   source: "sample",
   origin: "sample data",
   entries: () => Promise.resolve({ rows: SAMPLE_CATALOGUE, enriched: true }),
-  // Sample rows clone nothing, so they offer no books either.
   writerBooks: () => Promise.resolve([]),
   writerLanguages: () => Promise.resolve([]),
 });
 
-/**
- * Where the Translation Notes list is read, on EVERY channel: the production
- * Language API, named here rather than taken from the configured catalogue.
- * The one hard-wired host in this file, by Will's ruling (2026-10-15): the
- * dev API lists no English notes, and English is what a reader and the
- * tutorial reach for. Every other query stays on `catalogueUrlFor`.
- */
 const TRANSLATION_NOTES_API = "https://api.bibleineverylanguage.org/v1/graphql";
 
-/** The Translation Notes there are to download, one per language, A–Z by English name. */
 export const listTranslationNotes = async (): Promise<readonly HelpText[]> => {
   const decoded = decodeTranslationNotes(
     await graphql(TRANSLATION_NOTES_API, TRANSLATION_NOTES_QUERY),
@@ -628,22 +489,11 @@ export const listTranslationNotes = async (): Promise<readonly HelpText[]> => {
   );
 };
 
-/**
- * The flag: a build that was given a catalogue URL browses the real
- * catalogue, and a build that was not shows the sample so the screen is still
- * a screen. There is no third state — an unreachable API surfaces as the
- * table's own error line, not as a silent swap to samples.
- */
 export const catalogueFor = (settings: SettingsService): CatalogueService => {
   const url = catalogueUrlFor(settings);
   return url === null ? sampleCatalogue() : languageApiCatalogue(url);
 };
 
-/**
- * One text per gateway language, A–Z by English name: what the reference
- * column offers to download. WA publishes them under `wa-catalog`; where it
- * has several in one language, the ULB is the one a translator reads from.
- */
 export const gatewayTexts = (rows: readonly CatalogueEntry[]): readonly CatalogueEntry[] => {
   const ulb = (entry: CatalogueEntry): boolean => /_ulb$/iu.test(entry.repo);
   const best = new Map<string, CatalogueEntry>();

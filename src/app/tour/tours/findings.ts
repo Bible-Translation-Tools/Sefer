@@ -19,14 +19,6 @@ const toFindings = (context: TourContext): void => {
   });
 };
 
-/**
- * Working through findings: where they are counted, the screen that lists
- * them, narrowing it, reading a card, and stepping through them from the
- * editor. Six stops, all in the open project.
- *
- * Strings are raw and translated where they are drawn (`t(step.title)`), as
- * Settings' group titles are.
- */
 export const findingsTour: Tour = {
   id: "findings",
   kind: "tutorial",
@@ -78,8 +70,6 @@ export const findingsTour: Tour = {
     },
     {
       go: (context) => context.run("findings.next"),
-      // The bell rather than a mark in the text: not every finding draws one
-      // (an info-level finding has no underline), and the bell is always there.
       ready: () =>
         onBookScreen() && document.querySelector("[data-testid=toolbar-findings]") !== null,
       spotlight: {

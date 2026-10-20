@@ -30,9 +30,6 @@ const listFixture: Effect.Effect<readonly DevFixtureFile[], never, FileSystem.Fi
     return files;
   }).pipe(Effect.orDie);
 
-// No second composition: the root's already-built services come back through
-// `composition.layer`, and only the seeded FileSystem is new. Each call builds
-// a fresh instance of the memory Layer, which is what `reset` reseeds.
 const seed = async (composition: Composition): Promise<DevFixtureState> => {
   const files = await Effect.runPromise(
     Effect.provide(listFixture, Layer.merge(composition.layer, FixtureFileSystemLive)),

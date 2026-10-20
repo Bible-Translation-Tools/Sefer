@@ -1,12 +1,3 @@
-/**
- * Six lines of DOM convenience, so the panel reads as markup rather than as
- * two hundred `createElement` calls.
- *
- * No framework, by rule — `pnpm boundaries` fails this folder for importing
- * one. The panel is small enough that a render-everything-on-change approach
- * is correct, and correct is worth more here than clever.
- */
-
 type Attributes = Readonly<Record<string, string | boolean | undefined>>;
 
 export const el = <K extends keyof HTMLElementTagNameMap>(

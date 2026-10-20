@@ -47,26 +47,18 @@ import { toasts } from "./ui/primitives";
 
 export type ArrivalKind = "project" | "sourceText";
 
-/**
- * Bumped whenever the Library gains a copy, so a picker open at the time
- * re-reads. The Library's own state is not a signal, and this is its one
- * announcement, the way `projectIndexRevision` is the projects list's.
- */
 const [revision, setRevision] = createSignal(0, { name: "libraryRevision" });
 export const libraryRevision = revision;
 const libraryChanged = (): void => {
   setRevision((held) => held + 1);
 };
-/** For a screen that changed the Library itself (removed a copy), so the pickers re-read. */
 export const noteLibraryChanged = libraryChanged;
 
-/** `https://host/Owner/repo.git` → `owner`, `repo`, as the folder they clone into. */
 const ownerAndRepo = (url: string): { readonly owner: string; readonly repo: string } => {
   const parts = normaliseRepoUrl(url).split("/");
   return { repo: parts.at(-1) ?? "repo", owner: parts.at(-2) ?? "unknown" };
 };
 
-/** Where an arrival of this kind lands. */
 export const arrivalRoot = (services: Services, kind: ArrivalKind, url: string): string => {
   const { owner, repo } = ownerAndRepo(url);
   return kind === "project"
@@ -74,10 +66,6 @@ export const arrivalRoot = (services: Services, kind: ArrivalKind, url: string):
     : `${services.libraryRoot}/${owner}/${repo}`;
 };
 
-/**
- * Clones `url` as `kind`, and tells the list that shows it. A source text is
- * the newest version only: it is read beside a translation, never worked in.
- */
 export const cloneArrival = (
   services: Services,
   kind: ArrivalKind,
@@ -85,12 +73,6 @@ export const cloneArrival = (
   options?: {
     readonly catalogueId?: string;
     readonly clone?: CloneOptions;
-    /**
-     * A project into the first free folder (`root`, `root-2`, …) rather than
-     * the repository's name: a share link's download, where a failed try left
-     * a partial folder that cannot be cloned into, or another owner's
-     * repository of the same name already sits there. Nothing is cleared.
-     */
     readonly freeFolder?: true;
   },
 ): Effect.Effect<
@@ -108,9 +90,6 @@ export const cloneArrival = (
       options?.catalogueId,
       kind === "sourceText" ? { history: "latest" } : options?.clone,
     );
-    // A failed clone can leave a partial folder, and git will not clone into
-    // it again. In the Library's own folder that is ours to clear; a project
-    // folder is the person's disk, and stays as it is (`clone.ts`).
     const cloned = yield* kind === "project"
       ? clone
       : Effect.tapError(clone, () =>
@@ -131,11 +110,6 @@ export const cloneArrival = (
     return { root: into, progress: cloned.progress, resource };
   });
 
-/**
- * The Library's copy of a source text: the one already on this device when
- * there is one, else a fresh clone into the Library's folder. Once per device,
- * whoever asks — the projects page, a project's arrival, the reference column.
- */
 export const sourceTextCopy = (
   services: Services,
   url: string,
@@ -155,20 +129,15 @@ export const sourceTextCopy = (
     return yield* Effect.fail(new Error(`${url} arrived without a Library entry`));
   });
 
-/** How far a reference copy has got, for a progress readout. */
 export type CopyProgress =
-  /** The transfer, as git reports it: its own step ("Receiving objects"), `loaded` of `total`. */
   | {
       readonly phase: "downloading";
       readonly step: string;
       readonly loaded: number;
       readonly total?: number;
-      /** `bytes` while the pack itself arrives; otherwise git's object counts. */
       readonly unit?: "objects" | "bytes";
     }
-  /** Unpacking what arrived and reading its manifest. */
   | { readonly phase: "reading" }
-  /** Writing the kind's packs: book `done` of `of`. */
   | {
       readonly phase: "packing";
       readonly done: number;
@@ -176,7 +145,6 @@ export type CopyProgress =
       readonly book: string;
     };
 
-/** Every transfer progress event of the Remote in scope, as `downloading`, until interrupted. */
 const reportDownload = (
   onProgress: ((progress: CopyProgress) => void) | undefined,
 ): Effect.Effect<void, never, Remote | Scope.Scope> =>
@@ -238,10 +206,6 @@ export const referenceCopy = (
       );
       if (arrived.resource === undefined)
         return yield* Effect.fail(new Error(`${url} arrived without a Library entry`));
-      // The tree stays as cloned, and the kind readies it now, with the same
-      // "Packing" progress the Web shows, rather than on its first read. Its
-      // packs are a convenience a read rebuilds, so a failure here is no
-      // reason to fail the download.
       const index = indexFor(arrived.resource.content);
       if (index !== undefined) {
         const indexing = (yield* Observability).span("reference.index");
@@ -265,8 +229,6 @@ export const referenceCopy = (
           const git = yield* Git;
           const cloning = observability.span("reference.clone");
           yield* reportDownload(onProgress);
-          // Newest version only: a read-only copy never needs its history,
-          // and `history` said is what keeps a backfill from starting behind.
           const { repo: cloned } = yield* cloneRepository(url, staged, undefined, {
             history: "latest",
           });
@@ -302,7 +264,6 @@ export const referenceCopy = (
     return resource;
   });
 
-/** What a progress toast says for a copy's progress. */
 export const describeCopy = (progress: CopyProgress): string => {
   switch (progress.phase) {
     case "downloading":
@@ -327,30 +288,19 @@ export const describeCopy = (progress: CopyProgress): string => {
   }
 };
 
-/** One declared source text, after the pull: held already, pulled now, or not. */
 interface SourceTextRow {
   readonly ref: RelatedResource;
   readonly title: string;
   readonly outcome: "held" | "pulled" | "failed";
-  /** The version note, or why it failed. */
   readonly note?: string;
 }
 
-/**
- * Pulls what a project's metadata declares as its source texts. Never fails:
- * a source text that cannot be had fails its own row, and the project is
- * unaffected (it opens either way). With no content host configured there is
- * nowhere to look, and nothing is attempted.
- */
 const pullSourceTexts = (
   services: Services,
   projectRoot: string,
   fromHost?: string,
 ): Effect.Effect<readonly SourceTextRow[], never, Domain> =>
   Effect.gen(function* () {
-    // The cloud the project came from, when the caller knows it: a project
-    // from another host (a share link with `host=`) declares texts that live
-    // THERE, and the configured host may not hold them at all.
     const host = fromHost ?? contentHostFor(services.settings);
     const read = yield* readProjectMetadata(services.fileSystem, projectRoot);
     const refs = Option.match(read.metadata, {
@@ -371,10 +321,6 @@ const pullSourceTexts = (
       }
       const pulled = yield* Effect.result(cloneArrival(services, "sourceText", url));
       if (pulled._tag === "Failure") {
-        // Gitea answers an anonymous read of a repository that is missing,
-        // or private, with 401, which git words as an authentication
-        // failure. For a source text that only ever means it is not there
-        // for this device to read: said so, not as a sign-in problem.
         rows.push({
           ref,
           title: `${ref.language}_${ref.resource}`,
@@ -394,7 +340,6 @@ const pullSourceTexts = (
       });
       operation?.note("sources.resolve", "passed", undefined, { "sources.how": "clone" });
     }
-    // The version notes, now every copy that could be had is here.
     const resources = yield* library.resources();
     const versionOf = (url: string): string | undefined =>
       resources.find((resource) => resource.upstream?.url === url)?.version;
@@ -410,11 +355,6 @@ const pullSourceTexts = (
     });
   });
 
-/**
- * `pullSourceTexts`, said where the person will read it: one toast for the
- * whole arrival, quiet when nothing was declared or everything was held with
- * the listed version.
- */
 export const announceSourceTexts = async (
   services: Services,
   projectRoot: string,
@@ -439,7 +379,6 @@ export const announceSourceTexts = async (
   });
 };
 
-/** `root`, or `root-2`, `root-3`… whichever does not exist yet. */
 const freeRoot = (services: Services, root: string): Effect.Effect<string, never, Domain> =>
   Effect.gen(function* () {
     for (let attempt = 1; ; attempt += 1) {
@@ -465,7 +404,6 @@ export const adoptAsProject = (
       `${services.projectsRoot}/${lastSegment(resource.root)}`,
     );
     const fileSystem = services.fileSystem;
-    // A directory move where the host has one; OPFS without `move` copies.
     yield* Effect.catch(fileSystem.rename(resource.root, into), () =>
       Effect.andThen(fileSystem.copy(resource.root, into), () =>
         fileSystem.remove(resource.root, { recursive: true }),

@@ -1,34 +1,3 @@
-/**
- * The two ways to work with other people, and suggested changes.
- *
- * A project is worked on in ONE of two modes, chosen per project on this
- * device (`CollabMode`, `syncSettings.ts`): in the shared project itself, or
- * in the person's own copy of it (a Gitea fork, attached as the remote
- * `copy`), offering their changes as a suggestion when ready. Never a remote
- * per press. Someone who can write to the shared project starts in the first
- * and may choose the second; someone who cannot is sent to the second by the
- * first refused send. Whoever can write to the shared project brings
- * suggestions in, or declines them.
- *
- * One topology among several, kept in one place so it can go: a team whose
- * members all write to the shared project never needs any of this. It joins
- * the rest of Sefer at a handful of seams:
- *
- * - composition registers `Suggestions` (`services.ts`);
- * - a send asks `sendingTo` where to go, and the check reads the copy with
- *   `fetchCopy` (`syncActions.ts`);
- * - `collaboration.ts` holds what the surfaces show about it;
- * - the cloud popover (`CollabSection`), Settings' `CollabModeCard`, and the
- *   Suggestions tab (`SuggestionsScreen`: `YourSuggestions` for an author,
- *   `SuggestionsCard` for an editor);
- * - Review reads a suggestion like the shared project, from the ref
- *   `suggestionRef` names, and accepts or declines it (`ReviewPanel.tsx`,
- *   `SuggestionLine.tsx`).
- *
- * Take those out and this file, the components above and
- * `core/remote/suggestions.ts` are dead code the gate finds; everything else
- * sends to `origin` as it did.
- */
 import { Effect, Option } from "effect";
 
 import { Git, type Commit, type Repo } from "#core/git/git";
@@ -44,22 +13,12 @@ import { t } from "./i18n";
 import type { Services } from "./services";
 import { chosenMode, setChosenMode, type CollabMode } from "./syncSettings";
 
-/** The remote a translator's own copy is attached as. */
 const COPY = "copy";
 
-/**
- * The local ref that holds the person's copy: its remote-tracking ref, which
- * a send to the copy moves by itself and a read of the copy (`fetchCopy`)
- * writes. One ref for both, so what was sent and what was read cannot
- * disagree. It is outside `refs/remotes/origin/`, the only place the Web's
- * pruning fetch clears.
- */
 export const copyRef = (branch: string): string => trackingRef(branch, COPY);
 
-/** The local ref a suggestion's head is fetched to, for Review to read. */
 export const suggestionRef = (number: number): string => `refs/sefer/pull/${number}`;
 
-/** `owner/name` of a repository URL on the content host. */
 const ownerAndName = (
   url: string,
 ): { readonly owner: string; readonly name: string } | undefined => {
@@ -82,7 +41,6 @@ interface Where {
   readonly me: string | undefined;
 }
 
-/** The shared project this one receives from, and who is signed in. */
 const where = (project: Project) =>
   Effect.gen(function* () {
     const git = yield* Git;
@@ -104,16 +62,6 @@ const where = (project: Project) =>
     } satisfies Where;
   });
 
-/** Is a copy attached to this project? */
-/**
- * Is a copy attached to this project that belongs to whoever is signed in?
- *
- * The copy remote is kept on this device, not with an account: one account's
- * copy, left attached when another signs in, is not the second person's, and
- * sending there would put their work in someone else's copy (or succeed, for
- * an admin). So a copy counts only when its owner is the signed-in account;
- * otherwise the person makes or finds their own, which re-points the remote.
- */
 const copyAttached = (project: Project) =>
   Effect.gen(function* () {
     const git = yield* Git;
@@ -126,11 +74,6 @@ const copyAttached = (project: Project) =>
     return Option.isSome(session) && session.value.username.toLowerCase() === owner.toLowerCase();
   });
 
-/**
- * The project's mode: what was chosen on this device, else what the
- * repository says — a project with a copy attached was working in it before
- * the mode had a name.
- */
 export const modeOf = (services: Services, project: Project): Promise<CollabMode> => {
   const chosen = chosenMode(services.settings, project.root);
   if (chosen !== undefined) return Promise.resolve(chosen);
@@ -142,23 +85,12 @@ export const modeOf = (services: Services, project: Project): Promise<CollabMode
   );
 };
 
-/**
- * Where a send goes: the person's copy in the copy mode, the shared project
- * otherwise. A copy mode with no copy of the signed-in account's attached
- * (none yet, or another account's) sends nowhere new — it falls back to the
- * shared project, whose refusal says what to do.
- */
 export const sendingTo = async (services: Services, project: Project): Promise<string> => {
   if ((await modeOf(services, project)) !== "copy") return "origin";
   const attached = await services.run(Effect.orElseSucceed(copyAttached(project), () => false));
   return attached ? COPY : "origin";
 };
 
-/**
- * Can the signed-in account write to the shared project this one receives
- * from? `undefined` when there is none, or it could not be asked — which is
- * not the same as no.
- */
 export const canWriteShared = (
   services: Services,
   project: Project,
@@ -174,47 +106,20 @@ export const canWriteShared = (
     ),
   );
 
-/** What choosing the copy mode came to. */
 export type CopyOutcome =
-  /** The copy is attached (made now, or found already made) and has this device's work. */
   | {
       readonly kind: "copy";
       readonly copy: string;
-      /** Made under another name, because the person already held the upstream one. */
       readonly renamed?: true;
     }
-  /**
-   * The project was cloned from the person's own copy: it is now the copy,
-   * and the project it was copied from is the shared one.
-   */
   | { readonly kind: "rerooted"; readonly shared: string }
-  /**
-   * The shared project belongs to this account and copies nothing: there is
-   * nothing to suggest to until the person names the project that is.
-   */
   | { readonly kind: "standalone" };
 
-/**
- * The names a copy of `shared` may have: the upstream one, then the upstream
- * name and its owner (`en_ulb-raphael`) for someone who already held the
- * first, numbered on after that.
- */
 const copyNames = (shared: RemoteRepo): readonly string[] => {
   const owned = `${shared.name}-${shared.owner.toLowerCase()}`;
   return [shared.name, owned, `${owned}-2`, `${owned}-3`];
 };
 
-/**
- * The signed-in account's fork of `shared`, when one exists already.
- *
- * Asked of `shared`'s own list of forks, whatever the copy is called. Looking
- * up `<me>/<same name>` alone found the wrong repository for someone who
- * already owned one of that name from another project (Raphael/en_ulb, with
- * Will_Kelly/en_ulb a fork of WA-Catalog/en_ulb), and forking then failed on
- * the name. When the list cannot be read — the WACS proxy forwards only POST
- * on `forks` today — each name a copy is given (`copyNames`) is looked up
- * instead, and counts only when its parent is `shared`.
- */
 const existingFork = (host: string, me: string, shared: RemoteRepo) =>
   Effect.gen(function* () {
     const gitea = yield* Gitea;
@@ -234,13 +139,6 @@ const existingFork = (host: string, me: string, shared: RemoteRepo) =>
     return Option.none<RemoteRepo>();
   });
 
-/**
- * The name a new copy of `shared` takes: `undefined` for the upstream one,
- * or the first of `copyNames` the person does not already hold. A repository
- * that holds the name but is not a copy of `shared` (a sibling fork) is never
- * attached: it holds other work, and a suggestion from it would offer that
- * too.
- */
 const copyName = (host: string, me: string, shared: RemoteRepo) =>
   Effect.gen(function* () {
     const gitea = yield* Gitea;
@@ -254,14 +152,6 @@ const copyName = (host: string, me: string, shared: RemoteRepo) =>
     );
   });
 
-/**
- * Work in the person's own copy from now on.
- *
- * Never forks twice: a copy made on another device is found and attached
- * (Gitea refuses a second fork of the same project). A project cloned from
- * the person's own fork is re-rooted instead — its parent becomes the shared
- * project. Sets the mode; sending is the next send's.
- */
 export const workInOwnCopy = (services: Services, project: Project): Promise<CopyOutcome> =>
   services.run(
     Effect.gen(function* () {
@@ -280,7 +170,6 @@ export const workInOwnCopy = (services: Services, project: Project): Promise<Cop
         if (shared.owner.toLowerCase() === at.me?.toLowerCase()) {
           const parent: ForkParent | undefined = shared.parent;
           if (parent === undefined) return { kind: "standalone" } satisfies CopyOutcome;
-          // Cloned from their own copy: that is the copy, its parent is shared.
           yield* remote.attachAs(repo, COPY, shared.cloneUrl);
           yield* remote.attach(repo, parent.cloneUrl);
           yield* remote.fetch(repo);
@@ -292,9 +181,6 @@ export const workInOwnCopy = (services: Services, project: Project): Promise<Cop
         const copy = Option.isSome(held)
           ? held.value
           : yield* gitea.forkRepo(at.host, at.owner, at.name, renamed);
-        // Attached, not sent: a fresh copy already holds the shared project's
-        // history, and this device's own work goes at the next send — after
-        // receiving, when this device is behind (a send now would be refused).
         yield* remote.attachAs(repo, COPY, copy.cloneUrl);
         return {
           kind: "copy",
@@ -311,21 +197,9 @@ export const workInOwnCopy = (services: Services, project: Project): Promise<Cop
     }),
   );
 
-/**
- * Work in the shared project again, for someone who can write to it: the
- * next send goes there. The copy stays attached, for coming back to.
- */
 export const workInShared = (services: Services, project: Project): Promise<void> =>
   services.run(Effect.asVoid(setChosenMode(services.settings, project.root, "shared")));
 
-/**
- * For a shared project that is the person's own and copies nothing: name the
- * project it should suggest to. That one becomes the shared project and the
- * person's becomes their copy — but only when the two share history; when
- * they do not, everything is put back as it was and the answer says so,
- * because suggesting one unrelated project to another would offer the whole
- * of it.
- */
 export const suggestTo = (
   services: Services,
   project: Project,
@@ -361,36 +235,13 @@ export const suggestTo = (
     }),
   );
 
-/**
- * A new suggestion's title: the day it was offered, in the reader's own date
- * format. Not a summary — nobody is asked to write one yet — but enough that
- * a list of them is not a column of identical "Suggested changes".
- */
 const suggestionTitle = (now = new Date()): string =>
   t("Changes suggested on {date}", {
     date: now.toLocaleDateString(undefined, { dateStyle: "long" }),
   });
 
-/**
- * Where the person's copy stands against this device and the shared project,
- * read from the local refs (`copyRef`, `trackingRef`; read the copy first):
- *
- * - `none` — no copy ref, or its tip is already in this device's history: a
- *   send to it is a fast-forward and nothing needs settling;
- * - `shared` — the copy's tip is in the shared project's history: what this
- *   device lacks is the shared project's work, to bring from the shared
- *   project (Review against it), never to be labelled the copy's;
- * - `behind` — this device's tip is in the copy's history, and the copy has
- *   more that the shared project does not (another device's work);
- * - `own` — the copy holds versions of its own that neither has: the one
- *   decision is Review against the copy.
- *
- * One rule for every caller: the offer, a refused send, and the popover's
- * "your copy has work" line (`copyHasMore`).
- */
 export type CopyStanding = "none" | "shared" | "behind" | "own";
 
-/** Is `older` already in `newer`'s history? */
 const within = (repo: Repo, older: string, newer: string) =>
   Effect.gen(function* () {
     if (older === newer) return true;
@@ -416,22 +267,12 @@ const standingOfCopy = (repo: Repo, branch: string) =>
     return standing;
   });
 
-/** Reads the person's copy's branch into `copyRef`; a failed read leaves the last one. */
 const readCopy = (repo: Repo, branch: string) =>
   Effect.gen(function* () {
     const remote = yield* Remote;
     yield* Effect.ignore(remote.fetchRef(repo, `refs/heads/${branch}`, copyRef(branch), COPY));
   });
 
-/**
- * An offer that cannot go as it is, because work this device lacks is in the
- * way, and which Review settles it: against the person's own copy (`copy`: it
- * holds versions of its own, another device's or an older offer the shared
- * project never took), or against the shared project (the copy caught up with
- * it and this device has not). Not an error to retry. That review's Save
- * records a decision commit on top of both and sends it as an ordinary
- * fast-forward; nothing is forced.
- */
 class NeedsReview extends Error {
   readonly reason = "needs-review";
   constructor(readonly copy: boolean) {
@@ -443,17 +284,10 @@ class NeedsReview extends Error {
   }
 }
 
-/** The search that opens Review against the person's own copy. */
 export const COPY_REVIEW = { against: "shared", copy: 1 } as const;
 
-/** The search that opens Review against the shared project. */
 const SHARED_REVIEW = { against: "shared" } as const;
 
-/**
- * Which review a refused offer asks for, and the search that opens it, read by
- * its `reason` as `describe` reads every failure; undefined for any other
- * failure.
- */
 export const reviewNeeded = (
   cause: unknown,
 ):
@@ -470,12 +304,6 @@ export const reviewNeeded = (
   return { copy, search: copy ? COPY_REVIEW : SHARED_REVIEW };
 };
 
-/**
- * Suggests what this project's copy holds to the shared project: one open
- * suggestion per person, which later sends to the copy keep up to date by
- * themselves (`Suggestions.suggest` answers the open one rather than opening
- * a second). Sends first, so the suggestion holds this device's newest work.
- */
 export const suggestMyChanges = (services: Services, project: Project): Promise<Suggestion> =>
   services.run(
     Effect.gen(function* () {
@@ -485,12 +313,6 @@ export const suggestMyChanges = (services: Services, project: Project): Promise<
       const git = yield* Git;
       const remote = yield* Remote;
       const repo = yield* git.open(project.root);
-      // The copy read again first. When work this device lacks is in the way
-      // the push could only be refused, so say which review settles it
-      // instead (`standingOfCopy`, the rule `copyHasMore` reads too). When
-      // the copy already has this device's tip nothing is sent: sending the
-      // same commit again, a moment after the suggestion opened, showed on
-      // WACS as "force-pushed d3d8722 to d3d8722".
       yield* readCopy(repo, at.branch);
       const standing = yield* standingOfCopy(repo, at.branch);
       const head = Option.getOrUndefined(yield* git.resolve(repo, "HEAD"));
@@ -510,11 +332,6 @@ export const suggestMyChanges = (services: Services, project: Project): Promise<
     }),
   );
 
-/**
- * The open suggestions to the shared project, for whoever can write to it —
- * less the signed-in person's own: those are "Yours", and listing them again
- * under "To review" offered an editor their own work to judge.
- */
 export const openSuggestions = (
   services: Services,
   project: Project,
@@ -532,11 +349,6 @@ export const openSuggestions = (
     ),
   );
 
-/**
- * Fetches a suggestion's head from the shared project itself (Gitea keeps
- * `refs/pull/<n>/head` on the base repository) to the ref Review reads it
- * from. Nothing in the work tree moves.
- */
 export const fetchSuggestion = (
   services: Services,
   project: Project,
@@ -555,7 +367,6 @@ export const fetchSuggestion = (
     }),
   );
 
-/** Closes a suggestion without bringing it in, with the note its author will read. */
 export const declineSuggestion = (
   services: Services,
   project: Project,
@@ -570,18 +381,10 @@ export const declineSuggestion = (
     }),
   );
 
-/**
- * After a suggestion was brought in by Review and sent: tell the shared
- * project, so its author sees it taken rather than waiting. Gitea marks it
- * merged by the commit just sent where the repository allows that, and it is
- * closed otherwise; either way the reviewer's message goes on it as the note,
- * ending with the line that tells its author it was taken (`BROUGHT_IN`).
- */
 export const acceptSuggestion = (
   services: Services,
   project: Project,
   number: number,
-  /** The reviewer's message for the version: also the note its author reads. */
   note: string,
 ): Promise<void> =>
   services.run(
@@ -595,7 +398,6 @@ export const acceptSuggestion = (
     }),
   );
 
-/** How one of the person's suggestions stands, as its author reads it. */
 export type MySuggestion =
   | { readonly kind: "waiting"; readonly suggestion: Suggestion }
   | { readonly kind: "taken"; readonly suggestion: Suggestion; readonly note: string | undefined }
@@ -605,19 +407,8 @@ export type MySuggestion =
       readonly note: string | undefined;
     };
 
-/** How many of the person's suggestions are read, newest first: the recent story, not an archive. */
 const MINE_SHOWN = 5;
 
-/**
- * The person's suggestions to the shared project, newest first.
- *
- * "Taken" is Gitea's merged flag, or — where a repository does not allow
- * marking one "manually merged" and a brought-in suggestion ends merely
- * closed — the line Sefer ends its note with (`BROUGHT_IN`). Not git: one
- * copy's branch backs every suggestion, so each one's reported head is that
- * branch's current tip, and a declined suggestion would read as taken the
- * moment a later one was brought in.
- */
 export const mySuggestions = (
   services: Services,
   project: Project,
@@ -638,7 +429,6 @@ export const mySuggestions = (
               () => undefined,
             );
             const taken = suggestion.state === "merged" || said?.includes(BROUGHT_IN) === true;
-            // The marker is Sefer's, not the editor's: what is shown is what they wrote.
             const note = said?.replace(BROUGHT_IN, "").trim() || undefined;
             return taken
               ? ({ kind: "taken", suggestion, note } as const)
@@ -650,13 +440,11 @@ export const mySuggestions = (
     ),
   );
 
-/** The person's newest suggestion, for the popover's one line. */
 export const mySuggestion = async (
   services: Services,
   project: Project,
 ): Promise<MySuggestion | undefined> => (await mySuggestions(services, project))[0];
 
-/** Withdraws the person's own open suggestion: closed, nothing in their copy changes. */
 export const withdrawSuggestion = (
   services: Services,
   project: Project,
@@ -670,11 +458,6 @@ export const withdrawSuggestion = (
     }),
   );
 
-/**
- * Reads the person's copy, for the check in the copy mode: what another of
- * their devices sent there arrives in `copyRef`, not in the work tree.
- * Nothing when no copy is attached or it has no branch yet.
- */
 export const fetchCopy = (services: Services, project: Project): Promise<void> =>
   services.run(
     Effect.orElseSucceed(
@@ -690,17 +473,11 @@ export const fetchCopy = (services: Services, project: Project): Promise<void> =
     ),
   );
 
-/**
- * Has the person's copy work from another of their devices — work neither this
- * device nor the shared project has? A fresh copy holds the shared project's
- * versions, and those are the shared project's to bring, not the copy's.
- */
 export const copyHasMore = async (services: Services, project: Project): Promise<boolean> => {
   const standing = await copyStanding(services, project);
   return standing === "behind" || standing === "own";
 };
 
-/** Where the person's copy stands (`CopyStanding`) as it was last read; `none` when it cannot be told. */
 export const copyStanding = (services: Services, project: Project): Promise<CopyStanding> =>
   services.run(
     Effect.orElseSucceed(
@@ -715,7 +492,6 @@ export const copyStanding = (services: Services, project: Project): Promise<Copy
     ),
   );
 
-/** Has this device work the shared project does not — something an offer would carry? */
 export const aheadOfShared = (services: Services, project: Project): Promise<boolean> =>
   services.run(
     Effect.orElseSucceed(
@@ -735,10 +511,6 @@ export const aheadOfShared = (services: Services, project: Project): Promise<boo
     ),
   );
 
-/**
- * Where a send goes, as a person reads it — `owner/name` — or `undefined`
- * when this project sends nowhere.
- */
 export const sendingToName = async (
   services: Services,
   project: Project,
@@ -758,11 +530,6 @@ export const sendingToName = async (
   );
 };
 
-/**
- * One suggestion as a reviewer reads it: who offered it, its title, and the
- * messages of the versions it brings that this project does not have yet —
- * read from its head, already fetched to `suggestionRef` for the review.
- */
 export interface SuggestionDetails {
   readonly suggestion: Suggestion;
   readonly versions: readonly Commit[];

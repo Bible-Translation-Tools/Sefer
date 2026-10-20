@@ -1,11 +1,3 @@
-/**
- * Downloading reference material from the reference column's menu (and
- * removing it again, `removeHelp`): one
- * `import.remote` operation and one progress toast that moves the whole way —
- * git's own steps while the bytes arrive, then reading, then each book
- * packed — and ends saying what happened. A failure stays on screen.
- */
-
 import { Effect } from "effect";
 import { createSignal } from "solid-js";
 
@@ -20,25 +12,13 @@ import { t } from "../i18n";
 import type { Services } from "../services";
 import { toasts } from "../ui/primitives";
 
-/**
- * The repositories being downloaded right now, so the menu that offers one
- * can show its row as busy, and a second press does not start a second copy.
- */
 const [downloading, setDownloading] = createSignal<ReadonlySet<string>>(new Set(), {
   name: "helpDownloads",
 });
 export const helpDownloads = downloading;
 
-/** Downloads in flight, by repository: a second ask joins the first. */
 const inFlight = new Map<string, Promise<Resource>>();
 
-/**
- * Downloads `help` into the Library (once per device), with its progress
- * toast. Asked again while it is downloading (the menu of another open
- * project, or the same row pressed twice), it answers with the same download rather than
- * starting a second one into the same folder, whose failure would remove
- * what the first registers.
- */
 export const downloadHelp = (services: Services, help: HelpText): Promise<Resource> => {
   const running = inFlight.get(help.repository);
   if (running !== undefined) return running;
@@ -65,7 +45,6 @@ const startDownload = (services: Services, help: HelpText): Promise<Resource> =>
     .run(
       Effect.provideService(
         referenceCopy(services, url, (progress) => {
-          // Git reports every object; the toast changes only when its words do.
           const message = describeCopy(progress);
           if (message === said) return;
           said = message;
@@ -101,14 +80,6 @@ const startDownload = (services: Services, help: HelpText): Promise<Resource> =>
     });
 };
 
-/**
- * Takes reference material off this device: the Library forgets it, and its
- * folder goes when it is in the Library's own directory (a reference copy,
- * nobody's work; a folder someone picked stays where it is). A project that
- * had picked it simply shows nothing for it. Says how it went in a toast, as
- * the projects page's Remove did before it moved here; no confirm, no undo —
- * downloading it again is the undo.
- */
 export const removeHelp = (services: Services, resource: Resource): Promise<void> =>
   services
     .run(

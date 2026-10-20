@@ -1,13 +1,3 @@
-/**
- * The three answers to a Sous finding, and taking one back: the same from a
- * Findings card (`ui/panels/SuppressActions.tsx`) and from the editor's popup
- * (`ui/BookEditor.tsx`). Each says what it did in a toast with Undo.
- *
- *   fineHere      this text at this place
- *   allow         this exact claim anywhere in the project
- *   turnOff       the whole check, a proofreading setting (every project)
- */
-
 import { Effect } from "effect";
 
 import type { Finding } from "#core/findings/finding";
@@ -19,10 +9,8 @@ import { shellKeys } from "./settings";
 import { checkSwitchOf, withSetting } from "./sousSettings";
 import { toasts } from "./ui/primitives";
 
-/** Long enough to recognise a word pair; a whole verse quoted in a menu is noise. */
 const QUOTE_MAX = 32;
 
-/** The file could not be read when the project opened, so nothing is saved over it. */
 const unsaved = (): void => {
   toasts.error({
     title: t("Could not save that"),
@@ -32,14 +20,12 @@ const unsaved = (): void => {
   });
 };
 
-/** The flagged text, from the book as it is now; quoted in "Always allow". */
 export const flaggedText = (shell: Shell, finding: Finding): string => {
   const text = shell.project()?.book(finding.bookId)?.source().text ?? "";
   const site = text.slice(finding.from, finding.to).trim();
   return site.length > QUOTE_MAX ? `${site.slice(0, QUOTE_MAX)}…` : site;
 };
 
-/** The check a finding came from, as the proofreading settings name it. */
 export const checkLabel = (finding: Finding): string | undefined => {
   const setting = checkSwitchOf(finding.code);
   return setting === undefined ? undefined : SOUS_SETTINGS[setting].label;
@@ -91,7 +77,6 @@ export const turnOff = (shell: Shell, finding: Finding): void => {
   });
 };
 
-/** Takes back whichever rungs hide a finding: one hidden here AND allowed everywhere needs both. */
 export const bringBack = (shell: Shell, finding: Finding): void => {
   const keys = finding.suppression;
   const rung = shell.suppressedBy(finding);

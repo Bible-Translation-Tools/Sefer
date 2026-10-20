@@ -1,20 +1,3 @@
-/**
- * Turning the element under the cursor into something a reader can find again.
- *
- * In order of usefulness:
- *
- *   1. `data-loc` — the file, line and column the markup was written at, put
- *      there by the JSX-location Vite transform. This is the whole point. A
- *      comment carrying `src/app/ui/review/UnitCard.tsx:42` is a place to
- *      go; one carrying `.flex.items-center.gap-2` is a grep.
- *   2. A short CSS-ish path, for a project without that transform — this
- *      module must still be useful when dropped somewhere that has not set one
- *      up.
- *   3. The visible text nearby, because "the Find Project card" is how a
- *      person will describe it anyway.
- */
-
-/** Written by `tools/vite/jsxLocation.ts`. Kept as a literal so this file depends on nothing. */
 const LOCATION_ATTRIBUTE = "data-loc";
 
 /** The nearest element that knows where it came from, including the target itself. */
@@ -29,11 +12,7 @@ const nth = (element: Element): string => {
   return `:nth-of-type(${String(siblings.indexOf(element) + 1)})`;
 };
 
-/**
- * A path short enough to read. Three levels, ids win outright, and at most two
- * classes per step — a full Tailwind class list is longer than the comment and
- * identifies nothing.
- */
+/** A path short enough to read. */
 export const selectorOf = (element: Element): string => {
   const steps: string[] = [];
   let at: Element | null = element;
@@ -54,24 +33,7 @@ export const selectorOf = (element: Element): string => {
 
 const MAX_NEARBY = 60;
 
-/**
- * What this element itself says — its OWN text, not its descendants'.
- *
- * `textContent` was the obvious first answer and it is wrong, because it
- * concatenates every descendant with no separator at all. Clicking a card
- * produced
- *
- *   "ButtonsVariantsprimarysecondarytertiarydangerPressedprimarysecondary…"
- *
- * which is not a label, is not readable, and buries the one useful line of the
- * comment under eighty characters of run-together nouns.
- *
- * So: only DIRECT child text nodes. A `<button>primary</button>` still says
- * "primary"; a container of other elements says nothing, and falls through to
- * its accessible name if it has one. Saying nothing is the right answer there —
- * the source location already identifies the element, and an empty quote is
- * better than a misleading one.
- */
+/** What this element itself says — its OWN text, not its descendants'. */
 export const nearbyTextOf = (element: Element): string => {
   const own = [...element.childNodes]
     .filter((node) => node.nodeType === Node.TEXT_NODE)
@@ -89,23 +51,12 @@ export const nearbyTextOf = (element: Element): string => {
   return labelled.trim();
 };
 
-/** Ours, and already reported on its own line — repeating them is noise. */
 const SKIPPED_DATA = new Set(["data-loc", "data-sefer-annotate", "data-sefer-annotate-mode"]);
 
 const MAX_DATA_VALUE = 32;
 
-/**
- * The element's own `data-*` attributes, which in a hand-written codebase are
- * usually the most identifying thing on it — `data-screen`, `data-testid`,
- * `data-state`. Cheap to carry and often the difference between "some row" and
- * "the row for John".
- *
- * Capped at three and truncated, because a serialised blob in a data attribute
- * would otherwise take the whole comment.
- */
+/** The element's own `data-*` attributes, which in a hand-written codebase are usually the most identifying thing on it — `data-screen`, `data-testid`, `data-state`. */
 export const dataAttributesOf = (element: Element): string => {
-  // `dataset` is an HTMLElement convenience; an SVG or MathML node reached by a
-  // click has none, and reading the attributes directly works for all three.
   const parts: string[] = [];
   for (const attribute of element.attributes) {
     if (!attribute.name.startsWith("data-")) continue;
@@ -120,12 +71,7 @@ export const dataAttributesOf = (element: Element): string => {
   return parts.join(" ");
 };
 
-/**
- * Dark or light, as the page actually resolved it rather than as it was asked
- * for — a comment about contrast is useless without knowing which one it was
- * about. Reads the stamped attribute first (an explicit choice), then the
- * media query (the "system" default).
- */
+/** Dark or light, as the page actually resolved it rather than as it was asked for — a comment about contrast is useless without knowing which one it was about. */
 export const themeOf = (): string => {
   const stamped =
     document.documentElement.dataset["theme"] ??

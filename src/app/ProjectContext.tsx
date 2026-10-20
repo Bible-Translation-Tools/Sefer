@@ -1,25 +1,3 @@
-/**
- * The shell's state: the open Project, the services, and the handful of UI
- * choices that outlive a route (mode, clipped chapter, the findings cursor).
- *
- * Why here and not in the router: TanStack owns navigation, not lifetimes
- * (documentation/architecture/composition.md). A Project owns Book lifetimes
- * and an OPFS handle; a route match is created and destroyed on every
- * navigation, and hanging a Project off one would close books when the user
- * looked at the findings list. So the Project lives above the router and the
- * routes read it.
- *
- * The Solid/Book boundary rule (`documentation/architecture/shell.md`)
- * applies to this file too: NOTHING here subscribes to `book.changes`. Only
- * the editor surface does. That keeps exactly one subscription per book, at
- * the one place that already has to have one.
- *
- * The subscriber calls `changed()` with a `ShellEvent` naming the books that
- * moved (`shellEvent.ts`), and the stores below update only the rows that
- * event touched — not one "something, somewhere" counter that every derived
- * read would re-run on.
- */
-
 import { anchorFrom, type ChapterRow, type EditorBook, type ProjectionName } from "@sefer/editor";
 import type { Book, BookId } from "@sefer/text/book";
 import { addressCode, chaptersAddress, type Address } from "@sefer/text/location/address";
@@ -89,17 +67,8 @@ import * as Workflows from "./workflows/references";
 
 export type { SaveState } from "./shellStores";
 
-/**
- * Where the editor should put the aimed-at offset.
- *
- * `centre` is what a finding or a search hit wants — the thing is a point in
- * the middle of a page. `top` is what a chapter wants: arriving at Chapter 3
- * means Chapter 3's heading is the first line you read, with the rest of the
- * book below it.
- */
 export type RevealAt = "top" | "centre";
 
-/** What the next open of `bookId` should scroll to, and how. */
 export interface Reveal {
   readonly bookId: BookId;
   readonly from: number;
@@ -110,343 +79,98 @@ export interface Reveal {
 export interface Shell {
   readonly services: Services;
   readonly project: Accessor<Project | undefined>;
-  /** Opening replaces whatever was open; the previous project is closed. */
   readonly openProject: (root: string) => Promise<void>;
-  /**
-   * Unsaved work found when the open project opened, or `undefined` while the
-   * check is still running. Started beside the analysis, so it has answered
-   * by the time the editor could draw; the book screen waits for it, and the
-   * banner above the editor never arrives after it.
-   */
   readonly recoveryOffer: Accessor<readonly Restorable[] | undefined>;
   readonly setRecoveryOffer: (offer: readonly Restorable[]) => void;
   readonly closeProject: () => Promise<void>;
 
-  /** The book the editor route shows, instantiated and journalled. */
   readonly focused: Accessor<EditorBook | undefined>;
   readonly focus: (bookId: BookId | undefined) => Promise<void>;
 
-  /**
-   * Has this book changed since it was opened or last written?
-   *
-   * Exactly `SaveCoordinator.dirty` — the coordinator adopts a baseline when
-   * the shell opens a book, so "no baseline" never means "just opened".
-   *
-   * A read of the `books` store, so it is reactive AND free: the coordinator
-   * is asked when a `ShellEvent` says this book moved, never on a render.
-   */
   readonly unsaved: (book: Book) => boolean;
 
-  /**
-   * The three states a book can be in, given that the file is written only
-   * when a version is recorded. See `SaveState`.
-   *
-   * `recorded` is inferred rather than read from git, and that is the point of
-   * the save model: writing the file and recording the version are one action,
-   * so a book that matches the file matches the last version too. The one
-   * exception is the failed commit, and `noteWritten` is how Review reports
-   * it.
-   */
   readonly saveState: (book: Book) => SaveState;
-  /**
-   * Review's report after it wrote files: which books reached the disk,
-   * and whether a version was recorded for them. Nothing else may call it —
-   * the disk is the only other writer of this fact, and it has no opinion
-   * about versions.
-   */
   readonly noteWritten: (bookIds: readonly BookId[], recorded: boolean) => void;
 
   readonly mode: Accessor<ProjectionName>;
   readonly setMode: (mode: ProjectionName) => void;
-  /** The clipped chapter ordinal, or `null` for the whole book (the default). */
   readonly chapter: Accessor<number | null>;
   readonly setChapter: (ordinal: number | null) => void;
-  /**
-   * `editor.preferChapterView`, live. Read it to decide how prominent the
-   * chapter picker is; the shell itself reads it when it opens a book.
-   */
   readonly preferChapterView: Accessor<boolean>;
 
-  /**
-   * Where the next book to open should look.
-   *
-   * Findings and search navigate by URL, and the route that lands calls
-   * `focus(bookId)` with no offset — so the offset is left here first and
-   * `focus` picks it up. What happens with it is the preference's business:
-   * with chapter view ON the book opens clipped to the chapter that contains
-   * it, and with chapter view OFF (the default) the whole book is shown and
-   * `reveal` names the offset to scroll to.
-   */
-  /**
-   * Where the next open of `bookId` should land. `to` is the END of the thing
-   * being aimed at when the caller knows it — a search hit does, a finding
-   * does — and it is what the editor marks on arrival; without it there is a
-   * position to scroll to and nothing to point at.
-   */
   readonly aim: (bookId: BookId, from: number, to?: number, at?: RevealAt) => void;
   readonly reveal: Accessor<Reveal | undefined>;
 
-  /**
-   * Go to a chapter of the focused book — the sidebar's grid, the location
-   * bar's arrows and its outline all mean this.
-   *
-   * What "go to" means is the READER's preference, not the caller's: with
-   * "Open books one chapter at a time" on it CLIPS to the chapter, and with it
-   * off — the default, because a book is one document — it scrolls the
-   * chapter's `\c` anchor to the top of the viewport and leaves the rest of
-   * the book where it is. Every caller asks for the same thing and this is the
-   * one place that decides.
-   */
   readonly showChapter: (ordinal: number) => void;
 
-  /**
-   * Go to a book, and to a chapter and verse of it when the Address names
-   * one. The one door for every "take me to Luke 3:1" in the application.
-   */
   readonly showReference: (address: Address) => void;
 
-  /**
-   * The open project's answer to "where": what a typed place means, what to
-   * call an Address, which Address an offset is in. See `app/location.ts`.
-   */
   readonly location: Location;
 
-  /**
-   * Open the project at `root` and land in its text: Matthew 1 when it has
-   * Matthew, else chapter 1 of its first book. The landing list's "Open".
-   */
   readonly openProjectAtStart: (root: string) => void;
 
-  /**
-   * Where the caret is in the open book, in document offsets — or `undefined`
-   * when no editor is mounted.
-   *
-   * The shell keeps this because the things that want it are not in the
-   * editor: the reference panes beside it, which highlight the block answering
-   * the caret's block, and the breadcrumb, which names the block the caret is
-   * in. `book.changes` could not serve them — it fires on DOCUMENT changes,
-   * and moving the caret changes no document.
-   *
-   * An offset and not a block: what a block IS depends on who is asking (the
-   * editor's `DocStructure`, the overlay's skeleton, Galley's CST all cut
-   * differently), and the shell should not pick one of those for everybody.
-   * The offset is the fact; the cut is the reader's.
-   */
   readonly caret: Accessor<number | undefined>;
 
-  /**
-   * The editor reporting where the caret is. Only `BookEditor` calls it.
-   *
-   * Writes on every selection change, which is every arrow key — so consumers
-   * derive rather than react: a memo that maps the offset onto a block is
-   * recomputed per keypress, and the effects hanging off it fire only when the
-   * BLOCK changes, which is a good deal less often.
-   */
   readonly noteCaret: (offset: number | undefined) => void;
 
-  /**
-   * Where the reader is, as an Address: the unit of the open book the caret
-   * stands in (`LUK 3:1`, `LUK 3` at a chapter's head, `LUK intro`), from
-   * the engine's table of contents of the text as it stands.
-   *
-   * A signal, not a `ShellEvent`: it moves no Book, and what follows it — a
-   * resource pane, the notes for the verse — reads it like any other. It
-   * HOLDS: while the held analysis is a pass behind a keystroke the answer
-   * stays the last one rather than blinking to nothing, and a stale analysis
-   * never names a verse the text may no longer be.
-   */
   readonly place: Accessor<Address | undefined>;
 
-  /** The open project's resource handles, opened on first need and released with the project. */
   readonly resources: ResourceHandles;
 
-  /**
-   * The editor reporting which chapter is at the TOP of its viewport, so that
-   * the next open can land back on it.
-   *
-   * Only `BookEditor` calls it, from the one `watchLocation` subscription it
-   * already has for the location bar. The shell keeps no viewport state of its
-   * own — this is written straight into the remembered location and read
-   * nowhere else.
-   */
   readonly noteChapterAtTop: (ordinal: number, place?: LastLocation["place"]) => void;
 
-  /**
-   * Where the reader last was in `root` — the book, the clip and the chapter
-   * that was at the top of the page — or undefined if this device has never
-   * had one open there.
-   *
-   * Written by `focus` and by every chapter change, read by the project route
-   * (which sends an Open straight back to the work rather than to a census)
-   * and by `BackToEditor` and the app bar's Home (the ways back into a
-   * project from a full-page screen). Held as a preference, so it survives a restart.
-   */
   readonly lastLocation: (root: string) => LastLocation | undefined;
 
-  /** The finding the "next/previous finding" commands point at. */
   readonly finding: Accessor<Finding | undefined>;
 
-  /**
-   * Every finding the last Publication produced, unsorted and unfiltered.
-   *
-   * Publication-scoped, not keystroke-scoped: the held analyses do not move
-   * between scheduler passes, so a keystroke cannot change this list. It
-   * retains the previous answer while the next pass runs rather than blanking.
-   */
   readonly findings: Accessor<readonly Finding[]>;
-  /** A re-judge is in flight; the findings shown are about to be replaced. */
   readonly findingsPending: Accessor<boolean>;
 
-  /**
-   * The findings the reader said are fine, left out of `findings`: what
-   * "Show suppressed" lists. Publication-scoped, like `findings`.
-   */
   readonly suppressedFindings: Accessor<readonly Finding[]>;
-  /** "Fine here" (`here`) or "Always allow" (`everywhere`) on a Sous finding. */
   readonly suppress: (finding: Finding, rung: Rung) => Promise<boolean>;
-  /** Takes a suppression back, by its identity. False when nothing could be saved. */
   readonly unsuppress: (id: string) => Promise<boolean>;
-  /** Which rung hides a suppressed finding. */
   readonly suppressedBy: (finding: Finding) => Rung | undefined;
 
-  /**
-   * Something moved, and this says what — the one door the shell's stores are
-   * written through. Naming the event is what lets a keystroke in one book
-   * leave every other book's readers asleep.
-   */
   readonly changed: (event: ShellEvent) => void;
 
   readonly report: (message: string) => void;
   readonly paletteOpen: Accessor<boolean>;
   readonly setPaletteOpen: (open: boolean) => void;
 
-  /**
-   * How many findings the reader is being asked to look at, by rung.
-   *
-   * The app bar's bell and the toolbar's bell both want one number and neither
-   * wants to learn the findings module's vocabulary to get it, so the count is
-   * derived once here, off the findings store, so both bells read one number
-   * that one publication wrote.
-   */
   readonly findingCounts: Accessor<{ readonly errors: number; readonly warnings: number }>;
 
-  /** One book's row of the last Publication, or undefined before the first. */
   readonly summaryOf: (bookId: BookId) => BookSummary | undefined;
 
-  /** The whole census, in the project's book order. Publication-scoped. */
   readonly bookCensus: Accessor<readonly BookSummary[]>;
 
-  /** The character inventory of the last Publication. */
   readonly inventory: Accessor<Inventory>;
 
-  /**
-   * The stamp of the text a book currently holds.
-   *
-   * Every "has this moved since?" question compares against it — a finding's
-   * staleness, a flagged site's, the editor's status line. It moves on a
-   * keystroke, and it is per book, so asking it wakes only that book's
-   * readers. `undefined` for a book outside the open project.
-   */
   readonly stampOf: (bookId: BookId) => SourceStamp | undefined;
 
-  /**
-   * The focused book's undo and redo depth, and its chapter count.
-   *
-   * Reactive, which is the whole point: they are the last inputs to a
-   * command's `when()` that CodeMirror owns and never publishes, so without
-   * these the toolbar's buttons would re-evaluate only when something else on
-   * it happened to re-render. Written from the `books` row on every accepted
-   * edit.
-   */
   readonly historyDepth: Accessor<{ readonly undo: number; readonly redo: number }>;
   readonly chapterCount: Accessor<number>;
 
-  /**
-   * The focused book's chapter table — the location bar's crumb, its outline
-   * popover, and the sidebar's chapter grid, off one array.
-   *
-   * Empty when no book is focused. The rows are the editor's own and are not
-   * copied: read them, do not keep them past the render that asked.
-   */
   readonly outline: Accessor<readonly ChapterRow[]>;
 
-  /**
-   * The workspace chrome: is the project sidebar showing, and how wide is it.
-   *
-   * Both are `workspace.*` preferences (src/app/settings.ts) and both live
-   * here for the same reason the mode and the clipped chapter do — the toggle
-   * that shows the sidebar and the sidebar itself are in different subtrees
-   * of the root route, and a route match is not a lifetime.
-   */
   readonly sidebarOpen: Accessor<boolean>;
   readonly setSidebarOpen: (open: boolean) => void;
-  /**
-   * Is the sidebar actually on screen — the reader's toggle AND a project to
-   * put in it. With none open the panel has no books to list, so it is off
-   * screen (`/` draws `EmptyWorkspace`, which carries its own); `sidebarOpen`
-   * keeps the reader's own answer, untouched, for when a project is open
-   * again.
-   */
   readonly sidebarShowing: Accessor<boolean>;
-  /** A fraction of the workspace row; see `SIDEBAR_WIDTH`. */
   readonly sidebarWidth: Accessor<number>;
   readonly setSidebarWidth: (fraction: number) => void;
-  /**
-   * How wide the reference pane is on the book screen, as a fraction of the
-   * editor row; see `REFERENCE_WIDTH`. Same discipline as `sidebarWidth` — the
-   * signal moves at pointer speed and the file is written once the drag
-   * settles — because it is the same gesture on a different split.
-   */
   readonly referenceWidth: Accessor<number>;
   readonly setReferenceWidth: (fraction: number) => void;
-  /**
-   * Is the reference column beside the editor open at all. The toggle is in
-   * the editor's crumb strip and the column is the book route's, so the
-   * answer lives here, as `sidebarOpen` does.
-   */
   readonly referenceOpen: Accessor<boolean>;
   readonly setReferenceOpen: (open: boolean) => void;
-  /**
-   * The project roots this device has opened, newest first — `shell.recentProjects`
-   * read as a list. The landing screen writes the key as it opens a project;
-   * the sidebar reads it so a window with nothing open still offers the way
-   * back in.
-   */
   readonly recentProjects: Accessor<readonly RecentProject[]>;
 
-  /**
-   * This project's readable URL segment, minted on first sight and kept.
-   *
-   * `/project/en-ulb`, not `/project/%2Fsefer%2Fprojects%2Fen_ulb`. A root is a
-   * filesystem path and paths make bad URL segments; the slug is what the
-   * address bar carries and `rootForSlug` is how a navigation turns it back
-   * into a project.
-   */
   readonly slugFor: (root: string) => string;
-  /**
-   * The OPEN project's slug — what every in-project link needs for its
-   * `params`. Empty string when no project is open, which is a URL that
-   * resolves to the empty no-project state rather than a crash.
-   */
   readonly slug: Accessor<string>;
   readonly rootForSlug: (slug: string) => string | undefined;
-  /**
-   * Is there a newer Sefer? Checked ONCE per session, on the desktop host
-   * only, a few seconds after boot, and never awaited by anything: the answer
-   * is a pill in the sidebar footer and nothing branches on it.
-   */
   readonly updateAvailable: Accessor<boolean>;
 }
 
-/**
- * The router's navigate, as the shell passes it around.
- *
- * Named here so that `ShellBridge` and the provider agree with the router
- * without either of them importing route ids.
- */
 export type Navigate = UseNavigateResult<string>;
 
-/** One row of `shell.recentProjects`: a root, its folder name, and when. */
 export interface RecentProject {
   readonly root: string;
   readonly name: string;
@@ -463,18 +187,8 @@ interface Failed {
   readonly reason: string;
 }
 
-/** The engine takes a moment and may refuse; the shell has three states. */
 export type ShellState = Ready | Failed | { readonly kind: "building" };
 
-/**
- * What the context actually carries.
- *
- * A Solid 2 context value is read when the provider is CREATED, so the
- * provider cannot hand down `undefined` first and the shell later. It hands
- * down this stable handle instead: `state` is the reactive accessor every
- * screen gates on, and `shell` is the assertion-free way to reach the shell
- * once that gate has opened.
- */
 interface ShellHandle {
   readonly state: Accessor<ShellState>;
   readonly shell: () => Shell;
@@ -488,20 +202,15 @@ const handle = (): ShellHandle => {
   return held;
 };
 
-/** The shell's build state. Always available below the provider. */
 export const useShellState = (): Accessor<ShellState> => handle().state;
 
-/** The shell itself. Only inside a `ShellGate` — it throws while building. */
 export const useShell = (): Shell => handle().shell();
 
-/** Services only, for a component that needs no project state. */
 export const useServices = (): Services => useShell().services;
 
-/** The ready shell, or undefined — the shape `<Show when={…}>` wants. */
 export const readyShell = (state: ShellState): Shell | undefined =>
   state.kind === "ready" ? state.shell : undefined;
 
-/** One frozen empty table: "no focused book" must be the SAME value every time. */
 const NO_CHAPTERS: readonly ChapterRow[] = Object.freeze([]);
 
 const makeShell = (services: Services, navigate: Navigate): Shell => {
@@ -510,49 +219,20 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     name: "focusedBook",
   });
   const [mode, setMode] = createSignal<ProjectionName>("default", { name: "mode" });
-  /** An Address waiting for the book it names to become the focused one. */
   const [pendingPlace, setPendingPlace] = createSignal<Address | undefined>(undefined, {
     name: "pendingPlace",
   });
   const [chapter, setChapter] = createSignal<number | null>(null, { name: "chapter" });
-  /** A project root that should land in its text as soon as it is open. */
   const [landOnOpen, setLandOnOpen] = createSignal<string | undefined>(undefined, {
     name: "landOnOpen",
   });
   const location = createLocation(project);
 
-  /**
-   * The open project, as a plain value.
-   *
-   * NOT `project()`. The coordinator runs on events, and an event is handled
-   * at the moment it happens — but a signal read after `setProject` in the
-   * same turn can still answer with the previous value, because Solid 2
-   * schedules writes rather than applying them in place. That cost an evening:
-   * `project.open` wrote no book rows at all, because `refreshBooks` asked the
-   * signal for a project that was already set and was told `undefined`.
-   *
-   * So the coordinator keeps its own handle and the signal stays what the UI
-   * renders from. Which is the division this whole migration is about: plain
-   * values into core, store writes out, and reactivity only on the reading
-   * side.
-   */
   let live: Project | undefined;
 
-  /** Drops the seat-swap subscription of the project being closed. */
   let unwatchSeats: (() => void) | undefined;
   onCleanup(() => unwatchSeats?.());
 
-  /**
-   * Every seated book's edits, reported to the shell — whichever surface made
-   * them. (Journalling is not here: Recovery is mounted once on the Project's
-   * own edit feed, which hears unseated books too.) The main editor reports its own book (`BookEditor`, with the
-   * gesture's trace); a card editing a book the editor does NOT show — a Find
-   * result, a finding, a Review card — edits the same Book through its
-   * satellite, and without this the stamp, the corpus and every screen that
-   * reads them stood still until the card let the book go. One subscription
-   * per seat, taken when the Project announces the seat and dropped when it
-   * announces the release.
-   */
   const edits = {
     held: new Map<BookId, () => void>(),
     follow(bookId: BookId): void {
@@ -563,14 +243,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
       edits.held.set(
         bookId,
         book.changes(() => {
-          // A book the main editor is showing is reported by the editor itself.
           if (editsReported(bookId)) return;
-          // `invalidate`, not `supply`: a card's own analysis was not parsed
-          // through the engine's id door, so handing it over left the corpus
-          // on the old text and the next publication re-judged the book as
-          // it was before the edit (no new Doubled, no moved finding). The
-          // debounced pass parses it through the id door instead — one parse
-          // per pass, not per keystroke.
           services.projectAnalysis.invalidate(bookId);
           changed({ kind: "book.apply", books: [bookId] });
         }),
@@ -585,10 +258,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
   const [cursor, setCursor] = createSignal(0, { name: "findingCursor" });
   const [reveal, setReveal] = createSignal<Reveal | undefined>(undefined, { name: "reveal" });
 
-  // The one preference the shell reads outside the settings screen. Held in a
-  // signal, and kept in step with a forked fiber over `settings.changes`, so
-  // turning chapter view on moves the picker's prominence immediately instead
-  // of at the next reload.
   const keys = shellKeys(services.settings);
   const [preferChapterView, setPreferChapterView] = createSignal(
     services.settings.get(keys.preferChapterView),
@@ -603,11 +272,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     Effect.runFork(Fiber.interrupt(watching));
   });
 
-  // The working-state backup's timing — the ONE automatic write in the
-  // product, because the file is written only when a version is recorded.
-  // Pushed into Recovery rather than read by it: the journal's debounce fiber
-  // is built with the layer, below the settings service, and its two bounds
-  // are re-read on every pass, so moving the stepper re-times the next burst.
   const retime = (idleMs: number): Effect.Effect<void> =>
     services.recovery.setPolicy({
       idleMs,
@@ -622,16 +286,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     Effect.runFork(Fiber.interrupt(backing));
   });
 
-  // The proofreading settings. Pushed into the engine before any project is
-  // attached, so the first publication already judges with them. A change
-  // re-judges the project through the scheduler's one debounced pass — the
-  // path an edit takes. The findings judged under the old settings stay on
-  // screen, marked pending, until that pass's Publication replaces them: a
-  // list torn down and rebuilt for a ~100 ms pass is a flash, not news.
-  //
-  // Copied source words is the one check that needs more than a re-judge:
-  // the engine keeps a source's words only if that check was on when the
-  // source was registered. Turned on, the references are sent again first.
   let copying = sousValues(services.settings.get(keys.sousSettings)).source_copy;
   services.galley.setSettings(sousValues(services.settings.get(keys.sousSettings)));
   const judging = services.runtime.runFork(
@@ -657,11 +311,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     Effect.runFork(Fiber.interrupt(judging));
   });
 
-  // The scripture size. Applied to the document rather than held for a
-  // component to read: `packages/editor/src/editor.css` reads `--editor-font-size` for
-  // every `.cm-mode-regular` surface, so one write resizes the open book, the
-  // reference column and every excerpt satellite at once. The fiber is what
-  // makes the stepper on `/settings` move the text under it.
   applyEditorFontSize(services.settings.get(keys.editorFontSize));
   const sizing = services.runtime.runFork(
     Stream.runForEach(services.settings.changes(keys.editorFontSize), (px) =>
@@ -672,32 +321,12 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     Effect.runFork(Fiber.interrupt(sizing));
   });
 
-  // Which roots this device has opened, newest first. A signal and a fiber
-  // for the same reason as above: the landing screen writes the key as it
-  // opens a project, and the sidebar beside it must not still be showing the
-  // list from before.
-  /**
-   * Mint-and-keep, because a URL someone bookmarked has to go on working.
-   *
-   * The index is keyed by slug, so resolving one is a read; minting scans it
-   * for the root, which is the rarer direction. Writing is fire-and-forget:
-   * a slug that failed to persist is re-minted identically next time, since
-   * `mintSlug` is deterministic given the same index.
-   */
-  //
-  // `justMinted` is what makes a fresh slug resolvable in the same tick. The
-  // setting only answers a new value once the settings file has been written,
-  // and a click mints then navigates at once, so without it the route would
-  // read the old map and draw the no-project state for any project on its first
-  // open. The setting still covers bookmarks and every later visit.
   const justMinted = new Map<string, string>();
   const slugFor = (root: string): string => {
     const held = { ...services.settings.get(keys.projectSlugs), ...Object.fromEntries(justMinted) };
     const minted = mintSlug(root, held);
     if (held[minted] !== root) {
       justMinted.set(minted, root);
-      // `held` already carries every slug minted this session, so two mints
-      // before the first save lands cannot drop one another.
       void services.run(
         Effect.ignore(services.settings.set(keys.projectSlugs, { ...held, [minted]: root })),
       );
@@ -730,10 +359,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     Effect.runFork(Fiber.interrupt(recents));
   });
 
-  // The workspace chrome, seeded from the preferences and written back as the
-  // reader moves it. No `settings.changes` fiber like `preferChapterView`
-  // above: this shell is the ONLY writer of these two keys — there is no
-  // settings widget for either — so the signal cannot fall behind the file.
   const [sidebarOpen, setSidebarOpen] = createSignal(services.settings.get(keys.sidebarOpen), {
     name: "sidebarOpen",
   });
@@ -749,25 +374,15 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     { name: "referenceOpen" },
   );
 
-  // Where the reader was in each project. Same discipline as the two above —
-  // this shell is the only writer, so a signal seeded once cannot fall behind
-  // the file — and the same `equals: false` as `recentProjects`, because the
-  // value is a record replaced wholesale.
   const [locations, setLocations] = createSignal<LastLocations>(
     services.settings.get(keys.lastLocation),
     { name: "lastLocations", equals: false },
   );
 
   const persist = <S,>(key: SettingKey<S>, value: S): void => {
-    // `Effect.result` because a rejected preference is a note, not a crash:
-    // the value is already on screen, and the shell's report is where a
-    // refusal belongs.
     void services.run(Effect.result(services.settings.set(key, value)));
   };
 
-  // A drag publishes a fraction per pointer move, and every `settings.set`
-  // rewrites the whole preferences file. So the SIGNAL moves at pointer speed
-  // and the FILE is written once the drag settles.
   let widthWrite: ReturnType<typeof setTimeout> | undefined;
   let referenceWrite: ReturnType<typeof setTimeout> | undefined;
   onCleanup(() => {
@@ -775,11 +390,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     if (referenceWrite !== undefined) clearTimeout(referenceWrite);
   });
 
-  // Is there a newer Sefer? One check, on the desktop host only, five seconds
-  // after the shell is built — late enough that it never competes with opening
-  // a project, and once because a pill in a footer does not need polling. The
-  // Web host's `NoUpdaterLive` answers `Unavailable` without a request, so the
-  // host test is about honesty rather than cost.
   const [updateAvailable, setUpdateAvailable] = createSignal(false, { name: "updateAvailable" });
   if (detectHost() === "tauri") {
     const askAt = setTimeout(() => {
@@ -795,9 +405,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     services.composition.observability.note("shell.report", "consumed", message);
   };
 
-  // The coordinator: every store, and the one door they are written through.
-  // `open` is the plain handle and not the signal, for the reason its own note
-  // gives.
   const stores = makeShellStores({ services, open: () => live });
   const {
     changed,
@@ -818,27 +425,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     return services.projectAnalysis.suppressed();
   };
 
-  /**
-   * The focused book's chapter table.
-   *
-   * The engine has a TOC per book, but this is not it: `structure()` is
-   * CodeMirror's own table over the text in the editor, so it is right about
-   * a chapter the reader added a second ago and the TOC is right about the
-   * last text the engine was given. A location bar that lags a keystroke is
-   * the bug, so the editor's table is the one on screen.
-   *
-   * The stamp is the dependency. Nothing subscribes to a Book, and a Book
-   * publishes no structure — so a change counter would rebuild this on every
-   * event in the application, including a save in another book, with each of
-   * the two readers building its own rows: 150 chapters would be 300 objects
-   * per keystroke on the gesture's critical path. Read this way it wakes when the focused
-   * book's text moves and at no other time, and hands back the ARRAY the
-   * editor already holds rather than building anything.
-   *
-   * Frozen empty rather than a fresh `[]` so that "no book" is one value: a
-   * new array each call would wake every reader on every unrelated event,
-   * which is the habit this whole migration exists to break.
-   */
   const outline = createMemo<readonly ChapterRow[]>(
     () => {
       const book = focused();
@@ -860,8 +446,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
   );
 
   const closeProject = async (): Promise<void> => {
-    // A deliberate one-time read: we close exactly the project that was open
-    // when the call was made, not whatever is open when the await returns.
     const staticOpen = untrack(() => project());
     setRecoveryOffer(undefined);
     unwatchSeats?.();
@@ -871,40 +455,17 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     setProject(undefined);
     resources.releaseAll();
     suppressions.clear();
-    // The stores describe a project. With none open they describe nothing.
     stores.clear();
     if (staticOpen === undefined) return;
-    // One record for closing, rather than a note written into the trace of
-    // the open that has long since ended. Books and seats come from core's
-    // note inside it; the root is not recorded, because it is a path.
     const closing = services.composition.observability.operation("project.close", {
       "project.books": staticOpen.books.length,
     });
-    // The repository's lane first: it waits for any running receive or
-    // combine to finish handing its Books their text, and refuses new work,
-    // so nothing applies to a Book of a project that is already closed.
     await services.run(Effect.flatMap(Repositories, (lanes) => lanes.close(staticOpen.root)));
     await services.run(Effect.provideService(staticOpen.close(), Observability, closing));
-    // Save's baselines are keyed by book alone and live for the session: the
-    // next project's books must not be measured against this one's text.
     await services.run(services.save.forget());
     closing.end("passed");
   };
 
-  /**
-   * The open that is still running, and the root it is opening.
-   *
-   * Both routes that can land on a project guard with "is this one already
-   * open", and both read `project()`, which is not set until `attach` has
-   * finished. For the four hundred milliseconds in between, the answer is
-   * "no" — so landing on `/project/X` and forwarding to `/project/X/book/Y`
-   * opened en_ulb TWICE, parsing sixty-six books each time, and the ring said
-   * so: two `project.open` records per landing, back to back.
-   *
-   * Held here rather than fixed in the routes because a guard on a value that
-   * only exists afterwards cannot be made correct in the caller. This is the
-   * one place that knows an open is in flight.
-   */
   let opening: { readonly root: string; readonly done: Promise<void> } | undefined;
 
   const openProject = (root: string): Promise<void> => {
@@ -918,11 +479,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
 
   const openProjectOnce = async (root: string): Promise<void> => {
     await closeProject();
-    // ONE record for one thing the person did. Opening the files and analysing
-    // what was opened are two calls and one gesture: separately they were two
-    // unrelated traces whose durations had to be added up by hand, and the
-    // analysis — the expensive half — looked like background work nobody asked
-    // for. Provided to both, so everything either reaches narrates inside it.
     const gesture = services.composition.observability.operation("project.open", {
       "project.root": root,
       "op.trigger": "shell",
@@ -940,8 +496,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
       return;
     }
     const ready = opened.success;
-    // Unsaved work, asked now: journal IO beside the analysis below, which is
-    // the slow half of an open. Off in Advanced, the answer is "none".
     if (services.settings.get(keys.offerRecovery)) {
       void services
         .run(pendingOnOpen(services.recovery, ready.id, (text) => services.galley.hash(text)))
@@ -952,10 +506,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
           () => setRecoveryOffer([]),
         );
     } else setRecoveryOffer([]);
-    // The engine's marker table, BEFORE the first parse of this project: the
-    // legacy markers its texts already use, and none otherwise — which also
-    // clears what the previous project installed. `legacyMarkers.ts` is the
-    // policy and says why this one question is a regex, not a parse.
     const started = performance.now();
     const legacy = registerLegacyMarkers(services.galley, function* () {
       for (const book of ready.books) yield book.source().text;
@@ -965,28 +515,15 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
       "project.legacy_refused": legacy.refused.length,
       "project.legacy_scan_ms": Math.round((performance.now() - started) * 1000) / 1000,
     });
-    // The census, the corpus and every finding come from here; `attach` is what
-    // analyses the project once at open and keeps it in step.
     await services.run(
       Effect.provideService(
         Effect.gen(function* () {
-          // Every book's text as read IS what disk holds, so Save is told so
-          // for every book, now — not only for books the main editor opens. A
-          // book first opened through a card (a Find result, a finding) had no
-          // baseline, and "no baseline" read as the book's current text, so an
-          // edit made there looked saved. The text is the same string, not a
-          // copy; `adopt` refuses a book already recorded or already edited.
           const coordinator = yield* SaveCoordinator;
           yield* Effect.forEach(ready.books, (book) => coordinator.adopt(book), {
             discard: true,
           });
           const analysis = yield* ProjectAnalysis;
-          // What the reader said is fine, before the first publication, so
-          // it arrives already filtered.
           yield* Effect.promise(() => suppressions.load(root));
-          // The remembered book first. `attach` parses the whole project
-          // serially either way; naming the landing book decides which parse
-          // the reader is waiting on rather than how many there are.
           yield* analysis.attach(ready, { first: lastLocation(root)?.bookId });
         }),
         Observability,
@@ -995,10 +532,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     );
     gesture.end("ready", { "project.books": ready.books.length });
     live = ready;
-    // Every book is analysed now, so an entry whose text is gone can be told.
     void suppressions.prune();
-    // What the project declares as its source texts: the Library answers
-    // "source" with these when the person has picked none.
     await services.run(
       services.library.declare(
         ready.root,
@@ -1010,25 +544,12 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     );
     setProject(ready);
     setCursor(0);
-    // A name chosen on this device lives in `.sefer/project.json`, never in
-    // the project's own metadata, so the header learns it the way it learns a
-    // rename made this session.
     void services.run(services.admin.recordedName(root)).then((recorded) => {
       if (Option.isSome(recorded)) noteRenamed(root, recorded.value);
     });
-    // "Check for changes on open": in the background, never before the
-    // editor — it only asks and fetches, and never moves a file. Without it,
-    // the reading is still taken from what is already here, so the app bar's
-    // cloud says where the project stood when it was last checked.
     if (syncPreferences(services.settings, root).checkOnOpen) void checkForChanges(services, ready);
     else void syncWatch.refresh(services, ready).catch(() => undefined);
-    // A seat swap replaces the Book object, so every row derived from one has
-    // to be re-taken. One subscription for the whole project, not one per
-    // book, and it is the Project's own announcement rather than a guess.
     const unwatchEdits = watchSeatedEdits();
-    // The backup: mounted ONCE, on the Project's canonical edit feed, so every
-    // edit to every book is journalled once — seated or not, focused or not.
-    // The disk hash is Save's baseline, which follows every save.
     const unmountRecovery = services.recovery.mount(ready, (bookId) => {
       const book = ready.book(bookId);
       return book === undefined
@@ -1048,11 +569,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
       unmountRecovery();
     };
     changed({ kind: "project.open" });
-    // The project's source and references, registered with the corpus as it
-    // opens, so the checks against a source text have one without anybody
-    // visiting Find first. In the background; once they are in, ONE book is
-    // invalidated, which is a pass and so a publication that reads them —
-    // not a re-judge, which would re-analyse every book.
     void services.run(Workflows.bindReferences(ready.root)).then((bound) => {
       const first = ready.books[0]?.id;
       if (live === ready && bound.ids.length > 0 && first !== undefined)
@@ -1061,14 +577,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     report(t("opened {name} ({count} books)", { name: ready.root, count: ready.books.length }));
   };
 
-  /**
-   * The chapter a book opens on.
-   *
-   * `null` — the whole book — unless the reader asked for chapter view. A
-   * book is one document; clipping it is a preference, not the shape of the
-   * thing. When the preference is on, a navigation that named an offset opens
-   * on the chapter containing it, and everything else opens on the first.
-   */
   const openingChapter = (book: EditorBook, at: number | undefined): number | null => {
     if (!preferChapterView()) return null;
     if (at === undefined) return 0;
@@ -1078,12 +586,9 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     return found;
   };
 
-  /** The aim an earlier `focus` already answered; see the read of it below. */
   let honoured: Reveal | undefined;
 
   const focus = async (bookId: BookId | undefined): Promise<void> => {
-    // Another deliberate snapshot: we seat a book in the project that was open
-    // when the call was made. Closing a project clears the focus anyway.
     const staticProject = project();
     if (bookId === undefined || staticProject === undefined) {
       setFocused(undefined);
@@ -1094,87 +599,40 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
         const book = yield* Effect.result(staticProject.instantiate(bookId));
         if (Result.isFailure(book)) return undefined;
         const coordinator = yield* SaveCoordinator;
-        // The text we just read IS what disk holds, so Save is told so before
-        // anything can edit it — otherwise a book nobody has touched reads
-        // dirty. `adopt` refuses on a second visit and on a book whose text
-        // has already moved, so calling it on every focus is safe.
         yield* coordinator.adopt(book.success);
-        // Journalling is not started here: it follows the SEAT
-        // (`edits.follow`), once per book, whichever surface opened it.
         return book.success;
       }),
     );
-    // The seat recorded the editor-backed Book as it created it (services.ts),
-    // which is how the shell gets an `EditorBook` out of a `Book` port.
     const editing = seated === undefined ? undefined : services.seated(bookId);
     if (editing === undefined) {
       report(t("could not open book {book}", { book: bookId }));
       return;
     }
     setFocused(editing);
-    // The aim, if one was left for this book, decides the opening chapter and
-    // then stays put for the editor surface to scroll to. An aim is a REQUEST
-    // — a finding, a search hit, a chapter click — and a request is answered
-    // ONCE: without `honoured`, re-opening the book an aim named scrolled back
-    // to it forever, which is precisely what put the remembered place out of
-    // reach.
     const aimed = reveal();
     const fresh = aimed !== undefined && aimed !== honoured && aimed.bookId === bookId;
     const at = fresh ? aimed.from : undefined;
     if (!fresh) setReveal(undefined);
     else honoured = aimed;
 
-    /**
-     * Where the reader last WAS in this book, when nothing else asked for a
-     * place.
-     *
-     * The aim wins when there is a live one; a remembered place is only the
-     * absence of a request. The CLIP alone is not enough to remember, because
-     * a book opens whole: reopening would land at the top of the right book
-     * however far down it the reader had been.
-     */
     const held = lastLocation(staticProject.root);
     const resume = at === undefined && held?.bookId === bookId ? held.at : undefined;
 
     const opening = openingChapter(editing, at);
     if (preferChapterView() && resume !== undefined) {
-      // Chapter view narrows to a chapter, so resuming IS the clip.
       setChapter(resume);
       remember(bookId, resume, resume);
       return;
     }
     setChapter(opening);
-    // Whole-book view does NOT scroll from here.
-    //
-    // `BookEditor` resumes the exact place — the offset when the document
-    // still hashes the same, else the verse, else the chapter. A `Reveal` made
-    // here would fight it: an aim is an explicit request and outranks a
-    // remembered place, so the editor's own restore would stand down, and the
-    // fresh view would then record its position at the top of the book,
-    // overwriting what had been remembered.
-    //
-    // One resume, at the surface that knows the viewport.
     remember(bookId, opening, resume);
   };
 
-  /**
-   * Remembers where the reader is, so an Open lands back on it.
-   *
-   * Called on every focus and every chapter change, which is often — so the
-   * write goes through the same debounce the sidebar width uses rather than
-   * rewriting the whole preferences file per click.
-   */
   let locationWrite: ReturnType<typeof setTimeout> | undefined;
   onCleanup(() => {
     if (locationWrite !== undefined) clearTimeout(locationWrite);
   });
 
-  /**
-   * How long a scroll must settle before the position is written down. Long
-   * enough that a flick records once, short enough that leaving the screen
-   * straight after a scroll still catches it — the route change is a click
-   * away, and a click is slower than this.
-   */
   const OFFSET_SETTLE = 250;
   let offsetWrite: ReturnType<typeof setTimeout> | undefined;
 
@@ -1184,20 +642,11 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     at?: number,
     place?: LastLocation["place"],
   ): void => {
-    // A writer, not a reader: this runs on a focus or a chapter change and
-    // records what just happened. Both reads are therefore deliberately
-    // one-time — `live` for the project (see its note: a signal can answer
-    // with the previous value inside the turn that set it) and `untrack` for
-    // the map being rewritten, which Solid 2 otherwise reports as
-    // STRICT_READ_UNTRACKED because a read in an effect that is not a
-    // dependency is almost always a mistake. Here it is not.
     const root = live?.root;
     if (root === undefined || bookId === undefined) return;
+    // A writer, not a reader: a one-time read of the map it rewrites (Solid 2: STRICT_READ_UNTRACKED otherwise).
     const held = untrack(locations);
     const previous = held[root];
-    // The scrolled-to chapter is carried forward when the caller has no
-    // opinion about it: a clip change and a scroll are two different facts,
-    // and the one that did not happen must not be erased by the one that did.
     const same = previous?.bookId === bookId;
     const carried = same ? previous.at : undefined;
     const where = at ?? carried;
@@ -1219,25 +668,8 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     }, 400);
   };
 
-  /**
-   * The chapter at the top of the viewport, reported by the editor as the
-   * reader scrolls.
-   *
-   * The shell does not measure it and could not: it is a fact about a
-   * VIEWPORT, and `watchLocation` (packages/editor/src/recipes/whereAmI.ts) already
-   * reads it for the location bar. All that is added here is writing it down,
-   * so the next open can land on it. The write is the same debounced one every
-   * other location change uses, and a scroll is already coalesced into one
-   * animation frame before it gets here.
-   */
   const [caret, setCaret] = createSignal<number | undefined>(undefined, { name: "caret" });
 
-  /**
-   * Written by `BookEditor`'s selection listener, read by anything that wants
-   * to know where the reader is standing. A plain signal with no debounce:
-   * the write is one number on a gesture the reader made, and the consumers
-   * that would be expensive memoize themselves (see `caret`'s note).
-   */
   const noteCaret = (offset: number | undefined): void => {
     setCaret(offset);
   };
@@ -1263,12 +695,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
   const resources = createResourceHandles(services);
 
   const noteChapterAtTop = (ordinal: number, place?: LastLocation["place"]): void => {
-    // Every read here is a one-time snapshot, for the same reason as in
-    // `remember`: this is the editor REPORTING where the viewport got to, so
-    // it records the state at the moment of the scroll and subscribes to
-    // nothing. `untrack` says so, which is what Solid 2 asks for — a read in
-    // an effect that is not a dependency is nearly always a mistake, and the
-    // diagnostic cannot tell this one from those without being told.
+    // Records where the viewport got to: one-time snapshots, subscribing to nothing.
     const book = untrack(focused);
     if (book === undefined) return;
     const root = live?.root;
@@ -1278,8 +705,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     const settled = held?.place?.chapter === place?.chapter && held?.place?.verse === place?.verse;
     if (sameBook && held.at === ordinal && settled) return;
 
-    // A CHAPTER change is news — the crumb reads it, the reference panes
-    // follow it — so it goes through at once.
     if (!sameBook || held.at !== ordinal) {
       if (offsetWrite !== undefined) {
         clearTimeout(offsetWrite);
@@ -1289,10 +714,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
       return;
     }
 
-    // A VERSE change inside one chapter is not. It fires once per animation
-    // frame for the length of a scroll, and it is only ever read again after a
-    // remount — so it is throttled to the trailing edge rather than writing a
-    // store (and waking every reader of it) sixty times a second.
     if (offsetWrite !== undefined) clearTimeout(offsetWrite);
     offsetWrite = setTimeout(() => {
       offsetWrite = undefined;
@@ -1309,9 +730,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
   const showChapter = (ordinal: number): void => {
     const book = focused();
     if (book === undefined) return;
-    // `ordinal` is written as the scrolled-to chapter as well as the clip:
-    // asking for a chapter IS being at it, and waiting for the scroll watcher
-    // to say so would lose the answer for a reader who leaves immediately.
     remember(book.id, preferChapterView() ? ordinal : null, ordinal);
     if (preferChapterView()) {
       setChapter(ordinal);
@@ -1319,31 +737,12 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     }
     const chapter = book.structure().chapters[ordinal];
     if (chapter === undefined) return;
-    // A scroll is not a clip, and arriving at a chapter must not silently
-    // narrow the book: whatever clip was in force is dropped first.
     setChapter(null);
     aim(book.id, anchorFrom(chapter), undefined, "top");
   };
 
-  /**
-   * A place somebody named, from anywhere: the sidebar's box, the location
-   * bar's book picker, the command palette.
-   *
-   * Navigating to a book and then asking for a chapter of it does not work as
-   * one step, and the reason is worth stating once here rather than being
-   * rediscovered per caller: the chapter table belongs to a book that is not
-   * open yet, and the route's own effect calls `focus`, which decides the
-   * opening chapter itself from `editor.preferChapterView`. So the chapter is
-   * REMEMBERED and applied when the book it names becomes the focused one.
-   *
-   * It lives here rather than in `ProjectSidebar` because the palette wants
-   * the same thing, and two copies of "wait for the book, then scroll" would
-   * drift.
-   */
   const showReference = (address: Address): void => {
     if (project() === undefined) return;
-    // A Citation of a book this project lacks is still a Citation; the honest
-    // answer is to say so here, not to open a route to nothing.
     if (!location.holds(address.book)) {
       report(
         t("This project has no {book}", {
@@ -1361,7 +760,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
 
   const openProjectAtStart = (root: string): void => {
     setLandOnOpen(root);
-    // The route opens it; the effect below takes over once it has.
     void navigate({ to: "/project/$slug", params: { slug: slugFor(root) } });
   };
 
@@ -1371,8 +769,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
       if (open === undefined || want === undefined || open.root !== want) return;
       setLandOnOpen(undefined);
       const book = open.book("MAT") ?? open.books[0];
-      // A one-time landing, not a subscription: what `showReference` reads
-      // (the project, the books it holds, its slug) is this moment's value.
       if (book !== undefined) untrack(() => showReference(chaptersAddress(book.id, 1)));
     },
   );
@@ -1385,11 +781,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
       const analysis = held.structure().analysis;
       if (analysis == null) return;
       const place = (): string => location.label(want);
-      // Where the Address is in THIS text, from the analysis the editor's
-      // structure was built on — exact for the open text by construction.
-      // The jump is a one-time act on the book just focused: every signal it
-      // reads (the chapter preference, the project's names for the message)
-      // is this moment's value, not a subscription.
       untrack(() => {
         const found = resolve(tocViewOf(analysis), want);
         const chapters = held.structure().chapters;
@@ -1400,15 +791,10 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
           case "found": {
             const at = ordinalAt(found.from);
             if (at >= 0) showChapter(at);
-            // A verse is a scroll WITHIN the chapter just landed on, so it runs
-            // after: `showChapter` aims at the chapter's own anchor and this
-            // moves from there.
             if (want.kind === "verses") aim(held.id, found.from, undefined, "top");
             return;
           }
           case "missing": {
-            // A verse the book does not have leaves you at its chapter, the
-            // nearest true answer, and says it stopped short.
             if (found.within !== undefined) {
               const at = ordinalAt(found.within.from);
               if (at >= 0) showChapter(at);
@@ -1417,8 +803,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
             return;
           }
           case "ambiguous": {
-            // Malformed text: two places answer. Navigation may go to the first,
-            // because it changes nothing, but it must not pretend there was one.
             const first = found.spans[0];
             if (first !== undefined) {
               const at = ordinalAt(first.from);
@@ -1454,11 +838,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     report(t("{code} at {from}", { code: held.code, from: target.from }));
   };
 
-  /**
-   * Applies the fix the cursor's finding offers. Every check that matters is
-   * `fixes.preview`'s: it refuses a finding computed from text the book has
-   * since moved past, which is exactly the mistake a panel invites.
-   */
   const applyFix = (): void => {
     const held = finding();
     const book = focused();
@@ -1602,9 +981,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
   };
 
   onCleanup(registerShellCommands(bridge));
-  // `project.export` / `project.rename` live for the shell's lifetime. Rename
-  // needs a dialog and the landing owns it, so `ask` navigates there with the
-  // root in the URL and the landing opens its dialog on arrival.
   onCleanup(
     registerProjectCommands({
       services,
@@ -1615,26 +991,12 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
   return shell;
 };
 
-/**
- * Builds the services once, then the shell.
- *
- * The build is asynchronous because the wasm engine is: `children` is a
- * function so nothing below mounts against a half-built shell, and an engine
- * that will not load renders as a failure rather than as an editor that
- * refuses every parse.
- */
 export function ProjectProvider(props: ParentProps<{ readonly navigate: Navigate }>) {
   const composition = useComposition();
   const [state, setState] = createSignal<ShellState>({ kind: "building" }, { name: "shellState" });
-  // The shell registers commands with `onCleanup`, and it is built inside a
-  // promise callback — outside any reactive owner. Carrying this component's
-  // owner across the await is what keeps that registration disposable.
+  // Carried across the await below: the shell registers commands with onCleanup, outside any owner otherwise.
   const owner = getOwner();
 
-  // The provider can be disposed while the engine is still loading (a test
-  // that mounts and unmounts, a route change during boot). Building the shell
-  // into a disposed owner would register commands nothing can unregister, and
-  // would leak the runtime that holds the wasm engine — so we drop it instead.
   let disposed = false;
   onCleanup(() => {
     disposed = true;
@@ -1646,7 +1008,7 @@ export function ProjectProvider(props: ParentProps<{ readonly navigate: Navigate
         void services.dispose();
         return;
       }
-      // oxlint-disable-next-line solid/reactivity -- runs once, when composition settles, under the component's owner
+      // oxlint-disable-next-line solid/reactivity
       const shell = runWithOwner(owner, () => {
         onCleanup(() => {
           void services.dispose();
@@ -1665,10 +1027,7 @@ export function ProjectProvider(props: ParentProps<{ readonly navigate: Navigate
 
   const held: ShellHandle = {
     state,
-    // Untracked on purpose. The shell is built exactly once and never
-    // replaced, so a screen calling `useShell()` in its body is reading a
-    // constant — and `ShellGate` has already proved it exists. Tracking it
-    // would only invite Solid to warn about a read that can never change.
+    // Untracked: the shell is built once and never replaced, so this reads a constant.
     shell: () => {
       const now = untrack(state);
       if (now.kind !== "ready")

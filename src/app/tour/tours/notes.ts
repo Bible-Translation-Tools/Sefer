@@ -18,7 +18,6 @@ import type { Tour, TourContext } from "../machine";
 
 const PROJECT = "/r/Will_Kelly/leb-x-bisa_reg/book/JHN?host=content.bibletranslationtools.org";
 
-/** On the open project's book screen, in John, with the reference column open. */
 const toBook = (context: TourContext): void => {
   context.shell.setReferenceOpen(true);
   void context.navigate({
@@ -29,11 +28,9 @@ const toBook = (context: TourContext): void => {
 
 const present = (selector: string): boolean => document.querySelector(selector) !== null;
 
-/** What the notes pane says it is answering, or "" before the caret is in a verse. */
 const placeShown = (): string =>
   document.querySelector("[data-testid=notes-pane]")?.getAttribute("data-place") ?? "";
 
-/** The place the "move to another verse" step started from. */
 let firstPlace = "";
 
 /** Ten minutes: en_tn is about 8.5 MB, a little under three minutes on slow 3G. */
@@ -50,8 +47,6 @@ export const notesTour: Tour = {
   steps: [
     {
       go: (context) => void context.navigate({ href: PROJECT }),
-      // Either the link's Download (the project is not here yet) or the
-      // project opening straight away (it is).
       ready: () =>
         present("[data-tour=open-by-link-download]") || present("[data-testid=editor-host]"),
       timeoutMs: 60_000,
@@ -67,8 +62,6 @@ export const notesTour: Tour = {
       ready: () => present("[data-testid=reference-language]"),
       timeoutMs: DOWNLOAD_MS,
       spotlight: {
-        // The whole column, with the card beside it: a card below the menu's
-        // button would cover the menu it asks you to open.
         anchor: "aside[data-references]",
         side: "right",
         title: "Choose them beside the text",

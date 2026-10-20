@@ -19,7 +19,6 @@ const HEADINGS: Record<Tour["kind"], { readonly title: string; readonly subtitle
   },
 };
 
-/** Settings' list of tutorials or of workflows, each with its own Start. */
 export function TutorialsCard(props: { readonly kind: Tour["kind"] }) {
   const shell = useShell();
   const context = useTourContext();

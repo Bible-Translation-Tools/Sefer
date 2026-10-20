@@ -1,23 +1,3 @@
-/**
- * The one place the domain Layers are wired together.
- *
- * `src/app/composition.ts` owns boot and Observability and stops there, on
- * purpose (see documentation/architecture/composition.md). This file is the
- * next ring out: it takes the built composition and merges the Web host's
- * capabilities and every core module's Layer over it, then hands the shell
- * plain service objects it can call synchronously.
- *
- * Why one file and not a service registry: the set of services is fixed and
- * small, the wiring order carries real information (who is provided TO whom),
- * and a registry would hide exactly the thing a reader comes here to learn.
- * Every Layer below gets one line saying what it is for.
- *
- * Why the services are handed back as values rather than as Effects: the
- * shell's read path is synchronous — a Solid component cannot await a census —
- * and every service in the list is deliberately synchronous to read. The
- * Effect-shaped operations (open, save, commit) go through `run`.
- */
-
 import { gestureTrace, seatBook, type EditorBook } from "@sefer/editor";
 import type { BookId } from "@sefer/text/book";
 import { Effect, FileSystem, Layer, ManagedRuntime, Option, Result, Scope } from "effect";
@@ -79,59 +59,21 @@ import { startLogFiles, type LogFiles } from "./diagnostics";
 import { appIdFor, bootTransport, rememberBootEndpoints, resolveEndpoints } from "./endpoints";
 import { env } from "./env";
 
-/**
- * Where the shell looks for projects on the Web host.
- *
- * `WebDialogsLive.pickFolder` returns a picked handle's NAME, not a path the
- * OPFS FileSystem layer can read (the TODO(seam) in
- * `src/platform/web/dialogs.ts` says so), so the Web open
- * flow cannot yet open an arbitrary folder on the user's disk. What it can do
- * honestly is list the projects Sefer itself owns, which all live in one OPFS
- * subtree — this one.
- */
 const PROJECTS_ROOT = `${OPFS_ROOT}/projects`;
 
 const libraryRootIn = (appData: string): string => `${appData}/library`;
 
-/**
- * The desktop host's whole Layer set, as a TYPE only.
- *
- * `typeof import(...)` is erased at compile time, so naming the module here
- * costs a Web bundle nothing. The VALUE arrives through the dynamic
- * `import()` in `composeServices`, inside the `tauri` branch and nowhere else
- * — every file behind that barrel imports `@tauri-apps/*`, which must not be
- * evaluated in a browser.
- */
 type TauriHost = (typeof import("#platform/tauri/index"))["tauriHost"];
 
-/** Destructured at the import so the host's surface is visible to static analysis. */
 const loadTauriHost = async (): Promise<TauriHost> => {
   const { tauriHost } = await import("#platform/tauri/index");
   return tauriHost;
 };
 
-/**
- * The seeded fixture, reached the same way and for the same reason.
- *
- * `fixtures/small-nt` is four real ULB books inlined as `?raw` text — twenty
- * kilobytes that a release has no use for. A static import would put the
- * module in the graph however unreachable its only caller is, contradicting
- * the invariant `documentation/agents/verification.md` states
- * (`grep -r "Unlocked Literal Bible" dist/` is the check).
- *
- * The gate at the import site below is `__SEFER_DESIGN__` and NOT the
- * `fixture` flag. `fixture` is a runtime boolean, so
- * `fixture ? await import(…) : undefined` still emits the chunk — the same
- * way an exported constant folds at its use site while rolldown still ships
- * the chunk. Only the build-time literal lets the branch fold and the module
- * leave the graph.
- */
 type FixtureHost = typeof import("#core/fixture/smallNt");
 
-/** The engine is the one Layer that can refuse to build. */
 export type EngineFailure = EngineLoadError | VersionMismatch;
 
-/** Everything the shell may ask for. Also the `R` of every `run` call. */
 export type Domain =
   | Observability
   | FileSystem.FileSystem
@@ -155,13 +97,6 @@ export type Domain =
 export interface Services {
   readonly composition: Composition;
   readonly runtime: ManagedRuntime.ManagedRuntime<Domain, EngineFailure>;
-  /**
-   * Runs a domain Effect on the application runtime, with the APPLICATION's
-   * scope. That is the point: `openProject` and `ProjectAnalysis.attach`
-   * require `Scope`, and a per-call `Effect.scoped` would close the project
-   * the instant the call returned. Resources acquired through `run` therefore
-   * live until `dispose()`.
-   */
   readonly run: <A, E>(effect: Effect.Effect<A, E, Domain | Scope.Scope>) => Promise<A>;
 
   readonly fileSystem: FileSystem.FileSystem;
@@ -179,32 +114,15 @@ export interface Services {
   readonly gitea: GiteaService;
   readonly remote: RemoteService;
   readonly admin: ProjectAdminService;
-  /**
-   * A FileSystem with the Git and Remote that work over it, all in memory:
-   * for a clone that is read once and thrown away (a Writer candidate). A
-   * fresh FileSystem per call, or `held`, one the caller already filled (a
-   * picked zip, unpacked in memory). Undefined where disk is already cheap.
-   */
   readonly inMemoryTransfer:
     | ((
         held?: FileSystem.FileSystem,
       ) => Layer.Layer<FileSystem.FileSystem | Git | Remote, never, Credentials | Gitea>)
     | undefined;
 
-  /** Plain → Instantiated: `openProject(root, { seat })`. */
   readonly seat: Seat;
-  /**
-   * The editor-backed Book this seat most recently produced for `id`.
-   *
-   * `Project.book(id)` returns the `Book` PORT, and the shell's editor surface
-   * needs the four things only an `EditorBook` can answer (its state, its
-   * structure, `bindView`). Recording them as the seat creates them is how the
-   * shell learns that without a type assertion on the port.
-   */
   readonly seated: (id: BookId) => EditorBook | undefined;
-  /** Which FileSystem this composition got, for the shell to say so. */
   readonly storage: "opfs" | "native" | "fixture";
-  /** The subtree the projects list enumerates. */
   readonly projectsRoot: string;
   /**
    * The Library's folder: `library.json`, and the copies of source texts and
@@ -212,55 +130,21 @@ export interface Services {
    * list never shows them (Will, 2026-10-06).
    */
   readonly libraryRoot: string;
-  /**
-   * The seeded fixture project's root, when this composition is running over
-   * the fixture FileSystem. The projects list offers it as a one-click open,
-   * which in a dev build is the shortest route to a real book on screen.
-   */
   readonly fixtureProject: string | undefined;
-  /** The machine and WebView, as the diagnostics header states them. Read once. */
   readonly hostFacts: HostFacts;
-  /** Every recorded event, being written to `HostInfo.paths().logs`. */
   readonly logFiles: LogFiles;
   readonly dispose: () => Promise<void>;
 }
 
 export interface ServicesOptions {
-  /**
-   * DEV only: compose over the seeded in-memory `fixtures/small-nt` instead of
-   * OPFS, so a developer (or an agent) can see a real project without first
-   * importing one. `?fixture=1` on any route turns it on.
-   */
   readonly fixture?: boolean;
 }
 
-/**
- * `?fixture=1`, honoured in any build that carries the design surface.
- *
- * Not `import.meta.env.DEV`: the deployed `dev` channel is a production build
- * (`--mode dev`), so DEV alone would switch this off exactly where it is most
- * useful: on a worker there is no filesystem and no OPFS
- * project to open, and without it every data-bearing screen — the editor,
- * review, the inventory — is an empty state. With it, a link like
- * `/projects?fixture=1` opens four real ULB books over the in-memory
- * `fixtures/small-nt`, which is what makes those screens shareable at all.
- *
- * Still not production: `__SEFER_DESIGN__` is the same build-time literal that
- * gates `/design` itself, so a real release cannot be talked into composing
- * over a fixture by a query parameter.
- */
 export const fixtureRequested = (): boolean => {
   if (!__SEFER_DESIGN__ || typeof location !== "object") return false;
   return new URLSearchParams(location.search).get("fixture") === "1";
 };
 
-/**
- * The engine hash of a text, remembered for the last text asked.
- *
- * `dirty` is read reactively, per badged book per keystroke, and the dirty
- * book is the one being typed in, so one entry spares re-hashing the same text
- * on every read; `dirty` settles clean books on the revision alone.
- */
 const hashOf = (galley: GalleyService): ((text: string) => bigint) => {
   let last: { text: string; hash: bigint } | undefined;
   return (text) => {
@@ -271,13 +155,6 @@ const hashOf = (galley: GalleyService): ((text: string) => bigint) => {
   };
 };
 
-/**
- * The Save coordinator, holding the engine's content hash.
- *
- * `Layer.unwrap` rather than a plain merge because `SaveCoordinatorOptions`
- * takes the hasher as a FUNCTION, and the function needs the built Galley —
- * core computes no hash of its own (see documentation/architecture/review.md).
- */
 const saveLayer: Layer.Layer<
   SaveCoordinator,
   never,
@@ -289,16 +166,6 @@ const saveLayer: Layer.Layer<
     const fileSystem = yield* FileSystem.FileSystem;
     return SaveCoordinatorLive({
       hasher: hashOf(galley),
-      // The one thing that is wrong the moment a book is written: a Scripture
-      // Burrito's ingredient carries the md5 and the size of the file it
-      // names. Save must not know what a burrito is, and ProjectAdmin must not
-      // know when a save happened, so composition is where the two meet.
-      // `ingredientFor` answers both questions at once — which project this
-      // path belongs to, and what the ingredient is called inside it — and a
-      // path under no `metadata.json` is a folder of loose USFM, not an error.
-      // The metadata path is answered whenever the book belongs to a burrito,
-      // so Record a version commits it with the book: a checksum written and
-      // never recorded would leave the project unrecorded after every save.
       onSaved: (receipt) =>
         Effect.flatMap(ingredientFor(fileSystem, receipt.path), (found) =>
           Option.isNone(found)
@@ -311,25 +178,14 @@ const saveLayer: Layer.Layer<
   }),
 );
 
-/**
- * Every domain service, over nothing but what the composition already built.
- * `Observability` is absent from the requirements because every module below
- * takes it through `Effect.serviceOption` — core policy runs with or without
- * the ring — so it is merged back in by the caller for `run`'s sake, not
- * provided as a dependency here.
- */
 const domainLayer = (
   build: string,
   fixture: FixtureHost | undefined,
   paths: HostPaths,
   tauri: TauriHost | undefined,
 ): Layer.Layer<Exclude<Domain, Observability>, EngineFailure> => {
-  // The host's answers: paths, locale, capabilities. Everything rooted below
-  // reads its root from here.
   const hostInfo = tauri === undefined ? WebHostInfoLive(build) : tauri.TauriHostInfoLive(build);
 
-  // Storage. Real files on desktop, OPFS in a browser; the seeded fixture when
-  // a developer asks, on either host.
   const fileSystem =
     fixture !== undefined
       ? fixture.FixtureFileSystemLive
@@ -337,26 +193,6 @@ const domainLayer = (
         ? OpfsFileSystemLive
         : tauri.TauriFileSystemLive;
 
-  // The host capabilities layer: the pinned wasm engine, the folder/file
-  // pickers, and a credential store.
-  // Gitea sits in the host ring, not the module ring, because it needs the
-  // credential store and the browser's `fetch` — core names neither. The
-  // token it mints is called `sefer-web-<yyyymmddThhmmss>`, which is the only
-  // string Sefer ever writes into someone's Gitea account; the timestamp is
-  // to the second because Gitea refuses a duplicate token NAME, and a
-  // day-granular one made a second sign-in from one device impossible.
-  /**
-   * The fetch the Gitea API rides on.
-   *
-   * Gitea is handed the CONTENT HOST — the identity, the key a session is
-   * filed under — and on the Web this rewrites each request through the same
-   * transport the git transfers use, with the app id the proxy gates on.
-   * Before the two shared one door, git traffic was proxied and the API was
-   * not, and a successful sign-in was followed by "Failed to fetch" on the
-   * very next call, which read like a bad password.
-   *
-   * Desktop sends every request as it is: it talks to Gitea directly.
-   */
   const webFetch =
     (appId: string): HttpFetch =>
     (input, init) =>
@@ -369,76 +205,31 @@ const domainLayer = (
     tauri === undefined ? webFetch(appIdFor(build)) : globalThis.fetch.bind(globalThis);
   const account = Layer.provideMerge(
     Layer.provideMerge(
-      // Suggested changes (forks and pull requests): one topology among
-      // several, and this is its one registration.
       SuggestionsLive({ fetch: accountFetch }),
       GiteaLive({ fetch: accountFetch, platform: tauri === undefined ? "web" : "desktop" }),
     ),
-    // Desktop persists tokens in the OS keychain. The Web host has no secure
-    // store and persists to `localStorage` anyway, deliberately: a session
-    // that did not survive a reload was not a session. The trade is written
-    // out in `src/platform/web/credentials.ts`.
     tauri === undefined ? WebCredentialsLive : tauri.TauriCredentialsLive,
   );
 
-  /**
-   * The engine. ONE handle, ONE Layer, in the webview, on both hosts.
-   *
-   * The whole-corpus half is not run natively behind Tauri commands on
-   * desktop, though that would keep a publication off the thread that paints
-   * the editor. The id doors are the reason: `parse(id)` and `lint(id)` answer
-   * off the text a handle RETAINS, so a corpus living in another process is a
-   * corpus the parse path cannot name, and keeping both would send every
-   * book's text across the wall twice.
-   *
-   * The cost is real — native code maps a cold publication's chapters across
-   * many threads and wasm maps them on one. The gain is one resident copy of
-   * the project, and a parse path that names a book rather than re-sending it.
-   *
-   * The way to an off-thread publication is a Worker, and that is not a
-   * one-Layer change: a Worker needs the whole corpus on the other side, which
-   * is the same thing that makes a native door untenable. Whoever builds it is
-   * moving the engine, not swapping an implementation.
-   */
   const engine = WebGalleyLive;
 
   const host = Layer.mergeAll(
     engine,
-    // Real native pickers on desktop, the File System Access API on Web.
     tauri === undefined ? WebDialogsLive : tauri.TauriDialogsLive,
     account,
     hostInfo,
-    // Self-update: real on desktop, an honest refusal in a browser.
     tauri === undefined
       ? NoUpdaterLive(build)
       : tauri.TauriUpdaterLive({ updaterHost: env.updaterHost }),
-    // A whole folder's listing or files in one call, where the FileSystem
-    // port would cross IPC per file. Desktop only; core reads it through
-    // `serviceOption` and walks the port without it.
     tauri === undefined ? Layer.empty : tauri.TauriFolderTreeLive,
   );
 
-  // Save must find Recovery, or a crash costs the user everything since the
-  // last write: `SaveCoordinatorLive` takes Recovery through `serviceOption`,
-  // so it is only journalled when Recovery is IN ITS OWN context — hence
-  // provideMerge rather than a sibling merge.
-  // ProjectAdmin joins Recovery under Save for the same reason Recovery is
-  // there: `SaveCoordinatorLive`'s `onSaved` refreshes the burrito's ingredient
-  // checksums, and it can only do that with ProjectAdmin IN ITS OWN context.
-  // Both come back out of the merge, so ProjectAdmin is still one instance.
   const saveAndRecovery = Layer.provideMerge(
     saveLayer,
-    // `cause` is the editor's open gesture, so a journal flush names the
-    // keystroke that armed it; core cannot ask the editor itself.
     Layer.merge(
-      // With the engine's content hash, as Save has it: a journal records the
-      // hash of the text it starts from, so open, flush and restore compare
-      // text, not revision counts.
       Layer.unwrap(
         Effect.map(Galley, (galley) =>
           RecoveryLive({
-            // Journals have a folder of their own, so finding them is one
-            // listing: no walk past the Library or desktop's projects.
             journalRoot: `${paths.appData}/journals`,
             cause: gestureTrace,
             hasher: hashOf(galley),
@@ -449,35 +240,16 @@ const domainLayer = (
     ),
   );
 
-  /**
-   * Everything else, over Settings.
-   *
-   * `provideMerge` and `Layer.unwrap` rather than one flat merge because the
-   * transfer Layer takes an endpoint a PREFERENCE may have overridden, and
-   * a preference can only be read from a built `Settings`. Settings is still
-   * exposed to everything downstream; it is just built first.
-   *
-   * The endpoint is captured here, once, which is what `rememberBootEndpoints` records
-   * and what the settings screen offers a reload against.
-   */
   const modules = Layer.provideMerge(
     Layer.unwrap(
       Effect.map(Settings, (settings) => {
         const endpoints = resolveEndpoints(settings);
         rememberBootEndpoints(endpoints);
         return Layer.mergeAll(
-          // The project census, the held per-book analyses, and every finding.
           ProjectAnalysisLive,
-          // Imported resources; a project's picks of them live in its own `.sefer/`.
           LibraryLive({ libraryRoot: libraryRootIn(paths.appData) }),
-          // History and transfer, every call in its repository's lane.
           laned(
-            // git2 through Tauri commands on desktop, isomorphic-git over the
-            // same FileSystem port in a browser.
             tauri === undefined ? WebGitLive : tauri.TauriGitLive,
-            // Both hosts take the content host, which is what a project's
-            // `origin` names; the Web also takes the transport it is reached
-            // through (git2 is not a browser origin and needs none).
             tauri === undefined
               ? WebRemoteLive({
                   contentHost: endpoints.contentHost,
@@ -486,28 +258,16 @@ const domainLayer = (
                 })
               : tauri.TauriRemoteLive({ endpoint: endpoints.contentHost }),
           ),
-          // Save, Recovery, and — rename, delete, metadata, export — ProjectAdmin.
           saveAndRecovery,
         );
       }),
     ),
-    // Preferences, decoded through each owner's schema.
     SettingsLive,
   );
 
   return Layer.provideMerge(modules, Layer.merge(host, fileSystem));
 };
 
-/**
- * The hosts' Git and Remote, wrapped so every call runs in its repository's
- * lane, plus `Repositories` itself for anything that watches a repository's
- * state. The lifecycle looks at a repository through the host's own `Git`,
- * never the wrapped one, so a look can never wait on a lane.
- *
- * Web Locks wherever the platform has them (every browser, and both desktop
- * webviews), so the one-writer rule spans tabs and workers; an in-process lock
- * otherwise.
- */
 const laned = <EG, RG, ER, RR>(
   hostGit: Layer.Layer<Git, EG, RG>,
   hostRemote: Layer.Layer<Remote, ER, RR>,
@@ -528,60 +288,26 @@ const laned = <EG, RG, ER, RR>(
   return Layer.mergeAll(git, remote, repositories);
 };
 
-/**
- * The build identity the composition already validated, for HostInfo. Read off
- * the boot result rather than re-reading `__SEFER_BUILD__`, so the two can
- * never disagree.
- */
 const buildIdentity = (composition: Composition): string =>
   Result.isSuccess(composition.boot) ? composition.boot.success.build : "unknown";
 
-/**
- * Builds the domain services over an existing composition.
- *
- * Rejects when the engine will not load or its wire format does not match the
- * reader — there is no useful Sefer without Galley, and a shell that pretended
- * otherwise would refuse every parse one keystroke at a time. The caller
- * renders the tagged failure.
- */
 export const composeServices = async (
   composition: Composition,
   options: ServicesOptions = {},
 ): Promise<Services> => {
   const build = buildIdentity(composition);
-  /**
-   * The fixture, only in a build that carries the design surface at all. The
-   * `__SEFER_DESIGN__` half is what makes the module leave a release's graph;
-   * see `FixtureHost` above for why the runtime flag alone is not enough.
-   */
   const fixture: FixtureHost | undefined =
     __SEFER_DESIGN__ && (options.fixture ?? false)
       ? await import("#core/fixture/smallNt")
       : undefined;
-  /**
-   * The desktop Layers arrive through a dynamic import so a Web bundle never
-   * evaluates — or even fetches — the `@tauri-apps/*` code they sit on. Vite
-   * code-splits this, which is exactly the point: `pnpm build` must not carry
-   * the plugins.
-   */
   const tauri: TauriHost | undefined = detectHost() === "tauri" ? await loadTauriHost() : undefined;
-  /**
-   * The roots everything writable hangs off, resolved BEFORE the Layers are
-   * built because Recovery and Library take theirs as options. On desktop they
-   * are the OS app directories; on Web they are the OPFS constants.
-   */
   const paths = tauri === undefined ? WEB_PATHS : await tauri.tauriPaths();
-  // provideMerge, not provide: `run` may ask for Observability itself, and the
-  // composition's ring must stay visible above these modules.
   const layer = Layer.provideMerge(domainLayer(build, fixture, paths, tauri), composition.layer);
   const runtime = ManagedRuntime.make(layer);
 
   const run = <A, E>(effect: Effect.Effect<A, E, Domain | Scope.Scope>): Promise<A> =>
     runtime.runPromise(Effect.provideService(effect, Scope.Scope, runtime.scope));
 
-  // One pass that both forces the whole Layer (so a broken engine fails HERE,
-  // at composition, rather than at the first keystroke) and reads out the
-  // service values the synchronous shell needs.
   const resolved = await run(
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
@@ -629,17 +355,9 @@ export const composeServices = async (
   composition.observability.note(
     "shell.services",
     "ready",
-    // The tag, not just the crate name: which engine this build resolved is
-    // the first thing a bug report needs. The commit behind the tag is in
-    // `pnpm-lock.yaml`, which is where a dependency's identity belongs.
     `${storageKind} galley ${version.engine} ${version.tag}`,
   );
 
-  /**
-   * The seat: how a plain Book becomes the editor-backed one (`seatBook`, which
-   * brings the whole editor). A fresh `galley.memoize()` per book keeps one
-   * book's memoised parse out of another's.
-   */
   const seats = new Map<BookId, EditorBook>();
   const seat: Seat = (plain) => {
     const seated = seatBook(plain, {
@@ -652,8 +370,6 @@ export const composeServices = async (
 
   const browser = browserFacts(resolved.hostInfo.kind());
   const hostFacts = tauri === undefined ? browser : await tauri.tauriFacts(browser);
-  // Writing starts here because the FileSystem does; the queue has held every
-  // event since boot, so none of boot's are lost to the wait.
   const logFiles = startLogFiles({
     composition,
     run,
@@ -670,22 +386,13 @@ export const composeServices = async (
     seat,
     seated: (id) => seats.get(id),
     storage: storageKind,
-    // Desktop keeps its own projects beside its other app data; on Web that
-    // subtree is all the projects list can honestly enumerate.
     projectsRoot: tauri === undefined ? PROJECTS_ROOT : `${paths.appData}/projects`,
     libraryRoot: libraryRootIn(paths.appData),
-    // Web only: isomorphic-git writing to OPFS is the cost of a throwaway
-    // clone (measured 2026-10-07: 2.7 s for a tiny Writer project, most of
-    // it storage), and desktop's git2 on a native disk does not pay it.
     inMemoryTransfer:
       tauri === undefined
         ? (held) =>
             Layer.provideMerge(
               Layer.merge(
-                // Fresh: `WebGitLive` is one constant Layer, and the runtime
-                // memoises Layers by identity, so without this the app's own
-                // Git — over OPFS — came back, and a clone in memory read as
-                // no repository (no history, no Writer commit to follow).
                 Layer.fresh(WebGitLive),
                 WebRemoteLive({
                   contentHost: resolveEndpoints(resolved.settings).contentHost,

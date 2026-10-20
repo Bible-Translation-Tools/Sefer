@@ -1,39 +1,3 @@
-/**
- * The book as a MULTIBUFFER: only the neighbourhoods that changed, each with a
- * sticky header saying where you are, and the untouched stretches between them
- * collapsed to one line you can open.
- *
- * This is the Zed shape, and the reason to want it here is the reason Zed wants
- * it: a whole-file surface is the honest one, but nobody reads 1,189 chapters
- * to find eleven changes. An excerpt keeps the context that makes a change
- * judgeable — the verse before it and the verse after — and throws away the
- * hour of scrolling that buys nothing.
- *
- * ## What is different about doing it to scripture
- *
- * A code multibuffer cuts on LINES and has to guess how many to keep, which is
- * why its excerpt boundaries always look slightly arbitrary. Ours cuts on
- * DECISION UNITS, so "two verses of context" is a sentence a translator can
- * agree or disagree with, and an excerpt never starts mid-verse. The header can
- * therefore say `Genesis 3:4–3:9` rather than `@@ -112,7 +112,9 @@`.
- *
- * The collapsed stretches are the second half of the idea. A gap says how many
- * verses it swallowed and opens in place when clicked — so the surface is never
- * lying about what it is not showing, and following a change out into its
- * chapter is one click rather than a mode change.
- *
- * ## Open questions this is here to answer
- *
- *   * Does a sticky chapter header earn its row, or does the reference in each
- *     row's margin already do that job? (Dial: `Sticky headers`.)
- *   * How much context is enough — one verse, two, four? The dial is there
- *     because the answer is almost certainly "it depends on the change", and
- *     watching somebody reach for it is how you find that out.
- *   * Where do the decision buttons go when there is no card? They are in the
- *     gutter here, the same as `continuous`, so the two can be compared without
- *     that being a variable.
- */
-
 import { For, Show, createMemo, createSignal } from "solid-js";
 
 import { Badge, Card, cx } from "#app/ui/primitives";
@@ -42,19 +6,10 @@ import { unitReference, type DecisionUnit, type MergeSide } from "#core/galley";
 import type { Bench, Experiment, ExperimentProps } from "../experiment";
 import { Gutter, UnitBody, inOrder, type DiffTone } from "../units";
 
-/** A run of units the reader sees, or a stretch they do not. */
 type Band =
   | { readonly kind: "excerpt"; readonly units: readonly DecisionUnit[] }
   | { readonly kind: "gap"; readonly id: string; readonly units: readonly DecisionUnit[] };
 
-/**
- * Changed units, widened by `context` on each side, then run together where
- * they touch — the whole of the excerpting.
- *
- * Adjacent excerpts are MERGED rather than left as two with a one-verse gap
- * between them: a collapsed bar hiding a single verse is worse than the verse,
- * and two headers a line apart read as a mistake.
- */
 const bands = (
   units: readonly DecisionUnit[],
   context: number,
@@ -75,8 +30,6 @@ const bands = (
     let end = at;
     while (end < units.length && keep.has(end) === shown) end += 1;
     const slice = units.slice(at, end);
-    // A gap the reader opened becomes an ordinary excerpt, which is what makes
-    // "expand" one line of state rather than a second rendering path.
     const id = `gap:${at}`;
     out.push(
       shown || opened.has(id)
@@ -88,7 +41,6 @@ const bands = (
   return out;
 };
 
-/** "Genesis 3:4–3:9", or the single reference when an excerpt is one unit. */
 const bandLabel = (units: readonly DecisionUnit[]): string => {
   const first = units[0];
   const last = units.at(-1);
@@ -165,8 +117,6 @@ function Excerpts(props: ExperimentProps) {
                 <Show
                   when={band.kind === "excerpt" ? band : undefined}
                   fallback={
-                    // The gap. It says what it is hiding, because a surface that
-                    // silently omits scripture is not one a translator can trust.
                     <button
                       type="button"
                       class="my-2 flex w-full cursor-pointer items-center gap-3 rounded-md border border-dashed border-surface-border px-3 py-1.5 text-smallest text-on-surface-tertiary transition-colors hover:border-brand/40 hover:text-on-surface-secondary"
@@ -182,10 +132,7 @@ function Excerpts(props: ExperimentProps) {
                 >
                   {(excerpt) => (
                     <section class="mb-4 overflow-hidden rounded-md border border-surface-border">
-                      {/* The header the excerpt is named by. Sticky because in a
-                          long multibuffer the thing you lose first is where you
-                          are, and the reference in each row's margin is too
-                          quiet to answer that while scrolling. */}
+                      {}
                       <h2
                         class={cx(
                           "z-10 border-b border-surface-border bg-surface-secondary px-3 py-1 font-mono text-smallest text-on-surface-secondary",

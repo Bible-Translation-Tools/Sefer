@@ -1,13 +1,3 @@
-/**
- * Read-only path history for the history prototype, streamed newest first.
- *
- * Not `git.log({ filepath })`: isomorphic-git parses every tree it walks and
- * throws `UnsafeFilepathError` on an entry name git itself accepts — en_ulb's
- * 2018 root tree has `00-About_the_ULB\ULB-Intro.md` — and that one throw
- * discards the whole result. Here trees are read as raw object content and
- * only the entries on the path are looked at, so a name we never touch cannot
- * refuse the walk.
- */
 import { Buffer } from "buffer";
 
 import git from "isomorphic-git";
@@ -18,16 +8,13 @@ Object.assign(globalThis, { Buffer });
 
 export interface PathCommit {
   readonly id: string;
-  /** The path's blob id in this commit; null when the commit deleted it. */
   readonly blob: string | null;
   readonly message: string;
   readonly at: number;
 }
 
 export interface PathHistoryEnd {
-  /** Commits read from the ref, including those that did not touch the path. */
   readonly walked: number;
-  /** True when the walk stopped at a shallow boundary: older history is not local. */
   readonly shallowBoundary: boolean;
 }
 
@@ -44,7 +31,6 @@ const decoder = new TextDecoder();
 const hex = (bytes: Uint8Array): string =>
   Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 
-/** The object id a raw tree gives `name`, or undefined. Format: `<mode> <name>\0<20-byte id>`. */
 const entryIn = (
   tree: Uint8Array,
   name: string,
@@ -66,17 +52,11 @@ const entryIn = (
   return undefined;
 };
 
-/**
- * Commits that changed `filepath`, newest first, with git's default history
- * simplification: a merge whose path matches one parent follows only that
- * parent and is not itself reported. Yields as it goes; returns how far it got.
- */
 export async function* pathHistory(
   fs: IsomorphicFs,
   dir: string,
   filepath: string,
   ref = "HEAD",
-  /** Told the running count of commits walked, every few hundred. */
   onWalked?: (walked: number) => void,
 ): AsyncGenerator<PathCommit, PathHistoryEnd> {
   const cache = {};
@@ -91,7 +71,6 @@ export async function* pathHistory(
       )
       .catch((): string[] => []),
   );
-  // Path blob id per tree id; neighbouring commits share root trees often.
   const blobOf = new Map<string, string | null>();
   const pathIn = async (tree: string): Promise<string | null> => {
     const held = blobOf.get(tree);
@@ -110,7 +89,6 @@ export async function* pathHistory(
     blobOf.set(tree, found);
     return found;
   };
-  // A parent is read to compare, then again when it is walked; hold it between.
   const pending = new Map<string, Walked>();
   const read = async (id: string): Promise<Walked> => {
     const held = pending.get(id);
@@ -135,7 +113,6 @@ export async function* pathHistory(
   let walked = 0;
   let shallowBoundary = false;
   while (queue.length > 0) {
-    // Newest committer time first, as `git log` orders a walk.
     queue.sort((a, b) => a.committed - b.committed);
     const commit = queue.pop()!;
     pending.delete(commit.id);
@@ -168,7 +145,6 @@ export async function* pathHistory(
   return { walked, shallowBoundary };
 }
 
-/** One blob's bytes by object id — no tree is read, so no entry name can refuse it. */
 export const readBlobById = async (
   fs: IsomorphicFs,
   dir: string,

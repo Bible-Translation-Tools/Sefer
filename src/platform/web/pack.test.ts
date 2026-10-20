@@ -1,24 +1,4 @@
-/**
- * `src/core/git/pack.ts` against real git: the one test it gets (Will,
- * 2026-10-09), because "is this native identical?" is a question only git
- * can answer.
- *
- * One synthetic history, written twice — by `git fast-import` and by
- * `packWriter` — and then:
- *
- * - the same head: every object has the id git gives it;
- * - `git fsck --full` finds nothing wrong with ours;
- * - `git index-pack --strict` rebuilds our `.idx` from our `.pack` byte for
- *   byte, so git reads the pack exactly as it was written;
- * - isomorphic-git, the Web's reader, reads every file at every commit back.
- *
- * The history is shaped to reach the edges: non-ASCII text, an insert longer
- * than one delta op (127 bytes), a book over one copy op (64 KiB), a commit
- * that changes nothing, and sixty versions of one book, past the depth cap.
- *
- * Here rather than beside the module because it reads back with
- * isomorphic-git, which core may not import.
- */
+// The one test pack.ts gets (Will, 2026-10-09): only real git can say whether it is native-identical.
 
 import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
@@ -32,11 +12,6 @@ import { afterAll, describe, expect, it } from "vitest";
 import { commitBody, packWriter, treeBody, type CommitSignature } from "#core/git/pack";
 
 const encoder = new TextEncoder();
-/**
- * Git with none of the caller's `GIT_*`: run from a commit hook, git has set
- * `GIT_DIR` and `GIT_INDEX_FILE` for the repository being committed, and a
- * child git would read those rather than the folder it was pointed at.
- */
 const clean = Object.fromEntries(
   Object.entries(process.env).filter(([name]) => !name.startsWith("GIT_")),
 );
@@ -59,7 +34,6 @@ const someone = (n: number): CommitSignature => ({
   offset: n % 2 === 0 ? 120 : -300,
 });
 
-/** A long book: well over 64 KiB, so a copy runs to more than one op. */
 const longBook = (marker: string): string =>
   [
     "\\id ACT",
@@ -92,7 +66,6 @@ const history: Step[] = [
   })),
 ];
 
-/** What every commit's tree holds, step by step. */
 const states = (() => {
   const files = new Map<string, string>();
   return history.map((step) => {
@@ -127,7 +100,6 @@ const zone = (minutes: number): string => {
   return `${minutes < 0 ? "-" : "+"}${String(Math.floor(abs / 60)).padStart(2, "0")}${String(abs % 60).padStart(2, "0")}`;
 };
 
-/** The same history through `git fast-import`. */
 const gits = (): string => {
   const dir = join(work, "fast-import");
   run(["init", "-q", "--bare", dir]);
@@ -153,7 +125,6 @@ const gits = (): string => {
 };
 
 describe("packWriter against git", () => {
-  // Two full histories and three git processes: well past the 5 s default under load.
   it(
     "writes git's objects, in a pack git reads exactly as written",
     { timeout: 30_000 },

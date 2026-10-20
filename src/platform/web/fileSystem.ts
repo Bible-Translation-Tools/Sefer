@@ -374,17 +374,9 @@ const makeOpfsFileSystem = (): FileSystem.FileSystem => {
   const copyFile: FileSystem.FileSystem["copyFile"] = (fromPath, toPath) =>
     Effect.flatMap(readFile(fromPath), (bytes) => writeFile(toPath, bytes));
 
-  /**
-   * Copy, recursively, because OPFS has no copy primitive and the import
-   * pipeline copies whole project trees. A file is `copyFile`; a directory is
-   * its entries, one at a time, into a directory made on demand. Left
-   * unimplemented this refused every import in a browser.
-   */
   const copy: FileSystem.FileSystem["copy"] = (fromPath, toPath) =>
     Effect.gen(function* () {
       const info = yield* stat(fromPath);
-      // `overwrite` is not honoured: writing a file here always replaces it,
-      // which is what every caller in Sefer asks for anyway.
       if (info.type !== "Directory") return yield* copyFile(fromPath, toPath);
       yield* makeDirectory(toPath, { recursive: true });
       const entries = yield* readDirectory(fromPath);

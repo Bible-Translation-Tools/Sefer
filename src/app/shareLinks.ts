@@ -1,13 +1,3 @@
-/**
- * Share links, the device's half: which of my projects came from a source,
- * how my copy stands against the version a link names, and the link to the
- * place I am looking at. The format is `core/project/shareLink.ts`.
- *
- * A project's source is its `origin`, which is the shared project in both
- * ways to work (in the copy mode the person's fork is `copy`, and a link
- * still names the shared project, documentation/architecture/sync.md).
- */
-
 import { Effect, Option } from "effect";
 
 import { Git } from "#core/git/git";
@@ -26,7 +16,6 @@ import type { Domain, Services } from "./services";
 import { listProjects } from "./ui/landing/summaries";
 import { toasts } from "./ui/primitives";
 
-/** The source a project's `origin` points at, if it has one. */
 const sourceOfProject = (root: string): Effect.Effect<Source | undefined, never, Domain> =>
   Effect.gen(function* () {
     const git = yield* Git;
@@ -36,15 +25,6 @@ const sourceOfProject = (root: string): Effect.Effect<Source | undefined, never,
     return Option.isSome(origin) ? sourceOf(origin.value) : undefined;
   }).pipe(Effect.orElseSucceed(() => undefined));
 
-/**
- * This device's projects that came from `source`, most recently opened
- * first. Usually none or one; two when the same shared project was
- * downloaded twice, and then the caller takes the first.
- *
- * Reads every project's git config, once per arrival by link. An index of
- * sources would make this one read; it is not worth having until a device
- * holds enough projects for the wait to show.
- */
 export const projectsFrom = (
   services: Services,
   source: Source,
@@ -64,7 +44,6 @@ export const projectsFrom = (
       .map((project) => project.root);
   });
 
-/** How the copy at `root` stands against the commit `at`. */
 export const standingOf = (
   root: string,
   at: string,
@@ -83,11 +62,6 @@ export const standingOf = (
     return versionStanding(at, head, base, shallow);
   }).pipe(Effect.orElseSucceed((): VersionStanding => "other"));
 
-/**
- * The share link to a place in the project at `root`: `rest` is the path
- * after `/project/<slug>`, `search` the place's own query. Undefined when the
- * project has no shared project to name.
- */
 const shareLinkFor = (
   services: Services,
   root: string,
@@ -105,20 +79,11 @@ const shareLinkFor = (
     return shareLinkPath(source, rest, search, Option.getOrUndefined(head));
   });
 
-/**
- * Starts a clipboard write NOW, in the gesture, with text that arrives later.
- * WebKit (Safari, and the macOS desktop's WKWebView) refuses a clipboard write
- * that starts after an `await`, outside the user's gesture; a `ClipboardItem`
- * holding a promise is the standard way round it. False when that is not
- * supported here or was refused, so the caller can fall back to `writeText`
- * (which Chromium allows after an await).
- */
 const writeLater = (text: Promise<string | undefined>): Promise<boolean> => {
   const blob = text.then((held) => {
     if (held === undefined) throw new Error("nothing to copy");
     return new Blob([held], { type: "text/plain" });
   });
-  // Nothing to copy is the caller's to say; the blob's rejection is not news.
   blob.catch(() => undefined);
   try {
     if (typeof ClipboardItem === "undefined") return Promise.resolve(false);
@@ -131,12 +96,6 @@ const writeLater = (text: Promise<string | undefined>): Promise<boolean> => {
   }
 };
 
-/**
- * Copies the share link to the place on screen: the address bar's path after
- * `/project/<slug>`, with its query, in the project at `root`. The write starts
- * before the link is read (`writeLater`), so WebKit still counts it as the
- * press's.
- */
 export const copyPlaceLink = async (services: Services, root: string): Promise<void> => {
   const rest = /^\/project\/[^/]+(.*)$/u.exec(window.location.pathname)?.[1] ?? "";
   const origin = window.location.origin;

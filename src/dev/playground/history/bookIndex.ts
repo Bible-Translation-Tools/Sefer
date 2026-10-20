@@ -1,47 +1,20 @@
-/**
- * The book-change index: plan primitive 3, with 5a and 6a over it.
- *
- * One walk of the repository's history, and for every commit — its parents,
- * time, author and subject, and for EACH parent the top-level books whose blob
- * differs from it. Kept per parent because git's default per-path
- * simplification needs exactly that: a merge "TREESAME to parent p" for a book
- * is one where the book is not in the list against p. From it, any book's
- * history is an in-memory graph walk (Genesis in ~3 ms on en_ulb, identical
- * to native `git log -- 01-GEN.usfm`), and so is the split point between two
- * tips.
- *
- * The index is DERIVED: always rebuildable from Git, never the record. It
- * records the tip it was built from, so staleness is a comparison, and an
- * extension walks only what is new — see `buildBookIndex`'s `previous`.
- *
- * Pure over an `IsomorphicFs`; the same module runs in the page and in the
- * worker that builds the index off the main thread (`indexWorker.ts`).
- */
-
 import { Buffer } from "buffer";
 
 import git from "isomorphic-git";
 
 import type { IsomorphicFs } from "#core/fileSystem/nodeView";
 
-// isomorphic-git expects Node's `Buffer`; a worker has no polyfill of its own.
 Object.assign(globalThis, { Buffer });
 
-/** A book name and its blob id after the change; `null` when the commit removed it. */
 export type BookChange = readonly [book: string, blob: string | null];
 
 export interface IndexedCommit {
   readonly id: string;
-  /** Empty for a root commit — and for one at a shallow boundary (`shallow`). */
   readonly parents: readonly string[];
-  /** Author time, ms since the epoch. */
   readonly at: number;
-  /** The author's name as the commit records it — history metadata, never proof of who typed. */
   readonly author: string;
   readonly subject: string;
-  /** One list per parent, in parent order; one list against nothing for a root. */
   readonly changes: readonly (readonly BookChange[])[];
-  /** Read at a shallow boundary: its parents were not local, so it is re-read once they are. */
   readonly shallow?: true;
 }
 
@@ -49,19 +22,14 @@ const INDEX_VERSION = 1;
 
 export interface BookIndex {
   readonly version: typeof INDEX_VERSION;
-  /** The commit the index was built from. Stale when the ref no longer points here. */
   readonly tip: string;
-  /** Newest first, by author time with ties in walk order. */
   readonly commits: readonly IndexedCommit[];
-  /** Older history exists but is not in this repository yet. */
   readonly shallowBoundary: boolean;
 }
 
 export interface BuildReport {
   readonly commits: number;
-  /** Commits taken from `previous` without reading anything. */
   readonly reused: number;
-  /** Commits whose objects were read. */
   readonly read: number;
 }
 
@@ -72,11 +40,6 @@ const hex = (bytes: Uint8Array): string => {
   return out;
 };
 
-/**
- * Top-level `*.usfm` blob entries of a RAW tree, `<mode> <name>\0<20-byte id>`.
- * Raw rather than `readTree`, which parses every entry and throws on names git
- * accepts (`UnsafeFilepathError` on en_ulb's 2018 `00-About_the_ULB\...`).
- */
 const booksIn = (tree: Uint8Array): Map<string, string> => {
   const books = new Map<string, string>();
   let at = 0;
@@ -115,7 +78,6 @@ const shallowSet = async (fs: IsomorphicFs, dir: string): Promise<Set<string>> =
       .catch((): string[] => []),
   );
 
-/** Reads what one commit needs, with the root trees' book lists cached. */
 const reader = (fs: IsomorphicFs, dir: string) => {
   const cache = {};
   const trees = new Map<string, Map<string, string>>();
@@ -124,7 +86,6 @@ const reader = (fs: IsomorphicFs, dir: string) => {
     if (held !== undefined) return held;
     const { object } = await git.readObject({ fs, dir, oid: tree, format: "content", cache });
     const found = object instanceof Uint8Array ? booksIn(object) : new Map<string, string>();
-    // Bounded: a walk revisits a tree only between a commit and its parents.
     if (trees.size > 512) trees.clear();
     trees.set(tree, found);
     return found;
@@ -133,18 +94,6 @@ const reader = (fs: IsomorphicFs, dir: string) => {
   return { books, commit };
 };
 
-/**
- * The index for `ref`, reusing `previous` wherever it still describes the
- * repository.
- *
- * The walk goes newest first from the tip. A commit already in `previous` is
- * taken as it is — no object read — and its parents are followed from
- * `previous` too, so an extension after a fetch reads only the new commits,
- * and after a force-push or rebase the commits no longer reachable simply
- * never come up: the same walk covers "extend" and "rebuild" without deciding
- * which it is doing. A commit that was read at a shallow boundary is read
- * again once the repository has its parents.
- */
 export const buildBookIndex = async (
   fs: IsomorphicFs,
   dir: string,
@@ -163,8 +112,6 @@ export const buildBookIndex = async (
   const tip = await git.resolveRef({ fs, dir, ref: options.ref ?? "HEAD" });
   const out: IndexedCommit[] = [];
   const seen = new Set<string>([tip]);
-  // Each queued commit carries what ordering needs; the object is read only
-  // when it is taken, and only when `known` does not already have it.
   const queue: { id: string; at: number; order: number }[] = [];
   let order = 0;
   let reused = 0;
@@ -175,7 +122,6 @@ export const buildBookIndex = async (
   queue.push({ id: tip, at: await timeOf(tip), order: order++ });
 
   while (queue.length > 0) {
-    // Newest author time last, so pop() takes it; ties in the order queued.
     queue.sort((a, b) => a.at - b.at || b.order - a.order);
     const next = queue.pop();
     if (next === undefined) break;
@@ -219,7 +165,6 @@ export const buildBookIndex = async (
   };
 };
 
-/** The index's commits by id, built once per index. */
 const byIdOf = new WeakMap<BookIndex, ReadonlyMap<string, IndexedCommit>>();
 export const commitsById = (index: BookIndex): ReadonlyMap<string, IndexedCommit> => {
   const held = byIdOf.get(index);
@@ -229,7 +174,6 @@ export const commitsById = (index: BookIndex): ReadonlyMap<string, IndexedCommit
   return made;
 };
 
-/** Each parent not yet seen, queued once: the step both history walks share. */
 const enqueue = (
   parents: readonly string[],
   seen: Set<string>,
@@ -244,11 +188,6 @@ const enqueue = (
   }
 };
 
-/**
- * One book's history, newest first, with git's default simplification: a
- * merge in which the book is unchanged against some parent follows only that
- * parent, and is not itself a change. Matches `git log -- <book>`.
- */
 export const bookHistoryFrom = (index: BookIndex, book: string): readonly IndexedCommit[] => {
   const byId = commitsById(index);
   const touches = (list: readonly BookChange[]) => list.some(([name]) => name === book);
@@ -275,15 +214,8 @@ export const bookHistoryFrom = (index: BookIndex, book: string): readonly Indexe
   return out;
 };
 
-/** Every book a commit changed against its FIRST parent — what "this commit touched" means. */
 export const booksOf = (commit: IndexedCommit): readonly BookChange[] => commit.changes[0] ?? [];
 
-/**
- * The common ancestor of two commits (primitive 6a): the newest commit both
- * reach. Two walks over the index's parent links — milliseconds, no object
- * read. `undefined` when they share no history the index holds (a shallow
- * index can say that about two commits that do share history).
- */
 export const mergeBase = (index: BookIndex, a: string, b: string): IndexedCommit | undefined => {
   const byId = commitsById(index);
   const reach = new Set<string>();
@@ -308,11 +240,7 @@ export const mergeBase = (index: BookIndex, a: string, b: string): IndexedCommit
   return undefined;
 };
 
-/**
- * The books that differ between two commits (primitive 5a): two root trees
- * compared, no walk and no index. Measured 42 ms on en_ulb for "since
- * 2023-01-05". The blobs are the `to` side's.
- */
+// Measured 42 ms on en_ulb for "since 2023-01-05".
 export const booksChangedBetween = async (
   fs: IsomorphicFs,
   dir: string,
@@ -325,7 +253,6 @@ export const booksChangedBetween = async (
   return differences(newer, older);
 };
 
-/** A book's blob id at a commit, or `undefined` when the commit does not have the book. */
 export const blobAt = async (
   fs: IsomorphicFs,
   dir: string,
@@ -336,10 +263,7 @@ export const blobAt = async (
   return (await read.books((await read.commit(commit)).tree)).get(book);
 };
 
-/**
- * The stored form: the index as JSON, with a version to refuse a file from a
- * different build rather than misread it. 2.5 MB for en_ulb, 0.7 MB gzipped.
- */
+// 2.5 MB for en_ulb, 0.7 MB gzipped.
 export const encodeIndex = (index: BookIndex): string => JSON.stringify(index);
 
 export const decodeIndex = (text: string): BookIndex | undefined => {
@@ -349,8 +273,7 @@ export const decodeIndex = (text: string): BookIndex | undefined => {
     if (!("version" in value) || value.version !== INDEX_VERSION) return undefined;
     if (!("tip" in value) || typeof value.tip !== "string") return undefined;
     if (!("commits" in value) || !Array.isArray(value.commits)) return undefined;
-    // SAFETY: the version is this build's and the writer is `encodeIndex`; the
-    // index is derived and rebuildable, so a malformed one costs a rebuild.
+    // SAFETY: the version is this build's and the writer is `encodeIndex`; the index is derived and rebuildable, so a malformed one costs a rebuild.
     return value as BookIndex;
   } catch {
     return undefined;

@@ -39,14 +39,11 @@ import { trackingRef } from "#core/sync";
 import { APP_AUTHOR, personAuthor } from "./author";
 import type { Domain, Services } from "./services";
 
-/** New work in one book, with the text the review compares against. */
 interface IncomingWork extends WriterWork {
-  /** This project's book with their changes in the places they changed. */
   readonly proposal: string;
 }
 
 interface WriterFacts {
-  /** How many books follow a Writer project; 0 when the project follows none. */
   readonly followed: number;
   readonly checking: boolean;
   readonly work: readonly IncomingWork[];
@@ -63,7 +60,6 @@ const put = (root: string, facts: WriterFacts): void => {
   setHeld((map) => new Map(map).set(root, facts));
 };
 
-/** The commits the shared project's `.upstreams.json` records, by book: work a teammate took. */
 const takenOnShared = (root: string): Effect.Effect<ReadonlyMap<string, string>, never, Domain> =>
   Effect.gen(function* () {
     const git = yield* Git;
@@ -85,7 +81,6 @@ const takenOnShared = (root: string): Effect.Effect<ReadonlyMap<string, string>,
 
 const stagingOf = (services: Services): string => `${services.hostInfo.paths().temp}/writer`;
 
-/** One moved Writer project, cloned in memory where that is cheaper than disk (the Web). */
 const fetchIn = (
   services: Services,
   probed: Parameters<typeof fetchWork>[0],
@@ -96,11 +91,6 @@ const fetchIn = (
     : Effect.provide(fetchWork(probed, "/staging"), inMemory);
 };
 
-/**
- * Checks the project's Writer upstreams. Never rejects: a remote that does
- * not answer, or a project that cannot be fetched, has no new work this
- * time. Run AFTER the shared project's check.
- */
 export const checkWriter = async (services: Services, project: Project): Promise<void> => {
   const root = project.root;
   const upstreams = await services.run(projectUpstreams(services.fileSystem, root));
@@ -126,7 +116,6 @@ export const checkWriter = async (services: Services, project: Project): Promise
               each.head !== each.upstream.commit &&
               !each.upstream.books.some((book) => shared.get(book) === each.head),
           );
-          // A few at a time; a clone that does not finish in time has no work.
           const fetched = yield* Effect.forEach(
             moved,
             (each) =>
@@ -142,7 +131,6 @@ export const checkWriter = async (services: Services, project: Project): Promise
             const ours = project.book(each.book)?.source().text;
             if (ours === undefined) continue;
             const proposal = incoming(services.galley, each, ours);
-            // Their saves already match what this project holds: nothing to review.
             if (proposal === undefined || proposal === ours) continue;
             found.push({ ...each, proposal });
           }
@@ -169,17 +157,11 @@ export const checkWriter = async (services: Services, project: Project): Promise
   }
 };
 
-/**
- * Marks the given books' Writer work taken: `.upstreams.json` with their
- * heads, written into the project. Returns its path, for the commit that
- * records the review, or `undefined` when there is nothing to mark.
- */
 export const takeWriterWork = (
   services: Services,
   project: Project,
   books: readonly string[],
 ): Effect.Effect<string | undefined, unknown, Domain> => {
-  // Read once, now: the work offered when Record was pressed.
   const work = (untrack(held).get(project.root) ?? NONE).work.filter((each) =>
     books.includes(each.book),
   );
@@ -199,19 +181,12 @@ export const takeWriterWork = (
   });
 };
 
-/** Forget the work just taken, so the popover stops offering it. */
 export const forgetWriterWork = (root: string, books: readonly string[]): void => {
   const facts = held().get(root);
   if (facts === undefined) return;
   put(root, { ...facts, work: facts.work.filter((each) => !books.includes(each.book)) });
 };
 
-/**
- * "Stop following Writer projects": `.upstreams.json` with no upstreams,
- * recorded as one version. The Writer projects themselves are untouched;
- * this project just stops asking them, here and for every teammate who
- * receives the version.
- */
 export const stopFollowingWriter = (
   services: Services,
   root: string,

@@ -36,8 +36,6 @@ import { UpdatePanel } from "#app/ui/UpdatePanel";
 import type { SettingKey } from "#core/host/settings";
 import { parseTransport } from "#core/remote/transport";
 
-// The diff's tokens and marks, so the sample under "Removed words" is drawn
-// by the same rules as Review.
 import "@sefer/editor/editor.css";
 
 /**
@@ -87,14 +85,6 @@ function SettingsPage() {
     Effect.runFork(Fiber.interrupt(advancedChanges));
   });
 
-  /**
-   * Whether a reload would change what a transfer or a catalogue read does.
-   *
-   * The composition captured its endpoints once at boot, so a change here
-   * reaches the screens immediately and the services not at all. Saying so and
-   * offering the reload is honest; silently doing nothing until the next
-   * launch is not. `tick` is read so this re-runs after every write.
-   */
   const drifted = (): boolean => {
     tick();
     return endpointsChangedSinceBoot(services.settings);
@@ -105,7 +95,6 @@ function SettingsPage() {
     return services.settings.get(key);
   };
 
-  /** The appearance keys as one value, read straight out of Settings. */
   const appearance = (): Appearance => ({
     theme: asTheme(services.settings.get(keys.theme)),
     fontSize: services.settings.get(keys.fontSize),
@@ -114,8 +103,6 @@ function SettingsPage() {
     diffRemoved: asDiffRemoved(services.settings.get(keys.diffRemoved)),
   });
 
-  // The authoritative read, once the composition is up. The module-level apply
-  // in theme.ts used the cache; this corrects it if Settings disagrees.
   applyAppearance(appearance());
 
   const write = <S,>(key: SettingKey<S>, value: S): void => {
@@ -130,7 +117,6 @@ function SettingsPage() {
     });
   };
 
-  /** Proto's font-size and zoom controls: a value between two repeat buttons. */
   const stepper = (descriptor: AnyDescriptor & { readonly kind: "number" }): JSX.Element => {
     const step = descriptor.step ?? 1;
     const low = descriptor.min ?? Number.NEGATIVE_INFINITY;
@@ -165,15 +151,7 @@ function SettingsPage() {
     );
   };
 
-  /**
-   * A network row. Not written per keystroke like the rest of this screen: a
-   * half-typed URL is a broken server, and every transfer reads the value. So
-   * the box holds a DRAFT, prefilled with the value in use; Save writes it
-   * once it parses, and "Use this build's" drops the override. Saving the
-   * build's own value stores nothing, so the row follows the build again.
-   */
   const NetworkRow = (rowProps: { readonly descriptor: AnyDescriptor & { kind: "string" } }) => {
-    // Read once: `<For>` builds a row per descriptor, so a row's key never changes.
     const key = untrack(() => rowProps.descriptor.key);
     const which = (): keyof typeof BUILD_ENDPOINTS | undefined => {
       const held = shellKeys(services.settings);
@@ -190,7 +168,6 @@ function SettingsPage() {
     const inUse = (): string => stored() || built();
     const [draft, setDraft] = createSignal(untrack(inUse), { name: "networkDraft" });
 
-    /** Why the draft cannot be saved, or "" when it can. */
     const invalid = (): string => {
       const value = draft().trim();
       if (value === "") return "";
@@ -212,7 +189,6 @@ function SettingsPage() {
     const dirty = (): boolean => draft().trim() !== inUse();
     const save = (): void => {
       const value = draft().trim();
-      // The build's own value, or nothing, is no override at all.
       write(key, value === built() ? "" : value);
       if (value === "") setDraft(built());
     };
@@ -331,7 +307,6 @@ function SettingsPage() {
         })}
       />
 
-      {/* Tabs, in the URL (`?tab=`), so a tab can be linked to. */}
       <nav aria-label={t("Settings sections")} class="flex border-b border-surface-border">
         <For each={SETTINGS_TABS}>
           {(entry) => (
@@ -360,18 +335,11 @@ function SettingsPage() {
       <Show when={tab() === "preferences"}>
         <For each={SETTING_GROUPS}>
           {(group) => {
-            // A function, not a value: `advancedVisible` changes while the
-            // screen is open, and the rows must follow it.
             const rows = () =>
               descriptors.filter(
                 (descriptor) =>
                   descriptor.group === group.id &&
-                  // The network card is machinery too: which servers a build
-                  // talks to is the build's answer, and overriding it is for
-                  // somebody who has opened Advanced on purpose.
                   ((group.id !== "advanced" && group.id !== "network") || advancedVisible()) &&
-                  // A preference that cannot matter on this host is not drawn:
-                  // the browser transport, which desktop has no use for.
                   (descriptor.hosts === undefined ||
                     descriptor.hosts.includes(services.hostInfo.kind())),
               );
@@ -482,12 +450,6 @@ function SettingsPage() {
   );
 }
 
-/**
- * One change as Review draws it, under the diff settings: the verse as it was
- * with its removed word marked, and as it is with its added one. Drawn with
- * Review's own classes, so it follows the palette and the mark the moment
- * either is written — `applyAppearance` stamps them on `<html>`.
- */
 function DiffSample() {
   return (
     <div
@@ -505,7 +467,6 @@ function DiffSample() {
   );
 }
 
-/** Settings' tabs. Preferences is the default and carries no `?tab=`. */
 type SettingsTab = "preferences" | "tutorials" | "workflows";
 const SETTINGS_TABS: readonly { readonly id: SettingsTab; readonly label: string }[] = [
   { id: "preferences", label: "Preferences" },
@@ -513,7 +474,6 @@ const SETTINGS_TABS: readonly { readonly id: SettingsTab; readonly label: string
   { id: "workflows", label: "Workflows" },
 ];
 
-/** The same tab look as Changes and History. */
 const TAB = [
   "border-b-2 px-3 py-2 text-center text-small no-underline transition-colors",
   "aria-[current=page]:border-brand aria-[current=page]:font-medium aria-[current=page]:text-on-surface-primary",

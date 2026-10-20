@@ -5,21 +5,6 @@ import { PRODUCERS, SEVERITIES } from "#core/findings/filter";
 import { shellKeys, type FindingsFilterPreference } from "../../settings";
 import type { Tour, TourContext } from "../machine";
 
-/**
- * Telling Sefer a finding is fine: how the first
- * version works and why, for the product owner and the designer to give
- * feedback on, rather than for a translator. Key-term approvals, the same idea
- * on another screen, are their own tutorial (`./approvals.ts`). The plan it walks:
- * `planning/items/2026-10-06-project-state-and-suppressions.mdx`.
- *
- * It starts from a share link to WA's English ULB, pinned to one commit, so
- * everyone who runs it reads the same text and the same findings: the link
- * downloads the project where it is not on the device yet (a few seconds to
- * a minute), and opens it where it is.
- *
- * Strings are raw and translated where they are drawn.
- */
-
 const toFindings = (context: TourContext): void => {
   void context.navigate({
     to: "/project/$slug/findings",
@@ -28,24 +13,12 @@ const toFindings = (context: TourContext): void => {
   });
 };
 
-/**
- * Findings narrowed to one proofreading check, so the cards on screen have
- * Fine here and More whatever the reader's own filters say: a convention
- * finding is the kind that offers all three answers.
- */
-/** How many are marked fine: step 2 moves on when this goes up, not merely when it is shown. */
 const markedFine = (): number =>
   Number(
     document.querySelector<HTMLElement>("[data-findings-hidden]")?.dataset["findingsHidden"] ?? 0,
   );
 let markedAtStart = 0;
 
-/**
- * The reader's remembered severity, producer and stale filters, while the
- * tutorial shows every finding; put back when it moves on to key terms. A
- * filter left from earlier (proofreading switched off, say) would otherwise
- * hide every card this step points at.
- */
 let heldFilter: FindingsFilterPreference | undefined;
 
 const setFilter = (context: TourContext, preference: FindingsFilterPreference): void => {
@@ -70,10 +43,6 @@ const toProofreading = (context: TourContext): void => {
   });
 };
 
-/**
- * The editor, aimed at a proofreading finding still shown (one the reader has
- * not just hidden), so its underline is on screen to hover.
- */
 const toEditorFinding = (context: TourContext): void => {
   const finding = context.shell.findings().find((each) => each.code.startsWith("sous.convention."));
   if (finding === undefined) return;
@@ -84,7 +53,6 @@ const toEditorFinding = (context: TourContext): void => {
   });
 };
 
-/** Puts back the filters the reader had before the walk-through changed them. */
 const restoreFilter = (context: TourContext): void => {
   if (heldFilter !== undefined) setFilter(context, heldFilter);
   heldFilter = undefined;
@@ -92,27 +60,19 @@ const restoreFilter = (context: TourContext): void => {
 
 const present = (selector: string): boolean => document.querySelector(selector) !== null;
 
-/**
- * Each step puts the reader on its own screen when they are not there yet,
- * so a link or the card's step menu can open any of them directly.
- */
 const on = (screen: string): boolean => window.location.pathname.includes(screen);
 const onFindings = (context: TourContext): void => {
   if (!on("/findings")) toProofreading(context);
 };
 
-/** WA's English ULB as of 2025-10-02: public, and it does not move under the tutorial. */
 const PROJECT =
   "/r/WA-Catalog/en_ulb/findings?at=8baaf2076f7813ac7ab5f3e7988627ec0f9d91dc&host=content.bibletranslationtools.org";
 
-/** Long enough for a first download on a slow line. */
 const DOWNLOAD_MS = 600_000;
 
-/** The first card's ⋯ menu, opened if it is not already: the next stops talk about what is in it. */
 let pressedMoreAt = 0;
 const openMore = (): void => {
   if (present("[role=menu]")) return;
-  // Called from a poll: a menu still opening must not be pressed shut again.
   if (Date.now() - pressedMoreAt < 800) return;
   const more = document.querySelector<HTMLElement>("[data-tour=finding-more]");
   if (more === null) return;
@@ -128,17 +88,10 @@ const toTerms = (context: TourContext): void => {
   });
 };
 
-/**
- * The card being worked on: Key terms draws one card whole and condenses the
- * rest. Its approve button names the verse's state; it is hidden while the
- * card is being edited.
- */
 const ACTIVE_CARD = "[data-sid]:not([data-condensed])";
 const APPROVE = `${ACTIVE_CARD} [data-card-action=approve]`;
-/** The active card's status mark when its text no longer matches its approval. */
 const CHANGED = `${ACTIVE_CARD} [aria-label="Text changed since last approved"]`;
 const approveLabel = (): string => document.querySelector(APPROVE)?.textContent?.trim() ?? "";
-/** Was the verse already approved when the approve stop began? Then it waits for Next. */
 let approvedAtStart = false;
 
 export const suppressionsTour: Tour = {
@@ -174,7 +127,6 @@ export const suppressionsTour: Tour = {
     {
       go: toProofreading,
       ready: () => present("[data-tour=fine-here]"),
-      // A whole Bible's cards take a while to draw after the filter moves.
       timeoutMs: 60_000,
       spotlight: {
         anchor: "[data-tour=fine-here]",
@@ -221,7 +173,6 @@ export const suppressionsTour: Tour = {
     },
     {
       go: onFindings,
-      // Opens the first card's ⋯ once its cards are drawn (every poll, until it is open).
       ready: () => {
         openMore();
         return present("[role=menu]");
@@ -246,7 +197,6 @@ export const suppressionsTour: Tour = {
     },
     {
       go: onFindings,
-      // Opens the first card's ⋯ once its cards are drawn (every poll, until it is open).
       ready: () => {
         openMore();
         return present("[data-testid=suppress-allow]");
@@ -275,7 +225,6 @@ export const suppressionsTour: Tour = {
     },
     {
       go: onFindings,
-      // Opens the first card's ⋯ once its cards are drawn (every poll, until it is open).
       ready: () => {
         openMore();
         return present("[data-testid=suppress-turn-off]");
@@ -299,7 +248,6 @@ export const suppressionsTour: Tour = {
       advance: "user",
     },
     {
-      // Closes the menu by its own button: Escape would also end the tutorial.
       go: (context) => {
         if (present("[role=menu]"))
           document.querySelector<HTMLElement>("[data-tour=finding-more]")?.click();
@@ -344,8 +292,6 @@ export const suppressionsTour: Tour = {
       go: (context) => {
         if (!on("/book/")) toEditorFinding(context);
       },
-      // Shown whether or not the popup is open: someone who pressed Next
-      // without hovering still reads it, centred.
       ready: () => true,
       spotlight: {
         anchor: ".cm-tooltip-lint",
@@ -389,7 +335,6 @@ export const suppressionsTour: Tour = {
         toTerms(context);
         approvedAtStart = false;
       },
-      // A first visit downloads the project before the page can show.
       timeoutMs: DOWNLOAD_MS,
       ready: () => {
         if (!present(APPROVE)) return false;
@@ -408,8 +353,6 @@ export const suppressionsTour: Tour = {
           },
         ],
       },
-      // Moves on when the verse BECOMES approved: one approved already counts
-      // only after it has been unapproved, or Next.
       advance: () => {
         const approved = approveLabel().startsWith("Approved");
         if (!approved) approvedAtStart = false;
@@ -433,16 +376,12 @@ export const suppressionsTour: Tour = {
           },
         ],
       },
-      // The card's status says so as soon as the text differs, before Save:
-      // moving on then takes this card off the Save button it would cover.
       advance: () => present(CHANGED),
     },
     {
       go: (context) => {
         if (!on("/terms")) toTerms(context);
       },
-      // Waits while the card is still being edited (its approve button comes
-      // back after Save changes), as long as that takes.
       ready: () => approveLabel().startsWith("Text changed"),
       timeoutMs: 600_000,
       spotlight: {

@@ -1,21 +1,3 @@
-/**
- * The index builder, off the main thread.
- *
- * Building en_ulb's index is ~4 s of inflating and parsing, and a page that
- * does it cannot scroll. A dedicated worker has the same origin and so the
- * same OPFS; it opens the filesystem itself (the OPFS layer needs nothing but
- * `navigator.storage`), reads the repository through the pack view, and posts
- * the index back.
- *
- * It reads under a SHARED Web Lock on the repository, `sefer.git:<root>`, so a
- * writer that takes the exclusive lock (a commit, a fetch, a deepen) waits for
- * it and it waits for them. The app's own writers do not take the lock yet —
- * that is the one-writer rule the plan asks for, and this is its reader half.
- *
- * Messages are plain data: the page owns observability, so the worker reports
- * timings and the page records them as spans inside its operation.
- */
-
 import { Effect, FileSystem } from "effect";
 
 import { nodeFsView } from "#core/fileSystem/nodeView";
@@ -67,7 +49,6 @@ const build = async (request: BuildRequest): Promise<void> => {
   await navigator.locks.request(lockName(request.root), { mode: "shared" }, async () => {
     const lockWaitMs = performance.now() - asked;
     const loadStart = performance.now();
-    // Loading the packs up front, so their cost is its own number.
     await view.fs.readdir(`${request.root}/.git/objects/pack`);
     const packLoadMs = performance.now() - loadStart;
     const walkStart = performance.now();
