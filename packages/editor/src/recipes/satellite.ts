@@ -319,6 +319,46 @@ export interface SatelliteOptions {
   readonly label: string;
 }
 
+function satelliteExtensions(opts: SatelliteOptions): Extension[] {
+  return [
+    initialRange.of(opts.range),
+    scope,
+    rangeEdgesSettled,
+    caretKeptInScope,
+    caretSettled,
+    borrowedStructure.of(() => opts.host.structure()),
+    EditorView.editable.of(opts.editable),
+    viewLayer(),
+    Prec.high(
+      keymap.of(
+        [...motionKeys(), ...deletionKeys()].map((binding) => ({
+          ...binding,
+          run: (target: EditorView) =>
+            structured(target.state) && binding.run !== undefined && binding.run(target),
+        })),
+      ),
+    ),
+    keymap.of([
+      { key: "Mod-z", run: () => opts.host.undo() },
+      { key: "Mod-Shift-z", run: () => opts.host.redo() },
+      { key: "Mod-y", run: () => opts.host.redo() },
+    ]),
+    EditorView.domEventHandlers({
+      beforeinput(event) {
+        const undo = event.inputType === "historyUndo";
+        if (!undo && event.inputType !== "historyRedo") return false;
+        event.preventDefault();
+        if (undo) opts.host.undo();
+        else opts.host.redo();
+        return true;
+      },
+    }),
+    keymap.of(defaultKeymap),
+    Prec.lowest(tracer.of(opts.host.tracer?.() ?? localTracer)),
+    ...opts.extensions,
+  ];
+}
+
 /**
  * Mounts one satellite view over `opts.range` of the host book.
  *
@@ -336,43 +376,7 @@ export function mountSatellite(opts: SatelliteOptions): Satellite {
 
   const state = EditorState.create({
     doc: opts.host.doc(),
-    extensions: [
-      initialRange.of(opts.range),
-      scope,
-      rangeEdgesSettled,
-      caretKeptInScope,
-      caretSettled,
-      borrowedStructure.of(() => opts.host.structure()),
-      EditorView.editable.of(opts.editable),
-      viewLayer(),
-      Prec.high(
-        keymap.of(
-          [...motionKeys(), ...deletionKeys()].map((binding) => ({
-            ...binding,
-            run: (target: EditorView) =>
-              structured(target.state) && binding.run !== undefined && binding.run(target),
-          })),
-        ),
-      ),
-      keymap.of([
-        { key: "Mod-z", run: () => opts.host.undo() },
-        { key: "Mod-Shift-z", run: () => opts.host.redo() },
-        { key: "Mod-y", run: () => opts.host.redo() },
-      ]),
-      EditorView.domEventHandlers({
-        beforeinput(event) {
-          const undo = event.inputType === "historyUndo";
-          if (!undo && event.inputType !== "historyRedo") return false;
-          event.preventDefault();
-          if (undo) opts.host.undo();
-          else opts.host.redo();
-          return true;
-        },
-      }),
-      keymap.of(defaultKeymap),
-      Prec.lowest(tracer.of(opts.host.tracer?.() ?? localTracer)),
-      ...opts.extensions,
-    ],
+    extensions: satelliteExtensions(opts),
   });
 
   let submitting = false;

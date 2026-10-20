@@ -318,6 +318,28 @@ class Bar implements LayerMarker {
 
 const BAR_OFFSET = 11;
 
+function settleOverlaps(
+  spans: { hunk: DiffHunk; top: number; bottom: number }[],
+  open: ReadonlySet<string>,
+): void {
+  const point = (entry: { hunk: DiffHunk }): boolean =>
+    entry.hunk.from === entry.hunk.to && !open.has(entry.hunk.key);
+  for (let index = 1; index < spans.length; index++) {
+    const before = spans[index - 1];
+    const after = spans[index];
+    if (before === undefined || after === undefined || after.top >= before.bottom) continue;
+    if (point(after)) {
+      const height = after.bottom - after.top;
+      after.top = before.bottom + 2;
+      after.bottom = after.top + height;
+      continue;
+    }
+    const middle = (after.top + Math.min(before.bottom, after.bottom)) / 2;
+    before.bottom = middle;
+    after.top = middle;
+  }
+}
+
 const barLayer = layer({
   above: true,
   class: "cm-diff-bars",
@@ -360,22 +382,7 @@ const barLayer = layer({
       spans.push({ hunk, top, bottom: Math.max(bottom, top + (hunk.from === hunk.to ? 8 : 4)) });
     }
     spans.sort((a, b) => a.top - b.top);
-    const point = (entry: { hunk: DiffHunk }): boolean =>
-      entry.hunk.from === entry.hunk.to && !open.has(entry.hunk.key);
-    for (let index = 1; index < spans.length; index++) {
-      const before = spans[index - 1];
-      const after = spans[index];
-      if (before === undefined || after === undefined || after.top >= before.bottom) continue;
-      if (point(after)) {
-        const height = after.bottom - after.top;
-        after.top = before.bottom + 2;
-        after.bottom = after.top + height;
-        continue;
-      }
-      const middle = (after.top + Math.min(before.bottom, after.bottom)) / 2;
-      before.bottom = middle;
-      after.top = middle;
-    }
+    settleOverlaps(spans, open);
     const out: Bar[] = [];
     for (const { hunk, top, bottom } of spans)
       out.push(

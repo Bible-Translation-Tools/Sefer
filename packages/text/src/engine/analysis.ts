@@ -148,22 +148,9 @@ export const coarse = (cls: number): number => cls & 0b111;
 /** Is one `FLAG` set? */
 export const has = (cls: number, flag: number): boolean => (cls & flag) !== 0;
 
-/**
- * The class word for marker table row `idx`, refined by a token's kind bits.
- *
- * `kindBits` is the raw byte — spelling bit included — because the closer and
- * unknown facts are only knowable from it: `\+bd` and `\bd*` resolve to the
- * same row, and only the bits say which one this token is. Pass `null` when
- * classifying a row rather than a token.
- *
- * Row 0 is the unknown marker, so `idx === 0` is what UNKNOWN means.
- */
-export const classWordOf = (idx: number, kindBits: number | null): number => {
-  const row = MARKERS[idx];
-  if (row === undefined) return 0;
-  const unknown = idx === 0;
+const classOfKind = (kind: (typeof MARKERS)[number]["kind"]): number => {
   let word: number = CLASS.OTHER;
-  switch (row.kind) {
+  switch (kind) {
     case MarkerKind.Paragraph:
     case MarkerKind.Header:
       word = CLASS.PARA;
@@ -192,7 +179,12 @@ export const classWordOf = (idx: number, kindBits: number | null): number => {
     default:
       word = CLASS.OTHER;
   }
-  switch (row.category) {
+  return word;
+};
+
+const flagsOfCategory = (category: (typeof MARKERS)[number]["category"]): number => {
+  let word = 0;
+  switch (category) {
     case Category.ParaTitlesSections:
       word |= FLAG.HEADING;
       break;
@@ -211,6 +203,25 @@ export const classWordOf = (idx: number, kindBits: number | null): number => {
     default:
       break;
   }
+  return word;
+};
+
+/**
+ * The class word for marker table row `idx`, refined by a token's kind bits.
+ *
+ * `kindBits` is the raw byte — spelling bit included — because the closer and
+ * unknown facts are only knowable from it: `\+bd` and `\bd*` resolve to the
+ * same row, and only the bits say which one this token is. Pass `null` when
+ * classifying a row rather than a token.
+ *
+ * Row 0 is the unknown marker, so `idx === 0` is what UNKNOWN means.
+ */
+export const classWordOf = (idx: number, kindBits: number | null): number => {
+  const row = MARKERS[idx];
+  if (row === undefined) return 0;
+  const unknown = idx === 0;
+  let word = classOfKind(row.kind);
+  word |= flagsOfCategory(row.category);
   if (kindBits !== null) {
     const kind = kindBits & ~TOKEN_SPELLING_BIT;
     const spelled = (kindBits & TOKEN_SPELLING_BIT) !== 0;

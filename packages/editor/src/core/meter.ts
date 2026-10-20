@@ -181,6 +181,64 @@ const afterPaint = (
   });
 };
 
+function reportAfterPaint(
+  sink: (measured: Measured) => void,
+  began: number,
+  parts: Pick<Measured, "gesture" | "analyzes" | "browser" | "totals" | "other">,
+): void {
+  afterPaint(began, (cost, source) => {
+    const render = cost === null ? null : +cost.toFixed(3);
+    const measured = { ...parts, render, renderSource: source };
+    sink({ ...measured, note: noteOf(measured) });
+  });
+}
+
+function attribute(
+  totals: NonNullable<ReturnType<typeof closeGesture>>,
+  gesture: number,
+  first: number,
+  began: number,
+): { browser: number; other: number } {
+  const browser = first === 0 ? 0 : +Math.max(0, Math.min(gesture, first - began)).toFixed(3);
+  let attributed = browser;
+  for (const total of totals.values()) attributed += total.ms;
+  const other = +Math.max(0, gesture - attributed).toFixed(3);
+  return { browser, other };
+}
+
+function meterExtension(
+  on: () => boolean,
+  shut: (update: { docChanged: boolean; transactions: readonly unknown[] }) => void,
+  firstTransaction: () => void,
+): Extension[] {
+  return [
+    Prec.highest(
+      EditorView.domEventHandlers({
+        keydown: on,
+        beforeinput: on,
+        paste: on,
+        cut: on,
+        drop: on,
+        mousedown: on,
+        compositionstart: on,
+      }),
+    ),
+    Prec.highest(EditorView.updateListener.of(shut)),
+    Prec.highest(
+      EditorState.changeFilter.of(() => {
+        firstTransaction();
+        return true;
+      }),
+    ),
+    Prec.highest(
+      EditorState.transactionExtender.of(() => {
+        firstTransaction();
+        return null;
+      }),
+    ),
+  ];
+}
+
 export function keystrokeMeter(sink: (measured: Measured) => void): Meter {
   let live = false;
   let analyzed = 0;
@@ -199,16 +257,8 @@ export function keystrokeMeter(sink: (measured: Measured) => void): Meter {
     if (!(updates && (fromEvent || docChanged))) return;
     const gesture = +(last - began).toFixed(3);
     const analyzes = analyzeCount() - analyzed;
-    const startedAt = began;
-    const browser = first === 0 ? 0 : +Math.max(0, Math.min(gesture, first - began)).toFixed(3);
-    let attributed = browser;
-    for (const total of totals.values()) attributed += total.ms;
-    const other = +Math.max(0, gesture - attributed).toFixed(3);
-    afterPaint(startedAt, (cost, source) => {
-      const render = cost === null ? null : +cost.toFixed(3);
-      const measured = { gesture, render, renderSource: source, analyzes, browser, totals, other };
-      sink({ ...measured, note: noteOf(measured) });
-    });
+    const { browser, other } = attribute(totals, gesture, first, began);
+    reportAfterPaint(sink, began, { gesture, analyzes, browser, totals, other });
   };
 
   const open = (byEvent = false) => {
@@ -247,31 +297,6 @@ export function keystrokeMeter(sink: (measured: Measured) => void): Meter {
 
   return {
     open: () => open(false),
-    extension: [
-      Prec.highest(
-        EditorView.domEventHandlers({
-          keydown: on,
-          beforeinput: on,
-          paste: on,
-          cut: on,
-          drop: on,
-          mousedown: on,
-          compositionstart: on,
-        }),
-      ),
-      Prec.highest(EditorView.updateListener.of(shut)),
-      Prec.highest(
-        EditorState.changeFilter.of(() => {
-          firstTransaction();
-          return true;
-        }),
-      ),
-      Prec.highest(
-        EditorState.transactionExtender.of(() => {
-          firstTransaction();
-          return null;
-        }),
-      ),
-    ],
+    extension: meterExtension(on, shut, firstTransaction),
   };
 }

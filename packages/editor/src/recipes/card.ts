@@ -1,5 +1,5 @@
 import { ChangeSet, Compartment, Prec, StateField, type Extension } from "@codemirror/state";
-import { EditorView, keymap } from "@codemirror/view";
+import { EditorView, keymap, type ViewUpdate } from "@codemirror/view";
 
 import { seatedOf, type EditorBook } from "../book";
 import { analyzer, type Analyze } from "../core/analyzer";
@@ -106,35 +106,22 @@ const sessionUndo = (): StateField<ChangeSet> =>
     },
   });
 
-export function mountCard(options: CardOptions): CardMount {
-  const book = seatedOf(options.book);
-  const surface = options.surface ?? "cm-excerpt";
-  const clip = options.clip !== false;
-  const range = clip ? clipSpan(book.state.doc, options.range) : options.range;
-  const projection = new Compartment();
-  const undo = options.session === true ? sessionUndo() : undefined;
-  const dirtyListeners = new Set<(dirty: boolean) => void>();
-  let dirty = false;
-
-  const extensions: Extension[] = [
+function cardExtensions(
+  options: CardOptions,
+  surface: string,
+  clip: boolean,
+  projection: Compartment,
+  undo: ReturnType<typeof sessionUndo> | undefined,
+  track: (update: ViewUpdate) => void,
+): Extension[] {
+  return [
     projection.of(policyView(options.policy, surface)),
     analyzer.of(options.analyze),
     readingLayer,
     ...(clip ? [clippedToScope()] : []),
     ...(options.marks === undefined ? [] : [markedRanges(options.marks)]),
     ...(options.diff === undefined ? [] : liveDiff(options.diff)),
-    ...(undo === undefined
-      ? []
-      : [
-          undo,
-          EditorView.updateListener.of((update) => {
-            if (!update.docChanged) return;
-            const next = !update.state.field(undo).empty;
-            if (next === dirty) return;
-            dirty = next;
-            for (const listener of dirtyListeners) listener(dirty);
-          }),
-        ]),
+    ...(undo === undefined ? [] : [undo, EditorView.updateListener.of(track)]),
     ...(options.onEscape === undefined
       ? []
       : [
@@ -151,6 +138,66 @@ export function mountCard(options: CardOptions): CardMount {
           ),
         ]),
   ];
+}
+
+function placeCaret(
+  view: EditorView,
+  range: { readonly from: number; readonly to: number },
+  caret: CardOptions["caret"],
+): void {
+  if (caret === undefined) return;
+  const inside = (at: number): boolean => at >= range.from && at <= range.to;
+  const pointed = caret.point === undefined ? null : view.posAtCoords(caret.point);
+  const select = caret.select;
+  if (caret.at === undefined && pointed !== null && inside(pointed))
+    view.dispatch({ selection: { anchor: pointed } });
+  else if (caret.at !== undefined && inside(caret.at))
+    view.dispatch({ selection: { anchor: caret.at } });
+  else if (select !== undefined && select.from >= range.from && select.to <= range.to)
+    view.dispatch({ selection: { anchor: select.from, head: select.to } });
+  else view.dispatch({ selection: { anchor: range.from } });
+  view.focus();
+}
+
+function cardSession(
+  view: EditorView,
+  undo: ReturnType<typeof sessionUndo> | undefined,
+  dirtyListeners: Set<(dirty: boolean) => void>,
+  isDirty: () => boolean,
+): CardMount["session"] {
+  if (undo === undefined) return undefined;
+  return {
+    dirty: isDirty,
+    onDirty: (listener: (dirty: boolean) => void) => {
+      dirtyListeners.add(listener);
+      return () => dirtyListeners.delete(listener);
+    },
+    cancel: () => {
+      const inverse = view.state.field(undo, false);
+      if (inverse !== undefined && !inverse.empty)
+        view.dispatch({ changes: inverse, filter: false });
+    },
+  };
+}
+
+export function mountCard(options: CardOptions): CardMount {
+  const book = seatedOf(options.book);
+  const surface = options.surface ?? "cm-excerpt";
+  const clip = options.clip !== false;
+  const range = clip ? clipSpan(book.state.doc, options.range) : options.range;
+  const projection = new Compartment();
+  const undo = options.session === true ? sessionUndo() : undefined;
+  const dirtyListeners = new Set<(dirty: boolean) => void>();
+  let dirty = false;
+
+  const track = (update: ViewUpdate): void => {
+    if (!update.docChanged || undo === undefined) return;
+    const next = !update.state.field(undo).empty;
+    if (next === dirty) return;
+    dirty = next;
+    for (const listener of dirtyListeners) listener(dirty);
+  };
+  const extensions = cardExtensions(options, surface, clip, projection, undo, track);
 
   const release = book.hold();
   const satellite = mountSatellite({
@@ -163,20 +210,7 @@ export function mountCard(options: CardOptions): CardMount {
   });
   const { view } = satellite;
 
-  const caret = options.caret;
-  if (caret !== undefined) {
-    const inside = (at: number): boolean => at >= range.from && at <= range.to;
-    const pointed = caret.point === undefined ? null : view.posAtCoords(caret.point);
-    const select = caret.select;
-    if (caret.at === undefined && pointed !== null && inside(pointed))
-      view.dispatch({ selection: { anchor: pointed } });
-    else if (caret.at !== undefined && inside(caret.at))
-      view.dispatch({ selection: { anchor: caret.at } });
-    else if (select !== undefined && select.from >= range.from && select.to <= range.to)
-      view.dispatch({ selection: { anchor: select.from, head: select.to } });
-    else view.dispatch({ selection: { anchor: range.from } });
-    view.focus();
-  }
+  placeCaret(view, range, options.caret);
 
   return handleFor(view, {
     get range() {
@@ -190,21 +224,7 @@ export function mountCard(options: CardOptions): CardMount {
     },
     setMarks: (marks: readonly MarkedRange[]) => remark(view, marks),
     setDiff: (paint: DiffPaint | null) => repaintDiff(view, paint ?? NO_PAINT),
-    session:
-      undo === undefined
-        ? undefined
-        : {
-            dirty: () => dirty,
-            onDirty: (listener: (dirty: boolean) => void) => {
-              dirtyListeners.add(listener);
-              return () => dirtyListeners.delete(listener);
-            },
-            cancel: () => {
-              const inverse = view.state.field(undo, false);
-              if (inverse !== undefined && !inverse.empty)
-                view.dispatch({ changes: inverse, filter: false });
-            },
-          },
+    session: cardSession(view, undo, dirtyListeners, () => dirty),
     destroy: () => {
       dirtyListeners.clear();
       satellite.destroy();

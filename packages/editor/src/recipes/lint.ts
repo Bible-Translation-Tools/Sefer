@@ -226,6 +226,67 @@ export const showCorpusFindings = (view: EditorView, list: readonly CorpusFindin
   forceLinting(view);
 };
 
+function onionDiagnostics(
+  state: EditorState,
+  isHidden: HiddenTest,
+  suppressHidden: () => boolean,
+): CmDiagnostic[] {
+  const out: CmDiagnostic[] = [];
+  for (const f of findings(state, isHidden)) {
+    if (f.severity === null) continue;
+    if (f.hidden && suppressHidden()) continue;
+    const fix = f.fix;
+    const stamp = f.stamp;
+    out.push({
+      from: f.from,
+      to: f.point ? f.to : Math.max(f.to, f.from + 1),
+      severity: f.severity,
+      source: `onion/${f.name}`,
+      markClass: f.point ? "usfm-lint-slot" : (SEVERITY_CLASS[f.severity] ?? "usfm-lint-info"),
+      message: f.message,
+      actions:
+        fix === null
+          ? undefined
+          : [
+              {
+                name: `Fix: ${f.fixLabel ?? "repair"}`,
+                markClass: "usfm-fix-action",
+                apply(target) {
+                  applyFix(target, fix, stamp);
+                },
+              },
+            ],
+    });
+  }
+  return out;
+}
+
+function corpusDiagnostics(
+  state: EditorState,
+  isHidden: HiddenTest,
+  suppressHidden: () => boolean,
+): CmDiagnostic[] {
+  const out: CmDiagnostic[] = [];
+  const length = state.doc.length;
+  for (const f of corpusFindings(state)) {
+    if (f.from < 0 || f.to > length || f.from > f.to) continue;
+    if (suppressHidden() && isHidden(state, f.from, f.to)) continue;
+    out.push({
+      from: f.from,
+      to: Math.max(f.to, Math.min(f.from + 1, length)),
+      severity: f.severity,
+      source: `sous/${f.code}`,
+      markClass: SEVERITY_CLASS[f.severity] ?? "usfm-lint-info",
+      message: f.message,
+      actions: f.actions?.map((action) => ({
+        name: action.name,
+        apply: () => action.run(),
+      })),
+    });
+  }
+  return out;
+}
+
 /**
  * The inline linter: Galley's diagnostics from the current state, plus whatever
  * corpus findings were last pushed in. ONE `linter`, so one gutter, one
@@ -242,53 +303,10 @@ export function usfmLinter(
     sousField,
     linter(
       (view) => {
-        const out: CmDiagnostic[] = [];
-        for (const f of findings(view.state, isHidden)) {
-          if (f.severity === null) continue;
-          if (f.hidden && suppressHidden()) continue;
-          const fix = f.fix;
-          const stamp = f.stamp;
-          out.push({
-            from: f.from,
-            to: f.point ? f.to : Math.max(f.to, f.from + 1),
-            severity: f.severity,
-            source: `onion/${f.name}`,
-            markClass: f.point
-              ? "usfm-lint-slot"
-              : (SEVERITY_CLASS[f.severity] ?? "usfm-lint-info"),
-            message: f.message,
-            actions:
-              fix === null
-                ? undefined
-                : [
-                    {
-                      name: `Fix: ${f.fixLabel ?? "repair"}`,
-                      markClass: "usfm-fix-action",
-                      apply(target) {
-                        applyFix(target, fix, stamp);
-                      },
-                    },
-                  ],
-          });
-        }
-        const length = view.state.doc.length;
-        for (const f of corpusFindings(view.state)) {
-          if (f.from < 0 || f.to > length || f.from > f.to) continue;
-          if (suppressHidden() && isHidden(view.state, f.from, f.to)) continue;
-          out.push({
-            from: f.from,
-            to: Math.max(f.to, Math.min(f.from + 1, length)),
-            severity: f.severity,
-            source: `sous/${f.code}`,
-            markClass: SEVERITY_CLASS[f.severity] ?? "usfm-lint-info",
-            message: f.message,
-            actions: f.actions?.map((action) => ({
-              name: action.name,
-              apply: () => action.run(),
-            })),
-          });
-        }
-        return out;
+        return [
+          ...onionDiagnostics(view.state, isHidden, suppressHidden),
+          ...corpusDiagnostics(view.state, isHidden, suppressHidden),
+        ];
       },
       {
         delay: 150,

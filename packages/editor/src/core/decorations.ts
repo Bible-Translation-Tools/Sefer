@@ -594,6 +594,20 @@ export function buildRegular(
   return finish(add, doc, opts, { joined, blocks: structure.blocks.length });
 }
 
+function setOfPending(add: Pending[]): DecorationSet {
+  add.sort((a, b) => a.from - b.from || a.deco.startSide - b.deco.startSide || a.to - b.to);
+  const builder = new RangeSetBuilder<Decoration>();
+  let lastTo = -1;
+  for (const d of add) {
+    if (d.to > d.from && specOf(d.deco).class === undefined) {
+      if (d.from < lastTo) continue;
+      lastTo = d.to;
+    }
+    builder.add(d.from, d.to, d.deco);
+  }
+  return builder.finish();
+}
+
 export function buildNoteApparatus(
   doc: string,
   structure: DocStructure,
@@ -646,17 +660,7 @@ export function buildNoteApparatus(
   }
   hide(at, range.to);
 
-  add.sort((a, b) => a.from - b.from || a.deco.startSide - b.deco.startSide || a.to - b.to);
-  const builder = new RangeSetBuilder<Decoration>();
-  let lastTo = -1;
-  for (const d of add) {
-    if (d.to > d.from && specOf(d.deco).class === undefined) {
-      if (d.from < lastTo) continue;
-      lastTo = d.to;
-    }
-    builder.add(d.from, d.to, d.deco);
-  }
-  return builder.finish();
+  return setOfPending(add);
 }
 
 export function buildUsfm(doc: string, structure: DocStructure, opts: BuildOpts): BuildResult {
