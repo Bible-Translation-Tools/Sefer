@@ -647,6 +647,15 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
   /** The entry a resource is a tab as, if it is one. */
   const tabOf = (resource: Resource): Entry | undefined =>
     entries().find((entry) => entry.resource.id === resource.id);
+  // The joined panel: with no gateway tabs left, the heart language is the one
+  // on show — not an empty pane behind a tab that no longer exists.
+  createEffect(
+    () => !loading() && entries().length === 0,
+    (none) => {
+      if (none) props.heart?.onActivate(true);
+    },
+  );
+
   /** Takes a picked text off the tabs. It stays on this device, and in every other project. */
   const unpick = (entry: Entry): void => {
     const project = shell.project();
