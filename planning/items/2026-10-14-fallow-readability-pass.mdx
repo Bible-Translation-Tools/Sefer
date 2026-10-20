@@ -2,9 +2,9 @@
 id: 49f5f375-3747-4795-b13b-33f79fcb0912
 title: "Fallow readability pass"
 kind: followup
-status: planned
+status: in-progress
 created: 2026-10-14
-updated: 2026-10-14
+updated: 2026-10-20
 sha: 50aa9cd
 priority: 2
 tags: [quality]
@@ -15,3 +15,29 @@ source: sefer-next-features doc, 2026-10-07 to 13
 After the stack merges: `pnpm exec fallow health` for length and cyclomatic complexity, report
 first, then fix the worst few. The editor's cursor code is a first target;
 `documentation/lint-results.md` lists the component-size refactors still to do.
+
+## Done on branch `readability` (2026-10-20, not merged)
+
+Will's brief:
+
+> I don't want to change behavior in fallow … I'd like to look for addl primitive and duplicated
+> code to extract … axe likely all the comments nearly … prose is not runnable … variable naming
+> shouldn't be 1,2,3 letter … Don't have to nest the ternaries so much.
+
+- **Comments:** about 8,800 deleted. Kept: the packages' exported API docs (the hub reads them),
+  dated rulings, measured numbers, one-line SAFETY notes, lint directives, quirks of things
+  outside our control, and one-line notes on Solid 2 reactivity choices. Every touched file
+  parses to the same syntax tree with comments removed (466 files).
+- **Names, ternaries, duplicates:** about 300 local renames (TypeScript's own rename), about 95
+  nested ternaries flattened into named helpers, and a dozen duplicates extracted (one search
+  match generator, one wasm export probe, one apply-preview, one guarded Backspace/Delete, one
+  table sort icon, shared tool helpers). Exported names unchanged.
+- **Checked:** `pnpm check`, `deadcode` and `test:browser` pass; driven on en_ulb: the
+  suppressions tutorial's 14 stops, Find, typing and Undo, the recovery banner.
+
+<Followup id="exported-names">Exported names the passes flagged for a rename: `isUnit`/`isInvisible`/`isIsolate` (editor; unclear what they test), `with_` (sync options), `me` → `username` in suggestions' `where()`, `ask` (Find, key terms), `cx`, `asTheme` → `parseTheme`, `t` on observability events, one-letter members of exported interfaces in `packages/editor/src/core`.</Followup>
+
+<Followup id="giant-functions">Still to do, and riskiest without tests: split the giant functions (`ReviewPanel` 1,990 lines, `Find` 1,147, `ReviewReader` 1,139, `makeShell` 1,110, `ExcerptCard` cyclomatic 63). Report suggested splits first.</Followup>
+
+<Followup id="must-kill">The comment passes' `MUST KILL` list: reshape what needed prose to explain, e.g. the editor's observability `emit` closure as a named state machine, `analyze(text, why, id)` doing two things, the `BROUGHT_IN` note-line sentinel as a typed field, `strict: false` route-search casts as typed `validateSearch`, the remaining `solid/reactivity` suppressions in ReferenceColumn and ReferenceCard.</Followup>
+
