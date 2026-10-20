@@ -9,9 +9,27 @@ tags: [kitchen]
 source: planning/00-ideas/scripture-kitchen-asks.md
 ---
 
-Sefer is on **v0.1.10**. Everything asked before is delivered and in use, except what is below.
+Sefer is on **v0.1.11** (2026-10-20). Everything asked before is delivered, except ask 2.
 
-**Open upstream:** 2 (lower priority), 11, 12, 13, 14, 15. An empty note's body (was 6) is Sefer's: [the editor's edges](/items/2026-10-14-form-mode). Chapter labels (was 4) are Sefer's own: [workflows](/items/2026-10-14-workflows-routes-and-state-in-the-url).
+**Delivered in v0.1.11, Sefer side still to wire:**
+
+- **14, `resolve`:** `galley.resolve(id, address, { utf16: true })` answers an address in one
+  text (found, missing, ambiguous) as JSON; its 31 cases came from `locate.ts`'s rules. Sefer
+  can retire `packages/text/src/location/locate.ts`'s `resolve` for it.
+- **15, onion identities:** `diagnosticIdentityOf` (`v1:o`, by code and place) and
+  `diagnosticSubjectIdentity` (`v1:os`, an unknown or deprecated marker or attribute) in
+  `sous-identity`. Lint findings can now get Fine here and Always allow
+  ([suppressions](/items/2026-10-06-project-state-and-suppressions)).
+- **New, not asked:** `snapshot.hygieneGroups({ scope })` groups hygiene rows by book or project,
+  and a group's `.fix()` is the certain deletions (fa_opv: 235,434 ZWNJs, no letter). A
+  one-click "fix all" for a hygiene group is now possible.
+- **11, 12, 13** need nothing from Sefer: `locate` is 47× cheaper (the hub's case), the TOC tiles
+  a unit's opening markers forward, a letter run longer than its habit fires.
+
+The findings wire is version 3; the reader in the same package refuses version 2, so the package
+and its reader move together (they do: one dependency).
+
+**Open upstream:** 2 (lower priority). An empty note's body (was 6) is Sefer's: [the editor's edges](/items/2026-10-14-form-mode). Chapter labels (was 4) are Sefer's own: [workflows](/items/2026-10-14-workflows-routes-and-state-in-the-url).
 
 ## 2. Sous — a real character census, not only convictions
 
