@@ -162,8 +162,10 @@ export function FindingsPanel() {
       // `untrack`: `update` reads the current filter to merge the patch onto
       // it, and a read inside an effect callback is the one Solid warns about
       // — it would not track, and here it must not.
+      // A link naming a check means across the project, so the book scope
+      // this session had narrowed to is cleared with it.
       untrack(() => {
-        filters.update({ codes: [code] });
+        filters.update({ codes: [code], books: null });
       });
     },
   );

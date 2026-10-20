@@ -1,3 +1,8 @@
+import { Effect } from "effect";
+
+import { PRODUCERS, SEVERITIES } from "#core/findings/filter";
+
+import { shellKeys, type FindingsFilterPreference } from "../../settings";
 import type { Tour, TourContext } from "../machine";
 
 /**
@@ -34,8 +39,26 @@ const markedFine = (): number =>
   );
 let markedAtStart = 0;
 
+/**
+ * The reader's remembered severity, producer and stale filters, while the
+ * tutorial shows every finding; put back when it moves on to key terms. A
+ * filter left from earlier (proofreading switched off, say) would otherwise
+ * hide every card this step points at.
+ */
+let heldFilter: FindingsFilterPreference | undefined;
+
+const setFilter = (context: TourContext, preference: FindingsFilterPreference): void => {
+  const settings = context.shell.services.settings;
+  void context.shell.services.run(
+    Effect.ignore(settings.set(shellKeys(settings).findingsFilter, preference)),
+  );
+};
+
 const toProofreading = (context: TourContext): void => {
   markedAtStart = markedFine();
+  const settings = context.shell.services.settings;
+  heldFilter ??= settings.get(shellKeys(settings).findingsFilter);
+  setFilter(context, { severities: SEVERITIES, producers: PRODUCERS, hideStale: false });
   const code = context.shell
     .findings()
     .find((finding) => finding.code.startsWith("sous.convention."))?.code;
@@ -47,6 +70,8 @@ const toProofreading = (context: TourContext): void => {
 };
 
 const toTerms = (context: TourContext): void => {
+  if (heldFilter !== undefined) setFilter(context, heldFilter);
+  heldFilter = undefined;
   void context.navigate({
     to: "/project/$slug/terms",
     params: { slug: context.shell.slug() },
@@ -86,7 +111,8 @@ export const suppressionsTour: Tour = {
     {
       go: toProofreading,
       ready: () => present("[data-tour=fine-here]"),
-      timeoutMs: 20_000,
+      // A whole Bible's cards take a while to draw after the filter moves.
+      timeoutMs: 60_000,
       spotlight: {
         anchor: "[data-tour=fine-here]",
         title: "Fine here",
