@@ -45,6 +45,7 @@ import { ProjectAnalysis, type BookSummary } from "#core/analysis/projectAnalysi
 import type { Finding } from "#core/findings/finding";
 import { navigateTarget } from "#core/findings/findings";
 import type { Inventory } from "#core/findings/inventory";
+import type { Rung } from "#core/findings/suppressions";
 import * as Fixes from "#core/fixes/fixes";
 import { tocViewOf } from "#core/galley";
 import { Repositories } from "#core/git/repository";
@@ -79,6 +80,7 @@ import {
 import type { ShellEvent } from "./shellEvent";
 import { makeShellStores, type SaveState } from "./shellStores";
 import { sousValues } from "./sousSettings";
+import { makeSuppressionStore } from "./suppressions";
 import { checkForChanges } from "./syncActions";
 import { syncPreferences } from "./syncSettings";
 import { syncWatch } from "./syncWatch";
@@ -294,6 +296,16 @@ export interface Shell {
   readonly findings: Accessor<readonly Finding[]>;
   /** A re-judge is in flight; the findings shown are about to be replaced. */
   readonly findingsPending: Accessor<boolean>;
+
+  /**
+   * The findings the reader said are fine, left out of `findings`: what
+   * "Show suppressed" lists. Publication-scoped, like `findings`.
+   */
+  readonly suppressedFindings: Accessor<readonly Finding[]>;
+  /** "Fine here" (`here`) or "Always allow" (`everywhere`) on a Sous finding. */
+  readonly suppress: (finding: Finding, rung: Rung) => Promise<void>;
+  /** Takes a suppression back, by its identity. */
+  readonly unsuppress: (id: string) => Promise<void>;
 
   /**
    * Something moved, and this says what — the one door the shell's stores are
@@ -798,6 +810,11 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     bookCensus,
     inventory,
   } = stores;
+  const suppressions = makeSuppressionStore({ services, changed });
+  const suppressedFindings = (): readonly Finding[] => {
+    findings();
+    return services.projectAnalysis.suppressed();
+  };
 
   /**
    * The focused book's chapter table.
@@ -851,6 +868,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     setFocused(undefined);
     setProject(undefined);
     resources.releaseAll();
+    suppressions.clear();
     // The stores describe a project. With none open they describe nothing.
     stores.clear();
     if (staticOpen === undefined) return;
@@ -961,6 +979,9 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
             discard: true,
           });
           const analysis = yield* ProjectAnalysis;
+          // What the reader said is fine, before the first publication, so
+          // it arrives already filtered.
+          yield* Effect.promise(() => suppressions.load(root));
           // The remembered book first. `attach` parses the whole project
           // serially either way; naming the landing book decides which parse
           // the reader is waiting on rather than how many there are.
@@ -972,6 +993,8 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     );
     gesture.end("ready", { "project.books": ready.books.length });
     live = ready;
+    // Every book is analysed now, so an entry whose text is gone can be told.
+    void suppressions.prune();
     // What the project declares as its source texts: the Library answers
     // "source" with these when the person has picked none.
     await services.run(
@@ -1495,6 +1518,9 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     finding,
     findings,
     findingsPending,
+    suppressedFindings,
+    suppress: (target, rung) => suppressions.suppress(target, rung),
+    unsuppress: (id) => suppressions.unsuppress(id),
     report,
     paletteOpen,
     setPaletteOpen: (open) => {

@@ -26,6 +26,7 @@
 // Observability, which records counts and codes only.
 
 import type { BookId } from "@sefer/text/book";
+import type { TocView } from "@sefer/text/location/locate";
 import type { SourceStamp } from "@sefer/text/source";
 
 import {
@@ -45,9 +46,17 @@ import {
   type MarkBefore,
   type MaskMap,
   type Pattern,
+  patternIdentity,
 } from "../galley";
 import { comparisonOf } from "./compare";
 import { describeSous, render } from "./messages";
+import {
+  isEmpty,
+  NO_SUPPRESSIONS,
+  siteKeyOf,
+  type SuppressionKeys,
+  type Suppressions,
+} from "./suppressions";
 
 /**
  * The three rungs a reader is shown. The per-book lint's `hint` folds into
@@ -131,6 +140,12 @@ export interface Finding {
    * `message`.
    */
   readonly comparison?: readonly FindingQuery[];
+  /**
+   * What "Fine here" and "Always allow" would save for a Sous finding
+   * (`./suppressions.ts`). Computed when first read: only a finding someone
+   * suppresses, or a project that has suppressions, needs it.
+   */
+  readonly suppression?: SuppressionKeys;
 }
 
 const identify = (
@@ -272,6 +287,8 @@ export interface PublishedBook {
    * Casing message wants the mark before its word.
    */
   readonly mask?: () => MaskMap | undefined;
+  /** The book's table of contents, which names the verse a suppression is keyed by. */
+  readonly toc?: () => TocView;
 }
 
 /** Enough reading before a word to find the mark in front of it. */
@@ -337,11 +354,17 @@ const corpusCode = (finding: CorpusFinding, channel: string | undefined): string
  * which is what `ProjectAnalysis` does.
  */
 export interface CorpusReader {
-  /** One book's findings, converted on first ask and held for the publication. */
+  /** One book's findings, converted on first ask and held for the publication. Suppressed ones are left out. */
   of(bookId: BookId): readonly Finding[];
   /** Every book's — the Findings panel's list. Converts what was not asked for yet. */
   all(): readonly Finding[];
-  /** How many errors and warnings, from the severities alone: nothing is converted. */
+  /** The findings the reader said are fine, every book's: what "Show suppressed" lists. */
+  suppressed(): readonly Finding[];
+  /**
+   * How many errors and warnings are shown. From the severities alone when
+   * nothing is suppressed; otherwise every book is converted, since only a
+   * finding's identity says whether it is suppressed.
+   */
   totals(): { readonly errors: number; readonly warnings: number };
 }
 
@@ -359,6 +382,7 @@ export interface CorpusReader {
 export const corpusReader = (
   snapshot: FindingsSnapshot,
   resolveBook: (id: string) => PublishedBook | undefined,
+  suppressions: Suppressions = NO_SUPPRESSIONS,
 ): CorpusReader => {
   const usable = snapshot.coordinateSpace === "utf16";
   const bookCount = snapshot.length;
@@ -421,15 +445,28 @@ export const corpusReader = (
     return indexes;
   };
 
-  const converted = new Map<BookId, readonly Finding[]>();
-  const of = (bookId: BookId): readonly Finding[] => {
+  const filtering = !isEmpty(suppressions);
+  const bookKey = (index: number): string => snapshot.book(index)?.key ?? String(index);
+  const isSuppressed = (keys: SuppressionKeys | undefined): boolean =>
+    keys !== undefined &&
+    (suppressions.here.has(keys.here) ||
+      (keys.everywhere !== undefined && suppressions.everywhere.has(keys.everywhere)));
+
+  const converted = new Map<
+    BookId,
+    { readonly shown: readonly Finding[]; readonly hidden: readonly Finding[] }
+  >();
+  const NONE = { shown: [], hidden: [] };
+  const convert = (
+    bookId: BookId,
+  ): { readonly shown: readonly Finding[]; readonly hidden: readonly Finding[] } => {
     const held = converted.get(bookId);
     if (held !== undefined) return held;
     const at = indexOf().get(bookId);
     const book = at === undefined ? undefined : snapshot.book(at.index);
     if (at === undefined || book === undefined) {
-      converted.set(bookId, []);
-      return [];
+      converted.set(bookId, NONE);
+      return NONE;
     }
     const { patterns, patternBooks, bookName } = context();
     const resolved = at.resolved;
@@ -452,6 +489,25 @@ export const corpusReader = (
       // counted or squiggled, and never have either drawn.
       let headline: string | undefined;
       let more: string | undefined;
+      let keys: SuppressionKeys | null | undefined;
+      const suppression = (): SuppressionKeys | undefined => {
+        if (keys !== undefined) return keys ?? undefined;
+        const toc = resolved.toc?.();
+        const here =
+          toc === undefined
+            ? undefined
+            : siteKeyOf(resolved.bookId, resolved.text, toc, finding.from, finding.to);
+        keys =
+          here === undefined
+            ? null
+            : {
+                here,
+                ...(pattern === undefined
+                  ? {}
+                  : { everywhere: patternIdentity(pattern, { bookKey }) }),
+              };
+        return keys ?? undefined;
+      };
       out.push({
         id: identify("sous", resolved.bookId, code, finding.from, finding.to),
         bookId: resolved.bookId,
@@ -473,13 +529,24 @@ export const corpusReader = (
         engine: resolved.engine,
         ...(finding.kind === "Convention" ? { pattern: finding.convention.pattern } : {}),
         ...(comparison === undefined ? {} : { comparison }),
+        get suppression() {
+          return suppression();
+        },
       });
     }
-    converted.set(bookId, out);
-    return out;
+    const split = filtering
+      ? {
+          shown: out.filter((finding) => !isSuppressed(finding.suppression)),
+          hidden: out.filter((finding) => isSuppressed(finding.suppression)),
+        }
+      : { shown: out, hidden: [] };
+    converted.set(bookId, split);
+    return split;
   };
+  const of = (bookId: BookId): readonly Finding[] => convert(bookId).shown;
 
   let everything: readonly Finding[] | undefined;
+  let hidden: readonly Finding[] | undefined;
   let counted: { readonly errors: number; readonly warnings: number } | undefined;
   return {
     of,
@@ -487,10 +554,23 @@ export const corpusReader = (
       everything ??= [...indexOf().keys()].flatMap(of);
       return everything;
     },
+    suppressed: () => {
+      if (!filtering) return [];
+      hidden ??= [...indexOf().keys()].flatMap((bookId) => convert(bookId).hidden);
+      return hidden;
+    },
     totals: () => {
       if (counted !== undefined) return counted;
       let errors = 0;
       let warnings = 0;
+      if (filtering) {
+        for (const bookId of indexOf().keys())
+          for (const finding of of(bookId))
+            if (finding.severity === "error") errors += 1;
+            else if (finding.severity === "warning") warnings += 1;
+        counted = { errors, warnings };
+        return counted;
+      }
       for (const { index } of indexOf().values()) {
         const book = snapshot.book(index);
         if (book === undefined) continue;

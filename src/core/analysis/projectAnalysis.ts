@@ -42,6 +42,7 @@
 // document and lives in Findings.
 
 import type { Book, BookId } from "@sefer/text/book";
+import { tocViewOf } from "@sefer/text/engine/location";
 import { bookName } from "@sefer/text/location/canon";
 import type { SourceStamp } from "@sefer/text/source";
 import { Context, Duration, Effect, Latch, Layer, Option, PubSub, Scope, Stream } from "effect";
@@ -54,6 +55,7 @@ import {
   type PublishedBook,
 } from "../findings/finding";
 import { EMPTY as EMPTY_INVENTORY, inventory, type Inventory } from "../findings/inventory";
+import { NO_SUPPRESSIONS, versesOf, type Suppressions } from "../findings/suppressions";
 import {
   describesExactly,
   Galley,
@@ -221,6 +223,23 @@ export interface ProjectAnalysisService {
   readonly findingTotals: () => { readonly errors: number; readonly warnings: number };
 
   /**
+   * The reader's suppressions, applied from now on: `findings()`,
+   * `crossBookOf` and `findingTotals` leave a suppressed Sous finding out,
+   * and `suppressed()` lists them. The caller reads and writes the file
+   * (`src/core/findings/suppressions.ts`); this only applies what it holds.
+   */
+  readonly setSuppressions: (suppressions: Suppressions) => void;
+
+  /** The findings left out because the reader said they are fine. */
+  readonly suppressed: () => readonly Finding[];
+
+  /**
+   * One held book's verses by reference, raw USFM: what pruning a
+   * suppression reads. `undefined` for a book not analysed yet.
+   */
+  readonly versesIn: (bookId: BookId) => ReadonlyMap<string, string> | undefined;
+
+  /**
    * The last publication's pattern table, pivoted per character — what the
    * corpus does with its punctuation, and which sites were flagged.
    *
@@ -365,6 +384,7 @@ const make = (
     let corpusCache: CorpusReader | undefined;
     let totalsCache: { readonly errors: number; readonly warnings: number } | undefined;
     let inventoryCache: Inventory | undefined;
+    let suppressions: Suppressions = NO_SUPPRESSIONS;
 
     const pubsub = yield* PubSub.unbounded<{
       readonly bookId: BookId;
@@ -534,22 +554,24 @@ const make = (
       const entry = entries.get(id);
       if (entry === undefined || entry.analysis === undefined || entry.stamp === undefined)
         return undefined;
+      const analysis = entry.analysis;
       const metadata =
         attached === undefined ? undefined : Option.getOrUndefined(attached.metadata());
       return {
         bookId: id,
         stamp: entry.stamp,
-        engine: stampOf(entry.analysis),
-        text: entry.analysis.text,
+        engine: stampOf(analysis),
+        text: analysis.text,
         name: bookName(id, metadata),
         mask: () => galley.mask(id),
+        toc: () => tocViewOf(analysis),
       };
     };
 
     /** The publication's corpus findings, converted a book at a time as they are asked for. */
     const corpus = (): CorpusReader | undefined => {
       if (snapshot === undefined) return undefined;
-      corpusCache ??= corpusReader(snapshot, resolveBook);
+      corpusCache ??= corpusReader(snapshot, resolveBook, suppressions);
       return corpusCache;
     };
     const crossBook = (): readonly Finding[] => corpus()?.all() ?? [];
@@ -571,6 +593,20 @@ const make = (
         warnings: warnings + (shared?.warnings ?? 0),
       };
       return totalsCache;
+    };
+
+    const setSuppressions = (next: Suppressions): void => {
+      suppressions = next;
+      findingsCache = undefined;
+      corpusCache = undefined;
+      totalsCache = undefined;
+    };
+    const suppressed = (): readonly Finding[] => corpus()?.suppressed() ?? [];
+    const versesIn = (bookId: BookId): ReadonlyMap<string, string> | undefined => {
+      const analysis = entries.get(bookId)?.analysis;
+      return analysis === undefined
+        ? undefined
+        : versesOf(bookId, analysis.text, tocViewOf(analysis));
     };
 
     const characters = (): Inventory => {
@@ -851,6 +887,9 @@ const make = (
       crossBook,
       crossBookOf,
       findingTotals,
+      setSuppressions,
+      suppressed,
+      versesIn,
       inventory: characters,
       watch: () => Stream.fromPubSub(pubsub),
     };

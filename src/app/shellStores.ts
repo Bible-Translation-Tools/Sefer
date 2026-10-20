@@ -326,7 +326,12 @@ export const makeShellStores = (options: {
     // The two events that move findings. An edit is NOT one of them: it arms
     // the scheduler, and the Publication that follows is what has something
     // new to say.
-    if (event.kind === "project.open" || event.kind === "corpus.publish") publishFindings();
+    if (
+      event.kind === "project.open" ||
+      event.kind === "corpus.publish" ||
+      event.kind === "findings.suppress"
+    )
+      publishFindings();
     if (event.kind === "corpus.rejudge") setFindingsPending(true);
   };
 

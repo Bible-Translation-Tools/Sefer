@@ -97,6 +97,15 @@ export {
   type QueryClass as FindingQueryClass,
 } from "@wycliffeassociates/scripture-kitchen/sous-messages";
 export { default as FINDING_MESSAGES_EN } from "@wycliffeassociates/scripture-kitchen/sous-messages.en.json";
+// A finding's persisted names, for suppressions (`src/core/findings/suppressions.ts`):
+// a site (`v1:s`) and a pattern (`v1:p`), built from nothing an edit
+// elsewhere or a setting can move.
+export {
+  ordinalOf,
+  patternIdentity,
+  siteIdentityOf,
+  type SiteContext,
+} from "@wycliffeassociates/scripture-kitchen/sous-identity";
 // Sous's judging settings as kitchen generates them: every key, its type, its
 // default and range, and one plain sentence each. Renamed at the seam because
 // `SettingKey` and `SettingGroup` are already Sefer's own words.

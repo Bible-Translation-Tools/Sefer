@@ -49,6 +49,11 @@ export type ShellEvent =
    */
   | { readonly kind: "corpus.rejudge" }
   /**
+   * The reader suppressed a finding or took one back: the same findings,
+   * filtered again, so the lists and the counts move and no book's row does.
+   */
+  | { readonly kind: "findings.suppress" }
+  /**
    * A Book was seated, or released back to a plain Book.
    *
    * Both matter because `instantiate` and `release` REPLACE the object that
@@ -81,6 +86,7 @@ export const booksOf = (event: ShellEvent): readonly BookId[] | "all" => {
       return "all";
     case "corpus.publish":
     case "corpus.rejudge":
+    case "findings.suppress":
       // Findings, not save state. No book's row moves.
       return [];
   }
