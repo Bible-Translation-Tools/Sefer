@@ -1,26 +1,3 @@
-/**
- * The character inventory: how this translation actually uses its punctuation,
- * its digits and its symbols, and what stands out.
- *
- * Everything on the page is a read of one value — `ProjectAnalysis.inventory()`,
- * which pivots the last publication's pattern table per code point (see
- * `src/core/findings/inventory.ts`). The page adds a filter, a selection and a
- * layout, and nothing else: no counting, no scoring, no second measurement.
- *
- * Two honesties the layout has to carry.
- *
- * The table is NOT a census of the project's characters. Sous emits a pattern
- * row when a channel had a claim to make, so a character nothing was measured
- * about is simply absent — and on a small corpus that can mean the inventory
- * is only the convicted characters. The subtitle says so rather than letting a
- * short table read as a tidy project.
- *
- * "Occurrences" is a proxy drawn from the largest population any of a glyph's
- * channels judged against. The column header says `sites`, the detail card
- * shows the fraction every number came out of, and a tooltip on the header
- * says the rest.
- */
-
 import { Link } from "@tanstack/solid-router";
 import Type from "lucide-solid/icons/case-sensitive";
 import Search from "lucide-solid/icons/search";
@@ -49,7 +26,6 @@ import {
 import { GlyphDetail } from "./GlyphDetail";
 import { GlyphTile } from "./GlyphTile";
 
-/** The three ways of looking, over one list. Subtractive, like every filter. */
 const LENSES = [
   { value: "all", label: "All" },
   { value: "flagged", label: "Flagged" },
@@ -58,7 +34,6 @@ const LENSES = [
 
 type Lens = (typeof LENSES)[number]["value"];
 
-/** `u+201c`, `U+201C`, `201c` — the three ways someone types a code point. */
 const asCodePoint = (query: string): number | undefined => {
   const match = /^(?:u\+)?([0-9a-f]{2,6})$/i.exec(query.trim());
   if (match === null) return undefined;
@@ -66,11 +41,6 @@ const asCodePoint = (query: string): number | undefined => {
   return Number.isSafeInteger(value) && value <= 0x10ffff ? value : undefined;
 };
 
-/**
- * Does this glyph answer the query? A typed character matches itself, a `U+`
- * code matches the code point, and anything else matches the name — so both
- * "what does my project do with «" and "what is U+00AB" reach the same row.
- */
 const matches = (glyph: Glyph, query: string): boolean => {
   const needle = query.trim();
   if (needle === "") return true;
@@ -97,20 +67,8 @@ export function InventoryPanel() {
     name: "inventoryPattern",
   });
 
-  /**
-   * The inventory of the last Publication, which is the only time it can
-   * differ — it is measured FROM a Publication, so a keystroke cannot change
-   * it and `tick` was waking this screen for every one of them.
-   */
   const held = createMemo(() => shell.inventory(), { name: "inventory" });
 
-  // The screen opening, as one operation: mount to the frame after the first
-  // paint, which is the same `requestAnimationFrame`-then-timeout the
-  // findings panel defers its list with — a bare rAF runs before the paint.
-  // The inventory is already pivoted by the time anyone mounts this, so what
-  // the record measures is the table, and what it carries is how big it was.
-  // `inventory.glyphs` of 0 with `inventory.books` of 0 is "no publication
-  // yet", which is worth being able to tell from a clean project.
   {
     const opening = shell.services.composition.observability.operation("inventory.load");
     const snapshot = untrack(held);
@@ -129,7 +87,6 @@ export function InventoryPanel() {
     onCleanup(() => {
       cancelAnimationFrame(frame);
       if (after !== undefined) clearTimeout(after);
-      // Left before it painted: still one record, saying so.
       opening.end("declined", { ...facts, "inventory.painted": false });
     });
   }
@@ -146,7 +103,6 @@ export function InventoryPanel() {
     { name: "inventoryShown" },
   );
 
-  /** The chosen row, or the first one the filter left standing. */
   const selected = (): Glyph | undefined => {
     const rows = shown();
     return rows.find((glyph) => glyph.codePoint === chosen()) ?? rows[0];
@@ -266,9 +222,7 @@ export function InventoryPanel() {
                 wrapperClass="w-40"
                 aria-label={t("Filter by pool")}
                 value={pool()}
-                // SAFETY: the option list below is exactly `POOLS` plus the
-                // empty "every pool" value, so a native select can only ever
-                // report one of those strings back.
+                // SAFETY: the option list below is exactly `POOLS` plus the empty "every pool" value, so a native select can only ever report one of those strings back.
                 onChange={(event) => setPool(event.currentTarget.value as Pool | "")}
               >
                 <option value="">{t("Every pool")}</option>
@@ -280,9 +234,7 @@ export function InventoryPanel() {
                   total: held().glyphs.length,
                 })}
               </span>
-              {/* The one sentence the page cannot do without: a short table is
-                  not a clean project. Sous emits a pattern row per claim, not
-                  per character, so the inventory is what was measured. */}
+
               <p class="w-full text-smallest text-on-surface-tertiary">
                 {t(
                   "These are the characters the engine measured — it publishes a row when a channel has something to say about a glyph, not one per character in the text. “Sites” is the largest population any of a character's channels was judged against, not a count of the text.",

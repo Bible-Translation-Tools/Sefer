@@ -1,26 +1,3 @@
-/**
- * Migrate from Writer: assemble one project from single-book BTT Writer
- * projects, choosing between rival copies up front.
- *
- * Two steps, one screen:
- *
- *   find      a language from "Writer projects on WACS" (`WriterLanguages`),
- *             or a folder or zip of Writer projects: where the run starts.
- *             There is no way back to it — a run is that start, plus any
- *             Writer project's folder or zip added later in its language;
- *             leaving the screen abandons it
- *   books     a sidebar of books in canonical order, under OT and NT, beside
- *             the selected book's candidates as a table (`BookPane`): who,
- *             status, updated, health, and passages differing from the pick
- *
- * Assemble then runs at once, from the form prefilled to bwc_reg's
- * convention: there is no form step.
- *
- * Inactive candidates are hidden by default; Primary is "Recommended". Every
- * candidate is opened and measured as soon as it is listed, a few at a time,
- * so the health a person chooses by is there when they look.
- */
-
 import { CANON } from "@sefer/text/location/canon";
 import { useNavigate } from "@tanstack/solid-router";
 import { Option } from "effect";
@@ -87,16 +64,10 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
   const [opened, setOpened] = createSignal<ReadonlyMap<string, Opened>>(new Map(), {
     name: "migrateOpened",
   });
-  /** The person's choice per contested book; a settled book needs none. */
   const [chosen, setChosen] = createSignal<ReadonlyMap<string, string>>(new Map(), {
     name: "migrateChosen",
   });
   const [sources, setSources] = createSignal<readonly string[]>([], { name: "migrateSources" });
-  /**
-   * Adding to a project: the books it holds already are never offered (no
-   * Bible prints John twice), and only its language is. Read once: this
-   * screen is entered from the project, and leaves back to it.
-   */
   const intoProject = untrack(() => {
     const open = shell.project();
     return props.into !== undefined && open?.root === props.into ? open : undefined;
@@ -111,13 +82,11 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
   const [url, setUrl] = createSignal("", { name: "migrateUrl" });
   const [showInactive, setShowInactive] = createSignal(false, { name: "migrateInactive" });
   const [step, setStep] = createSignal<Step>("find", { name: "migrateStep" });
-  /** The book open in the main pane. */
   const [selected, setSelected] = createSignal<string | undefined>(undefined, {
     name: "migrateSelected",
   });
   const [assembling, setAssembling] = createSignal(false, { name: "migrateAssembling" });
 
-  // What a picked zip or folder unpacked into memory goes with the screen.
   onCleanup(forgetPicked);
 
   const openedOf = (id: string): Opened => opened().get(id) ?? { state: "waiting" };
@@ -126,11 +95,6 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
     setOpened((held) => new Map(held).set(id, value));
   };
 
-  /**
-   * Opens what is listed and not yet opened, a few at a time. Takes the list
-   * and the Inactive switch as arguments rather than reading them: a signal
-   * written in this same tick still reads its old value until the flush.
-   */
   const openPending = async (
     listed: readonly BookCandidate[],
     inactiveToo: boolean,
@@ -218,10 +182,6 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
     })();
   };
 
-  /**
-   * One Writer project pasted as a URL: for the one the catalogue has not
-   * caught up with yet. Checked, then added like a catalogue candidate.
-   */
   const fromUrl = (): void => {
     const typed = url().trim();
     if (typed === "") return;
@@ -258,7 +218,6 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
     })();
   };
 
-  /** Every book, all candidates: what decides "left out, Inactive only". */
   const allRows = createMemo(() => groupByBook(candidates()), { name: "migrateAllRows" });
 
   const visible = (row: BookRow): readonly BookCandidate[] =>
@@ -268,7 +227,6 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
         openedOf(candidate.id).state !== "refused",
     );
 
-  /** The candidate a book will be assembled from, or undefined when it is left out. */
   const pick = (row: BookRow): BookCandidate | undefined => {
     const shown = visible(row);
     const id = chosen().get(row.book);
@@ -300,7 +258,6 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
   const stillOpening = (): number =>
     picked().filter((candidate) => openedOf(candidate.id).state !== "ready").length;
 
-  /** Candidates still being opened, whether or not they are the pick. */
   const checking = (): number =>
     [...opened().values()].filter((held) => held.state === "opening").length;
 
@@ -313,12 +270,6 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
     return t("{have} of {total}", { have: have.length, total });
   };
 
-  /**
-   * Next: assembled at once, from what the books already say — the form is
-   * prefilled to bwc_reg's convention and nobody changed it (Will,
-   * 2026-10-07: "just skip this screen"). Title, language, contributors and
-   * the rest are edited in the project afterwards, like any project's.
-   */
   const runAssemble = (): void => {
     const books = ready();
     const form = prefillForm(books);
@@ -341,7 +292,6 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
     })();
   };
 
-  /** "Add a book…": the picks go into the open project, in one commit. */
   const runAdd = (): void => {
     const root = props.into;
     if (root === undefined) return;
@@ -361,10 +311,8 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
     })();
   };
 
-  /** What the rule would pick for a book, marked Recommended. */
   const recommended = (row: BookRow): BookCandidate | undefined => defaultCandidate(visible(row));
 
-  /** Every book still waiting on a choice takes the Recommended one. */
   const useRecommended = (): void => {
     setChosen((held) => {
       const next = new Map(held);
@@ -376,11 +324,9 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
     });
   };
 
-  /** The book in the main pane: the one picked in the list, else the first that needs a choice. */
   const current = (): BookRow | undefined =>
     allRows().find((row) => row.book === selected()) ?? needsChoice()[0] ?? allRows()[0];
 
-  /** A book's mark in the list: what it is waiting on, or who it comes from. */
   const mark = (row: BookRow): { readonly tone: BadgeTone; readonly label: string } => {
     const shown = visible(row);
     if (shown.length === 0) return { tone: "muted", label: t("left out") };
@@ -504,9 +450,7 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
           <span class="me-auto truncate text-small text-on-surface-tertiary">
             {sources().join(" · ")}
           </span>
-          {/* Once a run has started it is that run: more books come only as a
-              Writer project's folder or zip, in its language. Leaving the
-              screen abandons it. */}
+
           <Menu
             label={t("Add a Writer project")}
             side="bottom"
@@ -563,8 +507,6 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
             disabled={!canAssemble() || assembling()}
             onClick={props.into === undefined ? runAssemble : runAdd}
           >
-            {/* While it runs, what takes the time: every Writer save is
-                written into the new project's history. */}
             {assembling() && ready().some((staged) => (staged.history?.saves.length ?? 0) > 0)
               ? t("Writing {count} books' history…", { count: picked().length })
               : props.into === undefined

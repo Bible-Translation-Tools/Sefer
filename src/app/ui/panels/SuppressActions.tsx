@@ -1,16 +1,3 @@
-/**
- * What a reader can say about a Sous finding that is not a problem, narrowest
- * first. "Fine here" is on the line; the two wider answers sit behind More,
- * each with a line saying what it will do
- * (`planning/items/2026-10-06-project-state-and-suppressions.mdx`).
- *
- *   Fine here                 this text at this place
- *   Always allow "…"          this exact claim anywhere; the check still watches the rest
- *   Turn off this check       the whole check, a proofreading setting
- *
- * Each says so in a toast with Undo.
- */
-
 import CheckCheck from "lucide-solid/icons/check-check";
 import Ellipsis from "lucide-solid/icons/ellipsis";
 import { Show } from "solid-js";
@@ -36,7 +23,6 @@ export function SuppressActions(props: { readonly finding: Finding }) {
   const flagged = (): string => flaggedText(shell, props.finding);
   const check = (): string => checkLabel(props.finding) ?? "";
 
-  /** On a finding the reader already hid: one door back, saying what it undoes. */
   const hidden = () => shell.suppressedBy(props.finding);
 
   return (

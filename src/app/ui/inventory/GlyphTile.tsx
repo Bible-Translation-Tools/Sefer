@@ -1,31 +1,12 @@
-/**
- * The character itself, shown as a character.
- *
- * The whole page is about punctuation, so the one thing every row and every
- * card has to do well is show a mark large enough to recognise, in the family
- * scripture is set in — a comma and a Hebrew maqaf are three pixels apart in a
- * UI sans at 14px. The tile is tinted rather than bordered so a row reads as a
- * specimen, not as a form field.
- *
- * A glyph with no ink of its own — a space, a no-break space, a format
- * character — draws the open-box symbol instead, and the tile says `blank` to
- * a screen reader. Rendering nothing would make two different invisible
- * characters look like the same empty tile.
- */
-
 import { cx, type ClassValue } from "../primitives";
 
-/** U+2423 OPEN BOX: the conventional stand-in for a space you must see. */
 const BLANK = "␣";
 
-/** True for anything that would draw no ink: separators, controls, formats. */
 const invisible = (char: string): boolean => char === "" || /^[\p{Z}\p{C}]$/u.test(char);
 
 export interface GlyphTileProps {
-  /** The character; empty for the pooled digit lane. */
   readonly char: string;
   readonly size?: "sm" | "md" | "lg";
-  /** The pooled digit lane has no character — it draws `0-9`. */
   readonly pooled?: boolean;
   readonly class?: ClassValue;
 }

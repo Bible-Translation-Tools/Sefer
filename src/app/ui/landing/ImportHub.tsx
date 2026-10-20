@@ -1,30 +1,3 @@
-/**
- * The import hub: the ways a project gets onto this device — a zip, a folder,
- * a clone — as the projects page's buttons or the app bar's menu.
- *
- * The rule the whole component is built around: a source the host cannot serve
- * is rendered DISABLED with the reason in place of its explainer, never hidden
- * and never offered-then-failed. `HostCapabilities` and `env` are asked before
- * the button exists, which is what `HostInfo.capabilities()` is for.
- *
- * The folder flow is the real `stage → classify → commit` pipeline from
- * `src/core/resources/import.ts`, run one step at a time so the dialog can name
- * the step it is on. Nothing touches the project root until `commit`, so
- * cancelling or failing leaves a staging directory and nothing else.
- *
- * There are two ways into that pipeline and the difference is the FIRST step
- * only. A host with a native disk hands back a real path and `stage` copies it.
- * A browser has no path to hand back, so `src/platform/web/intake.ts` writes
- * the picked bytes into the staging directory itself and returns the same
- * `Staged` value — after which classify and commit are identical. Intake is
- * reached through a dynamic import, so the zip decoder is fetched by the people
- * who use it and never sits in the first load.
- *
- * Cloning is `cloneArrival(…, "project", …)` (`src/app/arrival.ts`) over the Gitea
- * session the cloud panel already holds — this screen does not log anyone in,
- * it only spends a session that exists.
- */
-
 import type { JSX } from "@solidjs/web";
 import { useNavigate } from "@tanstack/solid-router";
 import { Effect, Option, Scope } from "effect";
@@ -52,7 +25,6 @@ import type { Domain } from "../../services";
 import { Button, Dialog, Input, Menu, MenuItem, cx, toasts } from "../primitives";
 import { rememberProject } from "./summaries";
 
-/** Each step the pipeline runs, in order. The dialog draws all four. */
 const STEPS = ["pick", "stage", "classify", "commit"] as const;
 
 type Step = (typeof STEPS)[number];
@@ -64,20 +36,14 @@ const STEP_LABEL: Readonly<Record<Step, string>> = {
   commit: "Validating books and committing…",
 };
 
-/**
- * What the progress dialog is showing. `step` is the running one; `undefined`
- * means the run is over and `message` is the whole content.
- */
 interface Progress {
   readonly title: string;
   readonly step: Step | undefined;
   readonly message: string;
   readonly failed: boolean;
-  /** "12 of 66 files" while a step is running; the steps alone say too little. */
   readonly detail?: string;
 }
 
-/** What intake did, as the import operation's fields. */
 const intakeAttrs = (intake: IntakeResult) => ({
   "import.adopted": intake.adopted,
   "import.arrival": intake.arrival !== undefined,
@@ -85,27 +51,14 @@ const intakeAttrs = (intake: IntakeResult) => ({
 });
 
 export function ImportHub(props: {
-  /**
-   * After a project lands — the app bar goes to the projects page. The list
-   * itself needs no telling: `rememberProject` re-reads it.
-   */
   readonly onImported?: () => void;
-  /**
-   * `buttons` (the default) is "Import zip" and "Import folder" as the
-   * projects page's two large buttons, each going straight to the system
-   * picker. `menu` is the same two plus "Clone from cloud", opened from
-   * `trigger` — the app bar's Import. Same pipeline and progress dialog either way.
-   */
   readonly variant?: "buttons" | "menu";
-  /** The menu's trigger; `menu` only. */
   readonly trigger?: JSX.Element;
 }) {
   const shell = useShell();
   const { services } = shell;
   const navigate = useNavigate();
   const capabilities = services.hostInfo.capabilities();
-  // The content host: whether this build has a cloud at all. How a browser
-  // reaches it is the Remote's business, not this screen's.
   const endpoint = contentHostFor(services.settings);
 
   const [progress, setProgress] = createSignal<Progress | undefined>(undefined, {
@@ -124,13 +77,6 @@ export function ImportHub(props: {
     setProgress({ title, step: undefined, message, failed });
   };
 
-  /**
-   * The folder import, step by step.
-   *
-   * Each stage is its own `run` so the dialog can change between them; running
-   * the three as one Effect would show one spinner for the whole thing, which
-   * is exactly the information someone waiting wants.
-   */
   const importFolder = (): void => {
     const title = t("Import from a folder");
     const toast = toasts.progress({
@@ -214,9 +160,6 @@ export function ImportHub(props: {
         message: t("{count} books", { count: books.length }),
         tone: "success",
       });
-      // The projects index learns about the project HERE, at the one moment
-      // this device knows a new one exists — before the list is told to
-      // re-read, so the row it draws is the one just written.
       await run(rememberProject(services.projectsRoot, into, undefined));
       void announceSourceTexts(services, into);
       operation.end("passed", { "import.phase": "complete" });
@@ -232,11 +175,6 @@ export function ImportHub(props: {
     });
   };
 
-  /**
-   * The browser's way in: pick, write the bytes into staging, then the same
-   * classify and commit the native path runs. One function for both sources —
-   * a zip and a folder differ only in which picker produced the files.
-   */
   const importPicked = (title: string, source: "folder" | "zip"): void => {
     const toast = toasts.progress({ title: t("Importing project"), message: t("Choosing files") });
     running(title, "pick");
@@ -331,9 +269,6 @@ export function ImportHub(props: {
         message: t("{count} books", { count: books.length }),
         tone: "success",
       });
-      // The projects index learns about the project HERE, at the one moment
-      // this device knows a new one exists — before the list is told to
-      // re-read, so the row it draws is the one just written.
       await run(rememberProject(services.projectsRoot, into, undefined));
       void announceSourceTexts(services, into);
       operation.end("passed", { "import.phase": "complete" });
@@ -349,7 +284,6 @@ export function ImportHub(props: {
     });
   };
 
-  /** Fills the clone dialog with the repositories this session may write. */
   const openClone = (): void => {
     setCloneOpen(true);
     setCloneNote("");
@@ -371,7 +305,6 @@ export function ImportHub(props: {
       .catch((cause: unknown) => setCloneNote(describe(cause)));
   };
 
-  /** Clone a remote repository into a new project under the projects root. */
   const clone = (url: string): void => {
     if (url.trim() === "") return;
     const name = lastSegment(url.replace(/\.git$/u, ""));
@@ -418,8 +351,6 @@ export function ImportHub(props: {
       props.onImported?.();
     })().catch((cause: unknown) => {
       const message = describe(cause);
-      // Offline or a dead server is the world saying no; only a failure the
-      // Remote port did not name stays the alarm.
       end(remoteVerdict(remoteReasonOf(cause)), {
         "import.phase": phase,
         "import.reason": reasonOf(cause) ?? "Unknown",
@@ -434,7 +365,6 @@ export function ImportHub(props: {
     });
   };
 
-  /** True when the host reads a real path; false when the browser must copy. */
   const nativeFolder = capabilities.nativeDisk && capabilities.dialogs;
 
   const pick = (source: "zip" | "folder"): void => {
@@ -443,9 +373,6 @@ export function ImportHub(props: {
     else importPicked(t("Import from a folder"), "folder");
   };
 
-  // "Open project…" is importing a folder. Only the app bar's menu registers it:
-  // it is mounted on every screen, and one owner means one progress dialog.
-  // `variant` is read once: an instance is one shape for its whole life.
   if (untrack(() => props.variant) === "menu")
     onCleanup(
       registerCommand({
@@ -507,8 +434,7 @@ export function ImportHub(props: {
           >
             {t("Import folder")}
           </MenuItem>
-          {/* Disabled with the reason, never hidden: a source this build
-              cannot serve says so where it would have been. */}
+
           <MenuItem
             data-testid="import-cloud"
             icon={<CloudDownload aria-hidden="true" />}
@@ -579,8 +505,6 @@ export function ImportHub(props: {
           <Dialog
             open
             onOpenChange={(open) => {
-              // A running import cannot be dismissed: the dialog IS the record
-              // that something is writing to the project root.
               if (!open && state().step === undefined) setProgress(undefined);
             }}
             title={state().title}

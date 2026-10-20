@@ -1,17 +1,3 @@
-/**
- * The findings panel's filter toolbar — one row above the list.
- *
- * Severity is three values, so it is shown whole as a `ToggleGroup`. Producer
- * is a short `MultiSelect`; codes are long, so theirs is searchable (a
- * combobox). Books are the shared `BookScope`, the control Find scopes by. Each folded trigger says what it is filtering to, so the row is
- * a handful of controls and a search box.
- *
- * Every control is still subtractive: it hides rows, it never deletes a
- * finding, and the header beside it always says "N of TOTAL shown" so a
- * filtered panel cannot read as a clean project. Counts are `Badge`s, and the
- * severity ones take the severity's own tone, which is the only colour here.
- */
-
 import type { BookId } from "@sefer/text/book";
 import { bookName } from "@sefer/text/location/canon";
 import Search from "lucide-solid/icons/search";
@@ -42,9 +28,7 @@ const countOf = <T,>(rows: readonly Facet<T>[], value: T): number =>
 
 export interface FindingsFiltersProps {
   readonly state: FindingsFilterState;
-  /** Counts over the UNFILTERED list, so a chip's count never moves as you click. */
   readonly facets: Facets;
-  /** Every book in the project, from the census — clean ones included. */
   readonly books: readonly BookId[];
   readonly class?: string;
 }
@@ -52,11 +36,8 @@ export interface FindingsFiltersProps {
 export function FindingsFilters(props: FindingsFiltersProps) {
   const filter = (): FindingsFilter => props.state.filter();
   const shell = useShell();
-  /** What the project calls a book, else the English name, else its id. */
   const nameOf = (bookId: BookId): string => bookName(bookId, metadataOf(shell.project()));
 
-  // The scope is this control's; the filter holds only the books it means.
-  // Reopened, a narrowed filter reads as Custom over the books it held.
   const [kind, setKind] = createSignal<BookScopeKind>(
     untrack(() => (filter().books === null ? "project" : "custom")),
     { name: "findingsScope" },
@@ -67,7 +48,6 @@ export function FindingsFilters(props: FindingsFiltersProps) {
       name: "findingsCustomBooks",
     },
   );
-  /** This book: the open one, else the one last open (Findings has no editor of its own). */
   const thisBook = (): BookId | undefined => {
     const project = shell.project();
     return (
@@ -83,11 +63,9 @@ export function FindingsFilters(props: FindingsFiltersProps) {
     },
   );
 
-  /** "2 of 3" for an allow-list, and nothing at all when it allows everything. */
   const some = (kept: number, total: number): string =>
     kept >= total ? t("all") : t("{kept} of {total}", { kept, total });
 
-  /** The same for a `null`-means-everything set. */
   const narrowedSummary = (held: readonly string[] | null, total: number): string =>
     held === null ? t("all") : t("{kept} of {total}", { kept: held.length, total });
 
@@ -133,8 +111,6 @@ export function FindingsFilters(props: FindingsFiltersProps) {
         )}
       </MultiSelect>
 
-      {/* Which books: the same control Find scopes by. It sets the books
-          filter; This book follows the book you last had open. */}
       <BookScope
         value={kind()}
         onChange={setKind}
@@ -174,9 +150,6 @@ export function FindingsFilters(props: FindingsFiltersProps) {
         </MultiSelect>
       </Show>
 
-      {/* Inline, not folded: a text filter is the one control a reader reaches
-          for without planning to, and a search box behind a menu is a search
-          box nobody uses. */}
       <Input
         type="search"
         size="sm"
@@ -187,9 +160,6 @@ export function FindingsFilters(props: FindingsFiltersProps) {
         value={filter().text}
         onInput={(event) => props.state.update({ text: event.currentTarget.value })}
       />
-
-      {/* TODO(2026-10-01, Will): no "Hide stale" switch until we decide what
-          replaces it on this screen; the filter field and its logic hold. */}
     </div>
   );
 }

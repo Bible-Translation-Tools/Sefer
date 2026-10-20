@@ -1,19 +1,3 @@
-/**
- * The multibuffer's outline, drawn in the project sidebar's place.
- *
- * On a screen of results the sidebar navigates the RESULTS: one row per
- * section (a book, or a code or a severity on Findings) with its count, and
- * under a book its hits reduced to chapters — the same accordion and chapter
- * grid the project sidebar draws, so the panel keeps its shape and only its
- * subject changes. A row scrolls the list to its header; a chapter tile to the
- * first card in that chapter.
- *
- * Chapters come from each card's own Address, so a hit in front matter is an
- * "Intro" tile and a chapter's head is that chapter. A section whose cards
- * span several books (Findings by code) lists no chapters: a tile saying "3"
- * would not say which book's.
- */
-
 import BookIcon from "lucide-solid/icons/book";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronRight from "lucide-solid/icons/chevron-right";
@@ -27,19 +11,15 @@ export interface ResultsOutlineProps {
   readonly title: string;
   readonly groups: readonly BookExcerpts[];
   readonly outline: readonly OutlineRow[];
-  /** The section the list is scrolled to. */
   readonly active: string | undefined;
   readonly label: (row: OutlineRow) => string;
-  /** A card's row key, which is what a chapter tile scrolls to. */
   readonly keyOf: (group: BookExcerpts, excerpt: Excerpt) => string;
-  /** Go to `key` — a section, or a row — in section `section`: the one this row highlights. */
   readonly onGo: (key: string, section: string) => void;
 }
 
 interface ChapterTile {
   readonly label: string;
   readonly count: number;
-  /** The first card of the chapter, as its row key. */
   readonly first: string;
 }
 
@@ -69,13 +49,11 @@ const tilesOf = (
 };
 
 export function ResultsOutline(props: ResultsOutlineProps) {
-  /** Which sections are open; `undefined` until the reader opens or closes one. */
   const [opened, setOpened] = createSignal<ReadonlySet<string> | undefined>(undefined, {
     name: "outlineOpened",
   });
   const isOpen = (key: string): boolean => {
     const held = opened();
-    // Before anyone chooses, the section being read is the open one.
     return held === undefined ? key === (props.active ?? props.outline[0]?.bookId) : held.has(key);
   };
   const toggle = (key: string): void => {
@@ -142,7 +120,6 @@ export function ResultsOutline(props: ResultsOutlineProps) {
                         aria-hidden="true"
                         class="shrink-0"
                         onClick={(event) => {
-                          // The chevron only folds; the row itself also scrolls.
                           event.stopPropagation();
                           toggle(row.bookId);
                         }}

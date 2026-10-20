@@ -1,11 +1,3 @@
-/**
- * The viewport for `toasts.ts` — mounted once, near the root.
- *
- * `role="status"` with `aria-live="polite"` on the region, so a raised toast is
- * announced without stealing focus. An error toast never auto-closes (see
- * `toasts.error`), which is why the close button is the only way out of one.
- */
-
 import Check from "lucide-solid/icons/check";
 import Info from "lucide-solid/icons/info";
 import LoaderCircle from "lucide-solid/icons/loader-circle";

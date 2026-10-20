@@ -1,15 +1,3 @@
-/**
- * The gate every screen that needs services renders inside.
- *
- * Its children are rendered only once the shell is ready, so a screen below it
- * can call `useShell()` directly — which is why the gate passes nothing down.
- *
- * The engine loads asynchronously and can refuse (a wasm fetch that fails, a
- * wire format the reader does not know), so there are three states and all
- * three are shown honestly. A route body therefore never has to ask whether
- * its services exist.
- */
-
 import type { JSX } from "@solidjs/web";
 import { Match, Switch } from "solid-js";
 

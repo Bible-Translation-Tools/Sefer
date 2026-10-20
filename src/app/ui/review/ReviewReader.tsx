@@ -1,36 +1,3 @@
-/**
- * The review's reading: every difference drawn on the texts themselves, as the
- * editor reads them, with a decision per unit.
- *
- * Three layers, each independent of the others:
- *
- *  - **The engine** decides what differs: decision units and word runs
- *    (`galley.diff`), and the decision map the panel above holds. Every view
- *    reads and writes the same decisions, keyed by book and unit, so switching
- *    view never loses one.
- *  - **Layout** is how a difference is drawn: `split` (each side its own text,
- *    side by side) or `unified` (the current text with the other's words
- *    struck through where they were). `auto` splits when the reading is wide
- *    enough for two columns of scripture and unifies when it is not.
- *  - **Scope** is how much of the text is shown: `changes` (each change a card
- *    clipped to it and its context, across every book that differs — the
- *    multibuffer) or `book` (the whole book, the changes drawn in place).
- *    Scattered edits read better as cards, a rewrite reads better as the book;
- *    a card's "Open in the book" crosses between them at the same place.
- *
- * Layout and scope are preferences (`review.layout`, `review.scope`); the
- * toolbar changes them and they are remembered.
- *
- * Next and previous change (`Alt-F5`, `Alt-Shift-F5`, the palette, or the
- * arrows here) step through what is shown: cards in `changes`, units in
- * `book`, crossing into the next book at the end of one.
- *
- * Decisions come in three sizes: a unit (the gutter), a card (its header), and
- * a book (its header, over the changes the kind filter shows). The filter is
- * what makes the bulk ones safe to offer: "keep every markup-only change in
- * Genesis" is a question somebody can answer; "keep all 2,799" is not.
- */
-
 import type { EditorBook } from "@sefer/editor";
 import type { BookId } from "@sefer/text/book";
 import type { JSX } from "@solidjs/web";
@@ -85,21 +52,12 @@ import { Crumbs, LocationStrip, type CrumbChapter } from "../workspace/Crumbs";
 import { FollowToggle } from "../workspace/FollowToggle";
 import { claimSidebar } from "../workspace/sidebarSlot";
 
-/** One book that differs: both texts and the engine's units over them. */
 export interface ReviewBook {
   readonly bookId: BookId;
   readonly name: string;
-  /** The LEFT source's text — `current` in the engine's vocabulary. */
   readonly currentText: string;
-  /** The RIGHT source's text — `baseline`. */
   readonly baselineText: string;
   readonly skeleton: DiffSkeleton;
-  /**
-   * Changed units this review leaves out: reviewing a suggestion, the
-   * passages only the editor changed are not the suggestion's, so they are
-   * counted in one line rather than shown as if it offered them. A decided
-   * unit is still shown, so it can be put back.
-   */
   readonly hidden?: ReadonlySet<string>;
 }
 
@@ -107,7 +65,6 @@ type Layout = "auto" | "split" | "unified";
 type Scope = "changes" | "book";
 type Filter = "all" | "words" | "formatting";
 
-/** Below this width two columns of scripture are too narrow to read. */
 const AUTO_SPLIT_PX = 960;
 
 const FILTERS: Record<Filter, (unit: DecisionUnit) => boolean> = {
@@ -116,12 +73,10 @@ const FILTERS: Record<Filter, (unit: DecisionUnit) => boolean> = {
   formatting: isFormatting,
 };
 
-/** One book, ready to draw: its sides, its units in order, its cards. */
 interface Prepared {
   readonly book: ReviewBook;
   readonly sides: DiffSides;
   readonly units: readonly DecisionUnit[];
-  /** The changes the filter shows, in reading order. */
   readonly shown: readonly DecisionUnit[];
   readonly hunks: readonly Hunk[];
 }
@@ -134,58 +89,25 @@ export function ReviewReader(props: {
     units: readonly DecisionUnit[],
     side: MergeSide | undefined,
   ) => void;
-  /**
-   * The left side is the working text: every card edits the Book on a
-   * double-click, and a decision is written into it as it is made. False when
-   * neither side can be written — the review is for reading, with no Edit, no
-   * double-click and no decisions.
-   */
   readonly decidable: boolean;
   readonly usfm: boolean;
   readonly onUsfm: (on: boolean) => void;
-  /** Who changed a card's passage, in a review against the shared project. */
   readonly originOf?: (
     bookId: BookId,
     units: readonly DecisionUnit[],
   ) => "there" | "here" | "both" | undefined;
-  /** What each side calls itself, in a split's captions — per book where the sides differ by book. */
   readonly currentLabel: string | ((bookId: BookId) => string);
   readonly baselineLabel: string | ((bookId: BookId) => string);
   readonly currentShort: string;
   readonly baselineShort: string;
   readonly selected: BookId | undefined;
   readonly onSelect: (bookId: BookId) => void;
-  /** The book, seated for editing: the result pane's Edit. */
   readonly seat: (bookId: BookId) => Promise<EditorBook | undefined>;
-  /** An edit made in the result pane was accepted. */
   readonly onEdited: (bookId: BookId) => void;
-  /** Whether a card is being edited: while it is, the reader must stay mounted. */
   readonly onEditing?: (editing: boolean) => void;
-  /**
-   * Whether a split puts the current side (the working text) on the left.
-   * Off by default: the other side — the file, the shared project, the
-   * version before — on the left and the text you edit on the right, read
-   * left to right as was-then-now, the way History lays out time.
-   */
   readonly currentFirst?: boolean;
-  /**
-   * Whether a decision is written into the Book as it is made. Defaults to
-   * `decidable`; the playground decides without writing, to try a card's
-   * look against real text without touching the project.
-   */
   readonly writesDecisions?: boolean;
-  /** Dim the side a decided passage will not read as (`Controls.dimUnchosen`). */
   readonly dimUnchosen?: boolean;
-  /**
-   * When neither side is the Book (History's "what this version changed"):
-   * each card's own actions for either side — Adopt, written into the
-   * reader's text instead of a decision — and a row under it. In a split they
-   * sit under each side's caption; unified, in the card's header.
-   */
-  /**
-   * Whether the reader lists its books in the sidebar, under the Changes tab
-   * (Review, the default). History leaves the sidebar to its own timeline.
-   */
   readonly claimSidebar?: boolean;
   readonly sides?: (
     hunk: Hunk,
@@ -215,7 +137,6 @@ export function ReviewReader(props: {
     name: "reviewPrepared",
   });
   const [place, setPlace] = createSignal<number | undefined>(undefined, { name: "reviewPlace" });
-  /** Where "Open in the book" lands, and the card to return to. */
   const [opened, setOpened] = createSignal<
     { readonly unit: DecisionUnit; readonly card: string } | undefined
   >(undefined, { name: "reviewOpened" });
@@ -232,16 +153,6 @@ export function ReviewReader(props: {
   const split = (): boolean =>
     layout() === "split" || (layout() === "auto" && width() >= AUTO_SPLIT_PX);
 
-  // --- the books, made ready one per tick ------------------------------------
-
-  /**
-   * One parse per side per book, held while the text is the same. A parse is
-   * what a card's context (TOC steps) and every view are drawn from.
-   *
-   * `memoize()` with no id: the loose-text door. An id would register the text
-   * with the corpus as a proofreading target, and a review's other side is not
-   * one.
-   */
   const analyzers = new Map<string, (text: string) => Analysis>();
   const analysisOf = (bookId: BookId, side: "current" | "baseline", text: string): Analysis => {
     const key = `${side}\0${bookId}`;
@@ -253,17 +164,11 @@ export function ReviewReader(props: {
     return analyze(text);
   };
 
-  /**
-   * Each card's own widening, by its key — the verse's address — as Find's
-   * feed keeps them: the extent is the card's, and a card that scrolls out of
-   * the window and back must keep what the reader asked to see.
-   */
   const views = createCardViews<never>("review");
   const expand = (key: string, step: ContextStep): void => {
     const steps = services.settings.get(keys.excerptContext);
     views.send(key, { kind: "step", step, from: { up: steps, down: steps } });
   };
-  /** The widenings of one book's cards, as a value: what re-prepares that book. */
   const extentsOf = (bookId: BookId): string =>
     [...untrack(views.extents).entries()]
       .filter(([key]) => key.startsWith(`${bookId} `))
@@ -287,8 +192,6 @@ export function ReviewReader(props: {
       hidden === undefined || hidden.size === 0
         ? filtered
         : (unit: DecisionUnit): boolean => filtered(unit) && !hidden.has(unit.id);
-    // In an editable review a taken unit is unchanged now — it IS the other side's
-    // text — and still keeps its card, to say so and to put it back.
     const keep = (unit: DecisionUnit): boolean =>
       result && untrack(() => props.decision(book.bookId, unit.id)) !== undefined;
     return {
@@ -297,8 +200,6 @@ export function ReviewReader(props: {
       units,
       shown: units.filter((unit) => (changed(unit) && include(unit)) || keep(unit)),
       hunks: hunksOf({
-        // Read as of now: cards are built in the prepare effect, and a book's
-        // name is not something a review follows while it is open.
         label: (address) => untrack(() => shell.location.label(address)),
         bookId: book.bookId,
         units,
@@ -312,14 +213,6 @@ export function ReviewReader(props: {
     };
   };
 
-  /**
-   * Books are prepared one per tick, so the first cards are on screen while
-   * the rest are still being parsed. A book whose two texts are the ones it was
-   * prepared from is REUSED, and a book being re-prepared keeps its old entry
-   * until the new one is ready: a keystroke in the result pane re-compares the
-   * review, and must neither re-parse every other book nor empty the list
-   * under the card being edited.
-   */
   let held = new Map<BookId, { readonly key: string; readonly prepared: Prepared }>();
   const keyOf = (book: ReviewBook, show: Filter, result: boolean): string =>
     `${show}\0${result ? "r" : "c"}\0${book.currentText.length}\0${book.baselineText.length}\0${extentsOf(book.bookId)}\0${[...(book.hidden ?? [])].join(",")}`;
@@ -331,7 +224,6 @@ export function ReviewReader(props: {
       books: props.books,
       show: filter(),
       result: props.decidable,
-      // A card widened re-prepares its book (and only it: the key says which).
       widened: views.extents(),
     }),
     ({ books, show, result }) => {
@@ -354,7 +246,6 @@ export function ReviewReader(props: {
         } else queue.push(book);
       }
       held = kept;
-      /** The list in the books' order: fresh where ready, the old entry until then. */
       const list = (): Prepared[] => {
         const out: Prepared[] = [];
         for (const book of books) {
@@ -396,8 +287,6 @@ export function ReviewReader(props: {
   const selectedBook = (): Prepared | undefined =>
     prepared().find((held) => held.book.bookId === props.selected) ?? prepared()[0];
 
-  // --- decisions ---------------------------------------------------------------
-
   const controlsFor = (bookId: BookId): Controls | undefined =>
     props.decidable
       ? {
@@ -410,7 +299,6 @@ export function ReviewReader(props: {
         }
       : undefined;
 
-  /** One per book, so a card's controls keep their identity across renders. */
   const controls = createMemo(
     () => new Map(prepared().map((held) => [held.book.bookId, controlsFor(held.book.bookId)])),
     { name: "reviewControls" },
@@ -421,8 +309,6 @@ export function ReviewReader(props: {
       ? 0
       : held.shown.filter((unit) => props.decision(held.book.bookId, unit.id) !== undefined).length;
 
-  // --- next and previous ------------------------------------------------------
-
   let goTo: ((key: string) => void) | undefined;
   let book: BookDiffApi | undefined;
   let listRoot: HTMLDivElement | undefined;
@@ -432,7 +318,6 @@ export function ReviewReader(props: {
     { name: "reviewCardKeys" },
   );
 
-  /** The first card whose bottom is below the list's top: where the reader is. */
   const visibleCard = (): number | undefined => {
     const root = listRoot;
     if (root === undefined) return undefined;
@@ -447,7 +332,6 @@ export function ReviewReader(props: {
     return best;
   };
 
-  /** Whether the card with this key is drawn and inside the list's window. */
   const onScreen = (key: string | undefined): boolean => {
     const root = listRoot;
     if (root === undefined || key === undefined) return false;
@@ -461,11 +345,6 @@ export function ReviewReader(props: {
   const stepCards = (delta: 1 | -1): void => {
     const keysNow = untrack(cardKeys);
     if (keysNow.length === 0) return;
-    // From the card last stepped to while it is still on screen; otherwise
-    // from the card at the top, so a reader who scrolled is stepped from where
-    // they are, and the first "next" lands on that card rather than skipping
-    // it. (From the top card alone, the last few cards — on screen together,
-    // with nothing below to scroll to — could never be reached.)
     const at = untrack(place);
     const held = at !== undefined && onScreen(keysNow[at]) ? at : undefined;
     const from = held ?? visibleCard() ?? 0;
@@ -481,24 +360,9 @@ export function ReviewReader(props: {
     setPlace(to);
   };
 
-  /**
-   * When the reader was last moved for them. The book view reports its place
-   * as it scrolls, and the reports that follow a step — the mount, the scroll
-   * the step caused — describe the line at the top, which is not always the
-   * change stepped to. For a moment after a step, the step is the answer.
-   */
   let steeredAt = 0;
   const STEER_MS = 800;
 
-  /**
-   * The next or previous change from WHERE THE READER IS — the middle of
-   * their pane, read at the click — not from a remembered place: scroll away
-   * and the step counts from where you scrolled to. The change sitting at the
-   * middle is the one you are on, and is skipped both ways; with nothing
-   * further in this book, the step crosses into the next (or previous) book
-   * that has one, and with nothing anywhere it shows the nearest again, so a
-   * change is never lost to a scroll.
-   */
   const stepUnits = (delta: 1 | -1): void => {
     steeredAt = performance.now();
     const all = untrack(prepared);
@@ -531,7 +395,6 @@ export function ReviewReader(props: {
       setPlace(to);
       return;
     }
-    // Past either end of this book: the next (or previous) book that has one.
     const index = all.indexOf(held);
     for (let other = index + delta; other >= 0 && other < all.length; other += delta) {
       const next = all[other];
@@ -542,7 +405,6 @@ export function ReviewReader(props: {
       props.onSelect(next.book.bookId);
       return;
     }
-    // Nothing further anywhere: the last (or first) change again.
     const edge = delta > 0 ? shown.length - 1 : 0;
     const last = shown[edge];
     if (last !== undefined) {
@@ -575,7 +437,6 @@ export function ReviewReader(props: {
     releasePrevious();
   });
 
-  /** "3 of 61": where next and previous count from. */
   const counter = (): string => {
     const total = scope() === "changes" ? cardKeys().length : (selectedBook()?.shown.length ?? 0);
     const at = place();
@@ -584,7 +445,6 @@ export function ReviewReader(props: {
       : t("{at} of {total}", { at: at + 1, total });
   };
 
-  // A book scope follows the reader's place, so the counter says where they are.
   const placeFrom = (unit: DecisionUnit | undefined): void => {
     if (performance.now() - steeredAt < STEER_MS) return;
     const held = untrack(selectedBook);
@@ -607,12 +467,10 @@ export function ReviewReader(props: {
     setPlace(held?.shown.indexOf(first));
   };
 
-  /** The chapter a unit is in; 0 for the front matter. */
   const chapterOf = (unit: DecisionUnit): number => {
     const addr = unit.currentAddr ?? unit.baselineAddr;
     return addr === undefined || addr.kind === "frontMatter" ? 0 : addr.chapter;
   };
-  /** The book's chapters that have changes the filter shows, with how many. */
   const chaptersOf = (held: Prepared): readonly CrumbChapter[] => {
     const counts = new Map<number, number>();
     for (const unit of held.shown) {
@@ -628,7 +486,6 @@ export function ReviewReader(props: {
         count,
       }));
   };
-  /** The chapter of the change the reader is at: the first change until they move. */
   const currentChapter = (): number | undefined => {
     const held = selectedBook();
     const unit = held?.shown[place() ?? 0];
@@ -640,7 +497,6 @@ export function ReviewReader(props: {
       : chapter === 0
         ? t("Intro")
         : t("Chapter {label}", { label: chapter });
-  /** The chapter with changes before or after the one the reader is at. */
   const chapterAt = (delta: 1 | -1): number | undefined => {
     const held = selectedBook();
     if (held === undefined) return undefined;
@@ -652,10 +508,8 @@ export function ReviewReader(props: {
     const chapter = untrack(() => chapterAt(delta));
     if (chapter !== undefined) goToChapter(chapter);
   };
-  /** Whether the two texts scroll together: the chain in the strip. */
   const [linked, setLinked] = createSignal(true, { name: "reviewLinked" });
 
-  /** To the first change in a chapter; the other pane comes with it. */
   const goToChapter = (chapter: number): void => {
     const held = untrack(selectedBook);
     const index = held?.shown.findIndex((unit) => chapterOf(unit) === chapter) ?? -1;
@@ -666,7 +520,6 @@ export function ReviewReader(props: {
     setPlace(index);
   };
 
-  /** Into the whole book at its first change — not at the title page. */
   const enterBook = (): void => {
     const first = untrack(selectedBook)?.shown[0];
     if (untrack(opened) === undefined && first !== undefined) {
@@ -684,7 +537,6 @@ export function ReviewReader(props: {
     if (card !== undefined && card !== "") requestAnimationFrame(() => goTo?.(card));
   };
 
-  /** The book last picked in the sidebar: the row it highlights in Changes. */
   const [activeBook, setActiveBook] = createSignal<BookId | undefined>(undefined, {
     name: "reviewActiveBook",
   });
@@ -697,13 +549,6 @@ export function ReviewReader(props: {
     if (untrack(scope) === "changes") goTo?.(bookId);
   };
 
-  // --- the pieces --------------------------------------------------------------
-
-  /**
-   * The bulk decision, for what the view shows: every book in Changes, the
-   * book on screen in Whole book — always over the changes the kind filter
-   * shows, which is what makes "all" a question somebody can answer.
-   */
   const inScope = (): readonly Prepared[] => {
     if (scope() === "changes") return prepared();
     const held = selectedBook();
@@ -756,12 +601,6 @@ export function ReviewReader(props: {
     );
   }
 
-  /**
-   * A card's decision, said in words in its header: most cards hold one
-   * change, and a reader deciding it should not have to learn what a gutter
-   * glyph means. Pressed when every change in the card has that side; pressing
-   * it again clears them.
-   */
   const cardDecision = (hunk: Hunk): readonly CardAction[] => {
     if (hunk.units.length === 0) return [];
     if (!props.decidable) {
@@ -774,11 +613,6 @@ export function ReviewReader(props: {
     const one = hunk.units.length === 1;
     const choose = (chosen: MergeSide): void =>
       props.decide(hunk.bookId, hunk.units, side === chosen ? undefined : chosen);
-    // In the columns' order: the other side's on the left, yours on the right.
-    // Quiet until chosen — tertiary, like Edit beside them — so a page of
-    // undecided cards is not a page of outlined buttons; the pressed one takes
-    // the brand outline and says which side was chosen. Pressed again it puts the passage back, which it
-    // no longer spells out ("— put back" read as an instruction on every card).
     return [
       {
         kind: "button",
@@ -821,20 +655,12 @@ export function ReviewReader(props: {
     { name: "reviewSections" },
   );
 
-  /**
-   * The sidebar navigates the CHANGES, as Find's does its results: one row per
-   * book that differs, with how many of its changes are decided. A row goes to
-   * the book — its section in Changes, the book itself in Whole book — and its
-   * menu decides the whole book, which is why the list itself has no headers.
-   */
   if (untrack(() => props.claimSidebar) !== false)
     onCleanup(
       claimSidebar(() => (
         <ChangesHistorySidebar active="changes" changes={prepared().length}>
           <div class="px-4 pt-3 pb-2">
             <p class="px-2 text-small text-on-surface-secondary">
-              {/* The status line's words, so the two never read as different
-                  answers: "2 changes in 1 book". */}
               {(() => {
                 const count = prepared().reduce((sum, held) => sum + held.shown.length, 0);
                 const books = prepared().length;
@@ -920,35 +746,17 @@ export function ReviewReader(props: {
       )),
     );
 
-  /**
-   * A card can be edited whenever its current side IS the working text — this
-   * project, in the editor — in either mode: the modes differ in what a
-   * decision does, not in whether the text is yours. Two zips are read only.
-   */
   const editable = (): boolean => props.decidable;
 
-  /**
-   * An editable review's working text, live: every book in the review, seated once,
-   * so each card and the whole book can be the Book itself — an editor with
-   * the diff as a plugin on it — rather than a view of a copy. A seated book is
-   * held by identity: a new object would rebuild every live pane of it.
-   */
   const [seats, setSeats] = createSignal<ReadonlyMap<BookId, EditorBook>>(new Map(), {
     name: "reviewSeats",
   });
   createEffect(
-    // Only the whole book's current pane is always live; a card seats its own
-    // book when an edit starts (`DiffCard`, `CardList`).
     () => {
       const bookId = scope() === "book" && editable() ? selectedBook()?.book.bookId : undefined;
       return bookId === undefined ? [] : [bookId];
     },
     (bookIds) => {
-      // Nothing to seat is often a moment, not a decision: the selected book
-      // drops out while a comparison re-prepares the list. Releasing the seat
-      // then made the whole book's views build without it, and build again
-      // when it came back. A seat is the project's own Book, held by identity
-      // — keeping it costs nothing.
       if (bookIds.length === 0) return;
       let current = true;
       for (const bookId of bookIds) {
@@ -964,11 +772,8 @@ export function ReviewReader(props: {
         current = false;
       };
     },
-    // One array per run, compared by content: a new comparison of the same
-    // books is not a reason to look at the seats again.
   );
 
-  /** One live handle per seated book, the same object for as long as the seat. */
   const handles = new WeakMap<
     EditorBook,
     { readonly book: EditorBook; readonly analyze: (text: string) => Analysis }
@@ -989,9 +794,6 @@ export function ReviewReader(props: {
     observer?.disconnect();
     observer = new ResizeObserver((entries) => {
       const box = entries[0]?.contentRect;
-      // Zero is a hidden reader (behind Review's settled card), not a narrow
-      // one: taking it would flip an auto layout to unified and rebuild every
-      // view for the moment it is out of sight.
       if (box !== undefined && box.width > 0) setWidth(box.width);
     });
     observer.observe(element);
@@ -1027,8 +829,7 @@ export function ReviewReader(props: {
           trigger={
             <Button size="sm" variant="tertiary" data-review-view>
               <Columns2 aria-hidden="true" />
-              {/* Says when it is hiding something, since the filter that does
-                  so now lives inside it. */}
+
               {filter() === "all"
                 ? t("View")
                 : filter() === "words"
@@ -1038,9 +839,6 @@ export function ReviewReader(props: {
             </Button>
           }
         >
-          {/* Which changes: in here with how they are drawn, rather than a
-              select of its own in the toolbar — it is a way of looking, and
-              most reviews never change it. */}
           <MenuLabel>{t("Show")}</MenuLabel>
           <For each={["all", "words", "formatting"] as const}>
             {(value) => (
@@ -1078,9 +876,7 @@ export function ReviewReader(props: {
         </Menu>
         <div class="ms-auto flex items-center gap-1">
           <DecideAll />
-          {/* Where you are, once you have stepped: the how-many is the status
-              line's, and a second total here (cards, not changes) read as a
-              different answer to the same question. */}
+
           <Show when={place() !== undefined}>
             <span class="text-smallest text-on-surface-tertiary tabular-nums" data-review-counter>
               {counter()}
@@ -1104,9 +900,6 @@ export function ReviewReader(props: {
       <Show
         when={scope() === "changes"}
         fallback={
-          // Keyed on the BOOK, not on its prepared entry: a comparison
-          // replaces the entry for the same book, and keyed on the entry,
-          // the whole book's two editors were torn down and built again.
           <Show
             when={selectedBook()?.book.bookId}
             fallback={<EmptyState title={t("Preparing…")} />}
@@ -1121,11 +914,6 @@ export function ReviewReader(props: {
               };
               return (
                 <div class="flex min-h-0 flex-1 flex-col gap-2">
-                  {/* The editor's location strip, over what changed: Book ·
-                    Chapter listing only the books and chapters with changes,
-                    each with how many; the arrows step chapter to chapter;
-                    the chain links the two texts' scrolling, as a reference
-                    pane's does. */}
                   <LocationStrip testId="review-location" class="rounded-md border">
                     <Crumbs
                       book={held().book.name}
@@ -1164,9 +952,7 @@ export function ReviewReader(props: {
                       }
                     />
                   </LocationStrip>
-                  {/* Not before the reader has a width: "side by side when there
-                    is room" cannot answer at zero, and answering unified then
-                    split built every view twice. */}
+
                   <Show when={layout() !== "auto" || width() > 0}>
                     <BookDiff
                       class="min-h-0 flex-1"
@@ -1206,11 +992,7 @@ export function ReviewReader(props: {
             bookOf={(item) => item.hunk.bookId}
             seat={props.seat}
             lineLabel={(item) => item.hunk.label}
-            // A card is keyed by its verse's address, so typing into it never
-            // moves its key; an edit that ends its change leaves it held as
-            // "No longer a change" — never handed to a neighbour.
             goneLabel={t("No longer a change")}
-            // Held by the edit that ended it: nothing left to paint or decide.
             whenGone={(item) => ({ ...item, hunk: { ...item.hunk, units: [], all: [] } })}
             onEditing={(now) => props.onEditing?.(now)}
             ref={(scrollTo) => {

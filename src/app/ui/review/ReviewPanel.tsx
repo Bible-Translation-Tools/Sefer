@@ -1,47 +1,3 @@
-/**
- * `/review` — ONE screen for "these two texts differ; which do I keep". The
- * model is `documentation/architecture/review.md`; what follows is what this
- * file has to keep true.
- *
- * **Both sides are sources, and neither is special.** The left picker and the
- * right picker are the SAME list (`sources.ts`). Left defaults to the editor
- * and right to the file because that is the comparison a reader wants nine
- * times in ten — not because the screen knows anything about them. The same
- * source on both sides is refused, because a text is never a review of itself.
- *
- * **Editability is a property of what is loaded.** The one side that can be
- * written is the working text (`CompareSource.canApply`: only the open
- * project says yes), and it is always the model's left side — picking it on the
- * right swaps the sides — though it is DRAWN on the right, the other side on
- * the left, read left to right as was-then-now. Then the review is the
- * editor: every card edits the Book itself on a double-click, as every card
- * in Sefer does, and "Keep" / "Take" writes into it at once, one Undo step
- * each. When neither side can be
- * written (two folders, two versions) the review is for reading: no Edit, no
- * double-click, no decisions. There is no "decide, then apply" mode: a
- * decision somebody has to remember to apply later is a decision that gets
- * lost.
- *
- * **The unit is the engine's decision unit**, addressed by reference.
- * `diffSkeleton` is the engine's own diff and there is no second one. The
- * header says "engine diff", because a reviewer deciding what to keep is
- * entitled to know what aligned it, and a build whose artifact has no diff
- * door says so instead of showing an empty comparison.
- *
- * "Record a version" is the only thing in Sefer that writes a project file:
- * `saveAll` then `Git.commit`, in that order, as one action. It is offered
- * whenever the project is one of the two sides, because what it records is the
- * project's own unsaved work and not the comparison.
- *
- * **Against a suggestion** (`?against=shared&pull=<n>`) the review is also
- * its answer. Save brings it in — sent to the shared project whatever the
- * reviewer's own mode, even with nothing new to record — and closes it as
- * brought in, or leaves it open when the dialog's switch says so. Decline
- * closes it with a note (`SuggestionLine`, or Save's dialog itself when the
- * reviewer took none of it). Against the person's own copy (`copy=1`) Save
- * catches this device up with another of theirs and sends back to the copy.
- */
-
 import type { EditorBook } from "@sefer/editor";
 import { trustedBy, type BookId } from "@sefer/text/book";
 import { useNavigate, useSearch } from "@tanstack/solid-router";
@@ -123,21 +79,10 @@ import { ReviewReader, type ReviewBook } from "./ReviewReader";
 import { sourceChoices, type SourceChoice } from "./sources";
 import { SuggestionLine } from "./SuggestionLine";
 
-/** How long typing pauses before the review compares again: the cards' pause. */
 const TYPING_PAUSE_MS = 400;
 
-/** The sources that read live, so a keystroke moves the review under itself. */
 const LIVE = new Set(["project", "disk"]);
 
-/**
- * Decisions are keyed by book AND unit: a sid is unique only within a book.
- *
- * The separator is NUL, written as the escape `\0` and not as a raw control
- * byte: it is the one character that cannot occur in a book code or a sid, so
- * the key is unambiguous to split -- but a source file holding the byte itself
- * counts as binary, which makes `file` call it data and plain `grep` silently
- * find nothing in it. That cost this migration six missed call sites.
- */
 const keyOf = (bookId: BookId, unitId: string): string => `${bookId}\0${unitId}`;
 
 export function ReviewPanel() {
@@ -145,22 +90,16 @@ export function ReviewPanel() {
   const pageLeading = usePageLeading();
   const navigate = useNavigate();
   const { services } = shell;
-  // SAFETY: `strict: false` gives the union of every route's search; both
-  // fields are read as `unknown` and narrowed, never trusted.
+  // SAFETY: `strict: false` gives the union of every route's search; both fields are read as `unknown` and narrowed, never trusted.
   const search = useSearch({ strict: false }) as () => {
     readonly against?: unknown;
     readonly pull?: unknown;
     readonly copy?: unknown;
   };
-  /** A suggestion under review: its head, fetched to a local ref, is "theirs". */
   const pull = (): number | undefined => {
     const held = untrack(() => search().pull);
     return typeof held === "number" ? held : undefined;
   };
-  /**
-   * The person's own copy, as another of their devices left it, is "theirs".
-   * Read reactively, so the labels and the Save text follow a switch in place.
-   */
   const fromCopy = (): boolean => search().copy === 1;
   const theirsRef = (): string | undefined => {
     const number = pull();
@@ -169,11 +108,7 @@ export function ReviewPanel() {
     const branch = untrack(() => syncWatch.facts(shell.project()?.root)?.reading.branch);
     return branch === undefined ? undefined : copyRef(branch);
   };
-  /** Is one side the shared project? Then recording also takes what it changed. */
   const againstShared = (): boolean => rightId() === "shared" || leftId() === "shared";
-  // The sidebar's Changes tab with nothing under it, for a review with no
-  // reader: nothing differs, or nothing is compared yet. The reader's own claim
-  // replaces it while it is mounted, and the History tab stays one click away.
   onCleanup(
     claimSidebar(() => (
       <ChangesHistorySidebar active="changes" changes={0}>
@@ -183,8 +118,6 @@ export function ReviewPanel() {
   );
   const version = createRecordedVersion(shell);
   const shared = createRecordedVersion(shell, "shared", theirsRef);
-  // The last version both sides had in common: what "who changed this" is
-  // measured from, in a review against the shared project.
   const common = createRecordedVersion(shell, "base", theirsRef);
 
   const [leftId, setLeftId] = createSignal("project", { name: "reviewLeftKind" });
@@ -196,7 +129,6 @@ export function ReviewPanel() {
         : "disk",
     { name: "reviewRightKind" },
   );
-  /** Is one side new work from Writer? Then recording also marks it taken. */
   const againstWriter = (): boolean => rightId() === "writer" || leftId() === "writer";
   const [leftPicked, setLeftPicked] = createSignal<CompareSource | undefined>(undefined, {
     name: "reviewLeftPicked",
@@ -213,8 +145,6 @@ export function ReviewPanel() {
   const [selected, setSelected] = createSignal<BookId | undefined>(undefined, {
     name: "reviewBook",
   });
-  // The shell's mode, not a copy: the palette's Toggle USFM and this screen's
-  // View menu move the same switch every editor surface follows.
   const markup = (): boolean => shell.mode() === "usfm";
   const setMarkup = (on: boolean): void => shell.setMode(on ? "usfm" : "default");
   const [message, setMessage] = createSignal("", { name: "reviewMessage" });
@@ -223,16 +153,11 @@ export function ReviewPanel() {
   const [receipt, setReceipt] = createSignal("", { name: "reviewReceipt" });
   const [recording, setRecording] = createSignal(false, { name: "reviewRecording" });
   const [recordOpen, setRecordOpen] = createSignal(false, { name: "reviewRecordOpen" });
-  /** Who the version is by: the session's user or this device's name; undefined asks. */
   const [author, setAuthor] = createSignal<Author | undefined>(undefined, { name: "reviewAuthor" });
   const [typedName, setTypedName] = createSignal("", { name: "reviewAuthorName" });
-  /** Whether recording will also send, so the dialog can say so before the press. */
   const [sends, setSends] = createSignal(false, { name: "reviewSends" });
-  /** A suggestion was brought in and closed by this Save: Done goes back to the list. */
   const [broughtIn, setBroughtIn] = createSignal(false, { name: "reviewBroughtIn" });
-  /** Against a suggestion: close it as brought in when this Save sends it. */
   const [closeOnSave, setCloseOnSave] = createSignal(true, { name: "reviewCloseSuggestion" });
-  /** Where Save's send goes, named — the shared project, or the person's own copy. */
   const sendsLine = (): string => {
     const facts = collaboration.facts(shell.project()?.root);
     const copy = facts?.mode === "copy";
@@ -268,10 +193,6 @@ export function ReviewPanel() {
     name: "reviewJournals",
   });
 
-  /** New Writer work as the Writer side's texts: the project's books with their changes in. */
-  // Every book is on this side: the project's own text where Writer has
-  // nothing new, so only the books with work differ and no book reads as
-  // missing from one side.
   const writerSide = () => {
     const project = shell.project();
     const work = writerWatch.facts(project?.root).work;
@@ -314,11 +235,6 @@ export function ReviewPanel() {
   const choiceOf = (id: string): SourceChoice | undefined =>
     choices().find((choice) => choice.id === id);
 
-  /**
-   * One side, resolved. A kind with an `immediate` is minted fresh on every
-   * read — the project and the disk sources read live, and a stale object
-   * would describe the project as it was when the picker last moved.
-   */
   const sourceFor = (id: string, picked: CompareSource | undefined): CompareSource | undefined => {
     const choice = choiceOf(id);
     if (choice === undefined) return undefined;
@@ -333,21 +249,11 @@ export function ReviewPanel() {
   const leftLabel = (): string => left()?.label ?? choiceOf(leftId())?.label ?? "";
   const rightLabel = (): string => right()?.label ?? choiceOf(rightId())?.label ?? "";
 
-  /**
-   * The side being written: the one that says it can be. Only the open project
-   * says so, and the same source cannot sit on both sides, so this is never
-   * ambiguous.
-   */
   const target = (): "left" | "right" | undefined =>
     left()?.canApply === true ? "left" : right()?.canApply === true ? "right" : undefined;
 
   const live = (): boolean => LIVE.has(leftId()) || LIVE.has(rightId());
 
-  /**
-   * A side read out of a commit whose texts have not come back yet, by its
-   * short name. Compared now it would hold no books, and every book in the
-   * project would read as "only in the editor" until the read landed.
-   */
   const waitingFor = (): string | undefined => {
     for (const id of [leftId(), rightId()]) {
       const pending =
@@ -357,43 +263,17 @@ export function ReviewPanel() {
     }
     return undefined;
   };
-  /** A comparison is under way; the screen says so rather than "nothing yet". */
   const [comparing, setComparing] = createSignal(false, { name: "reviewComparing" });
 
-  /**
-   * Every open book's revision, as one key.
-   *
-   * Both effects below mean the same thing by "something moved": the text of
-   * some book in the project did. This screen is one of the few that honestly
-   * wants all of them — a comparison spans the project and so does a recovery
-   * scan — so it reads every row rather than pretending otherwise.
-   *
-   * It is still narrower than the counter it replaces, which also fired on
-   * every publication, every seat change and every save in the application.
-   */
   const revisions = (): string => {
     const project = shell.project();
     if (project === undefined) return "";
     return project.books.map((book) => shell.stampOf(book.id)?.revision ?? -1).join(",");
   };
 
-  // --- the comparison ------------------------------------------------------
-
-  /**
-   * One pass. Coalesced rather than queued: a burst of ticks while somebody
-   * types must cost one comparison after the burst, not one per keystroke, and
-   * a comparison that arrived late must not overwrite a newer one.
-   */
   let running = false;
   let again = false;
 
-  /** Every changed book's decision units, one engine diff each. */
-  /**
-   * A book somebody decided in stays in the review though it now reads the
-   * same on both sides: a take that made it identical keeps its card — whose
-   * pressed "Taken from …" still puts it back — rather than vanishing under
-   * the click.
-   */
   const decidedIn = (bookId: BookId): boolean => {
     for (const key of untrack(decisions).keys()) if (key.startsWith(`${bookId}\0`)) return true;
     return false;
@@ -406,9 +286,6 @@ export function ReviewPanel() {
       if (!inReview(book) || book.leftText === undefined || book.rightText === undefined) continue;
       held.set(
         book.bookId,
-        // The engine sends changed units only; a book somebody decided in
-        // needs its unchanged ones too, because a take makes the unit read the
-        // same on both sides and its card must stay, to put it back.
         diffSkeleton(services.galley, book.bookId, book.rightText, book.leftText, {
           unchanged: decidedIn(book.bookId),
         }),
@@ -417,11 +294,6 @@ export function ReviewPanel() {
     return held;
   };
 
-  /**
-   * The units the last comparison took, for the result it took them for. A
-   * plain variable, not a signal: `result` is the signal, and this is only
-   * what `skeletons` reads when it runs for that same result.
-   */
   let computed:
     | {
         readonly result: CompareResult;
@@ -442,8 +314,6 @@ export function ReviewPanel() {
     }
     running = true;
     setComparing(true);
-    // One comparison, one record: what it cost and how big the answer was.
-    // The sides by KIND only — a picked folder's label is somebody's path.
     const comparing = services.composition.observability.operation("review.compare", {
       "review.left": leftId(),
       "review.right": rightId(),
@@ -455,9 +325,6 @@ export function ReviewPanel() {
       .then((found) => {
         compared({ "review.books": found.books.length });
         running = false;
-        // The engine's decision units, taken here rather than on first read
-        // so the comparison's record carries them; `skeletons` below reads
-        // this and diffs nothing twice.
         const units = comparing.span("review.units");
         const held = skeletonsOf(found);
         let unitCount = 0;
@@ -495,8 +362,6 @@ export function ReviewPanel() {
       })
       .catch((cause: unknown) => {
         compared();
-        // A side that could not be read is the comparison refusing, in its
-        // own vocabulary; anything without a reason is the alarm.
         const reason = reasonOf(cause);
         comparing.end(reason === undefined ? "failed" : "refused", {
           "review.reason": reason ?? "unknown",
@@ -508,12 +373,6 @@ export function ReviewPanel() {
       });
   };
 
-  /**
-   * Re-take the comparison when the sides change, and — while either side
-   * reads live — whenever a book's text moves, so typing shows up here
-   * without a button. A comparison is still a snapshot; this simply takes a
-   * new one.
-   */
   let lastSides: string | undefined;
   let typing: ReturnType<typeof setTimeout> | undefined;
   onCleanup(() => {
@@ -521,23 +380,13 @@ export function ReviewPanel() {
   });
   createEffect(
     () => ({
-      // Both frozen sides are in the key: a side whose texts arrive after the
-      // screen opened (the shared project's, when the cloud popover opens it
-      // directly) is compared again once it has them.
       sides: `${leftId()}:${rightId()}:${leftPicked()?.id ?? ""}:${rightPicked()?.id ?? ""}:${
         version.recorded().head ?? ""
       }:${shared.recorded().head ?? ""}:${version.recorded().read}:${shared.recorded().read}`,
       text: live() ? revisions() : "",
     }),
     ({ sides }) => {
-      // The compute above IS the dependency list; what this reads is a
-      // one-time snapshot of the state that key describes, so `untrack` says so.
-      //
-      // New SIDES compare at once. A book's text moving — typing, in a card or
-      // the editor — compares at a pause, batched: one comparison per burst
-      // rather than per keystroke, the way every card re-takes its results.
-      // The engine's diff is cached by text, so that one comparison re-diffs
-      // only the book that moved.
+      // Untracked on purpose: a one-time read, not a dependency (Solid 2: STRICT_READ_UNTRACKED).
       if (typing !== undefined) clearTimeout(typing);
       if (sides !== lastSides) {
         lastSides = sides;
@@ -551,12 +400,6 @@ export function ReviewPanel() {
     },
   );
 
-  /**
-   * A new comparison starts with no decisions. Takes already written stay in
-   * the text — they are edits now, like any other, one Undo each — and the
-   * texts recorded to put them back go too: they described the review that
-   * ended, and a put back after the switch restored text from it.
-   */
   const startOver = (): void => {
     setDecisions(new Map());
     originals.clear();
@@ -566,7 +409,6 @@ export function ReviewPanel() {
 
   const pick = (side: "left" | "right", id: string): void => {
     const choice = choiceOf(id);
-    // The working text is the side that edits, and it sits on the left.
     if (side === "right" && id === "project") {
       const wasId = leftId();
       const wasPicked = leftPicked();
@@ -601,27 +443,12 @@ export function ReviewPanel() {
       });
   };
 
-  // --- the units -----------------------------------------------------------
-
   const changed = (): readonly BookComparison[] => {
-    // Tracked here: a decision cleared lets an identical book go.
     decisions();
     return result()?.books.filter(inReview) ?? [];
   };
-  /**
-   * A card is being edited. The edit that makes the last book identical is
-   * still under way in its card, so the reader stays until Done — the card
-   * held there as "No longer a change" — and only then says "No differences."
-   */
   const [cardEditing, setCardEditing] = createSignal(false, { name: "reviewCardEditing" });
 
-  /**
-   * The review's work is done: something was decided, nothing is left
-   * undecided, and both sides now read the same. The cards that held the
-   * decisions read "unchanged" by then, and a screen still full of them asks
-   * "did it work?" — so the one thing left, recording, takes their place, and
-   * the cards stay a click away to put something back.
-   */
   const settled = (): boolean => {
     const found = result();
     return (
@@ -640,37 +467,15 @@ export function ReviewPanel() {
     return found === undefined || bookId === undefined ? undefined : bookComparison(found, bookId);
   };
 
-  /**
-   * Every changed book's decision units, computed once per comparison.
-   *
-   * A decision changes no skeleton, so nothing the reader clicks should
-   * re-diff anything. This is the one place that asks the engine for them;
-   * the selected book's skeleton and the plan both read from it.
-   * (`diffSkeleton`'s own cache holds four entries, so reading every changed
-   * book through it on each render re-diffed all of them once a comparison
-   * had more than four.)
-   */
   const skeletons = createMemo(
     (): ReadonlyMap<BookId, SkeletonResult> => {
       const found = result();
       if (found === undefined) return new Map();
-      // The comparison took them already, inside its own record; a result
-      // that did not come through `runCompare` is diffed here as before.
       return computed?.result === found ? computed.skeletons : skeletonsOf(found);
     },
     { name: "reviewSkeletons" },
   );
 
-  /**
-   * The selected book's diff, or the reason there is none.
-   *
-   * An identical book is not in `skeletons` — it has nothing to plan — but the
-   * screen still shows its (empty) diff, so it is asked for directly.
-   *
-   * `baseline` is the RIGHT side and `current` the LEFT, which is the engine's
-   * own vocabulary and the reason the buttons read "Keep the editor's" / "Take
-   * the file's" rather than naming a side of the wire.
-   */
   const selectedSkeleton = createMemo(
     (): SkeletonResult | undefined => {
       const book = current();
@@ -686,11 +491,6 @@ export function ReviewPanel() {
     { name: "reviewSkeleton" },
   );
 
-  /**
-   * The engine has no diff door — which means the artifact in this build is
-   * not the pinned build. Said in as many words, because the
-   * alternative is a screen that looks like it found no differences.
-   */
   const diffRefusal = (): string | undefined => {
     const found = selectedSkeleton();
     return found !== undefined && Result.isFailure(found) ? found.failure.description : undefined;
@@ -699,11 +499,6 @@ export function ReviewPanel() {
   const decisionFor = (bookId: BookId, unitId: string): MergeSide | undefined =>
     decisions().get(keyOf(bookId, unitId));
 
-  /**
-   * One decision, or many at once — a card's or a book's. A snapshot on
-   * purpose: a bulk decision is about the units as they were when the button
-   * was pressed.
-   */
   const decide = (
     bookId: BookId,
     staticUnits: readonly DecisionUnit[],
@@ -720,10 +515,6 @@ export function ReviewPanel() {
     });
   };
 
-  /**
-   * Every book both sides hold and the engine diffed, as the reading draws
-   * it. A book the engine refused is not here; `diffRefusal` says why.
-   */
   const reviewBooks = createMemo(
     (): readonly ReviewBook[] => {
       const out: ReviewBook[] = [];
@@ -744,12 +535,6 @@ export function ReviewPanel() {
     { name: "reviewBooks" },
   );
 
-  /**
-   * Per book, which passages each side changed since the two last agreed —
-   * the same facts the policy decides from, the editor's text on one side and
-   * the shared project's on the other. Only in a review against the shared
-   * project; anywhere else there is no common version to measure from.
-   */
   const changedSince = createMemo(
     (): ReadonlyMap<
       BookId,
@@ -800,14 +585,6 @@ export function ReviewPanel() {
     return here && there ? "both" : here ? "here" : there ? "there" : undefined;
   };
 
-  /**
-   * Reviewing a suggestion: per book, the changed passages only the editor
-   * changed since the two last agreed. They are not what the suggestion
-   * offers — they are this device's own work, and the preset keeps them — so
-   * the reader leaves them out and one line counts them, with a way to look.
-   * Anywhere else (the shared project, your copy) both sides' work is the
-   * review, and nothing is left out.
-   */
   const mineOnly = createMemo(
     (): ReadonlyMap<BookId, ReadonlySet<string>> => {
       const out = new Map<BookId, ReadonlySet<string>>();
@@ -827,7 +604,6 @@ export function ReviewPanel() {
     [...mineOnly().values()].reduce((sum, ids) => sum + ids.size, 0);
   const [showMine, setShowMine] = createSignal(false, { name: "reviewShowMine" });
 
-  /** The books as the reader draws them: `reviewBooks`, less what `mineOnly` leaves out. */
   const readerBooks = createMemo(
     (): readonly ReviewBook[] => {
       const books = reviewBooks();
@@ -841,7 +617,6 @@ export function ReviewPanel() {
     { name: "reviewReaderBooks" },
   );
 
-  /** What a suggestion offers that the editor does not already read: its changed passages, less yours. */
   const offeredCount = (): number => {
     let count = 0;
     for (const book of reviewBooks())
@@ -849,19 +624,12 @@ export function ReviewPanel() {
     return count - mineOnlyCount();
   };
 
-  /**
-   * The side a passage lands on when nobody chooses, in a review against the
-   * shared project: what only they changed comes in, what only you changed
-   * stays. A passage changed in both places — or one whose origin cannot be
-   * told — has no preset: a person decides it, and Record waits for that.
-   */
   const preset = (bookId: BookId, unit: DecisionUnit): MergeSide | undefined => {
     if (!againstShared()) return undefined;
     const origin = originOf(bookId, [unit]);
     return origin === "there" ? "baseline" : origin === "here" ? "current" : undefined;
   };
 
-  /** The decision a card shows and Record applies: the person's, else the preset. */
   const effectiveFor = (bookId: BookId, unitId: string): MergeSide | undefined => {
     const held = decisionFor(bookId, unitId);
     if (held !== undefined || !againstShared()) return held;
@@ -871,23 +639,10 @@ export function ReviewPanel() {
     return unit === undefined ? undefined : preset(bookId, unit);
   };
 
-  /**
-   * Against a suggestion: how many passages it offers, and how many end up
-   * taken. Offered but none taken means there is nothing to bring in —
-   * keeping the editor's text everywhere is declining it — so Save is closed
-   * and the dialog offers only Decline. Recording anyway would join the
-   * suggestion's history to the project's and close it as brought in, which
-   * is the opposite of what was decided.
-   */
   const suggestionTally = (): { readonly offered: number; readonly taken: number } => {
     let offered = 0;
     let taken = 0;
     if (pull() === undefined) return { offered, taken };
-    // A take is written into the editor at once, so the passage it took then
-    // reads the same on both sides and is "unchanged" — kept on screen only
-    // because it was decided. The decisions are therefore counted as they
-    // were made, and only an undecided passage is counted by what differs and
-    // by its preset.
     for (const side of decisions().values()) {
       offered += 1;
       if (side === "baseline") taken += 1;
@@ -901,8 +656,6 @@ export function ReviewPanel() {
       }
     return { offered, taken };
   };
-  // Nothing left to differ is not "kept none": the suggestion's versions are
-  // already here, and Save is what sends them and closes it as brought in.
   const declineOnly = (): boolean => {
     const tally = suggestionTally();
     return tally.offered > 0 && tally.taken === 0;
@@ -912,7 +665,6 @@ export function ReviewPanel() {
     const project = shell.project();
     const number = pull();
     if (project === undefined || number === undefined || recording()) return;
-    // Read at the moment of the press.
     const staticNote = declineNote();
     setRecording(true);
     declineSuggestion(services, project, { number }, staticNote)
@@ -934,7 +686,6 @@ export function ReviewPanel() {
       .finally(() => setRecording(false));
   };
 
-  /** Passages changed in both places that nobody has chosen a side for yet. */
   const undecidedBoth = (): number => {
     if (!againstShared()) return 0;
     let count = 0;
@@ -949,14 +700,12 @@ export function ReviewPanel() {
     return count;
   };
 
-  /** How many units have been ruled on across the whole review, of how many. */
   const totals = () => {
     let total = 0;
     let decided = 0;
     for (const book of reviewBooks())
       for (const unit of book.skeleton.units) {
         const held = effectiveFor(book.bookId, unit.id);
-        // A taken unit in an editable review is unchanged now, and still counts.
         if (unit.status === "unchanged" && held === undefined) continue;
         total += 1;
         if (held !== undefined) decided += 1;
@@ -964,27 +713,10 @@ export function ReviewPanel() {
     return { total, decided };
   };
 
-  // --- writing into the working text ------------------------------------------
-
-  /**
-   * Whether this review edits: the left side is the working text. Each
-   * decision is then written into it as it is made, and the current pane is
-   * the Book itself. The file is still written only by Record a version.
-   */
   const editable = (): boolean => target() === "left" && leftId() === "project";
 
-  /**
-   * The target's text for a book when the review first wrote into it, so a
-   * take can be put back: merging the ORIGINAL's unit into the live text is
-   * exactly "undo that one", whatever else was written since.
-   */
   const originals = new Map<BookId, string>();
 
-  /**
-   * A decision written into the working text at once, as the engine's EDITS
-   * over the live text: only the chosen units move, everything else keeps its
-   * offsets, and it is one apply — one Undo step — through the one write path.
-   */
   const writeNow = (
     bookId: BookId,
     staticUnits: readonly DecisionUnit[],
@@ -1001,8 +733,6 @@ export function ReviewPanel() {
       "review.units": staticUnits.length,
       "review.side": side ?? "clear",
     });
-    // Where the chosen units come from: the other side for a take, the text
-    // as the review first found it for a put back.
     const from = taking ? other.baselineText : originals.get(bookId);
     const chosen = taking ? staticUnits : putBack;
     if (taking && !originals.has(bookId)) originals.set(bookId, live);
@@ -1011,13 +741,6 @@ export function ReviewPanel() {
       op.end("passed", { "review.wrote": false });
       return;
     }
-    // The unit ids are the review's, and the engine names a unit by its
-    // CURRENT side's address — so the merge is taken with the live text as
-    // the current side, exactly as the review's diff took it. (Diffed the
-    // other way round, a verse bridged on one side — `\v 5` against
-    // `\v 5-6` — got another id, and the take failed or found a different
-    // unit.) Then the edits from the live text to that result, a diff that
-    // names no unit.
     const merged = services.galley.merge(
       from,
       live,
@@ -1054,9 +777,6 @@ export function ReviewPanel() {
     side: MergeSide | undefined,
   ): void => {
     if (!editable()) return;
-    // "Put back" on a passage that is only PRESET to theirs: nothing was
-    // taken, so clearing would change nothing on screen. What the words ask
-    // for is this side's text, so that is the choice made.
     const putBackPreset =
       side === undefined &&
       staticUnits.length > 0 &&
@@ -1074,11 +794,9 @@ export function ReviewPanel() {
     return services.seated(bookId);
   };
 
-  /** Books only one side holds: Review cannot add or remove a book yet. */
   const oneSided = (): readonly BookComparison[] =>
     changed().filter((book) => book.presence !== "both");
 
-  /** The side that holds no book at all, by name: one sentence, not every book. */
   const emptySide = (): string | undefined => {
     const books = result()?.books ?? [];
     if (books.length === 0) return undefined;
@@ -1087,12 +805,8 @@ export function ReviewPanel() {
     return undefined;
   };
 
-  // --- record a version ----------------------------------------------------
-
   const unsaved = () => unsavedChanges(shell);
 
-  // The books by name, so the history reads "Edited Mark, Luke" rather than
-  // a count nobody can search for.
   const defaultMessage = (): string => {
     const names = unsaved().map((book) => bookName(book.bookId, metadataOf(shell.project())));
     return names.length === 0 ? t("Edited") : t("Edited {books}", { books: names.join(", ") });
@@ -1103,16 +817,9 @@ export function ReviewPanel() {
     const review = unsaved();
     if (project === undefined || recording()) return;
     if (review.length === 0 && !againstShared() && !againstWriter()) return;
-    // Taken before the save: afterwards no book is unsaved, and the default
-    // would name none of them.
     const typedMessage = message().trim();
-    // What the reviewer wrote, kept for the note a brought-in suggestion gets
-    // once the send has finished: a snapshot by design.
     const staticNote = typedMessage;
-    // Against the shared project the version is a settling, and says which
-    // books it settled; anything else names the books it records.
     const settledNames = reviewBooks().map((book) => bookName(book.bookId, metadataOf(project)));
-    // Which side this review is against, as it was when Save was pressed.
     const copyReview = fromCopy();
     const settling = !againstShared()
       ? undefined
@@ -1124,8 +831,6 @@ export function ReviewPanel() {
           ? t("Combined with the shared project")
           : t("Combined {books} with the shared project", { books: settledNames.join(", ") });
     const staticMessage = typedMessage !== "" ? typedMessage : (settling ?? defaultMessage());
-    // Asked once per device, when nobody is signed in: a version carries a
-    // person's name, and "Sefer" would say nothing about who changed the text.
     const typed = typedName().trim();
     const by = author() ?? (typed === "" ? undefined : { name: typed, email: "" });
     if (by === undefined) {
@@ -1152,10 +857,6 @@ export function ReviewPanel() {
     setRecordedLine(undefined);
     setSendLine(undefined);
     if (againstShared()) {
-      // The presets become real first: every passage only they changed, and
-      // nobody chose, is taken into the project's text. What is recorded is
-      // then exactly the project's text — decisions, presets, and whatever
-      // was typed into the review's cards.
       for (const book of reviewBooks()) {
         const taking = book.skeleton.units.filter(
           (unit) =>
@@ -1166,27 +867,18 @@ export function ReviewPanel() {
         if (taking.length > 0) writeNow(book.bookId, taking, "baseline");
       }
       const settled = new Set(reviewBooks().map((book) => book.bookId));
-      // Reviewed against the shared project: what was decided stays, and
-      // everything else it changed arrives with it — in one move.
       const outcome = await settleWithShared(
         services,
         project,
         by,
         staticMessage,
         settled,
-        // A suggestion is brought into the shared project itself; the person's
-        // copy is caught up with and sent back to, as any send in their mode.
         pull() !== undefined
           ? { theirs: theirsRef(), sendTo: "origin" }
           : copyReview
             ? { theirs: theirsRef() }
             : {},
       );
-      // A suggestion brought in and sent is marked taken on the shared
-      // project, so its author is not left waiting — unless the reviewer chose
-      // to leave it open (some of it now, more later). Not when it stayed here.
-      // Its note is the reviewer's own message (`Suggestions.accept` ends it
-      // with the line its author's list reads "brought in" from).
       const accepted = untrack(closeOnSave) ? pull() : undefined;
       const markTaken = (sent: boolean): void => {
         if (accepted === undefined || !sent) return;
@@ -1198,7 +890,6 @@ export function ReviewPanel() {
               message: describe(cause),
             }),
           )
-          // The Suggestions tab's count is the network's: ask it again now.
           .finally(() => void collaboration.refresh(services, project));
       };
       const done = (): void => {
@@ -1251,8 +942,6 @@ export function ReviewPanel() {
           done();
           break;
         case "received":
-          // The shared project's versions arrived either way; what the
-          // person decided was then kept, or it was not, and that is said.
           switch (outcome.recorded.kind) {
             case "recorded":
             case "nothing":
@@ -1295,10 +984,6 @@ export function ReviewPanel() {
       return;
     }
     const books = review.map((entry) => entry.book);
-    // Against Writer, what was looked at is marked taken in the same version,
-    // whether its saves were taken or every passage kept as it was.
-    // Every book the Writer side holds, not only those still differing: a
-    // book whose every change was taken differs no longer, and is taken too.
     const writerBooks = againstWriter()
       ? writerWatch.facts(project.root).work.map((each) => each.book)
       : [];
@@ -1342,8 +1027,6 @@ export function ReviewPanel() {
         });
         break;
       case "not-recorded":
-        // The files hold this text and no version holds the files: that is
-        // `onDisk`, exactly, and the book markers say so.
         shell.noteWritten(outcome.books, false);
         setRecordedLine({
           tone: "error",
@@ -1360,29 +1043,16 @@ export function ReviewPanel() {
         });
         setMessage("");
         version.refresh();
-        // The send is its own line after "Recorded": a refused send is never
-        // a failed save, and the dialog stays to say which it was.
         follow(sendAfterSave(services, project));
         break;
     }
     setRecording(false);
   };
 
-  // --- the record's receipt ------------------------------------------------
-
-  /**
-   * What the dialog says once Record is pressed: one line for this device,
-   * one for the shared project. The dialog stays open on them, because "did
-   * it work?" has two answers, and a toast that vanished said only the first.
-   */
   interface ReceiptLine {
     readonly tone: "success" | "warning" | "error" | "muted";
     readonly title: string;
     readonly detail?: string;
-    /**
-     * The move the line offers: compare what arrived, send again, go sign in,
-     * or — after a send to the person's copy — offer it to the shared project.
-     */
     readonly action?: "see" | "copy" | "retry" | "send" | "open" | "offer";
   }
   const [recordedLine, setRecordedLine] = createSignal<ReceiptLine | undefined>(undefined, {
@@ -1392,19 +1062,12 @@ export function ReviewPanel() {
     name: "reviewSendLine",
   });
 
-  /**
-   * Close the Record dialog and forget its receipt, as closing it by hand
-   * does. The receipt's own moves ("Compare with your copy", "Compare the
-   * changes") close it from code, which skips `onOpenChange`; the next Save
-   * then opened on the last receipt, with no message field to record with.
-   */
   const closeRecord = (): void => {
     setRecordOpen(false);
     setRecordedLine(undefined);
     setSendLine(undefined);
   };
 
-  /** The send's line once it has one: not while it is still under way. */
   const sentLine = (): ReceiptLine | undefined => {
     const held = sendLine();
     return held === "sending" ? undefined : held;
@@ -1412,11 +1075,8 @@ export function ReviewPanel() {
 
   const lineOfSend = (outcome: SendOutcome): ReceiptLine | undefined => {
     const project = shell.project();
-    // Attached to nothing, there is no second line to say.
     if (outcome.kind === "detached") return undefined;
     const copy = sendOutcomeCopy(outcome, syncWatch.sync(project?.root)?.state);
-    // Sent to the person's copy: the next move is offering it, right here.
-    // An open suggestion already follows the copy, so it needs no second offer.
     if (outcome.kind === "sent" && outcome.toCopy === true) {
       const waiting = collaboration.facts(project?.root)?.mine?.kind === "waiting";
       return waiting
@@ -1507,17 +1167,8 @@ export function ReviewPanel() {
     }
   };
 
-  /**
-   * Review against the person's own copy (`copy=1`): what a send or an offer
-   * the copy refused leads to. Its Save is the one decision: a decision commit
-   * on top of this device's work and the copy's, sent as a fast-forward.
-   */
   const seeCopy = (): void => {
     const project = shell.project();
-    // Already against the copy: no search changes, so nothing would read it
-    // again, and the decision would be made against a tip that may have moved
-    // (the copy's newer versions would then arrive unseen with Save). Read the
-    // copy, then the comparison, again.
     if (untrack(fromCopy) && untrack(() => search().against) === "shared") {
       if (project !== undefined) void fetchCopy(services, project).then(seeShared);
       return;
@@ -1529,23 +1180,12 @@ export function ReviewPanel() {
     });
   };
 
-  /**
-   * Set the review against the shared project, read as the last check left
-   * it: what "See the changes" means on this screen.
-   */
   const seeShared = (): void => {
     shared.refresh();
     common.refresh();
     if (rightId() !== "shared" && leftId() !== "shared") pick("right", "shared");
   };
 
-  // The cloud popover's "See the changes" navigates here with `against=shared`;
-  // when Review is already open that is a search change, not a mount.
-  // "Review their changes" does the same with `against=writer`.
-  // `copy` too: from a review already against the shared project, "Compare
-  // with your copy" changes only that, and "theirs" must be read again. The
-  // decisions made against one side mean nothing against the other, so
-  // switching sides in place starts over.
   let wasCopy = untrack(fromCopy);
   createEffect(
     () => `${String(search().against)}:${String(search().copy)}`,
@@ -1559,8 +1199,6 @@ export function ReviewPanel() {
         untrack(() => pick("right", "writer"));
     },
   );
-
-  // --- recovery ------------------------------------------------------------
 
   const reload = (): void => {
     const project = shell.project();
@@ -1577,17 +1215,10 @@ export function ReviewPanel() {
       });
   };
 
-  createEffect(
-    // A backup is written as the reader types, so the pending list moves when
-    // a book's text does — and, unlike the counter, at no other time.
-    revisions,
-    () => {
-      // Same as the compare effect above: a snapshot, not a dependency.
-      untrack(reload);
-    },
-  );
+  createEffect(revisions, () => {
+    untrack(reload);
+  });
 
-  /** When the working-state backup last wrote something, over every journal. */
   const lastBackup = (): number | undefined => {
     let latest: number | undefined;
     for (const journal of journals())
@@ -1595,8 +1226,6 @@ export function ReviewPanel() {
         if (latest === undefined || entry.at > latest) latest = entry.at;
     return latest;
   };
-
-  // --- render --------------------------------------------------------------
 
   const nameOf = (bookId: BookId): string => bookName(bookId, metadataOf(shell.project()));
 
@@ -1648,10 +1277,6 @@ export function ReviewPanel() {
     );
   }
 
-  /**
-   * The sources, said once and in the columns' order: "On disk → In the
-   * editor" — the other side, then the text you edit.
-   */
   const sourcesLabel = (): string => `${rightLabel()} → ${leftLabel()}`;
 
   return (
@@ -1660,11 +1285,6 @@ export function ReviewPanel() {
         when={shell.project()}
         fallback={<EmptyState icon={<Scale size={22} />} title={t("Open a project first.")} />}
       >
-        {/* ONE row of chrome, in the order a reader asks: WHAT is compared —
-            the page's title, as Spiritual terms' title is the term, and
-            pressing it changes the two sides — then the one write, then the
-            way back. How many lives on the status line under it; deciding in
-            bulk lives with the cards it decides. */}
         <header class="flex min-h-12 min-w-0 flex-wrap items-center gap-2" data-review-header>
           {pageLeading()}
           <Popover
@@ -1762,10 +1382,6 @@ export function ReviewPanel() {
           </div>
         </header>
 
-        {/* How many and where, each in its own place: this comparison's
-            counts, the shared project as the last check left it, and Writer
-            work — one quiet line instead of a count in the header and a
-            banner under it that read as the same number. */}
         <SyncLine
           comparison={
             result() === undefined
@@ -1782,7 +1398,6 @@ export function ReviewPanel() {
           seeingWriter={againstWriter()}
         />
 
-        {/* Against a suggestion: whose it is, and what its author said. */}
         <Show when={pull()}>{(number) => <SuggestionLine number={number()} />}</Show>
         <Show when={pull() !== undefined && mineOnlyCount() > 0}>
           <p
@@ -1799,8 +1414,6 @@ export function ReviewPanel() {
           </p>
         </Show>
 
-        {/* An earlier session's unsaved work: the one prompt every project
-            screen shows, answered once. Review keeps no list of its own. */}
         <RecoveryBanner />
 
         <Show
@@ -1875,10 +1488,7 @@ export function ReviewPanel() {
                 </Button>
               </p>
             </Show>
-            {/* The settled card sits OVER the reading rather than replacing it:
-                the reader stays mounted, hidden, so "Show my choices" is
-                instant. Replacing it threw away every book's prepared diff,
-                and showing them again parsed both sides of every book anew. */}
+
             <Show when={settled() && !showChoices()}>
               <EmptyState
                 icon={<Check size={20} />}
@@ -1967,8 +1577,6 @@ export function ReviewPanel() {
                   data-review-record-done
                   onClick={() => {
                     closeRecord();
-                    // A suggestion that is now closed has nothing left to
-                    // review here: back to the list it came from.
                     if (broughtIn()) {
                       setBroughtIn(false);
                       void navigate({
@@ -2131,7 +1739,6 @@ export function ReviewPanel() {
   );
 }
 
-/** One line of a record's receipt: what happened, and the move it offers. */
 function Receipt(props: {
   readonly line: {
     readonly tone: "success" | "warning" | "error" | "muted";
@@ -2200,12 +1807,6 @@ function Receipt(props: {
   );
 }
 
-/**
- * A suggestion with nothing to show: everything it offers already reads that
- * way in the editor — its author reviewing their own, or a reviewer who took
- * it already. Not "no differences": the shared project does not have it yet,
- * and Save is what brings it in.
- */
 function SuggestionHere() {
   return (
     <EmptyState

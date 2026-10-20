@@ -1,26 +1,3 @@
-/**
- * Review's status line: one quiet row under the header that says HOW MANY and
- * WHERE, each in its own place, so no number on the screen can be read as
- * another's.
- *
- *   4 changes in 2 books · 1 decided        Shared project  2 verses in 1 book to receive · checked 3 min ago ↻  See the changes
- *
- * - **This comparison** — what the two sides picked above differ by, counted
- *   in passages and books, and how many are decided. It moves with every edit.
- * - **Shared project** — where the project stands with it, as the last check
- *   left it: what it has that you do not, what you saved and have not sent.
- *   It is measured between recorded versions, so an edit does not move it;
- *   that is why it says when it was checked and can be checked again.
- * - **Writer** — new work in the Writer projects the books follow, when there
- *   is some.
- *
- * Plain text on the page's ground, no box: colour is spent only on what asks
- * something of the reader (a dot), and the one move for each place is a quiet
- * link-weight button beside it. It replaced a warning-tinted banner whose
- * "2 verses in 1 book differ from yours" sat over a "4 changes" it had nothing
- * to do with.
- */
-
 import type { JSX } from "@solidjs/web";
 import CloudIcon from "lucide-solid/icons/cloud";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
@@ -36,7 +13,6 @@ import { ago } from "../panels/format";
 import { Button, IconButton, cx } from "../primitives";
 import { attentionOf, createQuickSync, quickActionOf, quickLabel } from "./quick";
 
-/** What this comparison differs by. */
 export interface ComparisonCount {
   readonly changes: number;
   readonly books: number;
@@ -46,7 +22,6 @@ export interface ComparisonCount {
 const plural = (count: number, one: string, many: string): string =>
   t(count === 1 ? one : many, { count });
 
-/** "4 changes in 2 books · 1 decided", or that both sides read the same. */
 const comparisonWords = (count: ComparisonCount): string => {
   if (count.changes === 0) return t("No differences");
   const changes = plural(count.changes, "{count} change", "{count} changes");
@@ -57,10 +32,6 @@ const comparisonWords = (count: ComparisonCount): string => {
     : t("{said} · {decided} decided", { said, decided: count.decided });
 };
 
-/**
- * The shared project's side of things, in its own nouns: what it has that you
- * do not ("to receive"), and what you have that it does not ("not sent").
- */
 const sharedWords = (sync: Sync, plan: IncomingPlan | undefined): string => {
   switch (sync.state) {
     case "offline":
@@ -95,11 +66,9 @@ const sharedWords = (sync: Sync, plan: IncomingPlan | undefined): string => {
   return parts.length === 0 ? t("up to date") : parts.join(" · ");
 };
 
-/** A label, quiet, then what it labels. */
 const Zone = (props: {
   readonly label: string;
   readonly icon?: JSX.Element;
-  /** A dot when the place asks something of the reader. */
   readonly attention?: boolean;
   readonly children: JSX.Element;
   readonly data?: string;
@@ -120,13 +89,9 @@ const Zone = (props: {
 );
 
 export function SyncLine(props: {
-  /** This comparison's counts; absent while it is still being read. */
   readonly comparison: ComparisonCount | undefined;
-  /** What "See the changes" does here: Review sets itself against the shared project. */
   readonly onSee: () => void;
-  /** Review is already against the shared project, so "See the changes" is this screen. */
   readonly seeing: boolean;
-  /** Set Review against the Writer projects' new work. */
   readonly onSeeWriter: () => void;
   readonly seeingWriter: boolean;
 }) {
@@ -142,7 +107,6 @@ export function SyncLine(props: {
     return at === undefined ? undefined : syncWatch.fetchedAt(at);
   };
   const writer = () => writerWatch.facts(root());
-  /** The shared project's one move here, when there is one to make from this screen. */
   const move = (held: Sync) => {
     const action = quickActionOf(held);
     if (action === "check") return undefined;

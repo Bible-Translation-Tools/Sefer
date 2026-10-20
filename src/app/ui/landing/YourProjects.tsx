@@ -1,25 +1,3 @@
-/**
- * "Your projects": every project root this host can actually open, as a table.
- *
- * The columns are the four things that tell one project from another at a
- * glance — its name, its language, how many books it holds, and when it was
- * last opened here. All four come out of ONE file read:
- * `<projectsRoot>/.sefer/projects.json`, the index
- * (`src/core/project/projectIndex.ts`), repaired against the folder names that
- * are actually there. A project is described from disk once, when it first
- * appears; after that the list is the index's word for it.
- *
- * Opening writes `lastOpened` — to the index, and to `shell.recentProjects`,
- * which home (`/`) reads to reopen the last project — BEFORE it navigates. A project that failed to open
- * is still a project you tried to open, and the ordering people rely on is
- * "what I was last working on", not "what last succeeded".
- *
- * The kebab is the rest of a project's life: rename it, save a copy of it,
- * delete it. All three are `ProjectAdmin`, and all three end in the same place
- * the import does — a write to the index, which re-reads this list
- * (`projectIndexRevision`).
- */
-
 import { useNavigate, useSearch } from "@tanstack/solid-router";
 import { Effect, FileSystem, Result } from "effect";
 import ArrowRight from "lucide-solid/icons/arrow-right";
@@ -56,11 +34,8 @@ import {
   type ProjectSummary,
 } from "./summaries";
 
-/** One row of the kebab menu; the same class the toolbar's menu uses. */
 export function YourProjects(props: {
-  /** Downloads in flight, drawn first until the project each becomes is listed. */
   readonly downloads: readonly PendingDownload[];
-  /** Where the newest download's row was, to fly its card up from. */
   readonly flyFrom: DOMRect | undefined;
   readonly onDismiss: (id: string) => void;
 }) {
@@ -73,14 +48,8 @@ export function YourProjects(props: {
   });
   const navigate = useNavigate();
 
-  /** The card strip, and how many cards sit past its right edge. */
   const [strip, setStrip] = createSignal<HTMLUListElement>();
   const [hidden, setHidden] = createSignal(0, { name: "projectsHidden" });
-  /**
-   * Sharing — publishing a project, or the link to hand a teammate — is the
-   * cloud menu in the app bar, which belongs to an open project: so Share…
-   * opens the project, and the menu is one click from there.
-   */
   const share = (row: ProjectSummary): void => {
     void navigate({ to: "/project/$slug", params: { slug: shell.slugFor(row.root) } });
   };
@@ -88,7 +57,6 @@ export function YourProjects(props: {
     name: "renamingProject",
   });
   const [newName, setNewName] = createSignal("", { name: "newProjectName" });
-  /** What a card shows of a project: two with the same are told apart by folder. */
   const lookalike = (row: ProjectSummary): string =>
     `${row.name}\u0000${row.language}\u0000${row.languageTag}`;
   const twins = createMemo(
@@ -105,11 +73,7 @@ export function YourProjects(props: {
   });
   const [busy, setBusy] = createSignal(false, { name: "projectActionBusy" });
 
-  /**
-   * One pass per change to the index (`projectIndexRevision`): every import,
-   * download, rename and delete writes the index through `summaries.ts`, so
-   * this list re-reads without knowing what any of them are.
-   */
+  // Returned, not onCleanup: a Solid 2 effect's callback has no owner (NO_OWNER_CLEANUP).
   createEffect(
     () => projectIndexRevision(),
     () => {
@@ -120,10 +84,7 @@ export function YourProjects(props: {
     },
   );
 
-  // `project.rename` (registered by the shell) lands here with the root in
-  // the URL; the dialog opens once the rows are known.
-  // SAFETY: `strict: false` gives the union of every route's search; only
-  // `rename` is read, and a missing or non-string value is treated as absent.
+  // SAFETY: `strict: false` gives the union of every route's search; only `rename` is read, and a missing or non-string value is treated as absent.
   const search = useSearch({ strict: false }) as () => { readonly rename?: unknown };
   createEffect(
     () => ({ target: search().rename, held: rows() }),
@@ -136,18 +97,11 @@ export function YourProjects(props: {
     },
   );
 
-  /** Most recently opened first; never-opened projects fall to the bottom. */
-  /** The downloads still to draw: a listed root means the real card is here. */
   const pending = (): readonly PendingDownload[] => {
     const listed = new Set((rows() ?? []).map((row) => row.root));
     return props.downloads.filter((download) => !listed.has(download.root));
   };
 
-  // Counted by an IntersectionObserver rather than by measuring every card
-  // on every scroll event: the browser reports a card only when it crosses
-  // the strip's edge, so a scroll that moves nothing past it costs nothing.
-  // Re-observed when the cards change; the cleanup is the effect's RETURN
-  // value — Solid 2 runs an `onCleanup` here unowned.
   createEffect(
     () => ({ box: strip(), count: rows()?.length, pending: pending().length }),
     ({ box }) => {
@@ -171,7 +125,6 @@ export function YourProjects(props: {
     },
   );
 
-  /** Each download flies up once, when its card first mounts. */
   const flown = new Set<string>();
   const arrive = (card: HTMLElement, download: PendingDownload): void => {
     if (flown.has(download.id)) return;
@@ -196,8 +149,6 @@ export function YourProjects(props: {
     });
   };
 
-  // Downloaded this session first, newest first, so a finished download's
-  // card lands where its downloading card was; then most recently opened.
   const sorted = (): readonly ProjectSummary[] => {
     const fresh = props.downloads.map((download) => download.root);
     const rank = (row: ProjectSummary): number => {
@@ -221,18 +172,13 @@ export function YourProjects(props: {
         yield* Effect.ignore(
           services.settings.set(keys.recentProjects, { ...recent, [row.root]: stamp }),
         );
-        // The index's own column. A row that is not there yet (the fixture) is
-        // left alone — `touchProject` does not invent one.
         const fileSystem = yield* FileSystem.FileSystem;
         yield* Effect.ignore(touchProject(fileSystem, services.projectsRoot, row.root, stamp));
       }),
     );
-    // The route still does the opening (`project/$slug` is the one place a
-    // project is opened); the shell then lands the reader in Matthew 1.
     shell.openProjectAtStart(row.root);
   };
 
-  /** Saves a copy: the project as a zip, handed to the browser's downloads. */
   const exportZip = (row: ProjectSummary): void => {
     void exportProjectZip(services, row.root);
   };
@@ -249,8 +195,6 @@ export function YourProjects(props: {
   };
 
   const remove = (): void => {
-    // A deliberate snapshot: the dialog names one project, and that is the one
-    // being deleted however the signal moves while the write runs.
     const staticRow = deleting();
     if (staticRow === undefined || busy()) return;
     const row = staticRow;
@@ -259,9 +203,6 @@ export function YourProjects(props: {
       .run(
         Effect.result(
           Effect.gen(function* () {
-            // `delete` takes a confirm port so there is no silent path. THIS
-            // dialog is the confirmation — the person has already answered the
-            // question the port exists to ask.
             yield* services.admin.delete(row.root, () => Effect.succeed(true));
             yield* forgetRemembered(services.projectsRoot, row.root);
             const recent = { ...services.settings.get(keys.recentProjects) };
@@ -269,8 +210,6 @@ export function YourProjects(props: {
               delete recent[row.root];
               yield* Effect.ignore(services.settings.set(keys.recentProjects, recent));
             }
-            // Its slug goes too: a project made later at the same folder is a
-            // new project, and a link to the old one should not open it.
             const slugs = services.settings.get(keys.projectSlugs);
             const kept = Object.fromEntries(
               Object.entries(slugs).filter(([, root]) => root !== row.root),
@@ -309,9 +248,6 @@ export function YourProjects(props: {
           </p>
         }
       >
-        {/* ONE row of cards, scrolled sideways. The "+N more" pill counts the
-            cards past the right edge and scrolls to them; it goes when there
-            is nothing further to see. */}
         <div class="relative">
           <ul
             ref={setStrip}
@@ -365,8 +301,6 @@ export function YourProjects(props: {
                           </Button>
                         }
                       >
-                        {/* Indeterminate until the server says how much there
-                            is: a bar pinned at 0% reads as stuck. */}
                         <div
                           role="progressbar"
                           aria-label={t("Downloading {name}", { name: download.language })}
@@ -408,11 +342,7 @@ export function YourProjects(props: {
                         </Badge>
                       </Show>
                     </div>
-                    {/* The code, or the folder when the metadata declares no
-                        language — muted, so it never reads as one. Two cards
-                        that would read the same (two migrations of one
-                        language) also name their folders, so the right one
-                        can be opened or deleted. */}
+
                     <code
                       class="truncate font-mono text-smallest text-on-surface-tertiary"
                       data-project-folder={row.folder}
@@ -424,9 +354,6 @@ export function YourProjects(props: {
                           : row.languageTag}
                     </code>
 
-                    {/* `mt-auto` keeps the button on the card's floor when a
-                        neighbour in the row is taller; the 16px above it is
-                        the whole of the space otherwise. */}
                     <div class="mt-auto flex items-center gap-2 pt-4">
                       <Button
                         variant="accent"
@@ -454,10 +381,7 @@ export function YourProjects(props: {
                         >
                           {t("Open")}
                         </MenuItem>
-                        {/* The fixture is an in-memory copy of the seeded
-                            folder: there is nothing on disk to rename, zip,
-                            share or delete, so it offers Open and nothing
-                            that would fail. */}
+
                         <Show when={!row.fixture}>
                           <MenuItem
                             icon={<Share2 aria-hidden="true" />}

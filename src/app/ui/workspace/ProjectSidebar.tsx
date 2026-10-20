@@ -1,19 +1,3 @@
-/**
- * The project sidebar: which project is open, and where in it you are.
- *
- * Top to bottom: the project (name, and language with its code); a search box
- * that filters the list below it, and on Enter takes the book — to the
- * chapter it names, if it names one (`typedPlace`); a testament
- * switch; and the books of that testament as an accordion, each opening onto
- * a four-column grid of its chapters.
- *
- * The focused book's grid comes from the editor's own chapter table
- * (`shell.outline`), which knows about front matter. Any other book is Plain,
- * with no parsed structure, so its grid is counted from its `\c` markers —
- * and only when that book is expanded, so the sidebar still reads no text
- * until somebody asks for one book's chapters.
- */
-
 import { chaptersAddress, introAddress } from "@sefer/text/location/address";
 import { useNavigate, useRouterState } from "@tanstack/solid-router";
 import { Option } from "effect";
@@ -42,7 +26,6 @@ interface Row {
 }
 
 interface Chapter {
-  /** The row in the focused book's chapter table; the 1-based number otherwise. */
   readonly index: number;
   readonly label: string;
   readonly intro: boolean;
@@ -57,12 +40,6 @@ export function ProjectSidebar() {
     setQuery("");
     setSearchOpen(false);
   };
-  /**
-   * The testament somebody picked, and the book that was focused when they
-   * did. Derived, not synced by an effect: a choice holds until the editor
-   * opens another book, and then the testament follows it — landing in
-   * Psalms shows the OT.
-   */
   const [picked, setPicked] = createSignal<
     { readonly testament: Testament; readonly during: string | undefined } | undefined
   >(undefined, { name: "sidebarTestament" });
@@ -75,13 +52,10 @@ export function ProjectSidebar() {
   const pickTestament = (next: Testament): void => {
     setPicked({ testament: next, during: shell.focused()?.id });
   };
-  /** The one open book; `undefined` means "follow the focused book". */
   const [opened, setOpened] = createSignal<string | null | undefined>(undefined, {
     name: "sidebarOpened",
   });
 
-  // A memo over the open project, so typing in a book does not rebuild
-  // sixty-six rows.
   const rows = createMemo(
     (): readonly Row[] => {
       const project = shell.project();
@@ -96,12 +70,6 @@ export function ProjectSidebar() {
     { name: "sidebarBooks" },
   );
 
-  /**
-   * What the filter box means, read by the project's Location — the same
-   * names, localized and alternate, that the palette and every "go to" use.
-   * `books` is every book the words could mean; `chapter` is set once a
-   * number follows them.
-   */
   const search = createMemo(
     () => {
       const text = query().trim();
@@ -117,10 +85,6 @@ export function ProjectSidebar() {
   );
   const searching = (): boolean => search() !== undefined;
 
-  /**
-   * The books on show. While searching, both testaments: somebody typing
-   * "Genesis" with New Testament selected wants Genesis, not an empty list.
-   */
   const shown = createMemo(
     (): readonly Row[] => {
       const found = search();
@@ -130,10 +94,6 @@ export function ProjectSidebar() {
     { name: "sidebarShown" },
   );
 
-  /**
-   * Enter takes the book: to the chapter the text names when it names one
-   * ("mark 3"), else the first book on show, as the palette's "Go to" does.
-   */
   const takeSearch = (): void => {
     const place = typedChapter(shell.location, query());
     const first = shown()[0];
@@ -158,16 +118,11 @@ export function ProjectSidebar() {
       const rows: Chapter[] = [];
       shell.outline().forEach((chapter, index) => {
         if (chapter.label !== "") rows.push({ index, label: chapter.label, intro: false });
-        // The front matter row, and only if it holds something.
         else if (index === 0 && chapter.to > chapter.from)
           rows.push({ index, label: t("Intro"), intro: true });
       });
       return rows;
     }
-    // Any other book: the engine's TOC from the analysis the project holds
-    // for it — never a scan of the text. Row 0 is the front matter, offered as
-    // "Intro" when it holds something, as it is for the focused book — so the
-    // tile is there before the book has been opened, not only after.
     const held = Option.getOrUndefined(shell.services.projectAnalysis.analysis(id));
     if (held === undefined) return [];
     return tocViewOf(held.analysis).chapters.flatMap((chapter): Chapter[] => {
@@ -178,18 +133,11 @@ export function ProjectSidebar() {
   };
 
   const openChapter = (id: string, chapter: Chapter): void => {
-    // The focused book goes through `showChapter`, which decides clip vs
-    // scroll and knows the intro row; any other book is a reference.
     if (shell.focused()?.id === id) shell.showChapter(chapter.index);
     else if (chapter.intro) shell.showReference(introAddress(id));
     else shell.showReference(chaptersAddress(id, chapter.index));
   };
 
-  /**
-   * The chapter the reader is in: the clipped one in chapter view, otherwise
-   * the one at the top of the editor, which the editor reports as it scrolls
-   * (the same place the location bar's crumb reads).
-   */
   const currentChapter = (): number | undefined => {
     const clipped = shell.chapter();
     if (clipped !== null) return clipped;
@@ -212,8 +160,6 @@ export function ProjectSidebar() {
       },
       { name: "sidebarChapters" },
     );
-    // No block behind an open book: its chapters are bare numbers, and the
-    // current one is the white tile with a brand border and text.
     return (
       <li>
         <button
@@ -235,12 +181,7 @@ export function ProjectSidebar() {
         </button>
 
         <Show when={open() && chapters().length > 0}>
-          <ol
-            // Indented to the book's icon (the row's 12px padding). As many
-            // columns as 3.75rem tiles — 12px padding round a 14px label as
-            // wide as "Intro" — fit, so a wider panel shows more. 1px apart.
-            class="grid grid-cols-[repeat(auto-fill,minmax(3.75rem,1fr))] gap-px px-3 pt-1 pb-3"
-          >
+          <ol class="grid grid-cols-[repeat(auto-fill,minmax(3.75rem,1fr))] gap-px px-3 pt-1 pb-3">
             <For each={chapters()}>
               {(chapter) => (
                 <li>
@@ -263,9 +204,6 @@ export function ProjectSidebar() {
     );
   };
 
-  // With no project open the panel says what it is for — its books arrive
-  // with a project — and the project control above it is the way to one.
-
   return (
     <div
       class="flex h-full flex-col border-e border-sidebar-border bg-sidebar-surface"
@@ -287,8 +225,6 @@ export function ProjectSidebar() {
           </div>
         }
       >
-        {/* The search is an icon beside the testament switch; it opens the
-            field below, and closes again from Escape or an empty blur. */}
         <div class="flex flex-col gap-2 px-4 pb-2">
           <div class="flex items-center gap-controls">
             <SegmentedControl
@@ -319,8 +255,6 @@ export function ProjectSidebar() {
               data-testid="sidebar-search"
               icon={<SearchIcon />}
               aria-label={t("Search for book and chapter")}
-              // An example, not a description: it fits the narrow panel and
-              // shows what the search understands. The label keeps the words.
               placeholder={t("Mark 5")}
               value={query()}
               onInput={(event) => setQuery(event.currentTarget.value)}
@@ -352,8 +286,7 @@ export function ProjectSidebar() {
               <For each={shown()}>{(row) => <BookRow row={row} />}</For>
             </ul>
           </Show>
-          {/* Writer books this project does not have yet: the migration's
-              own screen, filtered to this project (`/migrate?into=`). */}
+
           <Button
             variant="tertiary"
             size="sm"
@@ -370,8 +303,6 @@ export function ProjectSidebar() {
         </nav>
       </Show>
 
-      {/* The mockup's "Update available" pill: one `Updater.check()` per
-          session, read here rather than asked for. */}
       <Show when={shell.updateAvailable()}>
         <footer class="border-t border-sidebar-border p-4">
           <Badge tone="brand">{t("Update available")}</Badge>
@@ -381,11 +312,6 @@ export function ProjectSidebar() {
   );
 }
 
-/**
- * The project control at the top of the sidebar: the open project, which goes
- * to the project list, or with none open an invitation to find one. Exported
- * so a screen that claims the sidebar (Key terms) keeps it above its own list.
- */
 export function ProjectControl() {
   const navigate = useNavigate();
   const shell = useShell();
@@ -394,8 +320,6 @@ export function ProjectControl() {
 
   return (
     <div class="px-4 pt-4 pb-2">
-      {/* With no project open the button is an invitation rather than a
-        label: two lines of brand text and an arrow. Same destination. */}
       <Show
         when={shell.project()}
         fallback={

@@ -1,13 +1,3 @@
-/**
- * Review against a suggestion says whose it is, in one sentence: who offered
- * it, its title, and when it last moved. Not the messages of the versions it
- * would bring: the review is latest to latest.
- *
- * And the one answer Review's Save does not give: Decline, with a note its
- * author reads. (Save brings it in, and closes it or leaves it open; when the
- * reviewer kept none of it, Save's dialog offers only this Decline.)
- */
-
 import { useNavigate } from "@tanstack/solid-router";
 import { Show, createEffect, createSignal } from "solid-js";
 
@@ -29,7 +19,6 @@ export function SuggestionLine(props: { readonly number: number }) {
     event.preventDefault();
     const project = shell.project();
     if (project === undefined || busy()) return;
-    // Read at the moment of the press.
     const staticNote = note();
     setBusy(true);
     declineSuggestion(shell.services, project, held.suggestion, staticNote)
@@ -65,9 +54,6 @@ export function SuggestionLine(props: { readonly number: number }) {
     <Show when={details()}>
       {(held) => (
         <div class="space-y-1" data-review-suggestion={props.number}>
-          {/* One sentence on the page's ground: who, what, when. The versions'
-              messages are not listed — the review compares latest to latest,
-              and a list of commits asked the reviewer to think in them. */}
           <div class="flex items-center gap-3">
             <p class="min-w-0 flex-1 text-small">
               <span class="font-semibold">{held().suggestion.author}</span>

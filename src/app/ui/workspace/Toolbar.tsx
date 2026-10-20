@@ -1,34 +1,3 @@
-/**
- * The workspace toolbar: what you are looking at, how it is projected, and the
- * handful of things you do to it without leaving it.
- *
- * Every action is a `runCommand` — the toolbar is one of the three callers
- * every command in `src/app/commands.ts` is required to have, alongside the
- * keystroke and the palette, and it holds no logic of its own.
- *
- * The kebab's items are NOT gated on `findCommand(id)`. `runCommand` already
- * answers for an id it does not hold — an unknown command, or one whose
- * `when()` refuses, is a documented no-op — so the menu names the intention
- * and the registry decides whether it happens. That matters while the
- * registry is being filled in by other work: a menu that hid or disabled
- * every id it could not yet see would be the toolbar guessing at the
- * registry's answer instead of asking for it. The one exception is Save,
- * whose `can()` is a real "there is nothing to save right now".
- *
- * The mode control has two segments. Form is not a projection — it is a
- * data-entry SURFACE beside the editor, so it gets a route and not a segment;
- * Key terms is a NAVIGATION dressed as a mode, because that is what the mockup
- * shows and what the reader means — the same corpus seen as a term list, on
- * `/terms`.
- *
- * The one piece of state the toolbar holds is whether a SOURCE is bound, and
- * it holds it because the answer is an Effect and a `disabled` attribute is
- * not. `library.resolve` is asked once per project, and again on a shell tick
- * so that binding a source in the reference column lights the button up
- * without a reload. The command itself re-resolves and reports when there is
- * none: the signal decides what the button LOOKS like, never what happens.
- */
-
 import { useNavigate } from "@tanstack/solid-router";
 import ArrowLeftRight from "lucide-solid/icons/arrow-left-right";
 import Bell from "lucide-solid/icons/bell";
@@ -46,21 +15,12 @@ import { bookName } from "./books";
 import { PanelToggle } from "./PanelToggle";
 import { metadataOf, projectName } from "./project";
 
-/** The two segments, as literal strings so Tailwind and the reader agree. */
-
 export function Toolbar() {
   const navigate = useNavigate();
   const [query, setQuery] = createSignal("", { name: "toolbarQuery" });
   const [menuOpen, setMenuOpen] = createSignal(false, { name: "toolbarMenu" });
   const shell = useShell();
 
-  /**
-   * "Mark 5 (Shila)" — book, where in it, project.
-   *
-   * The clip is an INDEX into the engine's chapter table, whose first row is
-   * the front matter and carries no label. So an empty label is named rather
-   * than printed as a blank: it is a place the reader can actually be.
-   */
   const title = (): string => {
     const book = shell.focused();
     if (book === undefined) return "";
@@ -69,9 +29,6 @@ export function Toolbar() {
     const label = clipped === null ? undefined : book.structure().chapters[clipped]?.label;
     const named = bookName(book.id, metadataOf(project));
     const of = projectName(project);
-    // A whole book is the ordinary case, so it says nothing: "Philemon
-    // (small-nt)". A clip names where you are — "Philemon 1 (small-nt)" — and
-    // an empty label is the front matter, which is a place, not a blank.
     if (clipped === null) return t("{book} ({project})", { book: named, project: of });
     const where = label === undefined || label === "" ? t("front") : label;
     return t("{book} {where} ({project})", { book: named, where, project: of });
@@ -80,31 +37,8 @@ export function Toolbar() {
   const findings = () => shell.findingCounts();
   const attention = () => findings().errors + findings().warnings;
 
-  /**
-   * Is this command possible right now?
-   *
-   * No change counter, and no store either: the predicate IS the dependency
-   * declaration. Every `when()` these buttons ask reads signals — the
-   * focused book, the open project, and the undo/redo depth the `books` store
-   * carries — so calling `available()` inside JSX subscribes to exactly what
-   * that command depends on and nothing else.
-   *
-   * Undo's input is the one that is not naturally reactive: CodeMirror's
-   * history knows its depth and publishes to nobody. So the depth lives on the
-   * book's row, written on the same receipt that already fans out, and the
-   * predicate stays honest.
-   */
   const can = (id: string): boolean => findCommand(id)?.available() === true;
 
-  /**
-   * Is there a source text to match formatting FROM?
-   *
-   * Re-asked when the project or the book changes. The shell has no signal for
-   * a BINDING — the reference column raises its own local one — so binding a
-   * source while the same book is open does not light this up until the next
-   * book change. The command re-resolves and reports either way, so the gap
-   * costs a hidden button and never a wrong answer.
-   */
   const [hasSource, setHasSource] = createSignal(false, { name: "toolbarHasSource" });
   createEffect(
     () => ({ project: shell.project()?.root, book: shell.focused()?.id }),
@@ -122,13 +56,10 @@ export function Toolbar() {
   );
 
   const item =
-    // md: 48px rows, 12px padding and radius, 14px, 20px icons.
     "flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-lg px-3 text-start text-small text-on-surface-primary transition-colors hover:bg-surface-secondary disabled:cursor-not-allowed disabled:text-on-surface-tertiary disabled:hover:bg-transparent [&>svg]:size-5";
 
   return (
     <div class="flex flex-wrap items-center gap-3" data-testid="toolbar">
-      {/* The project panel's show/hide, then the title: the toggle sits on
-          the side nearest the panel it opens and closes. */}
       <div class="flex min-w-0 shrink items-center gap-2">
         <PanelToggle />
         <strong
@@ -175,10 +106,6 @@ export function Toolbar() {
           onClick={() => runCommand("book.redo")}
         />
 
-        {/* Match formatting. Shown only when a source is bound, because a
-            button that is always there and never works teaches people to stop
-            looking at it. It writes straight to the open book — Undo is the
-            preview, and it is one step. */}
         <Show when={hasSource()}>
           <IconButton
             data-testid="toolbar-overlay"
@@ -231,8 +158,6 @@ export function Toolbar() {
             disabled={!can("book.save")}
             onClick={() => {
               setMenuOpen(false);
-              // The one way to save: it opens Review, where the files are
-              // written and the version kept together.
               runCommand("book.save");
             }}
           >
@@ -256,9 +181,6 @@ export function Toolbar() {
 
           <span aria-hidden="true" class="my-1 block h-px bg-surface-border" />
 
-          {/* Format, for a book or the whole project: the engine's formatter.
-              Matching formatting from a source is the toolbar's Match
-              formatting button (the Overlay), not this. */}
           <button
             data-testid="kebab-format-book"
             type="button"
@@ -284,9 +206,6 @@ export function Toolbar() {
 
           <span aria-hidden="true" class="my-1 block h-px bg-surface-border" />
 
-          {/* Project-wide, and here rather than on `/project/$id` because the
-              editor is where someone is when they decide to hand the work on
-              or rename it. */}
           <button
             data-testid="kebab-export-zip"
             type="button"

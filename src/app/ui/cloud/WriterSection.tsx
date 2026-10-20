@@ -1,14 +1,3 @@
-/**
- * The cloud popover's Writer section: for a project whose books still follow
- * their Writer projects, whether someone is still working there.
- *
- * Shown only while the project follows any (`.upstreams.json`); quiet when
- * nothing is new. The copy names the person and the book, never the remote:
- * "mary_chishimba is still working on 1 John in Writer". "Review their
- * changes" opens Review against "From Writer", where every passage is the
- * person's to decide and recording marks the work taken.
- */
-
 import { useNavigate } from "@tanstack/solid-router";
 import { For, Show } from "solid-js";
 

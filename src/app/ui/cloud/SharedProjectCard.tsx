@@ -1,19 +1,3 @@
-/**
- * The "Shared project" card: choosing WHICH shared project a project on this
- * device is, and creating one when there is none.
- *
- * In Settings' Cloud section (`CloudPanel`), beside the account. The cloud
- * popover publishes a project only on this device by itself; choosing one
- * that already exists is here. Once a project is attached the card names its
- * shared project, and choosing another sits behind "Change shared project…":
- * it moves where this project receives from and sends to, so it is never the
- * first button on the card.
- *
- * It holds no domain state. The session lives in `Credentials` (through
- * `Gitea`), the attachment in the repository's own `origin`, and the progress
- * line is a subscription to `Remote.progress()`.
- */
-
 import { Effect, Fiber, Stream } from "effect";
 import { Show, createEffect, createSignal, onCleanup } from "solid-js";
 
@@ -29,23 +13,14 @@ import { syncWatch } from "../../syncWatch";
 import { Button, Card, FilterList, Input, PanelHeader, Popover } from "../primitives";
 import type { Account } from "./account";
 
-/**
- * `root` is the project this card attaches and publishes; optional because
- * `/settings` shows it with no project open, and then it says what is missing
- * rather than offering a button that would `git.init` whatever folder was at
- * hand. An attach or publish reads the sync state and the collaboration facts
- * again, so every surface shows the new shared project.
- */
 export function SharedProjectCard(props: {
   readonly account: Account;
   readonly root?: string | undefined;
 }) {
   const shell = useShell();
   const { services } = shell;
-  // The account is the caller's, so the two cards on one screen share one.
-  // oxlint-disable-next-line solid/reactivity -- a handle, not a value: the same Account for the card's life
+  // oxlint-disable-next-line solid/reactivity
   const account = props.account;
-  /** After an attach or publish: every surface reads the new shared project. */
   const reread = (): void => {
     const project = shell.project();
     if (project === undefined) return;
@@ -58,15 +33,7 @@ export function SharedProjectCard(props: {
   const [newName, setNewName] = createSignal("", { name: "cloudNewName" });
   const [phase, setPhase] = createSignal("", { name: "cloudPhase" });
 
-  // The progress line. A forked fiber rather than an awaited effect, because
-  // the stream never completes; it is interrupted when the panel unmounts.
-  //
-  // The interrupt is registered in the COMPONENT body, not inside the effect
-  // callback: Solid 2 runs that callback unowned, so an `onCleanup` in there is
-  // never honoured (`NO_OWNER_CLEANUP`) and the fiber would outlive the panel,
-  // still writing into a signal nothing renders. The held fiber is interrupted
-  // both here and at the top of each re-run, so a root change replaces the
-  // subscription rather than stacking a second one on it.
+  // onCleanup in the component body: one inside an effect callback never runs (NO_OWNER_CLEANUP).
   let progressFiber: Fiber.Fiber<void, unknown> | undefined;
   const stopProgress = (): void => {
     if (progressFiber === undefined) return;
@@ -92,11 +59,6 @@ export function SharedProjectCard(props: {
   const [searching, setSearching] = createSignal(false, { name: "cloudRepoSearching" });
   let searchTimer: ReturnType<typeof setTimeout> | undefined;
   let searchTicket = 0;
-  /**
-   * What was typed, asked of Gitea: the first list is one page, and an
-   * organisation holds more than a page. What comes back joins the list, so
-   * the filter finds it.
-   */
   const searchRepos = (text: string): void => {
     clearTimeout(searchTimer);
     const base = account.host;
@@ -133,7 +95,6 @@ export function SharedProjectCard(props: {
     });
   };
 
-  /** Attach an existing repository as this project's `origin`. */
   const attach = (repo: RemoteRepo): void => {
     const root = props.root;
     if (root === undefined) return;
@@ -151,19 +112,11 @@ export function SharedProjectCard(props: {
     });
   };
 
-  /**
-   * First publish: create the repository if it is not there, attach it, push.
-   * `Remote.publish` owns that order — see `src/platform/web/remote.ts`.
-   */
   const publish = (): void => {
     const root = props.root;
     if (root === undefined) return;
-    // oxlint-disable-next-line solid/reactivity -- the account's work: runs once per press, reading the field at the moment of the ask
+    // oxlint-disable-next-line solid/reactivity
     account.attempt(async () => {
-      // Read inside the work, not at setup: the field may have changed between
-      // the render that made this handler and the submit that ran it. The
-      // `static` prefix says so to the Solid reactivity rule — one snapshot,
-      // taken deliberately, at the moment of the ask.
       const staticName = newName().trim();
       if (staticName === "") return;
       await services.run(
@@ -180,7 +133,6 @@ export function SharedProjectCard(props: {
     });
   };
 
-  /** The shared project this one is attached to, as a person reads it, when it is. */
   const attachedTo = (): string | undefined => {
     const origin = syncWatch.sync(shell.project()?.root)?.reading.origin;
     return origin === undefined
@@ -192,13 +144,8 @@ export function SharedProjectCard(props: {
           .join("/");
   };
 
-  // Choosing or creating a shared project. Up front when there is none;
-  // behind "Change shared project…" when there is, because a click here moves
-  // where this project sends — not something to offer as a first button.
   const controls = () => (
     <>
-      {/* A list you type at, not every repository the account can write
-          to drawn as a card each: an organisation holds hundreds. */}
       <div class="flex flex-wrap items-center gap-2">
         <Popover
           label={t("Shared projects")}

@@ -13,27 +13,12 @@ import { Remote } from "#core/remote/remote";
 
 import { Button, DelayedSpinner, EmptyState, toasts } from "../primitives";
 
-/**
- * `/r/<owner>/<repo>/…` — a share link arriving (`core/project/shareLink.ts`).
- *
- * The one question it asks is whether this device holds a project that came
- * from that shared project. Held: open it at the same place, under this
- * device's own slug, and say so when the copy is not at the version the link
- * was made at. Not held: offer to download it when the host has it, and say
- * the link cannot be followed when it does not.
- *
- * It never checks out the link's version. The copy may hold work of its own,
- * and "show me what they saw" is a question the toast answers with words; the
- * sync popover is where the copy is brought up to date.
- */
-
 type Phase =
   | { readonly kind: "looking" }
   | { readonly kind: "offer" }
   | { readonly kind: "downloading" }
   | { readonly kind: "unknown"; readonly why: string };
 
-/** The place a link names: its path after the project, and its query. */
 interface Place {
   readonly rest: string;
   readonly query: URLSearchParams;
@@ -84,20 +69,12 @@ const standingCopy = (
 export function OpenByLink(props: {
   readonly owner: string;
   readonly repo: string;
-  /** Everything after `/r/<owner>/<repo>`, starting with `/`, or empty. */
   readonly rest: string;
-  /**
-   * The query string as the router serialises it. The router reads each value
-   * as JSON first, so a commit id made only of digits would come back as a
-   * number; a real commit id has letters in it, and comes through as written.
-   */
   readonly searchStr: string;
 }) {
   const shell = useShell();
   const navigate = useNavigate();
   const [phase, setPhase] = createSignal<Phase>({ kind: "looking" });
-  // The lookups and the download answer after a wait; once the person has
-  // left this screen they must not navigate away from wherever they went.
   let alive = true;
   onCleanup(() => {
     alive = false;
@@ -106,8 +83,6 @@ export function OpenByLink(props: {
   const query = (): URLSearchParams => new URLSearchParams(props.searchStr);
 
   const source = (): Source | undefined => {
-    // `host=` is a bare host or a whole base (scheme and path prefix); with
-    // none, the configured cloud, whose own scheme and prefix are kept.
     const named = query().get("host") ?? contentHostFor(shell.services.settings);
     const at = named === null ? undefined : placeOf(named);
     return at === undefined
@@ -115,7 +90,6 @@ export function OpenByLink(props: {
       : { ...at, owner: props.owner.toLowerCase(), repo: props.repo.toLowerCase() };
   };
 
-  /** Opens `root` at the link's place, and says how its version stands. */
   const place = (): Place => ({ rest: props.rest, query: query() });
 
   const openAt = async (root: string, at: Place): Promise<void> => {
@@ -187,10 +161,6 @@ export function OpenByLink(props: {
         ),
       )
       .then(async (arrived) => {
-        // The source texts the project declares come with it, as from every
-        // other import, and BEFORE the place opens: a link into a screen
-        // that reads beside the source (Find's reference scope) needs them
-        // registered when it mounts.
         if (Result.isSuccess(arrived)) {
           await announceSourceTexts(shell.services, arrived.success.root, named.base);
           return openAt(arrived.success.root, target);

@@ -1,24 +1,3 @@
-/**
- * The frame every card in Sefer wears — Find, Key terms, Findings, Review —
- * so a card looks and behaves the same wherever it is. Named slots, in the one
- * order every card reads in:
- *
- *  - **Header**, everything ABOUT the place, above one border:
- *    - `title` — the place ("Genesis 3:6"), then `gone` while the card is held
- *      by an edit though its result ended, then `info` (badges: severity,
- *      "markup only", a count);
- *    - on the right, `headerActions`, then Edit or Done (from `edit`), then
- *      `open`;
- *    - `notes` under the title row (Findings' one line per finding).
- *  - **Body** (`children`): the text — read-only until Edit or a double-click,
- *    then the Book itself (`CardEditor`).
- *  - **Footer**: `context` on the left (the steps), `actions` on the right.
- *
- * Every button in a slot is a `CardAction`, drawn here; the frame holds no
- * state. What "editing" means, and what Edit does, is the list's edit session
- * (`CardList`) and the card's own.
- */
-
 import type { JSX } from "@solidjs/web";
 import PencilIcon from "lucide-solid/icons/pencil";
 import { Show } from "solid-js";
@@ -27,7 +6,6 @@ import { t } from "../../i18n";
 import { Badge, Card, cx } from "../primitives";
 import { CardActionButton, CardActions, type CardAction } from "./CardAction";
 
-/** Whether a card can be edited, and the session when it can. */
 export type CardEdit =
   | { readonly kind: "none" }
   | {
@@ -39,45 +17,23 @@ export type CardEdit =
 
 export interface CardFrameProps {
   readonly title: JSX.Element;
-  /** Held by an edit though the result ended: what to call it ("Resolved"). */
   readonly gone?: string | undefined;
-  /** Beside the title: what this place IS — a status, a kind, a count. */
   readonly info?: JSX.Element;
-  /** Under the title row, inside the header's border. */
   readonly notes?: JSX.Element;
-  /** The header's right, before Edit/Done: decisions, a switch. */
   readonly headerActions?: readonly CardAction[];
   readonly edit: CardEdit;
-  /** Last in the header: the way out to the editor or the book. */
   readonly open?: CardAction | undefined;
-  /** The body. */
   readonly children: JSX.Element;
-  /** The footer's left: the context control. */
   readonly context?: JSX.Element;
-  /**
-   * The large card — 24px padding and radius — with no rule under the header,
-   * and the title a bold heading that starts where the card's text does (a
-   * reading's own 12px). Key terms'.
-   */
   readonly flush?: boolean;
-  /** The footer's right: what this screen lets a reader do about this place. */
   readonly actions?: readonly CardAction[];
-  /**
-   * One dimmed line while another card is the active one (Key terms'). The
-   * whole card is then a button that makes it active — a click, or Enter or
-   * Space from the keyboard. The card draws its own regions; this is the
-   * frame's part: the look, and the way in.
-   */
   readonly condensed?: boolean;
   readonly onActivate?: () => void;
-  /** Is this the card the screen's cursor is on? A ring. */
   readonly current?: boolean;
   readonly onDblClick?: (event: MouseEvent) => void;
-  /** The card's own data attributes (`data-sid`, `data-diff-card`). */
   readonly data?: Readonly<Record<`data-${string}`, string | undefined>>;
 }
 
-/** Edit or Done, as the frame's own actions. */
 const editAction = (edit: CardEdit): CardAction | undefined =>
   edit.kind === "none"
     ? undefined
@@ -95,8 +51,6 @@ const editAction = (edit: CardEdit): CardAction | undefined =>
           id: "edit",
           label: t("Edit"),
           icon: PencilIcon,
-          // Quiet: on a page of cards, an outlined Edit on every one is the
-          // loudest thing on the page and the least often pressed.
           emphasis: "tertiary",
           onPress: edit.onEdit,
         };
@@ -121,11 +75,7 @@ export function CardFrame(props: CardFrameProps) {
       }
       class={cx(
         "group/card overflow-hidden",
-        // An outline, not a ring: `shadow-small` sets box-shadow outright, and
-        // a ring is a box-shadow, so on a raised card it never showed.
         props.current === true && "outline-2 -outline-offset-1 outline-brand",
-        // Padding and opacity ease with the regions' rows, so the card moves
-        // as one thing.
         props.flush === true &&
           "transition-[padding,opacity] duration-300 ease-in-out motion-reduce:transition-none",
         props.condensed === true &&
@@ -191,9 +141,6 @@ export function CardFrame(props: CardFrameProps) {
 
       <Show when={hasFooter()}>
         <footer class="flex items-center gap-2 px-3 pt-0.5 pb-1.5">
-          {/* The context steps are there when wanted and faint otherwise:
-              they belong to the card under the pointer, not to every card at
-              once. Keyboard focus inside the card brings them up too. */}
           <div class="opacity-50 transition-opacity group-hover/card:opacity-100 group-focus-within/card:opacity-100 motion-reduce:transition-none">
             {props.context}
           </div>

@@ -1,19 +1,3 @@
-/**
- * The IO half of sync: everything `src/core/sync` needs, read out of the real
- * services in one pass.
- *
- * The split is the point. This file knows about Effect, Git, Remote, Gitea and
- * the file system; it knows nothing about what any of it MEANS. It produces a
- * `SyncReading` and an `IncomingPlan`, and the pure module decides the state,
- * the clocks and the one right button. That is what lets every state be
- * derived and tested with no Gitea instance in sight.
- *
- * Every git call goes through `Effect.result` and degrades to an honest empty
- * answer. A project in a browser fixture has never had `git init` run on it,
- * and the popover must say "this project is only on this device" rather
- * than throw — that is a state, not a fault.
- */
-
 import { Effect, FileSystem, Option, Result } from "effect";
 
 import type { Galley } from "#core/galley";
@@ -34,20 +18,11 @@ import {
 import { copyRef } from "../../suggestions";
 import type { CollabMode } from "../../syncSettings";
 
-/** What one pass over the repository answers. */
 export interface SyncFacts {
   readonly reading: SyncReading;
   readonly plan: IncomingPlan;
 }
 
-/**
- * The reading, and the plan still to be worked out.
- *
- * Two halves because they are two pieces of work: the reading is cheap and
- * decides the state, and the plan — every changed blob, read three ways — is
- * only asked for when the device is behind. `plan` is that work unrun, or
- * `undefined` when there is nothing arriving.
- */
 export interface SyncSurvey {
   readonly reading: SyncReading;
   readonly plan:
@@ -56,35 +31,17 @@ export interface SyncSurvey {
 }
 
 export interface ReadSyncOptions {
-  /** The project's work tree. */
   readonly root: string;
-  /** The open project, so the plan measures "also changed here" against the editor. */
   readonly project: Project;
-  /** The Gitea host this build talks to; `null` when none is configured. */
   readonly host: string | null;
-  /** `navigator.onLine`, passed in so the pure side stays testable. */
   readonly online: boolean;
-  /** The last transfer's failure, from `syncStatus`. */
   readonly lastFailure: SyncReading["lastFailure"];
-  /** A check on this project is running now. */
   readonly checking: boolean;
-  /** The last send was refused. */
   readonly sendRefused: boolean;
-  /** When this session last fetched; `undefined` until it has. */
   readonly fetchedAt: number | undefined;
-  /** The mode chosen on this device, when one was (`chosenMode`). */
   readonly chosenMode?: CollabMode | undefined;
 }
 
-/**
- * A half-finished merge, detected by the file git leaves behind.
- *
- * Reaching into `.git` is not something Sefer does casually, and the port has
- * no word for "mid-merge" — but a work tree with conflict markers in
- * scripture is the one situation where a wrong answer is unacceptable, and
- * `MERGE_HEAD` is the same marker both hosts' libraries write. The alternative
- * is a fifth `GitFailureReason` that only one caller reads.
- */
 const mergeInProgress = (fileSystem: FileSystem.FileSystem, root: string): Effect.Effect<boolean> =>
   Effect.orElseSucceed(
     Effect.map(
@@ -97,19 +54,9 @@ const mergeInProgress = (fileSystem: FileSystem.FileSystem, root: string): Effec
     () => false,
   );
 
-/** An effect whose failure is an answer rather than a fault. */
 const orEmpty = <A, E>(effect: Effect.Effect<A, E>, fallback: A): Effect.Effect<A> =>
   Effect.orElseSucceed(effect, () => fallback);
 
-/**
- * One pass over the repository, the account and the device.
- *
- * Nothing here transfers anything: it reads what is already in the object
- * database. The cloud's side of the comparison is whatever the last fetch
- * put in the remote-tracking ref, which is why `fetchedAt` travels with the
- * reading — a screen that has not fetched says so rather than claiming the
- * shared project is empty.
- */
 export const readSync = (
   options: ReadSyncOptions,
 ): Effect.Effect<SyncSurvey, never, Git | Remote | Gitea | FileSystem.FileSystem> =>
@@ -141,14 +88,10 @@ export const readSync = (
     const tracking = trackingRef(branch ?? DEFAULT_BRANCH);
     const remoteKnown = Option.isSome(yield* orEmpty(git.resolve(repo, tracking), Option.none()));
 
-    // SAFETY: the fallback is the empty list, which inhabits `readonly
-    // Commit[]` for any element type; the annotation only stops TypeScript
-    // inferring `never[]` and then rejecting the real log.
+    // SAFETY: the fallback is the empty list, which inhabits `readonly Commit[]` for any element type; the annotation only stops TypeScript inferring `never[]` and then rejecting the real log.
     const empty = [] as readonly Commit[];
     const localLog = yield* orEmpty(git.log(repo), empty);
     const remoteLog = remoteKnown ? yield* orEmpty(git.logFrom(repo, tracking), empty) : empty;
-    // Only the signed-in account's own copy counts (`copyAttached` in
-    // suggestions.ts): one left by another account on this device is not theirs.
     const copyUrl = Option.getOrUndefined(
       yield* orEmpty(remote.urlOf(repo, "copy"), Option.none()),
     );
@@ -163,10 +106,6 @@ export const readSync = (
       .at(-2);
     const copyAttached =
       me !== undefined && copyOwner !== undefined && me.toLowerCase() === copyOwner.toLowerCase();
-    // In the copy mode, what is waiting to be SENT is what the person's copy
-    // lacks — a send goes there, and moves its tracking ref (`copyRef`); what
-    // is waiting to be RECEIVED is still the shared project's. A copy not read
-    // yet was made from the shared project, so the shared log stands in.
     const inCopyMode = (options.chosenMode ?? (copyAttached ? "copy" : "shared")) === "copy";
     const copied = copyRef(branch ?? DEFAULT_BRANCH);
     const copyKnown =
@@ -191,9 +130,6 @@ export const readSync = (
 
     if (behind.length === 0) return { reading, plan: undefined };
 
-    // The plan. `surveyIncoming` is core's, and it is core's for a reason:
-    // Combine asks the same question before it runs, and the screen must not
-    // be able to offer a move the program then refuses.
     const plan = Effect.map(
       surveyIncoming(repo, {
         tracking,

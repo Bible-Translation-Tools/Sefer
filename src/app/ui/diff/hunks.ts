@@ -1,22 +1,3 @@
-/**
- * Changes as cards: one card per TOC unit that changed — a verse, a bridge, a
- * chapter's head — the way Find has one card per verse with a hit.
- *
- * A card is its TOC unit, not a cluster of changes: every change the engine
- * reports inside one unit is on that one card, and the card's key is the
- * unit's address (`"<book> <address>"`, the excerpt's own key), so it does not
- * move when a change appears or disappears around it — typing into the verse
- * above makes a card for the verse above, and the card being edited stays the
- * card it was.
- *
- * Context is TOC steps either side, like every excerpt: the setting's steps to
- * start (`excerpts.context`), a card's own widening after that, or its whole
- * chapter. Neighbouring cards may show the same context verses, as Find's do.
- * Spans are into each side's own document, so a card clips each text to its
- * own stretch and the diff view paints on it; every change inside the stretch
- * is painted, and the card's OWN changes are the ones it decides.
- */
-
 import { addressCode, type Address } from "@sefer/text/location/address";
 import { tocUnits, unitAddress, unitIndexAt, type TocUnit } from "@sefer/text/location/locate";
 
@@ -31,35 +12,21 @@ export interface Range {
   readonly to: number;
 }
 
-/** How far a card reaches beyond its own unit — the excerpt's own extent, one type for every card. */
 export type { Extent } from "#core/excerpts/excerpts";
 
-/** One card: a TOC unit that changed, and the stretch of each text it shows. */
 export interface Hunk {
   readonly bookId: string;
-  /** `"<book> <address>"` — stable while the unit is: the list's row key. */
   readonly key: string;
-  /** Its TOC unit's place: the card's title, kept when its changes go. */
   readonly address: Address;
-  /** What a person reads for `address` ("Genesis 1:4") — the caller's `label`. */
   readonly label: string;
-  /** The engine's changes inside this unit: what the card decides. */
   readonly units: readonly DecisionUnit[];
-  /**
-   * The book's units inside this card's stretch, in reading order: what the
-   * card paints — its own changes and any in its context.
-   */
   readonly all: readonly DecisionUnit[];
-  /** What the current text shows. */
   readonly current: Range;
-  /** What the baseline text shows; absent when every change here is current-only. */
   readonly baseline: Range | undefined;
   readonly extent: Extent;
-  /** Whether one more TOC step is there to take, above and below. */
   readonly more: { readonly up: boolean; readonly down: boolean };
 }
 
-/** The stretch around units `[first, last]` of `all`, by `extent`. */
 const stretchOf = (
   all: readonly TocUnit[],
   first: number,
@@ -85,31 +52,13 @@ const stretchOf = (
   };
 };
 
-/**
- * One book's changes as cards, one per TOC unit.
- *
- * `units` is the book's units in reading order, as the engine sends them:
- * the changed ones, plus any unchanged ones it was asked for. A one-sided unit
- * is placed by its own `place` — where the text that lacks it would have it —
- * so nothing here walks the units around it. `include` narrows which changes
- * get a card — the kind filter; `keep` gives an unchanged unit a card anyway
- * (Review's editable result, a taken unit that must not vanish the moment it
- * is taken).
- */
 export const hunksOf = (options: {
   readonly bookId: string;
   readonly units: readonly DecisionUnit[];
   readonly baseline: Analysis;
   readonly current: Analysis;
-  /**
-   * What a person reads for a place — the shell's one display rule
-   * (`location.label`), as an excerpt's `BookText.label` is. Every card on
-   * every screen is titled by it.
-   */
   readonly label: (address: Address) => string;
-  /** The setting's steps, for a card nobody has widened. */
   readonly steps: number;
-  /** A card's own extent, by its key, once somebody widened it. */
   readonly extentOf?: (key: string) => Extent | undefined;
   readonly include?: (unit: DecisionUnit) => boolean;
   readonly keep?: (unit: DecisionUnit) => boolean;
@@ -121,8 +70,6 @@ export const hunksOf = (options: {
   for (const unit of options.units) {
     const shown = changed(unit) ? options.include?.(unit) !== false : options.keep?.(unit) === true;
     if (!shown) continue;
-    // A unit only the baseline has belongs where it stood: the TOC unit the
-    // current text has at that point — the one it ended, not the next.
     const anchor = unit.current?.from ?? Math.max(0, unit.place.current - 1);
     const at = Math.max(0, unitIndexAt(current, anchor));
     const held = groups.get(at);
@@ -131,7 +78,6 @@ export const hunksOf = (options: {
   }
 
   const count = options.units.length;
-  /** The first unit whose place in the current text is at or after `at`. */
   const firstAt = (at: number): number => {
     let lo = 0;
     let hi = count;
@@ -151,8 +97,6 @@ export const hunksOf = (options: {
     const key = `${options.bookId} ${addressCode(address)}`;
     const extent = options.extentOf?.(key) ?? { up: options.steps, down: options.steps };
     const shownCurrent = stretchOf(current, at, at, extent);
-    // The baseline's stretch: the units its own changes span there, widened
-    // the same way. A card whose every change is new has none.
     let from = Number.POSITIVE_INFINITY;
     let to = Number.NEGATIVE_INFINITY;
     for (const unit of own)
@@ -170,9 +114,6 @@ export const hunksOf = (options: {
             extent,
           ).range;
     const low = firstAt(shownCurrent.range.from);
-    // A unit the current text lacks, placed exactly at the stretch's end, is
-    // the one the last shown unit ENDED — grouped with it above, so painted
-    // with it too.
     let high = firstAt(shownCurrent.range.to);
     while (
       high < count &&
@@ -199,22 +140,14 @@ export const hunksOf = (options: {
   return out;
 };
 
-/** Roughly one line of the scripture serif per this many characters of source. */
 const CHARS_PER_LINE = 70;
 
-/** A card's height before it has been measured. */
 export const estimate = (hunk: Hunk): number =>
   60 + Math.ceil((hunk.current.to - hunk.current.from) / CHARS_PER_LINE) * 30;
 
-/** A change whose words are the same on both sides: markup, or spacing. */
 export const isFormatting = (unit: DecisionUnit): boolean =>
   unit.isWhitespaceChange || unit.isUsfmStructureChange;
 
-/**
- * What KIND of change a card holds when that is not the words: the engine's
- * own classification. A card whose every change is one kind says so; a mixed
- * card says how many, since the rest are the words.
- */
 export const hunkKind = (units: readonly DecisionUnit[]): string | undefined => {
   if (units.length === 0) return undefined;
   const spaces = units.filter((unit) => unit.isWhitespaceChange).length;

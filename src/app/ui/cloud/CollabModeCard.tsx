@@ -1,14 +1,3 @@
-/**
- * "How you work on this project", in Settings' Cloud section: the two modes,
- * each with what it means in a sentence, and the one that cannot be chosen
- * shown as unavailable, with why.
- *
- * Choosing the copy makes it (or finds the one already made) at once, because
- * a mode with nowhere to send is not a mode. A shared project that is the
- * person's own, and copies nothing, has nothing to suggest to: the card then
- * asks which project it should suggest to.
- */
-
 import type { JSX } from "@solidjs/web";
 import Lock from "lucide-solid/icons/lock";
 import { Show, createSignal, untrack } from "solid-js";
@@ -30,7 +19,6 @@ export function CollabModeCard() {
   const [asking, setAsking] = createSignal(false, { name: "collabModeAsking" });
   const [target, setTarget] = createSignal("", { name: "collabModeTarget" });
 
-  // Settings is somewhere a person comes to decide this: ask, if nothing has.
   untrack(() => {
     const opened = shell.project();
     if (opened !== undefined && collaboration.facts(opened.root) === undefined)
@@ -58,7 +46,6 @@ export function CollabModeCard() {
 
   const attachShared = (event: SubmitEvent): void => {
     event.preventDefault();
-    // Read at the moment of the press, not when the handler was made.
     const staticTarget = target();
     press(async () => {
       const project = shell.project();
@@ -92,15 +79,8 @@ export function CollabModeCard() {
     });
   };
 
-  /**
-   * The way this person CAN work. Someone who cannot write to the shared
-   * project works in their own copy whatever was stored, so that option shows
-   * as theirs — with the button that makes the copy, until it exists — rather
-   * than the stored "shared" showing as chosen beside why it cannot be.
-   */
   const effective = (): "shared" | "copy" | undefined =>
     facts()?.canWrite === false ? "copy" : facts()?.mode;
-  /** Their way of working is the copy, and the copy is not made yet. */
   const copyToMake = (): boolean => facts()?.canWrite === false && facts()?.mode === "shared";
 
   const option = (
@@ -128,16 +108,11 @@ export function CollabModeCard() {
         checked={effective() === mode}
         disabled={busy() || blocked !== undefined || facts() === undefined}
         onChange={(event) => {
-          // The mode changes when the move has happened, not when clicked: the
-          // radio follows the facts, which the move refreshes.
           event.currentTarget.checked = false;
           onChoose();
         }}
       />
       <span class="space-y-0.5">
-        {/* A way of working this person cannot choose reads as unavailable at a
-            glance — dimmed, dashed, and the reason beside a lock — not as the
-            same card with one grey line at the bottom. */}
         <span class={cx("block space-y-0.5", blocked !== undefined && "opacity-60")}>
           <span class="block text-small font-semibold">{title}</span>
           <span class="block text-smallest text-on-surface-secondary">{detail}</span>
@@ -187,7 +162,6 @@ export function CollabModeCard() {
               "Your changes go to your own copy. Offer them when they are ready, and an editor of the shared project brings them in.",
             ),
             copy,
-            // Not known means nobody is signed in: a copy is made by an account.
             facts()?.canWrite === undefined ? t("Sign in to choose this.") : undefined,
             () => (
               <Show when={copyToMake()}>

@@ -1,18 +1,3 @@
-/**
- * What a block marker is CALLED, for a translator.
- *
- * The shell's half of `blockNamer` (`packages/editor/src/recipes/emptyBlocks.ts`). It
- * lives here and not in the editor because `@sefer/editor` may not reach into the
- * app — its front door says it imports Galley's `Analysis` and core's
- * `Book`/`Source` vocabulary and nothing else — and these are interface copy.
- * Handed in as a facet for the same reason `analyzer` is: a capability the
- * state is GIVEN rather than one it imports.
- *
- * TODO(i18n): English only. When Sefer picks its localization story these go
- * through it; nothing else has to move, because the editor already asks for a
- * function rather than a table.
- */
-
 const NAMES: Record<string, string> = {
   p: "Paragraph",
   pi: "Paragraph, indented",
@@ -37,8 +22,4 @@ const NAMES: Record<string, string> = {
   iq: "Introduction poetry",
 };
 
-/**
- * An unlisted marker shows its own spelling rather than a guess. A translator
- * who sees `\xyz` learns something true; one who sees "Paragraph" does not.
- */
 export const nameBlock = (marker: string): string => NAMES[marker] ?? `\\${marker}`;

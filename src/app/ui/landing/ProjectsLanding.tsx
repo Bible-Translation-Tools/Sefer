@@ -1,22 +1,3 @@
-/**
- * The projects page: what is already on this device, then what is available
- * on WACS to download. Reference material (Translation Notes) is not listed
- * here: it is chosen and downloaded in a book's reference column (Will,
- * 2026-10-15).
- *
- * Two sections, one page. There is no separate find screen, and the
- * add-a-project cards are gone:
- * importing is `ImportHub`, as buttons under the table and as the app bar's menu.
- *
- * The state here is `downloads`: every download the WACS table started, which
- * the installed row draws as a card with a progress bar until the project it
- * becomes is listed. A downloaded project stays in the WACS table too.
- *
- * Rendered by BOTH `/` and `/projects` rather than redirecting one to the
- * other, so that `?fixture=1` — which the composition reads off `location`,
- * not off the router — survives landing on either.
- */
-
 import { createSignal } from "solid-js";
 
 import { t } from "../../i18n";
@@ -27,18 +8,13 @@ import { WacsProjects } from "./WacsProjects";
 import { YourProjects } from "./YourProjects";
 
 export function ProjectsLanding() {
-  /** Downloads started from the WACS table, newest first, until listed. */
   const [downloads, setDownloads] = createSignal<readonly PendingDownload[]>([], {
     name: "pendingDownloads",
   });
-  /** Where the latest download's row was, for the fly-up animation. */
   const [flyFrom, setFlyFrom] = createSignal<DOMRect>();
 
   return (
     <main class="flex h-full min-w-0 flex-col gap-8 overflow-hidden p-6">
-      {/* Above everything, and only when there is something to answer: work
-          that exists nowhere but the journal is the first thing someone who
-          crashed needs to see, before the list of what to open next. */}
       <RecoveryBanner />
 
       <section class="shrink-0 space-y-3">

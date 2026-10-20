@@ -34,7 +34,6 @@ import { Badge, Button, Card, cx } from "../primitives";
 import { ReviewReader, type ReviewBook } from "../review/ReviewReader";
 import { healthLine } from "./healthLine";
 
-/** Chapters and verses out of USFM, for reading; every other marker is dropped. */
 const reading = (
   usfm: string,
 ): readonly { chapter: string; verses: readonly [string, string][] }[] => {
@@ -63,15 +62,12 @@ export function BookPane(props: {
   readonly book: string;
   readonly candidates: readonly BookCandidate[];
   readonly opened: (id: string) => Opened;
-  /** The candidate the book will be assembled from. */
   readonly picked: string | undefined;
-  /** What the rule would pick, marked Recommended. */
   readonly recommended: string | undefined;
   readonly onUse: (id: string) => void;
 }) {
   const shell = useShell();
   const { services } = shell;
-  /** The candidate compared against the pick; "" for none. */
   const [comparing, setComparing] = createSignal("", { name: "bookPaneComparing" });
   const [source, setSource] = createSignal<
     { readonly title: string; readonly health: Health } | undefined
@@ -80,8 +76,6 @@ export function BookPane(props: {
 
   const name = (): string => CANON.find((entry) => entry.id === props.book)?.name ?? props.book;
 
-  // The source text's census, once per book: the sources every candidate's
-  // manifest lists, and the first one this device holds.
   createEffect(
     () =>
       props.candidates.flatMap((candidate) => {
@@ -99,7 +93,6 @@ export function BookPane(props: {
     return held.state === "ready" ? held.staged.usfm : undefined;
   };
 
-  /** Per candidate, passages differing from the pick; two-way, in a loop. */
   const differing = createMemo(
     (): ReadonlyMap<string, number | undefined> => {
       const picked = textOf(props.picked);
@@ -136,7 +129,6 @@ export function BookPane(props: {
     return count === 0 ? t("same text") : t("{count} passages", { count });
   };
 
-  /** Review's reader: the pick on the right, the compared one on the left. */
   const compared = createMemo(
     (): readonly ReviewBook[] => {
       const left = comparing();

@@ -1,22 +1,3 @@
-/**
- * The cloud popover's word on working with other people: one line, and at
- * most one button, for whichever of the two modes the project is in.
- *
- * - In the shared project, for someone who cannot write to it: the sentence
- *   that explains the refused send, and "Work in my own copy".
- * - In the shared project, for an editor: how many suggestions wait, and the
- *   way to the Suggestions tab.
- * - In their own copy: work another of their devices sent to the copy, to
- *   see in Review; how their newest suggestion stands — waiting, brought in,
- *   or closed with the editor's note; "Offer my changes" when none is open
- *   and this device has work the shared project lacks; and, for someone who
- *   has since been given write access, the way back.
- *
- * The full list of their suggestions, and Withdraw, are the Suggestions tab's
- * (`YourSuggestions`). Nothing here moves on its own. A gained permission is
- * said, never acted on.
- */
-
 import { useNavigate } from "@tanstack/solid-router";
 import { Match, Show, Switch, createSignal } from "solid-js";
 
@@ -38,7 +19,6 @@ export function CollabSection(props: { readonly onLeave: () => void }) {
   const [busy, setBusy] = createSignal(false, { name: "collabBusy" });
   const [standalone, setStandalone] = createSignal(false, { name: "collabStandalone" });
 
-  /** One press at a time; the project is read when pressed. */
   const press = (
     work: (project: NonNullable<ReturnType<typeof shell.project>>) => Promise<unknown>,
   ) => {
@@ -64,7 +44,6 @@ export function CollabSection(props: { readonly onLeave: () => void }) {
           ),
         });
       } catch (cause) {
-        // Work this device lacks is in the way: not a failure, one decision.
         const needed = reviewNeeded(cause);
         if (needed === undefined)
           toasts.error({ title: t("Could not offer your changes"), message: describe(cause) });
@@ -77,7 +56,6 @@ export function CollabSection(props: { readonly onLeave: () => void }) {
       }
     });
 
-  /** The review a refused offer leads to: against the person's copy, or the shared project. */
   const toReview = (search: NonNullable<ReturnType<typeof reviewNeeded>>["search"]): void => {
     props.onLeave();
     void navigate({ to: "/project/$slug/review", params: { slug: shell.slug() }, search });
@@ -88,7 +66,6 @@ export function CollabSection(props: { readonly onLeave: () => void }) {
     void navigate({ to: "/project/$slug/settings", params: { slug: shell.slug() } });
   };
 
-  /** Something to say: the frame is not drawn around nothing. */
   const said = () => {
     const held = facts();
     if (held === undefined) return undefined;

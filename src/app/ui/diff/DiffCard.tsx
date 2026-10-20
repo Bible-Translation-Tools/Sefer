@@ -1,22 +1,3 @@
-/**
- * One change as a card: the diff view (`@sefer/editor` `mountDiffView`) CLIPPED to
- * the change and its context, so it reads exactly as the editor does —
- * regular mode or USFM, split (baseline beside current) or unified (the
- * current text with the baseline's words struck through where they were).
- *
- * It wears the frame every card wears (`multibuffer/CardFrame`) and edits the
- * way every card edits: read-only until Edit or a double-click, then the
- * current side is the Book itself (`multibuffer/CardEditor`) with the diff as
- * a live diff on it (`CardEditor`'s `diff`), repainted as the review compares again; Done or
- * Escape ends it. The list it sits in owns the edit session and the pin
- * (`multibuffer/CardList`).
- *
- * A card with markup or spacing changes says so (a badge) and offers "Show
- * markup", one card at a time: in the reading those changes are invisible,
- * but the card does not switch mode on its own. What the reader sees changes
- * only when they ask for it.
- */
-
 import {
   mountDiffView,
   mountStamp,
@@ -45,7 +26,6 @@ import { cx } from "../primitives";
 import { hunkKind, type Hunk } from "./hunks";
 import { hunkPaint, sidePaint, type Controls } from "./paint";
 
-/** Both texts of one book, and their parses — what every card of that book reads. */
 export interface DiffSides {
   readonly bookId: string;
   readonly baselineText: string;
@@ -54,12 +34,6 @@ export interface DiffSides {
   readonly current: Analysis;
 }
 
-/**
- * The other side's wording of a unit, as an opened Zed hunk shows it — or a
- * unit only the other side has: a stamp of the baseline's own rendering, so it
- * reads like the page, read-only, with the words the current side no longer
- * has marked.
- */
 export const wasBlock =
   (baseline: Analysis, mode: "usfm" | "default") =>
   (unit: DecisionUnit): HTMLElement => {
@@ -74,7 +48,6 @@ export const wasBlock =
         marks: (unit.status === "modified" ? (unit.text?.baseline ?? []) : [])
           .filter((run) => run.kind !== "unchanged" && (run.what === "text" || mode === "usfm"))
           .map((run) => ({ from: run.from, to: run.to, class: "cm-diff-removed" })),
-        // The diff's own surface, so it reads at the size of the text below it.
         surface: "cm-diff",
         label: `was:${unit.id}`,
       });
@@ -82,13 +55,11 @@ export const wasBlock =
   };
 
 interface Pane {
-  /** A read-only diff view, or the card's editor while it is edited. */
   readonly mount: { repaint(paint: DiffPaint): void; text(): string; length(): number };
   readonly paint: () => DiffPaint;
   readonly live: boolean;
 }
 
-/** A memo's `equals` for a record of dependencies: the same fields, the same run. */
 export const sameFields = (
   a: Readonly<Record<string, unknown>>,
   b: Readonly<Record<string, unknown>>,
@@ -99,53 +70,28 @@ export function DiffCard(props: {
   readonly sides: DiffSides;
   readonly split: boolean;
   readonly usfm: boolean;
-  /** The reader's view of this card — its own USFM switch — held by the screen. */
   readonly view: CardView;
   readonly onView: (event: CardEvent) => void;
   readonly controls: Controls | undefined;
-  /** The card next and previous last stepped to: outlined, so it can be told from its neighbours. */
   readonly current?: boolean;
-  /**
-   * Who changed this passage since the two sides last agreed, when that is
-   * known — only in a review against the shared project, where "keep mine"
-   * on a passage only the other side changed would silently undo their work.
-   */
   readonly origin?: "there" | "here" | "both" | undefined;
-  /** Column captions in a split: what each source calls itself. */
   readonly currentLabel: string;
   readonly baselineLabel: string;
-  /**
-   * Which text a split puts first. `/review` puts the current side where its
-   * picker is (left); the conventional was-then-now puts the baseline first.
-   */
   readonly currentFirst?: boolean;
-  /** Whether the current side may be edited (an editable Review). */
   readonly editable?: boolean;
-  /** The edit session, from the list (`CardList`). */
   readonly editing?: boolean;
   readonly gone?: string | undefined;
   readonly onEdit?: () => void;
   readonly onDone?: () => void;
-  /** Plain → Instantiated for this card's book, when editing starts. */
   readonly seat?: () => Promise<EditorBook | undefined>;
-  /** The current side's parse, for the editor (the review's own memo). */
   readonly analyze?: (text: string) => Analysis;
-  /** Header actions, before Edit/Done: the card's decisions. */
   readonly headerActions?: readonly CardAction[];
-  /**
-   * In a split, actions under each column's caption, beside what that side
-   * calls itself — History's Adopt on either side. Drawn only in a split: a
-   * unified card has one column, and the screen puts them in the header.
-   */
   readonly sideActions?: {
     readonly baseline: readonly CardAction[];
     readonly current: readonly CardAction[];
   };
-  /** A row under the two sides: History's "your text against this version". */
   readonly below?: JSX.Element;
-  /** The way out (to the whole book). */
   readonly open?: CardAction;
-  /** One context step for this card: absent, the card offers no widening. */
   readonly onStep?: (step: ContextStep) => void;
   readonly onMounted?: (ms: number) => void;
 }) {
@@ -154,17 +100,10 @@ export function DiffCard(props: {
     name: "cardRight",
   });
 
-  /** This card's own switch to USFM (its code icon), over the screen's mode. */
   const markup = (): boolean => props.view.usfm;
   const usfm = (): boolean => props.usfm || markup();
 
-  /**
-   * The latest hunk and sides, read when painting. A new comparison hands
-   * over new objects every time; a pane that did not change must not be
-   * rebuilt for it, least of all a live one somebody is typing in.
-   */
   const now = () => untrack(() => ({ hunk: props.hunk, sides: props.sides }));
-  // The card's header decides it; its gutter carries no second pair of buttons.
   const controls = (): Controls | undefined => {
     const held = untrack(() => props.controls);
     return held === undefined ? undefined : { ...held, gutter: false };
@@ -182,11 +121,8 @@ export function DiffCard(props: {
     return sidePaint(hunk.all, "baseline", markup, undefined, sides.baseline);
   };
 
-  /** The panes of this card, and how to paint them — for a repaint in place. */
   const panes = new Map<"baseline" | "current", Pane>();
 
-  // The baseline pane: a read-only clip of the other side, rebuilt when its
-  // text or its stretch does.
   const baselineBuilt = createMemo(
     () => ({
       l: left(),
@@ -204,8 +140,6 @@ export function DiffCard(props: {
       if (!split || l === undefined || from === undefined || to === undefined) return;
       const { sides } = now();
       const paint = baselinePaint(markup);
-      // Untracked as a whole: drawing the gutter's decision widgets reads the
-      // decisions, and this is a one-time build — the repaint effect follows.
       const mount = untrack(() =>
         mountDiffView({
           parent: l,
@@ -225,7 +159,6 @@ export function DiffCard(props: {
     },
   );
 
-  // The edit session's book: seated when editing starts, let go when it ends.
   const [book, setBook] = createSignal<EditorBook | undefined>(undefined, { name: "cardBook" });
   const [refused, setRefused] = createSignal(false, { name: "cardRefused" });
   createEffect(
@@ -248,8 +181,6 @@ export function DiffCard(props: {
   );
   const editingBook = (): EditorBook | undefined => (props.editing === true ? book() : undefined);
 
-  // The current pane, read-only: rebuilt when its own text or stretch does,
-  // and not at all while the card is being edited — then the pane is the Book.
   const currentBuilt = createMemo(
     () => ({
       r: right(),
@@ -270,8 +201,6 @@ export function DiffCard(props: {
       const started = performance.now();
       const { hunk, sides } = now();
       const paint = currentPaint(markup, split);
-      // Untracked as a whole: drawing the gutter's decision widgets reads the
-      // decisions, and this is a one-time build — the repaint effect follows.
       const mount = untrack(() =>
         mountDiffView({
           parent: r,
@@ -292,8 +221,6 @@ export function DiffCard(props: {
     },
   );
 
-  // Edited back to exactly the other side's text: no change is left, so the
-  // live pane shows none.
   createEffect(
     () => props.gone !== undefined,
     (gone) => {
@@ -302,7 +229,6 @@ export function DiffCard(props: {
     },
   );
 
-  /** The editor, registered as the live current pane so a comparison repaints it. */
   const editorCard = (card: CardMount | undefined): void => {
     if (card === undefined) {
       panes.delete("current");
@@ -324,9 +250,6 @@ export function DiffCard(props: {
     untrack(() => card.setDiff(paint()));
   };
 
-  // A decision, or a new comparison, repaints in place. A live pane whose text
-  // has moved past the comparison (the next keystroke landed first) keeps its
-  // mapped decorations until the comparison catches up.
   createEffect(
     () => ({
       hunk: props.hunk,
@@ -335,24 +258,14 @@ export function DiffCard(props: {
     }),
     ({ text }) => {
       for (const pane of panes.values()) {
-        // A live pane is painted only by a comparison of EXACTLY the text it
-        // holds: one taken a keystroke earlier puts marks at offsets the typing
-        // has moved. Length alone is not enough — a same-length edit passes it.
         if (pane.live) {
           if (pane.mount.length() !== text.length || pane.mount.text() !== text) continue;
         }
-        // A snapshot of the decisions: the compute above is what tracks them.
-        // The decisions are the compute's; painting — and the gutter widgets
-        // it draws — reads them again, and is not a subscription.
         untrack(() => pane.mount.repaint(pane.paint()));
       }
     },
   );
 
-  /**
-   * The card's own switch to USFM, on a card whose changes are markup or
-   * spacing — invisible in the reading. Not in USFM mode, which shows them.
-   */
   const usfmAction = (): CardAction[] =>
     hunkKind(props.hunk.units) === undefined || props.usfm
       ? []
@@ -367,10 +280,6 @@ export function DiffCard(props: {
           },
         ];
 
-  /**
-   * The side every change in this card is decided for, if they agree: its
-   * caption says so, in brand with a check, rather than a wash over the text.
-   */
   const chosen = (): MergeSide | undefined => {
     const controls = props.controls;
     const units = props.hunk.units;
@@ -393,20 +302,12 @@ export function DiffCard(props: {
     </span>
   );
 
-  /**
-   * What the change is, as the engine says it — until it is decided. A take
-   * makes the passage read the same on both sides, and "unchanged" beside the
-   * button that took it reads as "did it work?"; the pressed button and the
-   * checked column say what happened instead.
-   */
   const status = (): string => {
     const units = props.hunk.units;
     if (units.length === 0) return "";
     const controls = props.controls;
     if (controls !== undefined && units.every((unit) => controls.decision(unit) !== undefined))
       return "";
-    // "modified" is what a change usually is, and said on every card it is
-    // noise; "added" and "deleted" are news.
     if (units.length > 1) return `${units.length} changes`;
     const only = units[0]?.status ?? "";
     return only === "modified" ? "" : only;
@@ -421,8 +322,7 @@ export function DiffCard(props: {
       info={
         <>
           <span class="text-smallest text-on-surface-tertiary">{status()}</span>
-          {/* Plain words, not chips: only "changed in both places" asks
-              something of the reader, so only it takes a colour. */}
+
           <Show when={props.origin}>
             {(origin) => (
               <span
@@ -474,9 +374,6 @@ export function DiffCard(props: {
           )}
         </Show>
       }
-      // Double-click edits, as on every card; a card that cannot be edited
-      // does nothing — the book icon is the one way into the whole book, so a
-      // gesture never takes the reader somewhere else.
       onDblClick={() => {
         if (props.editing !== true && props.editable === true) props.onEdit?.();
       }}

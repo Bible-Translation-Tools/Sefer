@@ -1,21 +1,3 @@
-/**
- * One character, in full: what the publication measured about it, and every
- * site it was flagged at.
- *
- * The sections are the engine's own channels, renamed into questions a
- * translator can answer — "what sits beside it", "how it attaches to words",
- * "run shape" — because `PooledNeighbor` and `Placement` are the vocabulary of
- * the thing that counted, not of the person reading. Nothing is scored and
- * nothing is ranked against a target: every row is a fraction the engine
- * published, and every flagged site is a verse you can open.
- *
- * A row's "sites" button is the whole point of joining the two halves. A
- * pattern is a claim about the corpus; the convictions that named it are where
- * that claim landed. Pressing it filters the list below to exactly those, and
- * the secondary link hands the same question to `/findings`, which owns
- * cross-book reading.
- */
-
 import { useNavigate } from "@tanstack/solid-router";
 import { Option } from "effect";
 import ExternalLink from "lucide-solid/icons/external-link";
@@ -46,17 +28,8 @@ import {
 } from "../primitives";
 import { GlyphTile } from "./GlyphTile";
 
-/** Basis points as a percentage. `0.02%` is a real answer; `0%` is not. */
 const share = (bp: number): string => `${(bp / 100).toFixed(2)}%`;
 
-/**
- * A one-line quotation around a span, from the raw USFM.
- *
- * The fallback, not the rule: `quote` in `src/core/excerpts` runs the same
- * projection the Find cards do and gives back the READING, which is what a
- * translator recognises. This is what is left when there is no analysis of the
- * book to project with — the newlines flattened so a row stays a row.
- */
 const rawAt = (text: string, from: number, to: number): Quotation => {
   const start = Math.max(0, from - 26);
   const end = Math.min(text.length, to + 34);
@@ -69,10 +42,8 @@ const rawAt = (text: string, from: number, to: number): Quotation => {
   };
 };
 
-/** What the excerpt reads when the book is no longer in the open Project. */
 const ABSENT: Quotation = { before: "", hit: "", after: "", projected: true };
 
-/** A section that draws nothing when the engine measured nothing. */
 function Section(props: {
   readonly title: string;
   readonly note?: string;
@@ -93,9 +64,7 @@ function Section(props: {
 
 export interface GlyphDetailProps {
   readonly glyph: Glyph;
-  /** Books in the publication — the denominator of a glyph's book spread. */
   readonly bookCount: number;
-  /** The pattern the flagged list is narrowed to, or `undefined` for all. */
   readonly pattern: number | undefined;
   readonly onPattern: (pattern: number | undefined) => void;
 }
@@ -109,25 +78,6 @@ export function GlyphDetail(props: GlyphDetailProps) {
   const analysisOf = (bookId: string) =>
     Option.getOrUndefined(shell.services.projectAnalysis.analysis(bookId));
 
-  /**
-   * The site quoted as the READING, the way the Find cards quote a match.
-   *
-   * The engine convicts a character at a source offset, and quoting the raw
-   * USFM around it made every row read as markup — `…\v 12 word, word…` — for
-   * a page whose whole subject is how the translation punctuates its
-   * sentences. `quote` projects a window around the offset and keeps the mark
-   * on the projected character, so the row reads as the sentence it is in.
-   *
-   * When the convicted span is markup itself — inside a marker name, an
-   * attribute, a control character the reading drops — there is no projected
-   * character to mark, and `quote` says so: that row falls back to the raw
-   * slice and is labelled. One site's answer, not the page's.
-   *
-   * Nothing here subscribes. The book's stamp is read so the quotation is
-   * re-taken when THAT book's text moves — the fallback slices the Book's own
-   * text, so it goes stale with it — and reading it per book is what stops an
-   * edit in one book re-quoting sites in the other sixty-five.
-   */
   const excerpt = (site: FlaggedSite): Quotation => {
     shell.stampOf(site.bookId);
     const analysis = analysisOf(site.bookId)?.analysis;
@@ -136,12 +86,6 @@ export function GlyphDetail(props: GlyphDetailProps) {
     return text === undefined ? ABSENT : rawAt(text, site.from, site.to);
   };
 
-  /**
-   * Book and reference, from the analysis the site was measured against.
-   * The location service names the place only when the engine stamps agree,
-   * so a book that has moved on since the publication reads as an offset
-   * rather than as a verse it may no longer be.
-   */
   const where = (site: FlaggedSite): string => {
     const address = shell.location.addressAt(
       site.bookId,
@@ -154,17 +98,11 @@ export function GlyphDetail(props: GlyphDetailProps) {
     return shell.location.label(address);
   };
 
-  /** Has the book moved on since the publication measured this site? */
   const stale = (site: FlaggedSite): boolean => {
     const stamp = shell.stampOf(site.bookId);
     return stamp === undefined || stamp.revision !== site.stamp.revision;
   };
 
-  /**
-   * Aim, then open — the order `FindingsPanel` uses, and for its reason: the
-   * book route reads the aim to choose the opening clip and the editor
-   * surface scrolls to it.
-   */
   const go = (site: FlaggedSite): void => {
     const project = shell.project();
     if (project === undefined) return;
@@ -178,12 +116,6 @@ export function GlyphDetail(props: GlyphDetailProps) {
     });
   };
 
-  /**
-   * The same question, handed to the panel that reads across books.
-   *
-   * Through the router, never an `<a href>`: a full load rebuilds the shell
-   * and the open Project goes with it.
-   */
   const openInFindings = (): void => {
     const channel = props.glyph.rows.find((row) => row.pattern === props.pattern)?.channel;
     if (channel === undefined) return;
@@ -199,12 +131,8 @@ export function GlyphDetail(props: GlyphDetailProps) {
       ? props.glyph.flagged
       : props.glyph.flagged.filter((site) => site.pattern === props.pattern);
 
-  /** The "show the other sites" control every pattern row carries. */
   const sitesButton = (row: PatternRow) => (
     <Show when={row.flagged > 0} fallback={<span class="text-on-surface-tertiary">—</span>}>
-      {/* A toggle, so the state is `aria-pressed` and not a second variant —
-          the primitive already paints a pressed button, and swapping variants
-          would say the same thing twice. */}
       <Button
         size="sm"
         variant="tertiary"
@@ -216,13 +144,11 @@ export function GlyphDetail(props: GlyphDetailProps) {
     </Show>
   );
 
-  /** What the corpus does instead, under a row's label, when the row says. */
   const usualLine = (row: PatternRow) =>
     row.usual === undefined ? null : (
       <span class="block text-smallest font-normal text-on-surface-tertiary">{row.usual}</span>
     );
 
-  /** The usual class on each side, once per table: every row of a side shares it. */
   const placementUsual = (): string => {
     const cells = props.glyph.placement;
     const before = cells.find((cell) => cell.prev?.usual !== undefined)?.prev?.usual;
@@ -360,10 +286,6 @@ export function GlyphDetail(props: GlyphDetailProps) {
                     </TableCell>
                     <TableCell class="text-end">
                       <span class="flex justify-end gap-1">
-                        {/* A ternary, not `<Show>`: `cell` is a plain value
-                            the `<For>` above already tracks, and reading a
-                            `<Show>` accessor from a child callback's body is
-                            an untracked read Solid 2 warns about. */}
                         {cell.prev === undefined ? null : sitesButton(cell.prev)}
                         {cell.next === undefined ? null : sitesButton(cell.next)}
                       </span>
@@ -500,9 +422,7 @@ export function GlyphDetail(props: GlyphDetailProps) {
           <ul class="divide-y divide-surface-border rounded-md border border-surface-border">
             <For each={sites()}>
               {(site) => {
-                // One slice per row, not three: a memo is legal here — a
-                // `<For>` child is an owned scope — and it keeps the read of
-                // the Book's text inside a tracking scope.
+                // Untracked on purpose: a one-time read, not a dependency (Solid 2: STRICT_READ_UNTRACKED).
                 const quoted = createMemo(() => excerpt(site), { name: "siteExcerpt" });
                 return (
                   <li class="flex flex-wrap items-center gap-2 px-3 py-2" data-site={site.from}>
@@ -521,9 +441,6 @@ export function GlyphDetail(props: GlyphDetailProps) {
                     <span
                       class={cx(
                         "w-full min-w-0 truncate text-small text-on-surface-secondary sm:w-auto sm:flex-1",
-                        // The reading in the scripture face, the raw slice in
-                        // mono: the row says which one it is showing before it
-                        // is read, not only in the badge.
                         quoted().projected ? "font-scripture" : "font-mono text-smallest",
                       )}
                       data-projected={quoted().projected ? "true" : "false"}

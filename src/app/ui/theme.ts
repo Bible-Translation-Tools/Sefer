@@ -1,32 +1,7 @@
-/**
- * Appearance: the preferences that are a fact about the DOCUMENT rather than
- * about a component — the colour scheme, the interface font size, the page
- * zoom, the diff's colours, and the scripture surface's own size.
- *
- * They live here, outside any screen, because each is written onto the root
- * element and every route reads them by simply existing. `tokens.css`
- * swaps the semantic names under `[data-theme="dark"]` and under
- * `prefers-color-scheme: dark` when no theme is stamped, so "system" is the
- * ABSENCE of the attribute and never a computed value: a computed one would
- * stop following the OS the moment the OS changed.
- *
- * The values are mirrored into `localStorage` and re-applied at module load.
- * That is not a second source of truth — `Settings` is, and `/settings` writes
- * both — it is a cache that beats the first paint. `Settings` is only readable
- * once the composition has built, which is after the browser has painted, and
- * a page that flashes light before turning dark is the thing this avoids.
- */
-
 const THEMES = ["system", "light", "dark"] as const;
 
 export type Theme = (typeof THEMES)[number];
 
-/**
- * The diff's hues and its removed-word mark (`packages/editor/src/editor.css`, the
- * `--diff-*` tokens). A fact about the document for the same reason the theme
- * is: every diff surface reads them by existing, and the settings sample shows
- * the one in force.
- */
 const DIFF_PALETTES = ["standard", "blue-orange"] as const;
 export type DiffPalette = (typeof DIFF_PALETTES)[number];
 const DIFF_REMOVED_MARKS = ["strike", "underline", "none"] as const;
@@ -34,9 +9,7 @@ export type DiffRemovedMark = (typeof DIFF_REMOVED_MARKS)[number];
 
 export interface Appearance {
   readonly theme: Theme;
-  /** Root font size in px; every `rem` in the interface scales with it. */
   readonly fontSize: number;
-  /** Page zoom as a percentage. 100 is untouched. */
   readonly zoom: number;
   readonly diffPalette: DiffPalette;
   readonly diffRemoved: DiffRemovedMark;
@@ -50,19 +23,9 @@ const DEFAULT_APPEARANCE: Appearance = {
   diffRemoved: "strike",
 };
 
-/** The bounds the widgets offer and the cache is clamped to. */
 const FONT_SIZE_RANGE = { min: 12, max: 24 } as const;
 const ZOOM_RANGE = { min: 50, max: 200 } as const;
 
-/**
- * The scripture surface's own size, in px, and its bounds.
- *
- * Separate from the interface size on purpose: the chrome and the text being
- * translated are read at different distances, and a translator who wants
- * larger scripture does not want a larger toolbar. It is not part of
- * `Appearance` either, because `Appearance` is what `/settings` applies in one
- * call and this one is applied by whoever writes it — see `applyEditorFontSize`.
- */
 export const EDITOR_FONT_SIZE_RANGE = { min: 14, max: 32 } as const;
 export const DEFAULT_EDITOR_FONT_SIZE = 18;
 
@@ -99,26 +62,15 @@ const asZoom = (value: number): number => clamp(value, ZOOM_RANGE.min, ZOOM_RANG
 const asEditorFontSize = (value: number): number =>
   clamp(value, EDITOR_FONT_SIZE_RANGE.min, EDITOR_FONT_SIZE_RANGE.max);
 
-/**
- * Writes `--editor-font-size` onto `<html>`, where `packages/editor/src/editor.css`
- * reads it for `.cm-mode-regular .cm-content`.
- *
- * A custom property rather than a root font size: the scripture column is the
- * only thing that scales, and `rem` in the editor's own chrome must keep
- * following the interface size.
- */
 export const applyEditorFontSize = (px: number): void => {
   if (typeof document === "undefined") return;
   const size = asEditorFontSize(px);
   document.documentElement.style.setProperty("--editor-font-size", `${size}px`);
   try {
     globalThis.localStorage?.setItem(EDITOR_CACHE_KEY, String(size));
-  } catch {
-    /* A cache that cannot be written is a slower first paint, not a failure. */
-  }
+  } catch {}
 };
 
-/** The cached scripture size, or the default. */
 const cachedEditorFontSize = (): number => {
   try {
     const held = Number(globalThis.localStorage?.getItem(EDITOR_CACHE_KEY));
@@ -128,13 +80,6 @@ const cachedEditorFontSize = (): number => {
   }
 };
 
-/**
- * Writes the appearance onto `<html>`.
- *
- * `system` REMOVES the attribute rather than writing a resolved value, which is
- * what keeps the media query in charge. Guarded for the production prerender,
- * which runs this module under Node with no document.
- */
 export const applyAppearance = (appearance: Appearance): void => {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
@@ -144,7 +89,6 @@ export const applyAppearance = (appearance: Appearance): void => {
   const zoom = asZoom(appearance.zoom);
   if (zoom === 100) root.style.removeProperty("zoom");
   else root.style.setProperty("zoom", `${zoom}%`);
-  // The defaults are the absence of the attribute, as `system` is.
   if (appearance.diffPalette === "standard") root.removeAttribute("data-diff-palette");
   else root.setAttribute("data-diff-palette", appearance.diffPalette);
   if (appearance.diffRemoved === "strike") root.removeAttribute("data-diff-removed");
@@ -152,23 +96,17 @@ export const applyAppearance = (appearance: Appearance): void => {
   cache(appearance);
 };
 
-/** Never throws: private-mode browsers refuse `localStorage` outright. */
 const cache = (appearance: Appearance): void => {
   try {
     globalThis.localStorage?.setItem(CACHE_KEY, JSON.stringify(appearance));
-  } catch {
-    /* A cache that cannot be written is a slower first paint, not a failure. */
-  }
+  } catch {}
 };
 
-/** The cached appearance, or the defaults. Shape is re-checked, not trusted. */
 const cachedAppearance = (): Appearance => {
   try {
     const held: unknown = JSON.parse(globalThis.localStorage?.getItem(CACHE_KEY) ?? "null");
     if (typeof held !== "object" || held === null) return DEFAULT_APPEARANCE;
-    // SAFETY: the line above rules out null and every primitive, so what
-    // remains of a JSON.parse result is an object with string keys; each field
-    // below is still type-checked before it is used.
+    // SAFETY: the line above rules out null and every primitive, so what remains of a JSON.parse result is an object with string keys; each field below is still type-checked before it is used.
     const record = held as Record<string, unknown>;
     return {
       theme: asTheme(typeof record.theme === "string" ? record.theme : ""),
@@ -182,8 +120,5 @@ const cachedAppearance = (): Appearance => {
   }
 };
 
-// Applied at import so the first paint is already in the right scheme. The
-// settings screen re-applies from `Settings` once the composition is up, which
-// is the authoritative read; this one only has to be fast.
 applyAppearance(cachedAppearance());
 applyEditorFontSize(cachedEditorFontSize());

@@ -1,21 +1,3 @@
-/**
- * The project's history: one recorded version's changes, with the timeline in
- * the sidebar's History tab (`ChangesHistorySidebar`) — what is not recorded
- * yet is the Changes tab, which is Review.
- *
- * The timeline is one `git.timeline` call — the log, every book's versions and
- * what the shared project has, which the Web answers from one read of its book
- * index. Each version answers "which commits touched this book" AND hands back
- * a `bytes()` thunk, so a commit row can name the books it changed without
- * reading a single blob, and reading one happens only when somebody selects
- * that commit.
- *
- * A version shows what IT changed: each book it touched, that book's previous
- * version against this one, as a log shows a commit. Nothing here writes a
- * file: Adopt puts one side's wording into the editor through `book.apply`, an
- * ordinary edit that Undo takes back and Record a version keeps.
- */
-
 import type { EditorBook } from "@sefer/editor";
 import type { Book, BookId } from "@sefer/text/book";
 import { decode, type Source } from "@sefer/text/source";
@@ -64,7 +46,6 @@ import {
 import { ago, dated, exact } from "./format";
 import { YoursRow } from "./YoursRow";
 
-/** A timeline row's look. */
 const ROW = [
   "flex w-full cursor-pointer flex-col gap-1 px-3.5 py-3 text-start transition-colors",
   "hover:bg-surface-secondary",
@@ -72,36 +53,24 @@ const ROW = [
   "aria-[current=true]:shadow-[inset_0.1875rem_0_0_0_var(--brand-base)]",
 ].join(" ");
 
-/** Your text against both sides of a selected version, for one book. */
 interface Yours {
   readonly book: Book;
-  /** Your text against this version: `baselineText` is the version, `workingText` yours. */
   readonly version: UnitChanges | undefined;
-  /** Your text against the book's version before it. */
   readonly before: UnitChanges | undefined;
-  /** `version`'s two texts and their parses, for the third row. */
   readonly sides: DiffSides | undefined;
 }
 
 const point = (at: number): Range => ({ from: at, to: at });
 
-/**
- * Whether two stretches share text. Two verses that only meet at a boundary do
- * not; a point (a passage one side lacks) does when it falls inside or on the
- * edge of the other.
- */
 const overlaps = (a: Range, b: Range): boolean =>
   a.from === a.to || b.from === b.to
     ? a.from <= b.to && b.from <= a.to
     : a.from < b.to && b.from < a.to;
 
-/** How many commits further back one step of older history goes. */
 const HISTORY_STEP = 10;
 
-/** Projects whose older history this session has already gone to fetch. */
 const deepened = new Set<string>();
 
-/** One read of a project's timeline: what the panel draws, all of it derived from git. */
 interface Timeline {
   readonly kind: "read";
   readonly commits: readonly Commit[];
@@ -110,14 +79,6 @@ interface Timeline {
   readonly shared: ReadonlySet<string> | undefined;
 }
 
-/**
- * The last timeline read per project, and the two tips it was read at (HEAD
- * and the shared project's). Moving between the Changes and History tabs
- * remounts this panel; with both tips where they were, nothing the timeline
- * is made of can have moved, so it is drawn from here instead of walking the
- * log and every book's versions again. Reload, a deepen, or a moved tip reads
- * it afresh.
- */
 const timelines = new Map<string, { readonly tips: string; readonly timeline: Timeline }>();
 
 export function HistoryPanel() {
@@ -129,27 +90,18 @@ export function HistoryPanel() {
   });
   const [problem, setProblem] = createSignal("");
   const [shown, setShown] = createSignal<readonly BookChanges[]>([], { name: "shownDiff" });
-  /** Commit ids the shared project has; `undefined` when there is nothing to compare with. */
   const [shared, setShared] = createSignal<ReadonlySet<string> | undefined>(undefined, {
     name: "historyShared",
   });
-  /** Recorded here and not yet on the shared project. */
   const onlyHere = (id: string): boolean => {
     const known = shared();
     return known !== undefined && !known.has(id);
   };
-  /**
-   * The cards whose "your text against this version" row is open, by card
-   * key. A selected version shows what it changed, as a log shows a commit;
-   * where your text has moved on since, a card offers that third row.
-   */
   const [yoursOpen, setYoursOpen] = createSignal<ReadonlySet<string>>(new Set(), {
     name: "historyYoursOpen",
   });
-  // SAFETY: `strict: false` gives the union of every route's search; `commit`
-  // is read as `unknown` and narrowed (the route validated it already).
+  // SAFETY: `strict: false` gives the union of every route's search; `commit` is read as `unknown` and narrowed (the route validated it already).
   const search = useSearch({ strict: false }) as () => { readonly commit?: unknown };
-  /** The version shown: the URL's, else the newest. Empty while the log is read. */
   const selected = (): string => {
     const asked = search().commit;
     return typeof asked === "string" ? asked : (log()?.[0]?.id ?? "");
@@ -162,21 +114,10 @@ export function HistoryPanel() {
       search: { commit: id },
     });
   };
-  /**
-   * Whether older history is on this device. A project cloned with its
-   * newest version only (the Web's default) has a short past until it is
-   * deepened, and the list must not pass that off as the whole.
-   */
   const [older, setOlder] = createSignal<"whole" | "missing" | "loading" | "failed">("whole", {
     name: "historyOlder",
   });
 
-  /**
-   * One pass over the repository. Every git call goes through `Effect.result`
-   * so that a repository that does not exist — the ordinary case in a browser
-   * fixture, where nothing has ever run `git init` — reports itself once and
-   * leaves the top row working.
-   */
   const load = (fresh = false): void => {
     const project = shell.project();
     if (project === undefined) return;
@@ -188,8 +129,6 @@ export function HistoryPanel() {
           if (Result.isFailure(opened))
             return { kind: "absent", reason: opened.failure.reason } as const;
           const repo = opened.success;
-          // The tips the timeline is made from, and the books it is read for:
-          // with all of them where they were, the held timeline is this one.
           const branch = yield* Effect.orElseSucceed(git.branch(repo), () => Option.none<string>());
           const tipOf = (ref: string) =>
             Effect.map(
@@ -204,10 +143,6 @@ export function HistoryPanel() {
           const known = timelines.get(project.root);
           if (!fresh && known !== undefined && known.tips === tips) return known.timeline;
           const shallow = yield* Effect.orElseSucceed(git.shallow(repo), () => false);
-          // The log, every book's versions, and what the shared project already
-          // has (every commit its remote-tracking ref reaches; `undefined` when
-          // there is none, and then the timeline marks nothing) — in one call,
-          // which the Web answers from one read of its book index.
           const paths = new Map<string, BookId>();
           for (const book of project.books) {
             const inside = repositoryPath(project.root, book.path);
@@ -239,9 +174,6 @@ export function HistoryPanel() {
       )
       .then((answer) => {
         if (answer.kind === "absent") {
-          // The TAG, not a sentence: the card below decides what to say about
-          // it, and "NotARepository" is the ordinary state of a project nobody
-          // has recorded yet rather than an error to print at someone.
           setProblem(answer.reason);
           setLog([]);
           return;
@@ -251,10 +183,6 @@ export function HistoryPanel() {
         setVersions(answer.perBook);
         setShared(answer.shared);
         setOlder((now) => (answer.shallow ? (now === "loading" ? now : "missing") : "whole"));
-        // The first time History opens on a project with its newest version
-        // only, one step further back is fetched without being asked: opening
-        // History is the asking. Once per project per session, so a failure is not
-        // retried on every visit; the button below retries.
         if (answer.shallow && !deepened.has(project.root) && syncStatus.interfaceUp()) {
           deepened.add(project.root);
           loadOlder(HISTORY_STEP);
@@ -262,7 +190,6 @@ export function HistoryPanel() {
       });
   };
 
-  /** Fetch older history a newest-version clone left on the server, then read again. */
   const loadOlder = (more: Deepen): void => {
     const project = shell.project();
     if (project === undefined) return;
@@ -281,8 +208,6 @@ export function HistoryPanel() {
       .then(
         (progress) => {
           operation.end("passed", { "history.loaded": progress.loaded });
-          // `load` reads `shallow` again: a step that did not reach the
-          // beginning leaves the card offering more.
           setOlder("missing");
           load(true);
         },
@@ -292,10 +217,8 @@ export function HistoryPanel() {
         },
       );
   };
-  // One read of the open project, at setup. `load` is not a derivation.
   untrack(load);
 
-  /** Which books a commit touched, from the per-book version lists. */
   const booksIn = (id: string): readonly BookId[] => {
     const out: BookId[] = [];
     for (const [bookId, list] of versions())
@@ -308,14 +231,12 @@ export function HistoryPanel() {
       .get(bookId)
       ?.find((version) => version.commit.id === id);
 
-  /** The book's version just older than `id`'s, from its own newest-first list. */
   const previousOf = (bookId: BookId, id: string): Version | undefined => {
     const list = versions().get(bookId) ?? [];
     const at = list.findIndex((version) => version.commit.id === id);
     return at < 0 ? undefined : list[at + 1];
   };
 
-  /** One version's text of a book, decoded; `undefined` when it cannot be read. */
   const textOf = async (version: Version): Promise<Source | undefined> => {
     const bytes = await shell.services.run(Effect.result(version.bytes()));
     if (Result.isFailure(bytes)) return undefined;
@@ -323,12 +244,6 @@ export function HistoryPanel() {
     return Result.isFailure(decoded) ? undefined : decoded.success;
   };
 
-  /**
-   * The selected side's diff.
-   *
-   * What a version changed: each book it touched, its previous version
-   * against this one. Where your text stands against either is `yours`, below.
-   */
   const recompute = async (): Promise<void> => {
     const project = shell.project();
     const id = selected();
@@ -356,29 +271,21 @@ export function HistoryPanel() {
     setShown(out);
   };
 
-  // A version diffs two recorded texts, which no keystroke moves: where your
-  // text stands against them is `yours`, which follows the edits itself.
   createEffect(
     () => `${selected()}:${versions().size}`,
     () => {
-      // The compute above IS the dependency list. Everything this reads is a
-      // one-time snapshot of the state that key already describes, so
-      // `untrack` says so — a read in an effect's effect-phase that is not a
-      // dependency is what STRICT_READ_UNTRACKED exists to catch, and it
-      // cannot tell a deliberate snapshot from a mistake without being told.
+      // Untracked on purpose: a one-time read, not a dependency (Solid 2: STRICT_READ_UNTRACKED).
       untrack(() => {
         void recompute();
       });
     },
   );
 
-  /** USFM or the reading, in the reader below; History's own, not Review's. */
   const [markup, setMarkup] = createSignal(false, { name: "historyMarkup" });
   const [focusBook, setFocusBook] = createSignal<BookId | undefined>(undefined, {
     name: "historyBook",
   });
 
-  /** The shown books as the reader takes them: both texts and their skeleton. */
   const reviewBooks = createMemo(
     (): readonly ReviewBook[] => {
       const out: ReviewBook[] = [];
@@ -413,18 +320,12 @@ export function HistoryPanel() {
     return shell.services.seated(bookId);
   };
 
-  /**
-   * Your text against each side of the selected version, per book it shows:
-   * what Adopt writes from, and whether it would change anything. Follows
-   * your edits to those books (`stampOf`), and nothing else.
-   */
   const yours = createMemo(
     (): ReadonlyMap<BookId, Yours> => {
       const out = new Map<BookId, Yours>();
       if (selected() === "") return out;
       const held = shown().filter((changes) => changes.firstTime !== true);
       for (const changes of held) void shell.stampOf(changes.bookId)?.revision;
-      // The reads above are the dependencies; the diffs below are snapshots of them.
       return untrack(() => {
         const galley = shell.services.galley;
         for (const changes of held) {
@@ -454,7 +355,6 @@ export function HistoryPanel() {
     { name: "historyYours" },
   );
 
-  /** One parse per text per book, held while the text is the same — as the reader holds its own. */
   const yoursAnalyzers = new Map<string, (text: string) => Analysis>();
   const yoursAnalysis = (role: "version" | "yours", bookId: BookId, text: string): Analysis => {
     const key = `${role}\0${bookId}`;
@@ -466,14 +366,6 @@ export function HistoryPanel() {
     return analyze(text);
   };
 
-  /**
-   * Your text's changes against one side that fall in this card's passage.
-   * Matched by place in THAT side's text, which both diffs share: a card's
-   * `current` ranges (before → this version) and a unit's `baseline` range in
-   * "your text against this version" are offsets into the same text; likewise
-   * `baseline` and "your text against before it". Empty: your text already
-   * reads as that side here.
-   */
   const yoursAt = (hunk: Hunk, side: "baseline" | "current"): readonly DecisionUnit[] => {
     const held = yours().get(hunk.bookId);
     const changes = side === "current" ? held?.version : held?.before;
@@ -488,12 +380,6 @@ export function HistoryPanel() {
     );
   };
 
-  /**
-   * One side of a card, written into your text: for its passage, your text
-   * takes that side's wording. Never a revert of the version, never a
-   * checkout — one ordinary edit, unsaved until Record a version, and one
-   * Undo takes it back.
-   */
   const adopt = (hunk: Hunk, side: "baseline" | "current"): void => {
     const held = yours().get(hunk.bookId);
     const changes = side === "current" ? held?.version : held?.before;
@@ -511,11 +397,6 @@ export function HistoryPanel() {
     shell.changed({ kind: "book.apply", books: [hunk.bookId] });
   };
 
-  /**
-   * A card's Adopt on either side, its "Yours differs", and the row that
-   * opens. In a split each sits under its side's caption; unified, both are
-   * in the header and say which side they take.
-   */
   const sidesOf = (hunk: Hunk, split: boolean) => {
     const already = t("Your text already reads this way here.");
     const adoptOf = (side: "baseline" | "current", id: string, label: string): CardAction => {
@@ -580,18 +461,14 @@ export function HistoryPanel() {
   const selectedCommit = (): Commit | undefined =>
     log()?.find((commit) => commit.id === selected());
 
-  /** Books not yet written to disk: the Changes tab's count. */
   const unsaved = (): number => unsavedChanges(shell).length;
 
-  /** Save & Review, from a project with nothing recorded yet. */
   const review = (): void => {
     void navigate({ to: "/project/$slug/review", params: { slug: shell.slug() } });
   };
 
-  /** What a person calls a book: the project's own name for it, else the canon's. */
   const nameOf = (bookId: BookId): string => bookName(bookId, metadataOf(shell.project()));
 
-  /** A version's row in the timeline: what it says, who, when, and the books it touched. */
   const Row = (props: { readonly commit: Commit }) => (
     <button
       type="button"
@@ -615,10 +492,6 @@ export function HistoryPanel() {
     </button>
   );
 
-  /**
-   * The timeline is the sidebar's History tab, as Review's changed books are
-   * its Changes tab: one panel, two tabs, the route says which.
-   */
   onCleanup(
     claimSidebar(() => (
       <ChangesHistorySidebar active="history" changes={unsaved()}>
@@ -636,7 +509,6 @@ export function HistoryPanel() {
         </div>
         <nav aria-label={t("Timeline")} class="min-h-0 flex-1 overflow-y-auto pb-4">
           <ul class="divide-y divide-sidebar-border" data-commits={log()?.length ?? 0}>
-            {/* The first read of the log: the shared short-wait spinner. */}
             <Show when={log() === undefined && problem() === ""}>
               <li class="px-4 py-3">
                 <DelayedSpinner />
@@ -645,8 +517,6 @@ export function HistoryPanel() {
             <For each={log() ?? []}>
               {(commit, index) => (
                 <>
-                  {/* Only when some versions are not shared yet: a divider
-                      above them, and one where the shared ones begin. */}
                   <Show when={index() === 0 && onlyHere(commit.id)}>
                     <li
                       data-history-divider="local"
@@ -811,11 +681,7 @@ export function HistoryPanel() {
                 )}
               </For>
             </div>
-            {/* The changes themselves: the multibuffer Review reads with —
-                the same cards, steps, chapter and fold-back, Open in the
-                book. Adopt on either side (on hover) writes that side's
-                wording into your text, and "Yours differs" opens your text
-                against this version. Neither writes a file. */}
+
             <Show when={reviewBooks().length > 0}>
               <div class="flex min-h-0 flex-1 flex-col" data-history-reader>
                 <ReviewReader

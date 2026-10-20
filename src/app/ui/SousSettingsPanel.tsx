@@ -1,21 +1,3 @@
-/**
- * The Proofreading card in Settings: every Sous setting, generated from
- * kitchen's list (`SOUS_SETTINGS`).
- *
- *   Checks
- *     What a mark touches
- *     Flags a punctuation mark or digit right next to something it is rarely…
- *     [on]  Default: on  [reset]
- *
- * Grouped by kitchen's `group`, and each row is kitchen's label, its one plain
- * sentence ABOVE the control (written for readers who are not linguists), the
- * control its `kind` calls for, the default, and a reset. Sefer writes no copy
- * for a setting: one kitchen adds appears here with its own words.
- *
- * A write stores the change in Settings; `ProjectContext` hears it, hands the
- * engine the whole set and re-judges the project once.
- */
-
 import { Dynamic } from "@solidjs/web";
 import { Effect, Fiber, Result, Stream } from "effect";
 import RotateCcw from "lucide-solid/icons/rotate-ccw";
@@ -34,10 +16,8 @@ import { shellKeys } from "../settings";
 import { fits, SOUS_GROUPS, sousValues, withSetting, type SousOverrides } from "../sousSettings";
 import { Button, Card, IconButton, Input, PanelHeader, Switch } from "./primitives";
 
-/** A share is stored out of 10,000 and shown as a percent. */
 const percent = (bp: number): number => bp / 100;
 
-/** How a value reads beside "Default:". */
 const shown = (key: SousSettingKey, value: boolean | number): string => {
   const kind = SOUS_SETTINGS[key].kind;
   if (typeof value === "boolean") return value ? t("on") : t("off");
@@ -45,12 +25,10 @@ const shown = (key: SousSettingKey, value: boolean | number): string => {
   return value.toLocaleString("en");
 };
 
-// SAFETY: `SOUS_GROUPS` satisfies `Record<SousSettingGroup, …>`, so its keys
-// are exactly the groups, in the order it declares them.
+// SAFETY: `SOUS_GROUPS` satisfies `Record<SousSettingGroup, …>`, so its keys are exactly the groups, in the order it declares them.
 const GROUPS = Object.keys(SOUS_GROUPS) as readonly SousSettingGroup[];
 
 export interface SousSettingsPanelProps {
-  /** Inside a dialog (Findings' settings): no card around it, the dialog is one. */
   readonly bare?: boolean;
 }
 
@@ -88,7 +66,6 @@ export function SousSettingsPanel(props: SousSettingsPanelProps) {
   const changed = (setting: SousSettingKey): boolean =>
     values()[setting] !== SOUS_SETTINGS[setting].default;
 
-  /** A number box that commits on change, and snaps back when the value does not fit. */
   const numberBox = (setting: SousSettingKey) => {
     const spec = SOUS_SETTINGS[setting];
     const share = spec.kind === "share-bp";

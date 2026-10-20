@@ -1,12 +1,3 @@
-/**
- * Your suggestions, in the Suggestions tab: what you offered from your own
- * copy, how each stands — waiting, brought in, or closed — with what the
- * editor wrote on it either way, and the two moves that are yours: offer what
- * your copy has that the shared project does not, and withdraw a suggestion
- * still waiting. "Brought in" is read from Sefer's own line at the end of the
- * editor's note (`mySuggestions`), not from git.
- */
-
 import { useNavigate } from "@tanstack/solid-router";
 import { For, Show, createEffect, createSignal } from "solid-js";
 
@@ -39,11 +30,7 @@ const statusOf = (mine: MySuggestion): string => {
   }
 };
 
-export function YourSuggestions(props: {
-  readonly project: Project;
-  /** Moves when the page's refresh is pressed: read the list again. */
-  readonly asked?: number;
-}) {
+export function YourSuggestions(props: { readonly project: Project; readonly asked?: number }) {
   const shell = useShell();
   const navigate = useNavigate();
   const { services } = shell;
@@ -56,7 +43,6 @@ export function YourSuggestions(props: {
     name: "yourSuggestionsWithdrawing",
   });
 
-  /** Only the newest load writes, so a slow answer never lands over a newer one. */
   let asked = 0;
   const load = async (project: Project): Promise<void> => {
     const ask = ++asked;
@@ -70,13 +56,11 @@ export function YourSuggestions(props: {
     },
   );
 
-  /** One press: the work started in the handler; afterwards everything reads again. */
   const act = (work: Promise<unknown>, done: string, project: Project): void => {
     setBusy(true);
     work
       .then(() => toasts.success({ title: done }))
       .catch((cause: unknown) => {
-        // Work this device lacks is in the way: not a failure, one decision.
         const needed = reviewNeeded(cause);
         if (needed !== undefined) {
           toasts.info(offerRefusalCopy(needed));

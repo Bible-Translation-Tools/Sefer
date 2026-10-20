@@ -1,13 +1,3 @@
-/**
- * The many-of-a-few switcher: `SegmentedControl`'s row, but each segment is
- * on or off by itself.
- *
- * For a closed set small enough to show whole — three severities — where a
- * menu would hide what is already on the screen. Each segment is a
- * `<button aria-pressed>`, which is what a screen reader already reads as a
- * toggle; arrows move focus along the row, Space and Enter flip.
- */
-
 import type { JSX } from "@solidjs/web";
 import { For } from "solid-js";
 
@@ -16,7 +6,6 @@ import { cx, type ClassValue } from "./cx";
 export interface Toggle<T extends string> {
   readonly value: T;
   readonly label: string;
-  /** Rides after the label — a count `Badge`, usually. */
   readonly adornment?: JSX.Element;
 }
 
@@ -24,7 +13,6 @@ export interface ToggleGroupProps<T extends string> {
   readonly items: readonly Toggle<T>[];
   readonly pressed: (value: T) => boolean;
   readonly onToggle: (value: T) => void;
-  /** Names the group for a screen reader. */
   readonly label: string;
   readonly class?: ClassValue;
 }

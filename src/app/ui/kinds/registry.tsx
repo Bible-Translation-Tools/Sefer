@@ -1,20 +1,3 @@
-/**
- * The renderer registry: the second and last place a `ContentKind` is
- * narrowed (the first is `recognize`, `core/resources/kinds/content.ts`).
- * Rendering is the one job where knowing what a thing is is the point — a
- * note is drawn as a note, Macula's words right to left with their parsing on
- * hover — so this is where the switch lives, and nowhere between.
- *
- * A screen asks for `ResourcePane` or `ResourceCard` with a `Resource`; this
- * opens the handle through the shell (`shell.resources`, which owns its
- * lifetime) and hands the kind's own component the handle typed for its kind.
- * The pane speaks to the rest of the app only in Address, through
- * `shell.place`.
- *
- * Adding a kind: a row in the kind table (`app/kinds/table.ts`), a case here.
- * TypeScript refuses a `ContentKind` either one forgets.
- */
-
 import type { JSX } from "@solidjs/web";
 import { Cause, Exit } from "effect";
 import Library from "lucide-solid/icons/library";
@@ -30,7 +13,6 @@ import { ReferenceCard } from "../workspace/ReferenceCard";
 import { ReferencePane } from "../workspace/ReferencePane";
 import { NotesPane } from "./NotesPane";
 
-/** The handle on `resource`, opened through the shell; `undefined` while it opens. */
 const useHandle = (resource: () => Resource) => {
   const shell = useShell();
   const [opened, setOpened] = createSignal<Exit.Exit<OpenHandle, Unavailable> | undefined>(
@@ -53,7 +35,6 @@ const useHandle = (resource: () => Resource) => {
   return opened;
 };
 
-/** What a kind with nothing to draw (yet) says, the same everywhere. */
 const NotShown = (props: { readonly resource: Resource; readonly reason: string }) => (
   <EmptyState
     icon={<Library size={22} />}
@@ -62,7 +43,6 @@ const NotShown = (props: { readonly resource: Resource; readonly reason: string 
   />
 );
 
-/** Switches on the open handle's kind; one case per `ContentKind`. */
 const byKind = (
   opened: OpenHandle,
   draw: {
@@ -87,13 +67,10 @@ const byKind = (
 export interface ResourcePaneProps {
   readonly resource: Resource;
   readonly role: Role;
-  /** The book the reader has open. */
   readonly bookId: string;
-  /** The chapter NUMBER the editor is clipped to, or `null`. */
   readonly clip: () => number | null;
 }
 
-/** The pane the reference column shows for one resource, whatever it holds. */
 export function ResourcePane(props: ResourcePaneProps) {
   const opened = useHandle(() => props.resource);
   const body = (): JSX.Element => {
@@ -134,11 +111,6 @@ export interface ResourceCardProps {
   readonly onOpen: () => void;
 }
 
-/**
- * One resource folded to a card. Scripture shows its opening verses
- * (`ReferenceCard`); a kind with no verses to show names itself and what it
- * is, which is all a folded card is for.
- */
 export function ResourceCard(props: ResourceCardProps) {
   return (
     <Show

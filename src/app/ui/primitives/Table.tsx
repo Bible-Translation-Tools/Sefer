@@ -1,13 +1,3 @@
-/**
- * The table, as six thin components.
- *
- * Thin on purpose: a table's shape is the caller's data, not a config object, so
- * these carry the look and nothing else. The one piece of behaviour is the
- * sortable header — `sort` takes `"asc" | "desc" | "none"`, sets
- * `aria-sort` from it, and draws the arrow, so a sortable column cannot be
- * announced one way and drawn another.
- */
-
 import type { ComponentProps, JSX } from "@solidjs/web";
 import ArrowDown from "lucide-solid/icons/arrow-down";
 import ArrowUp from "lucide-solid/icons/arrow-up";
@@ -79,7 +69,6 @@ export function TableCell(props: ComponentProps<"td">) {
 }
 
 export interface TableHeaderProps extends Omit<ComponentProps<"th">, "onClick"> {
-  /** Present makes the cell a sort control; `"none"` means "sortable, not sorted". */
   readonly sort?: SortDirection;
   readonly onSort?: () => void;
   readonly children: JSX.Element;

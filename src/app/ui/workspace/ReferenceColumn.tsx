@@ -73,23 +73,16 @@ import { ResourceCard, ResourcePane } from "../kinds/registry";
 import { listProjects, type ProjectSummary } from "../landing/summaries";
 import { Button, EmptyState, IconButton, Menu, MenuItem, MenuLabel } from "../primitives";
 
-/**
- * The roles the column shows, in the order it shows them: every role some
- * kind is picked under (`app/kinds/table.ts`), scripture's first.
- */
 const ROLES: readonly Role[] = KIND_ROLES;
 
 interface Entry {
   readonly resource: Resource;
   readonly role: Role;
-  /** Shown because the project declares it, not because anyone picked it. */
   readonly declared: boolean;
 }
 
-/** Scripture is picked as a source text; everything else is reference material. */
 const isBible = (resource: Resource): boolean => roleFor(resource) === "source";
 
-/** "English", from a language tag; the tag itself when the browser does not know it. */
 const languageName = (code: string | undefined): string | undefined => {
   if (code === undefined || code === "") return undefined;
   try {
@@ -99,25 +92,13 @@ const languageName = (code: string | undefined): string | undefined => {
   }
 };
 
-/** The catalogue's Translation Notes, as far as the menu has read them. */
 type HelpsRead =
   | { readonly state: "loading" }
   | { readonly state: "ready"; readonly rows: readonly HelpText[] }
-  /** `offline`: the request never reached the API (`fetch` rejects with a `TypeError`). */
   | { readonly state: "failed"; readonly offline: boolean };
 
 export interface ReferenceColumnProps {
-  /**
-   * How many resources are bound, reported as it changes. The ROUTE owns the
-   * split, and a split with nothing to show in it collapses to the picker —
-   * which is a layout decision about the row, so the row is told rather than
-   * asking the Library a second time.
-   */
   readonly onBound?: (count: number) => void;
-  /**
-   * Folded to its cards, or open: the ROUTE narrows the column for the cards,
-   * as it does when nothing is bound.
-   */
   readonly onFolded?: (folded: boolean) => void;
 }
 
@@ -126,54 +107,31 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
   const { services } = shell;
   const [entries, setEntries] = createSignal<readonly Entry[]>([], { name: "referenceEntries" });
   const [loading, setLoading] = createSignal(true, { name: "referenceLoading" });
-  /** The Library's own copies on this device: source texts and reference material. */
   const [copies, setCopies] = createSignal<readonly Resource[]>([], { name: "referenceCopies" });
-  /** The reader's other projects, read when the menu first opens. */
   const [projects, setProjects] = createSignal<readonly ProjectSummary[] | undefined>(undefined, {
     name: "referenceProjects",
   });
-  /** The catalogue's gateway texts, read when the menu first opens. */
   const [gateways, setGateways] = createSignal<readonly CatalogueEntry[] | undefined>(undefined, {
     name: "referenceGateways",
   });
-  /**
-   * The Translation Notes the catalogue lists, read when the menu first
-   * opens; read again on the next open after a failure.
-   */
   const [notes, setNotes] = createSignal<HelpsRead | undefined>(undefined, {
     name: "referenceNotes",
   });
-  /** Declared source texts with no copy on this device. */
   const [missing, setMissing] = createSignal<readonly RelatedResource[]>([], {
     name: "referenceMissing",
   });
   const [busy, setBusy] = createSignal(false, { name: "referenceBusy" });
-  /** What is being fetched right now, said in the column while it is. */
   const [fetching, setFetching] = createSignal("", { name: "referenceFetching" });
-  /** Raised by a pick, so the bindings re-resolve. */
   const [bound, setBound] = createSignal(0, { name: "referenceBound" });
 
-  // Named here rather than called from inside the resolve's `.then`, where a
-  // bare `props.onBound` is a reactive read the Solid lint flags — correctly,
-  // since a promise callback is not a tracked scope. The prop is a setter that
-  // never changes; this is the one-line way to say so.
   const report = (count: number): void => props.onBound?.(count);
 
-  /** What the open project declares as its source texts, at the version to hold. */
   const declared = (): readonly RelatedResource[] =>
     Option.match(shell.project()?.metadata() ?? Option.none(), {
       onNone: (): readonly RelatedResource[] => [],
       onSome: (metadata) => highestVersions(metadata.related),
     });
 
-  /**
-   * The BINDINGS, and nothing about the passage.
-   *
-   * It does not re-run on scroll: a pane holds the whole book, so the only
-   * things that can change what is on screen here are the project, the open
-   * book and a pick — and each of those is a reason to rebuild the pane
-   * rather than to update it.
-   */
   createEffect(
     () => ({
       project: shell.project()?.root,
@@ -210,7 +168,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
             return { found, absent, library };
           }),
         )
-        // oxlint-disable-next-line solid/reactivity -- a promise continuation: runs once, when the bindings resolve
+        // oxlint-disable-next-line solid/reactivity
         .then(({ found, absent, library }) => {
           setEntries(found);
           setMissing(absent);
@@ -221,14 +179,6 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     },
   );
 
-  /**
-   * Where the reader is, as a chapter NUMBER rather than an ordinal.
-   *
-   * The ordinal is an index into the OPEN book's chapter table, whose row 0 is
-   * the front matter; the reference is a different file of the same book and
-   * may count its rows differently. `\c`'s own label is the one thing the two
-   * texts are guaranteed to agree about, so it is what crosses the gap.
-   */
   const numberAt = (ordinal: number | null | undefined): number | undefined => {
     const book = shell.focused();
     if (book === undefined || ordinal === undefined || ordinal === null) return undefined;
@@ -237,14 +187,8 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     return Number.isNaN(numbered) ? undefined : numbered;
   };
 
-  /** The chapter the editor is CLIPPED to, if it is clipped at all. */
   const clip = (): number | null => numberAt(shell.chapter()) ?? null;
 
-  /**
-   * The other projects and the catalogue's gateway texts, read once, the
-   * first time the menu opens: a directory listing and a network read, whose
-   * answers only change when someone imports on another screen.
-   */
   const offer = (): void => {
     if (projects() === undefined) {
       const recent = services.settings.get(shellKeys(services.settings).recentProjects);
@@ -271,7 +215,6 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     }
   };
 
-  /** On this device: what the project shows, then the Library's copies, scripture first. */
   const installed = (): readonly Resource[] => {
     const seen = new Map<string, Resource>();
     for (const entry of entries()) seen.set(entry.resource.id, entry.resource);
@@ -280,7 +223,6 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     return [...seen.values()];
   };
 
-  /** The reader's projects that are not the open one and not already on show. */
   const otherProjects = (): readonly ProjectSummary[] => {
     const open = shell.project()?.root;
     return (projects() ?? []).filter(
@@ -288,10 +230,6 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     );
   };
 
-  /**
-   * Gateway texts with no copy on this device, by the URL they would be
-   * cloned from. English first for a project that declares no source text.
-   */
   const downloadable = (): readonly CatalogueEntry[] => {
     const held = new Set(
       copies().flatMap((resource) =>
@@ -306,12 +244,10 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     ];
   };
 
-  /** Which text the column shows, by resource id; the first when none was chosen. */
   const [chosen, setChosen] = createSignal<string | undefined>(undefined, {
     name: "referenceShown",
   });
 
-  /** Picks `resource` for this project if it is not already on show, then shows it. */
   const show = (resource: Resource): void => {
     const project = shell.project();
     if (project === undefined) return;
@@ -322,15 +258,11 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       .then(() => setBound((held) => held + 1));
   };
 
-  /**
-   * Registers another project with the Library (`add` is idempotent — it
-   * re-reads the metadata and replaces the entry), then shows it.
-   */
   const showProject = (row: ProjectSummary): void => {
     setBusy(true);
     void services
       .run(Effect.result(services.library.add(row.root)))
-      // oxlint-disable-next-line solid/reactivity -- a promise continuation: runs once, when the project is registered
+      // oxlint-disable-next-line solid/reactivity
       .then((outcome) => {
         setBusy(false);
         if (Result.isFailure(outcome)) {
@@ -346,7 +278,6 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       });
   };
 
-  /** Downloads a gateway text into the Library (once per device), then shows it. */
   const fetchText = (entry: CatalogueEntry): void => {
     const name = entry.anglicizedName || entry.naturalName;
     const operation = services.composition.observability.operation("import.remote", {
@@ -364,7 +295,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
           operation,
         ),
       )
-      // oxlint-disable-next-line solid/reactivity -- a promise continuation: runs once, when the copy is here
+      // oxlint-disable-next-line solid/reactivity
       .then((resource) => {
         operation.end("passed", { "import.phase": "complete" });
         show(resource);
@@ -379,7 +310,6 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       });
   };
 
-  /** Reference material in the Library's own folder: what Remove may take off this device. */
   const heldHelps = (): readonly Resource[] => copies().filter((resource) => !isBible(resource));
 
   /**
@@ -408,28 +338,24 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     );
   };
 
-  /** Takes downloaded notes off this device; the pickers re-read when the Library says so. */
   const removeNotes = (resource: Resource): void => {
     if (chosen() === resource.id) setChosen(undefined);
     void removeHelp(services, resource);
   };
 
-  /** Why the notes list could not be read, while that is the last word. */
   const notesFailure = () => {
     const read = notes();
     return read?.state === "failed" ? read : undefined;
   };
 
-  /** Downloads reference material into the Library (once per device), then shows it. */
   const fetchHelp = (help: HelpText): void => {
     setBusy(true);
     setFetching(
       t("Translation Notes · {language}", { language: help.languageName || help.language }),
     );
     void downloadHelp(services, help)
-      // oxlint-disable-next-line solid/reactivity -- a promise continuation: runs once, when the copy is here
+      // oxlint-disable-next-line solid/reactivity
       .then((resource) => show(resource))
-      // The toast has said why; nothing more to do here.
       .catch(() => undefined)
       .finally(() => {
         setBusy(false);
@@ -437,7 +363,6 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       });
   };
 
-  /** Pulls the declared source texts that are not here, then shows them. */
   const download = (): void => {
     const project = shell.project();
     if (project === undefined) return;
@@ -448,11 +373,6 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     });
   };
 
-  /**
-   * The ONE pane, and the book it reads: a different text, or a different
-   * book, is a new pane. Compared by ids so a re-resolve that finds the same
-   * text does not rebuild the editor inside it.
-   */
   type Shown = { readonly entry: Entry; readonly book: string } | undefined;
   const shown = createMemo(
     (): Shown => {
@@ -470,19 +390,15 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     },
   );
 
-  /** "English (en)", or the title when the text names no language. */
   const nameOf = (resource: Resource | undefined): string => {
     if (resource === undefined) return "";
     const name = languageName(resource.language);
     if (name === undefined) return resource.title;
-    // Reference material says what it is: "English (en)" alone would not tell
-    // a language's notes from its scripture.
     return isBible(resource)
       ? `${name} (${resource.language ?? ""})`
       : `${resource.title} · ${name} (${resource.language ?? ""})`;
   };
 
-  /** Folded to a stack of cards, one per installed text. */
   const [folded, setFolded] = createSignal(false, { name: "referenceFolded" });
   const fold = (next: boolean): void => {
     setFolded(next);
@@ -492,18 +408,14 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
   const [showProjects, setShowProjects] = createSignal(false, { name: "referenceShowProjects" });
   const [showOthers, setShowOthers] = createSignal(false, { name: "referenceShowOthers" });
   const [showHelps, setShowHelps] = createSignal(false, { name: "referenceShowHelps" });
-  /** Rows: 48px, 24px sides; the menu's own 8px plus 4px here is 12px above and below. */
   const ROW = "px-6";
 
-  /** A folded group's header row: its name and count, and the way to open it. */
   const GroupToggle = (groupProps: {
     readonly testId: string;
     readonly label: string;
     readonly open: boolean;
     readonly onToggle: () => void;
   }) => (
-    // A menu row the arrow keys reach, like the rows it opens; pressing it
-    // folds or unfolds the group and leaves the menu open.
     <button
       type="button"
       role="menuitem"
@@ -520,7 +432,6 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     </button>
   );
 
-  /** A row's two lines: what it is called, and what it is. */
   const RowText = (rowProps: { readonly name: string; readonly detail?: string }) => (
     <span class="flex min-w-0 flex-1 flex-col">
       <span class="truncate">{rowProps.name}</span>
@@ -530,14 +441,9 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     </span>
   );
 
-  /**
-   * The reference language: what is on this device, and below it, folded
-   * away, the reader's other projects and the gateway languages to download.
-   */
   const LanguagePicker = () => (
     <Menu
       label={t("Reference language")}
-      // Folded again each time it opens: the texts on this device come first.
       onOpenChange={(open) => {
         if (!open) return;
         setShowProjects(false);
@@ -600,8 +506,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
             </For>
           </Show>
         </Show>
-        {/* Shown while the list is read and when it could not be, so the
-            group does not appear from nowhere, nor vanish without a word. */}
+
         <Show
           when={
             notes() !== undefined &&
@@ -623,9 +528,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
           <Show when={showHelps()}>
             <div role="group" aria-label={t("Translation Notes")} data-testid="reference-notes">
               <MenuLabel inset={ROW}>{t("Translation Notes")}</MenuLabel>
-              {/* On this device first, each with Remove. Not a MenuItem: the
-                  row itself does nothing (choosing it is in the list above),
-                  and Remove leaves the menu open so the row is seen to go. */}
+
               <For each={heldHelps()}>
                 {(resource) => (
                   <div
@@ -751,8 +654,6 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       <Show
         when={!folded()}
         fallback={
-          // Folded: one card per text on this device; pressing one opens the
-          // column on it.
           <div class="flex min-h-0 flex-col gap-3 overflow-y-auto">
             <For each={installed()}>
               {(resource) => (
@@ -783,8 +684,6 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
           />
         </div>
 
-        {/* Only while nothing is picked: a person who chose a text has
-            answered the question this row asks. */}
         <Show
           when={!loading() && missing().length > 0 && entries().every((entry) => entry.declared)}
         >
@@ -809,7 +708,6 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
           </div>
         </Show>
 
-        {/* One text, straight on the page: the menu above says whose it is. */}
         <Show
           when={shown()}
           keyed

@@ -1,24 +1,3 @@
-/**
- * A magnifying glass that shows what a finding's sentence is comparing: every
- * place the form HERE occurs, beside every place of what else the sentence
- * names — "“'.” 4 times; the other way round, “.'”, 171 times" as lists you
- * can read.
- *
- * The queries are kitchen's (`Finding.comparison`, `core/findings/
- * compare.ts`; `sous-messages.md`, "Queries"), one column per purpose
- * present: `this` (here), `alternative` (instead), `others` (usually). The
- * dialog knows nothing about which rule wrote them. A literal goes to the
- * engine's own find (`GalleyService.findAll`, targets only), with the
- * query's case and whole-word flags; a regex runs over each book's verse-text
- * reading (`findInReading`). Both search the text with the markers out, so a
- * hit's preview reads as the reader sees it. Each hit is its place and its
- * line, wrapped rather than cut; a hit opens in the editor.
- *
- * The searches run when the dialog OPENS, and the mask maps they build die
- * when it closes, for the reason `createReadings` gives: nothing holds a
- * second copy of the project for a question nobody is asking any more.
- */
-
 import { useNavigate } from "@tanstack/solid-router";
 import { Option, Result } from "effect";
 import SearchIcon from "lucide-solid/icons/search";
@@ -37,10 +16,8 @@ import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { Dialog, IconButton, Kbd, cx } from "../primitives";
 
-/** How many hits a query lists. The count is always the whole answer. */
 const SHOWN = 200;
 
-/** Room to wrap: most verses are one line of this or less, so most show whole. */
 const PREVIEW_WIDTH = 400;
 
 const PURPOSES: readonly FindingQueryPurpose[] = ["this", "alternative", "others"];
@@ -51,20 +28,14 @@ const heading = (purpose: FindingQueryPurpose): string => {
   return t("Usually");
 };
 
-/**
- * A mark as itself, or as its `\u{…}` escape where it would not show (a
- * space, a control, a format character).
- */
 const visible = (escape: string, hex: string): string => {
   const mark = String.fromCodePoint(Number.parseInt(hex, 16));
   return /^[\p{L}\p{M}\p{N}\p{P}\p{S}]$/u.test(mark) ? mark : escape;
 };
 
-/** The query's whole text: the needle, or the regex with its escapes drawn. */
 const source = (query: FindingQuery): string =>
   query.kind === "literal" ? query.needle : query.source.replace(/\\u\{([0-9a-f]+)\}/giu, visible);
 
-/** A query as people read it: kitchen's shape, exact text and named classes. */
 const partsOf = (query: FindingQuery): readonly FindingQueryPart[] =>
   query.kind === "literal" ? [{ text: query.needle }] : query.shape;
 
@@ -85,13 +56,11 @@ const classWord = (name: FindingQueryClass): string => {
   }
 };
 
-/** The shape as one line of plain text: `“?” + a capital`. */
 const plain = (query: FindingQuery): string =>
   partsOf(query)
     .map((part) => ("text" in part ? `“${part.text}”` : classWord(part.class)))
     .join(" + ");
 
-/** The shape drawn: exact text as keycaps, a class as its words. */
 function Shape(props: { readonly query: FindingQuery }) {
   return (
     <span class="inline-flex flex-wrap items-baseline gap-1">
@@ -108,7 +77,6 @@ function Shape(props: { readonly query: FindingQuery }) {
   );
 }
 
-// TODO(merge): revisit with Will — queries now drive SearchDialog/comparisonOf; decide whether the dialog stays generic Query[] and whether the probe fallback can go.
 export function SearchDialog(props: { readonly queries: readonly FindingQuery[] }) {
   const [open, setOpen] = createSignal(false, { name: "searchDialogOpen" });
 
@@ -194,7 +162,6 @@ function Results(props: { readonly columns: readonly ColumnOf[]; readonly onGo: 
 
 function Hits(props: {
   readonly query: FindingQuery;
-  /** How many queries share the column's height. */
   readonly share: number;
   readonly readings: Readings;
   readonly onGo: () => void;
@@ -232,7 +199,6 @@ function Hits(props: {
   const place = (hit: Search.Hit): string =>
     hit.address === undefined ? hit.bookId : shell.location.label(hit.address);
 
-  /** Aim, then open — the order every "go to this place" here uses. */
   const go = (hit: Search.Hit): void => {
     shell.aim(hit.bookId, hit.from, hit.to);
     props.onGo();

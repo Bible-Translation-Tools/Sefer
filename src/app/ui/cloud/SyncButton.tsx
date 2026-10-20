@@ -1,21 +1,3 @@
-/**
- * The cloud in the app bar: where the open project stands with the shared
- * project, without going anywhere to find out.
- *
- * The glyph says it at a glance — a tick when both sides agree, an arrow up
- * for work waiting to be sent, an arrow down for versions to receive, the
- * cloud struck through when the device is offline — and it turns the warning
- * colour, with a "!", when something is waiting on a person: versions to
- * review, a send that was refused, a sign-in. Offline is never the alarm: the
- * work is on disk, and editing goes on.
- *
- * The popover is where sync is done: the state in a sentence, the two clocks,
- * what would arrive, the one right move, the link to hand a teammate, and the
- * account — signing in and out happen here — and publishing a project that is
- * only on this device. Choosing an existing shared project, the mode and the
- * per-project switches are Settings' Cloud section.
- */
-
 import Cloud from "lucide-solid/icons/cloud";
 import CloudAlert from "lucide-solid/icons/cloud-alert";
 import CloudCheck from "lucide-solid/icons/cloud-check";
@@ -75,17 +57,13 @@ export function SyncButton() {
   const [open, setOpen] = createSignal(false, { name: "syncButtonOpen" });
 
   const sync = quick.sync;
-  // New work in a Writer project the books follow waits on a person too,
-  // whether or not the project is shared.
   const attention = () =>
     writerWatch.facts(shell.project()?.root).work.length > 0 ? "alert" : attentionOf(sync());
   const copy = () => {
     const held = sync();
     return held === undefined
       ? undefined
-      : // A project attached to nothing is "only on this device", whoever is
-        // or is not signed in.
-        stateCopy(held.reading.origin === undefined ? "detached" : held.state, {
+      : stateCopy(held.reading.origin === undefined ? "detached" : held.state, {
           sendRefused: held.reading.sendRefused,
           signedIn: held.reading.signedIn,
           inCopy: collaboration.facts(shell.project()?.root)?.mode === "copy",
@@ -101,10 +79,7 @@ export function SyncButton() {
     return root === undefined ? undefined : syncWatch.fetchedAt(root);
   };
 
-  // Coming back online, going offline, or signing in or out changes the answer
-  // without anything being read: take the reading again so the glyph says so.
-  // The project is read in the compute, with the two signals the effect
-  // follows: Solid 2 runs the callback untracked and warns on a read there.
+  // Untracked on purpose: a one-time read, not a dependency (Solid 2: STRICT_READ_UNTRACKED).
   createEffect(
     () => ({
       project: shell.project(),
@@ -114,8 +89,6 @@ export function SyncButton() {
     ({ project }) => {
       if (project === undefined) return;
       void syncWatch.refresh(services, project).catch(() => undefined);
-      // Who is signed in decides what the collaboration facts say. Only once
-      // they have been asked: the first ask is the check's, on its schedule.
       if (untrack(() => collaboration.facts(project.root)) !== undefined)
         void collaboration.refresh(services, project);
     },
@@ -124,11 +97,8 @@ export function SyncButton() {
   const openChanged = (next: boolean): void => {
     setOpen(next);
     const project = shell.project();
-    // Opening reads again: local work, refs and logs already here.
     if (next && project !== undefined) {
       void syncWatch.refresh(services, project).catch(() => undefined);
-      // Somebody looking, with no check made yet (checking on open is off):
-      // ask once, so the popover can say how this project is worked on.
       if (collaboration.facts(project.root) === undefined)
         void collaboration.refresh(services, project);
     }
@@ -188,8 +158,6 @@ export function SyncButton() {
           {(held) => (
             <div class="space-y-4" data-sync-popover={held().state}>
               <div>
-                {/* The headline in ink, with a dot when it wants something —
-                    not a yellow sentence: the button already said so. */}
                 <h3 class="flex items-center gap-2 text-body font-semibold text-on-surface-primary">
                   <Show when={copy()?.tone === "warning" || copy()?.tone === "error"}>
                     <span
@@ -225,7 +193,6 @@ export function SyncButton() {
               </Show>
 
               <div class="flex flex-wrap items-center gap-2">
-                {/* Signing in and publishing are the forms below, not buttons that go elsewhere. */}
                 <Show
                   when={quickActionOf(held()) !== "sign-in" && quickActionOf(held()) !== "open"}
                 >
@@ -319,7 +286,6 @@ export function SyncButton() {
                 {(held) => (
                   <div class="flex items-center gap-2">
                     <p class="min-w-0 flex-1 text-small break-words text-on-surface-secondary">
-                      {/* Who, then where, quietly: the scheme is noise. */}
                       <span class="font-medium text-on-surface-primary">{held().username}</span>
                       <span class="text-on-surface-tertiary">
                         {" · "}

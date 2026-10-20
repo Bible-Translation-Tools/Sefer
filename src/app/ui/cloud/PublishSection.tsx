@@ -1,10 +1,3 @@
-/**
- * The cloud popover for a project that is only on this device: publish it as
- * a new shared project, under a name worked out from the project — WACS's
- * `<language>_<resource>`, `en_ulb` — that the person can change. Choosing an
- * existing shared project instead is Settings' Shared project card.
- */
-
 import { useNavigate } from "@tanstack/solid-router";
 import { Effect } from "effect";
 import { Show, createSignal, untrack } from "solid-js";
@@ -21,7 +14,6 @@ import { syncWatch } from "../../syncWatch";
 import { Button, Input, toasts } from "../primitives";
 import { metadataOf } from "../workspace/project";
 
-/** WACS's own naming, `<language>_<resource>`, else the folder's name. */
 const suggestedName = (project: Project): string => {
   const metadata = metadataOf(project);
   const language = metadata?.language.tag ?? "";
@@ -42,7 +34,6 @@ export function PublishSection(props: {
   const shell = useShell();
   const navigate = useNavigate();
   const { services } = shell;
-  // The suggested name is worked out once, when the form appears.
   const opened = untrack(() => shell.project());
   const [name, setName] = createSignal(opened === undefined ? "" : suggestedName(opened), {
     name: "publishName",
@@ -52,7 +43,6 @@ export function PublishSection(props: {
   const publish = (event: SubmitEvent): void => {
     event.preventDefault();
     const project = shell.project();
-    // Read at the moment of the press, not when the handler was made.
     const staticName = name().trim();
     if (project === undefined || staticName === "" || busy()) return;
     setBusy(true);

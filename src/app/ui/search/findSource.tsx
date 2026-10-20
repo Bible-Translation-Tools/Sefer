@@ -1,19 +1,3 @@
-/**
- * Find's source text: the project's ONE source, read beside each result.
- *
- * Two axes, kept apart. WHICH text is shown beside your verse (this picker,
- * or none) and WHICH text is searched (Find's "Search the source text"
- * switch) are separate questions: you can read the source while searching
- * your own text, or search the source and hide it.
- *
- * The picker is the same binding Refine's reference column makes — every
- * other project on this device, registered with the Library and bound under
- * `source` — so choosing one here is choosing it there. "No source text"
- * unbinds it: the project then has no source, so nothing is drawn beside the
- * results and the checks against a source text stop running. Either way the
- * references are re-registered with the corpus and the project re-judged.
- */
-
 import type { BookId } from "@sefer/text/book";
 import { Effect, Option, Result } from "effect";
 import { Show, createEffect, createSignal } from "solid-js";
@@ -30,12 +14,10 @@ import type { Paired } from "../excerpts";
 import { listProjects, type ProjectSummary } from "../landing/summaries";
 import { MultiSelect } from "../primitives";
 
-/** One source book: still being read, absent from the source, or read. */
 type Held = { readonly kind: "loading" } | { readonly kind: "missing" } | BookText;
 
 const NONE = "";
 
-/** `onBound` is told after a new source is bound, so the caller can re-register it. */
 export function createFindSource(onBound: () => void) {
   const shell = useShell();
   const { services } = shell;
@@ -46,12 +28,9 @@ export function createFindSource(onBound: () => void) {
   const [choices, setChoices] = createSignal<readonly ProjectSummary[]>([], {
     name: "findSourceChoices",
   });
-  /** Raised by a bind, so the source re-resolves. */
   const [tick, setTick] = createSignal(0, { name: "findSourceTick" });
-  /** Raised whenever a source book finishes reading, so the cards ask again. */
   const [read, setRead] = createSignal(0, { name: "findSourceRead" });
   const books = new Map<BookId, Held>();
-  /** Bumped whenever the source may have changed, so a late read is dropped. */
   let generation = 0;
 
   createEffect(
@@ -69,8 +48,6 @@ export function createFindSource(onBound: () => void) {
     },
   );
 
-  // Every other project on this device, once per screen: a directory listing
-  // and a JSON parse, and it only changes when somebody imports elsewhere.
   createEffect(
     () => shell.project()?.root,
     (open) => {
@@ -81,7 +58,6 @@ export function createFindSource(onBound: () => void) {
     },
   );
 
-  /** Bind the project at `root` as this project's source, replacing whatever source it had. */
   const choose = (root: string): void => {
     const project = shell.project();
     if (project === undefined) return;
@@ -108,7 +84,6 @@ export function createFindSource(onBound: () => void) {
           return;
         }
         setTick((held) => held + 1);
-        // The corpus follows the binding, and the source-text checks with it.
         void services
           .run(Workflows.bindReferences(project.root))
           .then(() => services.projectAnalysis.rejudge());
@@ -142,7 +117,6 @@ export function createFindSource(onBound: () => void) {
     return { kind: "loading" };
   };
 
-  /** The source's verse beside `excerpt`, or nothing when no source is shown. */
   const pairedOf = (excerpt: Excerpt): Paired | undefined => {
     read();
     const source = resource();
@@ -159,10 +133,8 @@ export function createFindSource(onBound: () => void) {
     };
   };
 
-  /** Is a source shown beside the results? */
   const shown = (): boolean => resource() !== undefined;
 
-  /** The picker's rows: "no source text", then every other project here. */
   type Row = { readonly root: string; readonly name: string; readonly language: string };
   const rows = (): readonly Row[] => [
     { root: NONE, name: t("No source text"), language: "" },

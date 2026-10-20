@@ -1,45 +1,3 @@
-/**
- * "Unsaved work from your last session": the one thing a project open owes
- * someone who crashed. `documentation/architecture/recovery.md`, "The banner",
- * has the full account.
- *
- * The check runs ONCE per open project, on mount: `pendingOnOpen` lists that
- * project's journals, reads each book file once and discards — silently —
- * every journal whose work the file already holds. What is left is work that
- * exists nowhere else, and that is what this banner offers.
- *
- * ## One question, not one per book
- *
- * Nobody knows, from a book id and an edit count, whether last Tuesday's work
- * in 3 John is worth keeping. The question a reader CAN answer is "was my last
- * session real work or not", and that is a project-level question — so this
- * is one card, with **Restore all** and **Discard all**, and the book count in
- * the sentence rather than as a list to triage.
- *
- * Restoring is deliberately the cheap, reversible answer: it puts the work
- * back in the editor, dirty, where the reader can compare every changed book
- * against disk in Review and revert whatever they do not want.
- *
- * Three rules the surface must keep:
- *
- *   * **Restore goes through the Book.** `project.instantiate(bookId)` seats
- *     the book and `recovery.restore` replays the journal through
- *     `book.apply(…, 'recovery', trusted)`, so the text arrives as ordinary
- *     applied changes and is re-judged by today's rules rather than trusted.
- *   * **The disk text becomes the baseline first.** `SaveCoordinator.adopt`
- *     is called on the freshly instantiated book, BEFORE the replay, while its
- *     revision is still 0 and its text really is the bytes on disk. Without
- *     that the restored book has no baseline at all, and Review — which
- *     compares against disk — cannot show what came back.
- *   * **Nothing is offered twice.** A journal for a book this session already
- *     has open is the live backup of what is on screen; restoring it would
- *     replay edits the editor is already showing. Those are filtered out, the
- *     same way `ReviewPanel` filters them.
- *
- * Exported for the project route to mount as well; it is mounted here because
- * the landing screen is where someone lands after the crash.
- */
-
 import { Effect, Result } from "effect";
 import History from "lucide-solid/icons/history";
 import { Show, createSignal } from "solid-js";
@@ -51,7 +9,6 @@ import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { Button, Card, PanelHeader, toasts } from "../primitives";
 
-/** When the work was last journalled, over every offered journal. */
 const lastTouched = (journals: readonly Restorable[]): string => {
   let latest: number | undefined;
   for (const journal of journals) {
@@ -69,8 +26,6 @@ const lastTouched = (journals: readonly Restorable[]): string => {
 
 export function RecoveryBanner() {
   const shell = useShell();
-  // The shell asked when the project opened (`ProjectContext.openProject`),
-  // so the answer is in before the editor draws.
   const offered = (): readonly Restorable[] => shell.recoveryOffer() ?? [];
   const setOffered = (
     next: readonly Restorable[] | ((was: readonly Restorable[]) => readonly Restorable[]),
@@ -79,18 +34,8 @@ export function RecoveryBanner() {
 
   const books = (): number => offered().length;
 
-  /**
-   * Every journal, in order, as one action.
-   *
-   * A failure on one book stops nothing: the other journals are independent
-   * backups and refusing them all because one replay was rejected by today's
-   * rules would throw away work for no reason. The count of what came back and
-   * the count of what refused are both reported.
-   */
   const restoreAll = (): void => {
     const project = shell.project();
-    // A stale journal started from a text the file no longer holds: it can
-    // be discarded, never replayed.
     const journals = offered().filter((journal) => journal.stale !== true);
     if (project === undefined || journals.length === 0 || busy()) return;
     setBusy(true);
@@ -107,15 +52,7 @@ export function RecoveryBanner() {
           (journal) =>
             Effect.result(
               Effect.gen(function* () {
-                // The replay needs a Book to apply onto, and a book nobody
-                // opened has none — so it is instantiated first, through the
-                // Project that owns its lifetime.
                 const book = yield* project.instantiate(journal.bookId);
-                // Its text IS the bytes on disk at this moment, and its
-                // revision is still 0, so this is the one moment the disk
-                // baseline can be learned for free. Review compares
-                // against that baseline; without it the restored work would
-                // come back invisible to the screen built to inspect it.
                 yield* shell.services.save.adopt(book);
                 return yield* shell.services.recovery.restore(journal.id, (bookId) =>
                   shell.services.seated(bookId),
@@ -127,7 +64,6 @@ export function RecoveryBanner() {
       )
       .then((results) => {
         setBusy(false);
-        // What could not be put back stays, to be discarded.
         setOffered((was) => was.filter((journal) => journal.stale === true));
         const refused = results.filter(Result.isFailure);
         const restored = results.length - refused.length;
@@ -136,9 +72,6 @@ export function RecoveryBanner() {
           "journal.restored": restored,
           "journal.refused": refused.length,
         });
-        // Only the journals that actually replayed. `results` is parallel to
-        // `journals`, and a refused journal moved no text, so naming it here
-        // would wake its row to tell it nothing.
         const books = results.flatMap((result, index) => {
           const journal = journals[index];
           return Result.isSuccess(result) && journal !== undefined ? [journal.bookId] : [];

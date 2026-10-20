@@ -1,11 +1,3 @@
-/**
- * The pill: a count, a severity, a state. Text only, never interactive.
- *
- * The tones are the semantic pairs (`--surface-warning` / `--on-surface-warning`)
- * so a badge cannot invent a colour. `neutral` is the default because most
- * badges in this product are counts, and a count is not a judgement.
- */
-
 import type { JSX } from "@solidjs/web";
 
 import { variants, type ClassValue } from "./cx";
@@ -21,7 +13,6 @@ const classes = variants({
       warning: "bg-surface-warning text-on-surface-warning",
       error: "bg-surface-error text-on-surface-error",
       success: "bg-surface-success text-on-surface-success",
-      // For a row that is still shown but no longer trusted — a stale finding.
       muted: "bg-surface-tertiary text-on-surface-tertiary",
     },
     size: {
@@ -47,7 +38,6 @@ export function Badge(props: BadgeProps) {
   );
 }
 
-/** The severity a `Finding` carries, as the tone it should wear. */
 export const severityTone = (severity: string): BadgeTone => {
   if (severity === "error") return "error";
   if (severity === "warning") return "warning";

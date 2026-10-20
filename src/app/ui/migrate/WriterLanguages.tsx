@@ -1,16 +1,3 @@
-/**
- * Writer projects on WACS, one row per language: the first step of Migrate
- * from Writer. The same table as Projects Available on WACS — Code,
- * Language, Region, how many Writer projects, the newest change — kept here
- * and not on the projects page, which does not promote Writer (Will,
- * 2026-10-07).
- *
- * The search runs on the server and only from two letters: every language at
- * once is thousands of rows (`catalogue.ts`, `writerLanguages`). An answer
- * that arrives after a newer search is dropped. A row opens that language's
- * Writer projects, the assembling step.
- */
-
 import ArrowDown from "lucide-solid/icons/arrow-down";
 import ArrowUp from "lucide-solid/icons/arrow-up";
 import ChevronsUpDown from "lucide-solid/icons/chevrons-up-down";
@@ -40,7 +27,6 @@ const COLUMNS =
 
 const ROW_HEIGHT = 57;
 
-/** Wait this long after the last keystroke before asking the server. */
 const SETTLE_MS = 300;
 
 const sortValue = (column: Column, row: WriterLanguage): string | number => {
@@ -63,7 +49,6 @@ export function WriterLanguages(props: {
   readonly onPick: (code: string) => void;
 }) {
   const { services } = useShell();
-  // Read once: the search a person starts from (a project's own language).
   const initial = untrack(() => props.initial);
   const [query, setQuery] = createSignal(initial, { name: "writerLanguagesQuery" });
   const [rows, setRows] = createSignal<readonly WriterLanguage[] | undefined>(undefined, {
@@ -78,11 +63,6 @@ export function WriterLanguages(props: {
 
   let asked = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
-  /**
-   * Asks the server once typing settles. Every write happens in the timer or
-   * after the answer, never in the caller: the first search runs from the
-   * component's own setup, where writing a signal is not allowed.
-   */
   const schedule = (text: string): void => {
     clearTimeout(timer);
     asked += 1;

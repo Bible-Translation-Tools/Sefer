@@ -1,24 +1,3 @@
-/**
- * Projects Available on WACS: the remote catalogue, as the second section of
- * the projects page. A header with the search field inline, then a windowed
- * five-column table — Code, Language, Region, Date, Download.
- *
- * The rows come from `src/app/catalogue.ts`: the Language API's consolidated
- * repos, joined with langnames for region, alternate names and the gateway
- * flag. Translations show by default — this table is mostly a translation
- * team finding its own work — and a toggle swaps in the gateway languages.
- * Which of the two a download is FOR (edit vs read) is not modelled yet; see
- * planning/items/2026-10-06-resource-kinds.mdx. A row's date is the most recent update across
- * every repo of its language — blank until the API carries one (see
- * `catalogue.ts`).
- *
- * Search matches the code, both names, and every alternate name.
- *
- * Download clones: what the payload carries is `repo_url`, and
- * `cloneRepository` is what takes one. A row with no URL, or a build with no
- * transfer configured, gets a disabled link with the reason in a tooltip.
- */
-
 import { Effect, Fiber, Option, Stream } from "effect";
 import ArrowDown from "lucide-solid/icons/arrow-down";
 import ArrowUp from "lucide-solid/icons/arrow-up";
@@ -67,7 +46,6 @@ import { ImportHub } from "./ImportHub";
 import { RegionIcon } from "./RegionIcon";
 import { formatDate } from "./summaries";
 
-/** The four sortable columns, in the order they are drawn. */
 const SORTABLE: readonly (readonly [Column, () => string])[] = [
   ["code", () => t("Code")],
   ["language", () => t("Language")],
@@ -75,16 +53,9 @@ const SORTABLE: readonly (readonly [Column, () => string])[] = [
   ["date", () => t("Date")],
 ];
 
-/**
- * One grid template for the header row and every body row, so the two cannot
- * drift apart the way a hand-aligned pair of widths does. `minmax(0, …)` on the
- * name column is what lets a long repository path truncate instead of pushing
- * the Download button off the end.
- */
 const COLUMNS =
   "grid grid-cols-[var(--code-column)_minmax(0,1fr)_8rem_8rem_9rem] items-center gap-x-8 px-8 text-body";
 
-/** What a row sorts by in `key`, with the date read through `updated`. */
 const sortValue =
   (key: Column, updated: (entry: CatalogueEntry) => string | undefined) =>
   (entry: CatalogueEntry): string => {
@@ -100,7 +71,6 @@ const sortValue =
     }
   };
 
-/** The two sort choices a column offers, in its own words. */
 const sortChoices = (column: Column): readonly (readonly [SortDirection, string])[] =>
   column === "date"
     ? [
@@ -112,7 +82,6 @@ const sortChoices = (column: Column): readonly (readonly [SortDirection, string]
         ["desc", t("Z to A")],
       ];
 
-/** What one catalogue row is tall, before it has been measured. */
 const ROW_HEIGHT = 75;
 
 const ariaSort = (sort: SortDirection): "none" | "ascending" | "descending" =>
@@ -120,62 +89,22 @@ const ariaSort = (sort: SortDirection): "none" | "ascending" | "descending" =>
 
 type Column = "code" | "language" | "region" | "date";
 
-/**
- * One row, with every value the table draws already computed.
- *
- * The whole point of this shape: **a row must not read a signal.** The live
- * catalogue is thousands of rows, and `nameOf(entry)` inside the `<For>` body
- * made every one of them a subscriber of the name-style signal — thousands of
- * scopes re-running to move one segmented control, which is what the
- * `HUGE_FAN_OUT` diagnostic was reporting. The derivation happens once, in the
- * `rows` memo; a row receives plain values, `busy` included.
- *
- * Two things were measured against a 1,333-row catalogue before this shape was
- * settled on, and both are worth writing down because both look right:
- *
- *   * a per-key store `createProjection` keyed by row id — the repair the
- *     diagnostic's own text suggests — measured WORSE (13,000 subscribers
- *     against 6,500), because a store read still registers a node per row;
- *   * a memo returning fresh row objects with an unkeyed `<For>` measured
- *     worse for the same reason: every flip tore down and rebuilt all 1,333
- *     rows. Hence `keyed={(row) => row.entry.id}` below.
- *
- * What is left is NOT ours and cannot be fixed here: at 1,333 rows the page
- * still reports ~6,500 subscribers on one unnamed signal, and the same number
- * appears when the row is five instances of a five-line component that reads
- * nothing at all. It is one subscriber per COMPONENT INSTANCE in Solid
- * 2.0.0-rc.6 — raw `<tr>`/`<td>` elements report zero. Nothing in this file,
- * or in `primitives/Table.tsx`, moves it.
- */
 interface CatalogueRow {
   readonly entry: CatalogueEntry;
-  /** The language's own name. */
   readonly name: string;
-  /** The English name, when it differs from `name`; else empty. */
   readonly english: string;
-  /** The most recent update across every repo of this language. */
   readonly updated: string | undefined;
-  /** Empty when Download is offered; otherwise why it is not. */
   readonly refusal: string;
-  /** True while this row's clone is running. A value, never a signal read. */
   readonly downloading: boolean;
 }
 
-/** A mark no search or language name contains, to split a message around. */
 const HOLE = "\u0000";
 
-/**
- * What a search that finds nothing says: why, the filters that may be to
- * blame (each one a chip that drops it), and the other way in — importing a
- * project that is not on WACS at all.
- */
 function NoMatch(props: {
   readonly query: string;
   readonly regions: readonly string[];
   readonly onDropRegion: (region: string) => void;
 }) {
-  // One message, so a translator sees the whole sentence; the query is bolded
-  // by splitting the result around a placeholder no search can contain.
   const said = (): readonly string[] =>
     t(
       "Nothing matched your search for “{query}.” Try again using alternate spellings, dialect names, or any variant names for your language.",
@@ -233,14 +162,12 @@ function NoMatch(props: {
           )}
         </p>
       </div>
-      {/* The same import the old cards ran, as two buttons, each going
-          straight to the system picker. */}
+
       <ImportHub variant="buttons" />
     </div>
   );
 }
 
-/** How the table tells the page about a download it started. */
 export interface DownloadTracker {
   readonly start: (download: PendingDownload, from: DOMRect) => void;
   readonly update: (id: string, patch: Partial<PendingDownload>) => void;
@@ -249,15 +176,9 @@ export interface DownloadTracker {
 export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
   const shell = useShell();
   const { services } = shell;
-  // One catalogue per mount. It is a pure value over `env`, so there is nothing
-  // to keep reactive and nothing to dispose.
   const catalogue = catalogueFor(services.settings);
-  /** Read when the page opens: the setting is changed on another screen. */
   const gatewaysOffered = services.settings.get(shellKeys(services.settings).showGatewayProjects);
 
-  // A row names its own server, which need not be this build's content host:
-  // a catalogue can list repositories on more than one. Desktop reaches any
-  // of them; a browser only those it has a transport for.
   const transport = transportFor(services.settings, services.hostInfo.kind());
   const reachable = (url: string): boolean =>
     services.hostInfo.kind() !== "web" || through(transport, url) !== url;
@@ -272,13 +193,10 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
     name: "catalogueDirection",
   });
   const [busy, setBusy] = createSignal("", { name: "catalogueBusy" });
-  /** Which half of the catalogue is shown — see the file header. */
   const [kind, setKind] = createSignal<CatalogueEntry["type"]>("translation", {
     name: "catalogueKind",
   });
-  /** Which column's header menu is open; "" for none. */
   const [menuFor, setMenuFor] = createSignal<Column | "">("", { name: "catalogueMenu" });
-  /** Regions to keep; empty keeps every region (the "All regions" choice). */
   const [regionFilter, setRegionFilter] = createSignal<ReadonlySet<string>>(new Set(), {
     name: "catalogueRegionFilter",
   });
@@ -289,7 +207,6 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
     setRegionFilter(next);
   };
 
-  /** The region filter's choices, each with how many rows it holds. */
   const regions = createMemo(
     (): readonly (readonly [string, number])[] => {
       const counted = new Map<string, number>();
@@ -297,25 +214,18 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
         const key = entry.region ?? "";
         counted.set(key, (counted.get(key) ?? 0) + 1);
       }
-      // Named regions A–Z. Rows with no region are reached through "All
-      // regions", which is the unfiltered table.
       counted.delete("");
       return [...counted.entries()].sort(([left], [right]) => left.localeCompare(right));
     },
     { name: "catalogueRegions" },
   );
 
-  // One read of the catalogue, as one operation: which source answered, how
-  // many rows, how long. Never the endpoint — `catalogue.source` says whether
-  // it was the live API, and the URL is the build's business.
   const browsing = services.composition.observability.operation("catalogue.browse", {
     "catalogue.source": catalogue.source,
   });
   void catalogue
     .entries()
     .then(({ rows: all, enriched }) => {
-      // Enrichment failing is the table drawing without regions and dates,
-      // not the browse failing: it passes, and says what it went without.
       browsing.end("passed", {
         "catalogue.entries": all.length,
         "catalogue.gateways": all.filter((entry) => entry.type === "gateway").length,
@@ -329,7 +239,6 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
       setProblem(describe(cause));
     });
 
-  /** Per language code, the newest date across all of its repos. */
   const latest = createMemo(
     () => {
       const newest = new Map<string, string>();
@@ -353,8 +262,6 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
       const keep = regionFilter();
       return (entries() ?? []).filter((entry) => {
         if (entry.type !== kind()) return false;
-        // Gateway texts are the ones WA publishes; other owners' gateway-language
-        // repos are somebody's own work, not a source to read from.
         if (kind() === "gateway" && entry.owner.toLowerCase() !== "wa-catalog") return false;
         if (keep.size > 0 && (entry.region === undefined || !keep.has(entry.region))) return false;
         if (needle === "") return true;
@@ -387,12 +294,6 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
     return "";
   };
 
-  /**
-   * The rows the table draws. Every reactive read the rows used to make — the
-   * name style, the two filters, the sort — happens HERE, once, and each row
-   * receives plain strings.
-   */
-  /** Each row's place in the sorted whole, for `aria-rowindex`. */
   const rowIndex = createMemo(
     (): ReadonlyMap<string, number> => new Map(sorted().map((entry, at) => [entry.id, at])),
     { name: "catalogueRowIndex" },
@@ -413,26 +314,11 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
     { name: "catalogueRows" },
   );
 
-  /**
-   * The same rows, as the virtualizer takes them: a stable key and a height to
-   * assume until the row has been on screen. Every row here is one line of
-   * text and a button, so one estimate is right for all of them and the list
-   * never has to correct itself.
-   */
   const virtualRows = createMemo(
     () => rows().map((row) => ({ key: row.entry.id, item: row, estimate: ROW_HEIGHT })),
     { name: "catalogueVirtualRows" },
   );
 
-  /**
-   * The Code column, as wide as the longest code and no wider. Measured once
-   * per catalogue in the table's own font: every virtual row is its own grid,
-   * so `max-content` would size each row differently.
-   *
-   * Measured at 16px and returned in REM, because the column holds body text
-   * (`text-body`, 1rem): when somebody raises their browser's default font
-   * size, the codes grow, and the column has to grow with them.
-   */
   const codeColumn = createMemo(
     () => {
       const codes = (entries() ?? []).map((entry) => entry.code);
@@ -441,7 +327,6 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
       if (context === null) return "9rem";
       const style = getComputedStyle(document.body);
       context.font = `400 16px ${style.fontFamily}`;
-      // The header's word and its sort arrow are the floor.
       let widest = context.measureText(t("Code")).width + 16;
       for (const code of codes) widest = Math.max(widest, context.measureText(code).width);
       return `${String((Math.ceil(widest) + 2) / 16)}rem`;
@@ -451,34 +336,12 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
 
   const sortOf = (key: Column): SortDirection => (column() === key ? direction() : "none");
 
-  /**
-   * A download that fails must SAY SO. `services.run` rejects with the tagged
-   * failure itself, whose `toString` is the bare tag — so the reason and the
-   * description are read structurally (`src/app/describe.ts`), the toast keeps
-   * the error tone, it never auto-closes, and it carries an × like every other
-   * one. The previous version of this handler produced a toast that said
-   * "RemoteError" and could not be dismissed.
-   */
-  /**
-   * Download: the row flies up to the installed list as a card at once, and
-   * that card carries the progress. A failure is still a toast as well — it
-   * must SAY SO, and never auto-close (`src/app/describe.ts` reads the reason
-   * structurally, so the toast is not a bare tag).
-   *
-   * Progress comes from `Remote.progress()`, the transport's one stream. It is
-   * not per clone, which is fine while `busy` allows one download at a time.
-   */
   const download = (entry: CatalogueEntry, from: DOMRect): void => {
-    // A gateway text is a source text: it goes to the Library, never to the
-    // projects list (`src/app/arrival.ts`). A translation is a project.
     const kind: ArrivalKind = entry.type === "gateway" ? "sourceText" : "project";
     const into = arrivalRoot(services, kind, entry.gitUrl);
-    // Read once, at the click: the callbacks below run long after, outside
-    // any tracking scope, and must not read props there.
+    // Untracked on purpose: a one-time read, not a dependency (Solid 2: STRICT_READ_UNTRACKED).
     const { downloads } = props;
     setBusy(entry.id);
-    // A project flies up to the installed list as a card that carries the
-    // progress. A source text has no card to become, so a toast carries it.
     const toast =
       kind === "sourceText"
         ? toasts.progress({ title: t("Downloading {name}", { name: entry.repo }), message: "" })
@@ -507,7 +370,6 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
             if (toast === undefined)
               downloads.update(entry.id, {
                 status: progress.unit === "bytes" ? describeTransfer(progress) : progress.phase,
-                // A byte count has no total, and says nothing about the bar.
                 ...(progress.unit === "bytes" ? {} : { percent }),
               });
             else
@@ -519,9 +381,6 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
         ),
       ),
     );
-    // The same operation the import hub's clone opens, told apart by where it
-    // came from. No URL and no repository name: the catalogue row's type is
-    // the one fact about it worth filtering on.
     const operation = services.composition.observability.operation("import.remote", {
       "import.source": "catalogue",
       "import.host": services.hostInfo.kind(),
@@ -531,8 +390,6 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
       .run(
         Effect.provideService(
           Effect.gen(function* () {
-            // Pulled once per device: a copy already in the Library is the
-            // answer, whichever project or download brought it.
             if (kind === "sourceText") {
               const held = yield* services.library.cloned(entry.gitUrl);
               if (Option.isSome(held)) return "held" as const;
@@ -578,15 +435,10 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
   };
 
   return (
-    // Takes the page's remaining height and never more: the table scrolls
-    // inside itself, and the page above it never scrolls away.
     <section class="flex min-h-0 flex-1 flex-col gap-3">
       <div class="flex flex-wrap items-center gap-3">
         <PanelHeader title={t("Projects Available on WACS")} class="me-auto" />
-        {/* Gateway languages are listed here only with Settings → Advanced
-            on; everyone else chooses one to read from the reference column's
-            language menu. Either way a gateway row is a source text and lands
-            in the Library (`arrival.ts`). */}
+
         <Show when={gatewaysOffered}>
           <SegmentedControl
             size="sm"
@@ -619,10 +471,6 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
           </p>
         </Show>
 
-        {/* A grid with table ROLES, so a screen reader hears a table: the
-            header row and the windowed body are each a rowgroup, and every
-            row says its place in the whole (`aria-rowindex`), since most rows
-            are not in the DOM at any moment. */}
         <Card
           padded={false}
           role="table"
@@ -631,20 +479,6 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
           class="flex min-h-0 flex-1 flex-col overflow-hidden"
           style={{ "--code-column": codeColumn() }}
         >
-          {/* WINDOWED, and the catalogue is why: it lists every repository the
-              Language API knows, which on this account is 521 rows — 2,605
-              cells and 6,941 DOM nodes, all built, all measured, for the dozen
-              a reader can see. The section header is the column row, so the
-              list gets a sticky heading for free and the two stay aligned by
-              sharing one grid template.
-
-              A grid and not a `<table>`: a virtual row is positioned by a
-              transform, and a transform on a `<tr>` is not something table
-              layout honours. The roles carry the semantics the elements no
-              longer do. */}
-          {/* The column row, above the scroll pane. Both it and the list
-              reserve the scrollbar's gutter (`scrollbar-gutter: stable`),
-              scrolling or not, so the columns line up without measuring. */}
           <div
             role="rowgroup"
             class="scrollbar-subtle shrink-0 overflow-hidden [scrollbar-gutter:stable] border-b border-surface-border"
@@ -658,9 +492,6 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
               <For each={SORTABLE}>
                 {([column, label]) => (
                   <div role="columnheader" aria-sort={ariaSort(sortOf(column))} class="h-full">
-                    {/* The whole cell is the button, so the hover lights the
-                        area and not just the word. It opens the column's
-                        menu: Sort always, Filter where the column has one. */}
                     <Menu
                       size="lg"
                       label={t("{column} options", { column: label() })}
@@ -669,8 +500,6 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
                       class="w-60"
                       fitViewport
                       triggerClass={
-                        // The hover reaches 16px into the 32px gap each side;
-                        // the first column reaches back to the table's edge.
                         column === "code"
                           ? "-ms-8 -me-4 flex h-full w-[calc(100%+3rem)]"
                           : "-mx-4 flex h-full w-[calc(100%+2rem)]"
@@ -685,8 +514,6 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
                           class="flex w-full cursor-pointer items-center gap-1.5 p-4 text-start data-first:ps-8 font-medium text-inherit transition-colors hover:bg-surface-tertiary hover:text-on-surface-primary data-open:bg-surface-tertiary"
                           data-open={menuFor() === column ? "" : undefined}
                         >
-                          {/* The label grows, so the sort and filter icons
-                              sit at the cell's far right. */}
                           <span class="min-w-0 flex-1 truncate">{label()}</span>
                           {sortOf(column) === "asc" ? (
                             <ArrowUp size={14} aria-hidden="true" />
@@ -762,8 +589,6 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
           <VirtualList<CatalogueRow>
             role="rowgroup"
             class="scrollbar-subtle min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]"
-            // No section at all when nothing matches: the list shows `empty` only
-            // then, and a section with zero rows would draw nothing instead.
             sections={virtualRows().length > 0 ? [{ key: "catalogue", rows: virtualRows() }] : []}
             empty={
               <Show
@@ -781,8 +606,6 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
                 />
               </Show>
             }
-            // The column row lives OUTSIDE the scroller (above), so the
-            // scrollbar runs beside the rows only; the list draws no headers.
             row={(item) => {
               const entry = () => item().entry;
               return (
@@ -803,7 +626,7 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
                     <Show when={item().english !== ""}>
                       <span class="ms-2 text-on-surface-tertiary">{item().english}</span>
                     </Show>
-                    {/* The repo itself, so two rows of one language can be told apart. */}
+
                     <div class="truncate font-mono text-smallest text-on-surface-tertiary">
                       {entry().id}
                     </div>
@@ -818,10 +641,6 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
                     <Show
                       when={item().refusal === ""}
                       fallback={
-                        // Focusable although it does nothing, so a keyboard
-                        // reaches the tooltip that says why: `aria-disabled`,
-                        // not `disabled`, which would take it out of the tab
-                        // order along with its reason.
                         <Tooltip label={item().refusal}>
                           <Button
                             variant="link"

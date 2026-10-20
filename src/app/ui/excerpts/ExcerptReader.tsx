@@ -1,15 +1,3 @@
-/**
- * One excerpt, read: the editor's own reading of a range of a book, read-only.
- *
- * The card's resting state (`@sefer/editor` `mountReader`). It is a view of the
- * book's text through the book's parse — the same projection, verse pips and
- * paragraph shapes the editor paints — clipped to the excerpt, so a list of
- * results reads like the pages they came from.
- *
- * Double-click is the way in: it hands the source offset under the pointer to
- * `onEdit`, and the card swaps this view for a satellite with the caret there.
- */
-
 import {
   mountReader,
   policyKey,
@@ -27,28 +15,12 @@ import "@sefer/editor/editor.css";
 export interface ExcerptReaderProps {
   readonly analysis: Analysis;
   readonly span: { readonly from: number; readonly to: number };
-  /** How the text is drawn and guarded (`editorPolicy`): the screen's choice, not the card's. */
   readonly policy: EditorPolicy;
   readonly marks: readonly MarkedRange[];
-  /** Names the view in the timing ring. */
   readonly label: string;
-  /**
-   * The seated Book of this text, when one is open: the view follows its
-   * published changes, so it shows another card's typing as it happens.
-   */
   readonly follow?: Following | undefined;
-  /**
-   * Double-click: edit. `at` is the source offset under the pointer, and the
-   * point rides along for the satellite — laid out identically — to answer.
-   */
   readonly onEdit?: (at: number | undefined, point?: { x: number; y: number }) => void;
-  /** One click edits, and the reader is a tab stop; otherwise a double-click. */
   readonly direct?: boolean;
-  /**
-   * Handed the view's own scroll-to: `at` (a source offset, the view's
-   * document being the source) brought to the top of whatever scrolls it —
-   * the editor's `scrollIntoView`, as the book editor lands on a verse.
-   */
   readonly onReveal?: (reveal: (at: number) => void) => void;
 }
 
@@ -60,23 +32,12 @@ export function ExcerptReader(props: ExcerptReaderProps) {
     name: "readerMount",
   });
 
-  /**
-   * The parse, compared by identity before the mount effect sees it. Reading
-   * `props.analysis` also reads `props.excerpt`, and widening a card hands it
-   * a NEW excerpt over the SAME parse; without this the effect's compute
-   * returned a fresh `{ parent, analysis }` on every widen, and the view was
-   * destroyed and remounted — the card collapsed for a frame and the list
-   * below it jumped — where `reclip` was all it needed.
-   */
   const analysis = createMemo(() => props.analysis, { name: "readerAnalysis" });
-  /** The same, for the policy: a screen that rebuilds an equal policy moves nothing. */
   const policy = createMemo(() => props.policy, {
     name: "readerPolicy",
     equals: (a, b) => policyKey(a) === policyKey(b),
   });
 
-  // Rebuilt only for a different parse — a different text. Everything else a
-  // card changes (its range, its marks, the mode) moves the live view.
   createEffect(
     () => ({ parent: host(), analysis: analysis() }),
     ({ parent, analysis }) => {
@@ -92,11 +53,7 @@ export function ExcerptReader(props: ExcerptReaderProps) {
         selectable: untrack(() => props.direct) !== true,
       });
       setLive(mount);
-      // RETURNED, not `onCleanup` — an effect's callback has no owner in
-      // Solid 2 (see `ExcerptEditor`). No signal write in here: this also runs
-      // when the list unmounts the row, inside the owner's disposal, where a
-      // write is refused (REACTIVE_WRITE_IN_OWNED_SCOPE). A rebuild for a new
-      // parse sets the next mount straight after.
+      // Returned, not onCleanup: a Solid 2 effect's callback has no owner (NO_OWNER_CLEANUP).
       return () => {
         mount.destroy();
       };
@@ -139,11 +96,6 @@ export function ExcerptReader(props: ExcerptReaderProps) {
     if (edit === undefined) return;
     const mount = live();
     const point = { x: event.clientX, y: event.clientY };
-    // Best effort: a view just re-clipped (a chapter folded back, a verse
-    // added above) can throw here before it has re-measured. The click still
-    // edits — the editor answers the same point on its own fresh view
-    // (`CardEditor`). A direct card's reader takes no mousedown at all
-    // (`selectable: false`), so CodeMirror's own handler cannot throw first.
     edit(mount?.offsetAt(point), point);
   };
 

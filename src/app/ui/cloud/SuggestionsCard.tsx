@@ -1,15 +1,3 @@
-/**
- * The suggestions waiting for an editor: for someone who can write to the
- * shared project, each one to review (in Review, against the suggestion) or
- * to decline with a note its author reads.
- *
- * Shows nothing to anyone else. The author's side — their copy, offering
- * their changes, how each suggestion stands — is `YourSuggestions`, above
- * this list in the same tab, and the cloud popover's one line. Declining
- * here closes it without a review; Review's own Decline does the same from
- * inside one. Its logic is `src/app/suggestions.ts`; this is the words and
- * buttons.
- */
 import { useNavigate } from "@tanstack/solid-router";
 import { For, Show, createEffect, createSignal } from "solid-js";
 
@@ -33,13 +21,11 @@ import { QuietSection } from "./QuietSection";
 export function SuggestionsCard(props: {
   readonly project: Project;
   readonly signedIn: boolean;
-  /** Moves when the page's refresh is pressed: read the list again. */
   readonly asked?: number;
 }) {
   const shell = useShell();
   const navigate = useNavigate();
   const { services } = shell;
-  /** True, false, or unknown — no shared project, or it could not be asked. */
   const [writer, setWriter] = createSignal<boolean | undefined>(undefined, {
     name: "suggestionsWriter",
   });
@@ -52,11 +38,6 @@ export function SuggestionsCard(props: {
   const [busy, setBusy] = createSignal(false, { name: "suggestionsBusy" });
   const [note, setNote] = createSignal("", { name: "suggestionsDeclineNote" });
 
-  /**
-   * The project is a parameter, not a read: this runs from promise
-   * continuations. Only the newest load writes, so an answer about a project
-   * that has since been left never lands on the next one's card.
-   */
   let asked = 0;
   const load = async (project: Project, signedIn: boolean): Promise<void> => {
     const mine = ++asked;
@@ -66,8 +47,6 @@ export function SuggestionsCard(props: {
     setWriter(canWrite);
     setWaiting(waiting);
   };
-  // On mount, and again for a different project; `load` reads the project as
-  // a parameter-free call, so the key is what is tracked.
   createEffect(
     () => ({ project: props.project, signedIn: props.signedIn, asked: props.asked }),
     ({ project, signedIn }) => {
@@ -75,7 +54,6 @@ export function SuggestionsCard(props: {
     },
   );
 
-  /** One press: `work` has already started, in the event handler that read the props. */
   const act = (work: Promise<unknown>, done: string, project: Project, signedIn: boolean): void => {
     setBusy(true);
     work
@@ -86,7 +64,6 @@ export function SuggestionsCard(props: {
       .finally(() => {
         setBusy(false);
         void load(project, signedIn);
-        // The tab's count reads the same network: ask it again too.
         void collaboration.refresh(services, project);
       });
   };
@@ -126,9 +103,6 @@ export function SuggestionsCard(props: {
               {(suggestion) => (
                 <li class="space-y-2 py-1.5" data-suggestion={suggestion.number}>
                   <div class="flex items-center justify-between gap-3">
-                    {/* The title, not only the date: two from one person read
-                        as two rows of the same words otherwise. Who and when
-                        under it, quietly, as in Yours. */}
                     <span class="min-w-0">
                       <span class="block truncate text-small font-medium text-on-surface-primary">
                         {suggestion.title}

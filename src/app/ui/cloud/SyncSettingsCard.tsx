@@ -1,14 +1,3 @@
-/**
- * This project's four sync settings, in Settings' Cloud section.
- *
- * Per project and stored on this device (`src/app/syncSettings.ts`), so they
- * are their own card rather than rows of the global settings form, and they
- * show only while a project is open. The two that reach the network are on by
- * default; the card says what each one does in a sentence, because a
- * translator deciding whether Sefer may send their work is owed the
- * consequence, not a key name. Where a send goes — the shared project or the
- * person's own copy — is the mode's (`CollabModeCard`), not a setting here.
- */
 import { Effect } from "effect";
 import { For, createSignal } from "solid-js";
 
@@ -48,9 +37,6 @@ const ROWS: readonly {
 
 export function SyncSettingsCard(props: { readonly root: string }) {
   const { services } = useShell();
-  // Settings reads are synchronous and not reactive, so a counter says when
-  // to read again; `props.root` is read inside the accessor, where a change of
-  // project is tracked.
   const [written, setWritten] = createSignal(0, { name: "syncPreferencesWritten" });
   const held = (): SyncPreferences => {
     written();
