@@ -1,8 +1,3 @@
-/**
- * What `verify:launch` and `verify:perf` share: a run directory, a free port,
- * a Vite dev server on it, and the wait until a route answers.
- */
-
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
@@ -13,7 +8,6 @@ import process from "node:process";
 const READINESS_TIMEOUT_MS = 60_000;
 const POLL_INTERVAL_MS = 250;
 
-/** `.verify/<runId>/`, created. The id sorts by time and never collides. */
 export const newRun = (root: string): { readonly runId: string; readonly runDir: string } => {
   const runId = `${new Date().toISOString().replaceAll(/[:.]/gu, "-")}-${randomUUID().slice(0, 8)}`;
   const runDir = path.join(root, ".verify", runId);
@@ -44,7 +38,6 @@ export const sleep = (ms: number): Promise<void> =>
     setTimeout(resolve, ms);
   });
 
-/** `vite --port <port> --strictPort` in `root`, both streams piped for the caller to tee. */
 export const spawnVite = (
   root: string,
   port: number,
@@ -56,10 +49,6 @@ export const spawnVite = (
     stdio: ["ignore", "pipe", "pipe"],
   });
 
-/**
- * The `accept: text/html` header is not optional: the Solid plugin's dev page
- * middleware only answers requests that ask for HTML.
- */
 const responds = async (url: string): Promise<boolean> => {
   try {
     const response = await fetch(url, {
@@ -72,7 +61,6 @@ const responds = async (url: string): Promise<boolean> => {
   }
 };
 
-/** Milliseconds until `url` answered 200. Throws if Vite exits or a minute passes. */
 export const waitForReady = async (url: string, child: ChildProcess): Promise<number> => {
   const started = Date.now();
   while (Date.now() - started < READINESS_TIMEOUT_MS) {

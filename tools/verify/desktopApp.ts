@@ -1,26 +1,3 @@
-/**
- * The driven desktop app: what `verify:desktop` and `test:desktop` share.
- *
- * Three pieces, each on a free port so two runs (two worktrees, two agents)
- * never meet:
- *
- *   1. `cargo build --features webdriver` — the debug binary with WebdriverIO's
- *      embedded WebDriver server (`tauri-plugin-wdio-webdriver`) compiled in.
- *      The feature exists nowhere else, and `src-tauri/src/lib.rs` refuses to
- *      compile it into a release; see documentation/architecture/desktop.md.
- *   2. A Vite dev server, so the webview runs the dev module graph and
- *      `globalThis.__sefer` (the observability surface) is there to read.
- *   3. The binary itself, told the dev server's URL through `SEFER_DEV_URL`
- *      (instead of the compiled-in `localhost:3000`) and its WebDriver port
- *      through `TAURI_WEBDRIVER_PORT`, with `HOME` (and on Linux the XDG
- *      folders) pointed at a scratch folder so the app's data — the Library,
- *      settings, projects it creates — never lands in the person's own
- *      `~/Library/Application Support` or `~/.local/share`. Windows is refused:
- *      see `scratchEnv`.
- *
- * Node built-ins only, like the other `tools/verify` scripts.
- */
-
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createWriteStream, existsSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -31,7 +8,6 @@ import { freePort, sleep, spawnVite, waitForReady } from "./devServer.ts";
 
 const STATUS_TIMEOUT_MS = 90_000;
 
-/** `src-tauri/target/debug/sefer`, the binary `cargo build` writes. */
 const desktopBinary = (root: string): string =>
   path.join(
     root,
@@ -41,10 +17,6 @@ const desktopBinary = (root: string): string =>
     process.platform === "win32" ? "sefer.exe" : "sefer",
   );
 
-/**
- * Incremental, so a second run costs seconds; the first costs minutes. Output
- * goes to `<runDir>/cargo.log`, and a failure throws with its tail.
- */
 export const buildDesktop = (root: string, runDir: string): void => {
   const log = path.join(runDir, "cargo.log");
   const result = spawnSync("cargo", ["build", "--features", "webdriver"], {
@@ -60,7 +32,6 @@ export const buildDesktop = (root: string, runDir: string): void => {
     );
 };
 
-/** Milliseconds until the embedded server's `/status` says ready. */
 const waitForWebDriver = async (port: number, app: ChildProcess): Promise<number> => {
   const started = Date.now();
   while (Date.now() - started < STATUS_TIMEOUT_MS) {
@@ -69,13 +40,10 @@ const waitForWebDriver = async (port: number, app: ChildProcess): Promise<number
       const response = await fetch(`http://127.0.0.1:${String(port)}/status`, {
         signal: AbortSignal.timeout(2000),
       });
-      // SAFETY: W3C `/status` is `{ value: { ready: boolean, message } }`; a
-      // body of another shape reads as not ready and the loop tries again.
+      // SAFETY: W3C `/status` is `{ value: { ready: boolean, message } }`; a body of another shape reads as not ready and the loop tries again.
       const body = (await response.json()) as { value?: { ready?: boolean } };
       if (body.value?.ready === true) return Date.now() - started;
-    } catch {
-      // Not listening yet.
-    }
+    } catch {}
     await sleep(250);
   }
   throw new Error(
@@ -83,7 +51,6 @@ const waitForWebDriver = async (port: number, app: ChildProcess): Promise<number
   );
 };
 
-/** A Vite dev server for the webview, on a free port, logging to `<runDir>/vite.log`. */
 export const startDevServer = async (
   root: string,
   runDir: string,
@@ -106,28 +73,9 @@ export const startDevServer = async (
   return { devUrl, pid: vite.pid ?? 0, stop };
 };
 
-/**
- * The app's scratch `HOME` for a run: `<tmp>/sefer-verify/<runId>/home`, NOT
- * under `.verify/` (which holds the logs and screenshots). The fs capability
- * scope's globs cross one hidden folder below `$APPDATA`, and a journal path
- * nests the project's absolute path inside app data, so a `HOME` under
- * `.claude/…/.verify/` put two hidden folders in every journal path and every
- * backup-journal write was refused as a forbidden path (2026-10-13). A
- * person's real paths have none.
- */
 export const scratchHome = (runDir: string): string =>
   path.join(tmpdir(), "sefer-verify", path.basename(runDir), "home");
 
-/**
- * The variables that move the app's data folders under the scratch `home`:
- * `HOME` on macOS, where app data is `$HOME/Library/Application Support`, and
- * on Linux the XDG folders too, which take precedence over `HOME` when the
- * developer has them set. `test:desktop` hands the same variables to
- * `@wdio/tauri-service` (`e2e-desktop/wdio.conf.ts`), which spawns the app
- * itself. Windows is refused: Tauri reads app data from the Known Folders
- * API, which no environment variable redirects, so a driven run there would
- * write into the developer's own `%APPDATA%\org.wycliffe.sefer`.
- */
 export const scratchEnv = (home: string): Record<string, string> => {
   if (process.platform === "win32")
     throw new Error(
@@ -142,17 +90,14 @@ export const scratchEnv = (home: string): Record<string, string> => {
   };
 };
 
-/** The environment the app runs under: the dev server's URL and the scratch folders. */
 const desktopEnv = (devUrl: string, home: string): Record<string, string> => ({
   ...scratchEnv(home),
   SEFER_DEV_URL: devUrl,
 });
 
 export interface DesktopRun {
-  /** Where a WebDriver client connects: `remote({ hostname, port })`. */
   readonly webdriver: { readonly hostname: string; readonly port: number };
   readonly devUrl: string;
-  /** The scratch `HOME` the app ran under; its data is in `Library/Application Support/org.wycliffe.sefer`. */
   readonly home: string;
   readonly appPid: number;
   readonly vitePid: number;
@@ -160,11 +105,6 @@ export interface DesktopRun {
   readonly stop: () => void;
 }
 
-/**
- * Starts Vite and the app, waits for both, and tees the app's output into
- * `<runDir>/app.log`. `home` defaults to a fresh `scratchHome(runDir)`; pass a
- * folder to keep a profile across runs.
- */
 export const startDesktop = async (
   root: string,
   runDir: string,

@@ -1,14 +1,3 @@
-/**
- * Offsets to 1-based line and column.
- *
- * oxc hands back spans as JS string indices; humans, editors and stack traces
- * want line and column. Computed once per file rather than per lookup — a file
- * with thirty imports, or three hundred JSX elements, should not be rescanned
- * once per answer.
- *
- * Shared by the boundary walker and the JSX-location transform, which are the
- * two things in this repository that read its own source with oxc.
- */
 export const lineIndex = (
   source: string,
 ): ((offset: number) => { line: number; column: number }) => {

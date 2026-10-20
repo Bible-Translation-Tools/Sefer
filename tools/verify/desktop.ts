@@ -1,40 +1,3 @@
-/**
- * `pnpm verify:desktop` — the real desktop app, driveable over WebDriver.
- *
- * The desktop twin of `verify:launch`: builds the debug binary with the
- * embedded WebDriver server (`cargo build --features webdriver`, incremental),
- * starts a Vite dev server and the app on free ports, waits until the
- * WebDriver server answers `/status`, and prints ONE JSON line:
- *
- *     {"webdriver":"http://127.0.0.1:61234","hostname":"127.0.0.1","port":61234,
- *      "devUrl":"http://localhost:61233/","home":"<tmp>/sefer-verify/<runId>/home",
- *      "runId":"…","runDir":"…/.verify/<runId>","appPid":1234,"vitePid":1233}
- *
- * Attach from a script with WebdriverIO:
- *
- *     import { remote } from "webdriverio";
- *     const browser = await remote({ hostname, port, capabilities: {} });
- *     await browser.execute(() => globalThis.__sefer?.state());
- *     await browser.saveScreenshot(".verify/<runId>/01-landing.png");
- *     await browser.deleteSession(); // the app keeps running
- *
- * Without `--check` it stays up until SIGINT or SIGTERM, then stops the app
- * and the dev server. With `--check` it opens one session, reads the title and
- * whether `globalThis.__sefer` is there, prints that as a second JSON line,
- * and stops.
- *
- *     pnpm verify:desktop                 # build, launch, stay up
- *     pnpm verify:desktop --check         # build, launch, prove a session, stop
- *     pnpm verify:desktop --no-build      # reuse the binary as it is
- *     pnpm verify:desktop --home <dir>    # keep the app's data across runs
- *
- * The app's window appears and takes focus: a WKWebView has no headless mode.
- * Its data lives under the scratch `HOME` (`scratchHome`: the system temp
- * folder, outside any hidden folder), never the person's own. A `--home`
- * of your own must not sit under a hidden folder either: the fs scope refuses
- * journal writes there.
- */
-
 import path from "node:path";
 import process from "node:process";
 
@@ -65,7 +28,6 @@ const parseOptions = (argv: readonly string[]): Options => {
   return { check, build, home };
 };
 
-/** One W3C call, without a client library: the check needs three. */
 const call = async (
   base: string,
   method: "POST" | "DELETE",
@@ -89,9 +51,6 @@ const check = async (base: string): Promise<Record<string, unknown>> => {
     sessionId: string;
   };
   try {
-    // The server answers before the page has loaded: the first visit compiles
-    // the dev module graph, and a script sent meanwhile times out. Ask until
-    // the shell has booted (`__sefer` is set), for up to two minutes.
     const until = Date.now() + 120_000;
     for (;;) {
       try {

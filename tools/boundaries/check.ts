@@ -13,14 +13,7 @@ export interface BoundaryViolation {
 }
 
 export interface BoundaryOptions {
-  /**
-   * The self-contained directory. Named `coreDir` because `src/core` was the
-   * first, but the rule set — stay inside, no framework packages, no Node
-   * builtins — is exactly what "this folder is liftable somewhere else" means,
-   * and `src/dev/annotate` wants precisely that.
-   */
   readonly coreDir: string;
-  /** What violations call this directory; defaults to "core". */
   readonly label?: string;
   readonly paths?: Readonly<Record<string, readonly string[]>>;
   readonly pathsBase?: string;
@@ -39,13 +32,8 @@ export const DEFAULT_FORBIDDEN_PACKAGES: readonly string[] = [
   "@effect/platform-node*",
 ];
 
-// A bare-specifier prefix, not a package name: "node:fs" and "node:fs/promises"
-// are both the Node builtin namespace, which no package glob spells.
 export const DEFAULT_FORBIDDEN_PREFIXES: readonly string[] = ["node:"];
 
-// Core policy must run under a browser as well as under Node, but a core *test*
-// is Node's own program: it may reach for the builtins and the Node platform
-// layer to set up the fixtures the policy runs against.
 const TEST_FILE = /\.test\.tsx?$/;
 
 const NODE_ONLY: readonly string[] = ["node:", "@effect/platform-node"];
@@ -145,8 +133,6 @@ export const checkCoreBoundary = (options: BoundaryOptions): BoundaryViolation[]
           rawAssetDirs.some((directory) => isInside(directory, resolved))
         )
           continue;
-        // A core test is Node's own program: it may reach outside core for the
-        // Node platform layers (filesystem, engine bytes) it builds fixtures with.
         if (isTest) continue;
         if (!isInside(coreDir, resolved))
           report(`resolves to ${path.relative(pathsBase, resolved)}, outside ${label}`);
@@ -161,8 +147,6 @@ export const checkCoreBoundary = (options: BoundaryOptions): BoundaryViolation[]
 
       const aliased = resolveAlias(specifier.value, paths, pathsBase);
       if (aliased !== null) {
-        // The same exemption as the relative branch: a core test may reach the
-        // Node platform layers however the path is spelled.
         if (isTest) continue;
         if (!isInside(coreDir, aliased))
           report(`alias resolves to ${path.relative(pathsBase, aliased)}, outside ${label}`);
@@ -185,13 +169,6 @@ export const checkCoreBoundary = (options: BoundaryOptions): BoundaryViolation[]
   return violations;
 };
 
-/**
- * The hosts of the editor — everything under `src/` but core — talk to it
- * through `@sefer/editor`'s front door and nothing else: no `@codemirror/*`,
- * and no path (relative or aliased) into either package's sources, where the
- * view behind every handle is. A test may drive the editor's recipes with
- * CodeMirror itself, so tests are exempt from the CodeMirror half.
- */
 export const checkHostUse = (options: {
   readonly from: string;
   readonly except: readonly string[];
@@ -237,42 +214,15 @@ export const formatViolation = (violation: BoundaryViolation, root: string): str
   `${path.relative(root, violation.file)}:${violation.line}:${violation.column} ${violation.specifier} — ${violation.reason}`;
 
 export interface ReachOptions {
-  /** Files under here are read. */
   readonly from: string;
-  /** Subtrees of `from` this rule does not apply to. */
   readonly except?: readonly string[];
-  /** Directories a file under `from` may not resolve a specifier into. */
   readonly forbidden: readonly string[];
-  /**
-   * Specifier kinds that are allowed through anyway. `import()` is the one that
-   * matters: a dynamic import behind `import.meta.env.DEV` is how a route
-   * reaches dev-only code WITHOUT putting it in the production bundle, which is
-   * the opposite of the leak this rule exists to catch.
-   */
   readonly allowKinds?: readonly string[];
   readonly paths?: Readonly<Record<string, readonly string[]>>;
   readonly pathsBase?: string;
-  /** Named in the violation, so the message says which rule was broken. */
   readonly label: string;
 }
 
-/**
- * Which directories a subtree is not allowed to REACH INTO — the mirror of
- * `checkCoreBoundary`, which asks what a subtree may not reach OUT to.
- *
- * Two rules use it, and both are about the design surface:
- *
- *   * nothing outside `src/dev` may statically import `src/dev`. The route
- *     gates already keep dev code out of a production bundle; this keeps a
- *     static edge from ever being written in the first place, which is the
- *     architectural claim rather than the bundling one. A dynamic `import()`
- *     from a route is how the gate is spelled, so that stays allowed.
- *   * `src/dev/annotate` may not import `src/core` or `src/app`. The comment
- *     overlay is a DOM tool that happens to live here; keeping it ignorant of
- *     Sefer is the whole reason it can be lifted into another repository as a
- *     folder copy. `src/dev/design`, which holds the screens themselves, is
- *     under no such rule — it is supposed to reach for the real components.
- */
 export const checkReach = (options: ReachOptions): BoundaryViolation[] => {
   const from = path.resolve(options.from);
   const except = (options.except ?? []).map((directory) => path.resolve(directory));
@@ -312,14 +262,6 @@ export const checkReach = (options: ReachOptions): BoundaryViolation[] => {
   return violations;
 };
 
-/**
- * A tsconfig is JSON with comments, and TypeScript 7 exports no reader for
- * it, so this strips what a tsconfig is
- * allowed to carry beyond JSON — line and block comments, and trailing commas
- * — while leaving anything inside a string alone. A path that happens to
- * contain `//` is the case a naive strip gets wrong, and this repository's own
- * config would not catch the mistake.
- */
 const stripJsonc = (text: string): string => {
   let out = "";
   let inString = false;
@@ -352,7 +294,6 @@ const stripJsonc = (text: string): string => {
     }
     out += character;
   }
-  // Trailing commas, once no comma inside a string can be mistaken for one.
   return out.replace(/,(\s*[}\]])/g, "$1");
 };
 
@@ -361,8 +302,7 @@ export const readTsconfigPaths = (
 ): { paths: Record<string, readonly string[]>; base: string } => {
   const base = path.dirname(path.resolve(tsconfigPath));
   const parsed: unknown = JSON.parse(stripJsonc(readFileSync(tsconfigPath, "utf8")));
-  // SAFETY: two optional fields read off a config file this repository owns.
-  // A tsconfig that does not have them is the ordinary case, not an error.
+  // SAFETY: two optional fields read off a config file this repository owns. A tsconfig that does not have them is the ordinary case, not an error.
   const config = parsed as {
     compilerOptions?: { paths?: Record<string, readonly string[]>; baseUrl?: string };
   };
@@ -383,28 +323,17 @@ const main = (): void => {
       paths,
       pathsBase: base,
       rawAssetDirs: [path.join(root, "fixtures")],
-      // Core is below the editor: it may use the text model, never the editor.
       forbiddenPackages: [...DEFAULT_FORBIDDEN_PACKAGES, "@sefer/editor", "@sefer/editor/*"],
     }),
     ...checkReach({
       from: source,
       except: [dev],
       forbidden: [dev],
-      // The route gates — `/dev/fixture`, `/project/$slug/playground` and the
-      // design routes — are exactly this: a dynamic import inside a build-time
-      // `import.meta.env` branch, which is what keeps the page out of the
-      // production bundle. Statically importing the same module would not.
       allowKinds: ["import()"],
       paths,
       pathsBase: base,
       label: "src/dev is dev-only",
     }),
-    // The annotator gets `src/core`'s OWN rule set rather than a weaker one of
-    // its own, because "liftable into another repository as a folder copy" and
-    // "imports no framework, no Node builtin, and nothing outside itself" are
-    // the same sentence. Solid is on the forbidden list, which is the whole
-    // point: the overlay is a DOM tool, and the day it imports `solid-js` is
-    // the day it stops being droppable into anything that is not this app.
     ...checkHostUse({
       from: source,
       except: [path.join(source, "core")],
@@ -412,8 +341,6 @@ const main = (): void => {
       paths,
       pathsBase: base,
     }),
-    // The workspace packages other apps install. `@sefer/text` gets core's
-    // rule set and one more: it is BELOW the editor, so it may not import it.
     ...checkCoreBoundary({
       coreDir: path.join(root, "packages", "text", "src"),
       label: "@sefer/text",
@@ -421,9 +348,6 @@ const main = (): void => {
       pathsBase: base,
       forbiddenPackages: [...DEFAULT_FORBIDDEN_PACKAGES, "@sefer/editor", "@sefer/editor/*"],
     }),
-    // `@sefer/editor` is core's rule set with CodeMirror allowed: it is the
-    // one package that owns CodeMirror, and nothing framework- or host-shaped
-    // gets in. Hosts bring the engine, so the editor imports none of its own.
     ...checkCoreBoundary({
       coreDir: path.join(root, "packages", "editor", "src"),
       label: "@sefer/editor",

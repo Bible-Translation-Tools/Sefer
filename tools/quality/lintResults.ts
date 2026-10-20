@@ -1,24 +1,3 @@
-/**
- * The generated half of `documentation/lint-results.md`: what the linters say
- * right now, and every place we told one of them to look away.
- *
- * Nobody keeps a list like this by hand for long. So the numbers and the
- * inventory are GENERATED, between two markers, and the prose around them —
- * the policy, and why each class of exception is accepted — stays written by
- * a person. The pre-commit hook runs this and stages the file, so every commit
- * says what it left unfixed.
- *
- * Deterministic on purpose: sorted, no timestamps, no line numbers (a warning
- * that moves down a file is the same warning), and no fallow health score,
- * which reads git churn and so changes with history rather than with code.
- * The file changes when a finding appears or goes away, and not otherwise.
- *
- * Usage:
- *
- *     node tools/quality/lintResults.ts           # rewrite the generated block
- *     node tools/quality/lintResults.ts --check   # exit 1 if it is stale
- */
-
 import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -37,8 +16,7 @@ const run = (command: string, args: readonly string[]): string => {
       stdio: ["ignore", "pipe", "ignore"],
     });
   } catch (error) {
-    // A linter that FOUND something exits non-zero; its report is still stdout.
-    // SAFETY: execFileSync's thrown error carries the child's stdout as a field.
+    // A linter that FOUND something exits non-zero; its report is still stdout. SAFETY: execFileSync's thrown error carries the child's stdout as a field.
     const stdout = (error as { stdout?: unknown }).stdout;
     if (typeof stdout === "string" && stdout.trim() !== "") return stdout;
     throw error;
@@ -46,8 +24,6 @@ const run = (command: string, args: readonly string[]): string => {
 };
 
 const bin = (name: string): string => path.join(ROOT, "node_modules", ".bin", name);
-
-// --- oxlint ---------------------------------------------------------------
 
 interface OxDiagnostic {
   readonly code?: string;
@@ -61,8 +37,6 @@ const oxlint = (): readonly OxDiagnostic[] => {
   // SAFETY: oxlint's own JSON reporter; every field is read as optional.
   return (parsed as { diagnostics?: readonly OxDiagnostic[] }).diagnostics ?? [];
 };
-
-// --- suppressions in source -----------------------------------------------
 
 const SUPPRESSION =
   /(fallow-ignore(?:-file|-next-line)?|oxlint-disable(?:-next-line|-line)?|eslint-disable(?:-next-line|-line)?|@ts-expect-error|@ts-ignore)\b(.*)$/u;
@@ -106,8 +80,6 @@ const suppressions = (): readonly Suppression[] => {
   return found.sort((a, b) => a.file.localeCompare(b.file) || a.kind.localeCompare(b.kind));
 };
 
-// --- fallow ---------------------------------------------------------------
-
 const fallowConfig = (): { entry: readonly string[]; ignoreDependencies: readonly string[] } => {
   const text = readFileSync(path.join(ROOT, ".fallowrc.jsonc"), "utf8")
     .replace(/^\s*\/\/.*$/gmu, "")
@@ -148,8 +120,6 @@ const duplication = (): { percent: string; groups: number } => {
     groups: report.clone_groups?.length ?? 0,
   };
 };
-
-// --- render ---------------------------------------------------------------
 
 const render = (): string => {
   const lines: string[] = [];
