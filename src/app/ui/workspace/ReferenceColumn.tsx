@@ -202,7 +202,10 @@ export function LanguageTab(props: {
         title={props.name}
         class={cx(
           "flex h-full min-w-0 cursor-pointer items-center gap-2",
-          closable() ? "ps-6 pe-2" : "px-6",
+          // Removable: 48px each side of the label — on the right, 8px, the
+          // 24px × and its 16px margin — so the name is centred with or
+          // without the × showing.
+          closable() ? "ps-12 pe-2" : "px-6",
         )}
         onClick={() => props.onSelect?.()}
       >
