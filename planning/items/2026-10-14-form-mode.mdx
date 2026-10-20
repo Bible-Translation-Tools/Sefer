@@ -1,14 +1,14 @@
 ---
 id: 40d3076e-25ac-47fa-91fd-8482173a4162
-title: "Form mode"
+title: "Form mode, verse per line, and the editor's sharp edges"
 kind: idea
 status: discussing
 created: 2026-10-14
-updated: 2026-10-14
+updated: 2026-10-20
 sha: 50aa9cd
-priority: 2
+priority: 1
 tags: [editor]
-related: [858618e5-da52-4556-8734-d055729b7b8b, 9cdeee6c-1747-4922-b2b8-84748a95839a]
+related: [858618e5-da52-4556-8734-d055729b7b8b, 9cdeee6c-1747-4922-b2b8-84748a95839a, c8b63600-40a8-4937-bc03-e0264e9a13f0]
 source: sefer-next-features doc, 2026-10-07 to 13
 ---
 
@@ -21,7 +21,7 @@ Why keep CodeMirror at all: the document is a string, not an object tree (as in 
 Parsing and proofreading point at offsets and don't clone strings or objects, which keeps memory
 low on field devices.
 
-## Option 1: a projection in the editor
+## Option 1: verse per line, a projection in the editor
 
 One CodeMirror compartment, turned on and off:
 
@@ -43,3 +43,45 @@ out of the step machine, which is now built.
 <Question id="keys">How is key handling organised by mode: branch on mode inside each key, or one handler per key that checks the mode? Ideally a matrix, mode × behaviour = policy.</Question>
 
 <Followup id="spike">A spike with Will at the keyboard. `plan.ts` is the risk.</Followup>
+
+## The editor's sharp edges, done in the same pass
+
+Folded in from [editor sharp edges](/items/2026-10-14-editor-sharp-edges) (2026-10-20): key
+handling by mode is the same work as the Enter question, and the tests belong on the
+[package's](/items/2026-10-14-embeddable-editor) harness.
+
+<Question id="enter">Keep taking over Enter (a line break means nothing, so Enter makes a paragraph), at the cost of no pressing Enter for blank space?</Question>
+
+<Followup id="tests">Tests around copy, paste and Enter, on the package's harness (`@sefer/editor/testing`).</Followup>
+
+<Followup id="cursor">Cursor mechanics with the arrow keys, on the playground. The cursor code is a first target for the [fallow pass](/items/2026-10-14-fallow-readability-pass).</Followup>
+
+<Followup id="formatter">Revisit the USFM formatter, written before the editor drew newlines by context. Consider format-on-save.</Followup>
+
+<Followup id="usfm-light">USFM mode has no light theme.</Followup>
+
+<Followup id="extensions-global">The engine's marker registry is process-wide (`onion/src/extensions.rs`, `static REGISTRY`), so two editors on one page with different marker configs interfere. The package documents one config per page; a per-call or per-handle registry would be a kitchen ask.</Followup>
+
+<Followup id="empty-note-body">
+
+**An empty note gets a body part, on Sefer's side** (was kitchen ask 6; kitchen pushed it back
+2026-10-20, Will agreed). Onion does not build note parts: Sefer does, in `notePartsOf`
+(`packages/editor/src/core/cst.ts:382`), walking the CST and tagging tokens. An empty
+`\ft \f*` has no text token, so no BODY part comes out. A zero-width token in onion would break
+the rule that tokens tile the source, and every consumer would pay for it.
+
+The fact is already in the tree: a body marker followed directly by the closer. `notePartsOf`
+emits a zero-width BODY part at the end of that marker (`\fr` and `\xt` the same way), and the
+carve-out in `packages/editor/src/core/sealed.ts` (an insertion at a one-position surface) goes.
+
+Check while there: everything that reads `NotePart` copes with a zero-width part. Painting
+skips it (CodeMirror cannot mark an empty range); `owned.ts`'s editable spans and the note
+editor's surface range use it. Then type into a fresh footnote by hand.
+
+Or (Will, 2026-10-20): insert a new note with a known placeholder body, so it is never empty. To circle back to.
+
+</Followup>
+
+<Followup id="markdown">Markdown mode: CodeMirror's own Markdown support, for glossaries and notes.</Followup>
+
+<Tradeoff id="gutter" chose="a line-based gutter" cost="a project with no paragraphs has no real lines to number">Accepted as a known limit.</Tradeoff>

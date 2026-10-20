@@ -1,0 +1,24 @@
+---
+id: 21bcb434-717e-4133-bb54-81724a40b3de
+title: "Chapter labels: a Sefer rule, a fix and a workflow"
+kind: idea
+status: idea
+created: 2026-10-20
+updated: 2026-10-20
+sha: 1584e9b
+tags: [findings]
+---
+
+Sefer's own, not kitchen's (Will, 2026-10-20; was kitchen ask 4):
+
+> I don't think it's terribly complex, but it will be a new module of like, local lint maybe?
+> cause want to draw diagnostics where it's not consistent in a book or across books. I would
+> say this is a rule is the thing.
+
+- **A rule:** find every `\cl` per book, reduce, and report where labels are inconsistent in a
+  book or across books. Drawn with the engine's findings through the host-diagnostics door
+  (`CorpusFinding`, `setHostDiagnostics`).
+- **A fix:** rewrite to one shape, e.g. per-chapter `\cl Psalm 1`, `\cl Psalm 2` to one
+  book-level `\cl Psalm` before `\c 1`, or back. An edit through the Book, offered by the
+  finding (the fix lives in the editor package's `core/fixes`).
+- **A workflow** visits each in order, or shows them grouped and replaces in one pass.

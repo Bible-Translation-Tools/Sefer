@@ -1,113 +1,338 @@
 ---
 id: 6c8936de-cbb7-450c-a5cc-ae6d62d13f65
-title: "Project state: suppressions, approvals, and where they live (2026-10-06)"
+title: "Suppressions and key-term approvals"
 kind: idea
-status: idea
+status: planned
 created: 2026-10-06
-updated: 2026-10-14
+updated: 2026-10-20
+priority: 0
 tags: [project-state, findings, terms]
 source: planning/00-ideas/project-state-and-suppressions.md
 ---
 
-## Audit, 2026-10-14
+State that belongs to a project and outlives a session: proofreading suppressions ("this finding
+is fine here") and key-term approvals. Reference picks are already built this way (per device,
+`.sefer/project.json`). Today approvals live in memory for the session and nothing persists
+suppressions.
 
-Reference picks are built: per device, in `.sefer/project.json` (9bf6064). Key-term approvals
-(PR #5, merged) are held in memory for the session only. Nothing persists suppressions.
+## Where it lives: this device, for now
 
-Answered by the code: a zip or Burrito export does **not** carry `.sefer/`
-(`isPrivatePath`, `src/core/admin/projectAdmin.ts`), so local-only approvals and suppressions
-would not travel by zip.
+> We probably document this as a limitation right now, and we ask the product owner if this
+> should be designed to be shared later. … we can figure out collaboration on that file later
+> and start with it locally. … it can be added on later, I think
 
-<Question id="where">Per device or committed? Note `src/core/project/projectState.ts` says team facts do NOT belong in `.sefer/project.json`, which the 2026-10-12 "local first" draft below contradicts.</Question>
+(Will, 2026-10-20.) Both files live in `.sefer/`, which is per device and kept out of every
+commit and export (`isPrivatePath`, `src/core/admin/projectAdmin.ts`). Each file's schema is
+written as if it may one day be shared: a header with a version, and keys that name text, never
+offsets.
 
-<Question id="one-or-two">One mechanism for approvals and suppressions, or two?</Question>
+**Limitation, to document:** each teammate approves and suppresses alone, and a zip carries
+none of it.
 
-<Question id="book-wide">How is a book-wide Sous finding, with no address, suppressed?</Question>
+<Question id="where" answer="This device first (Will, 2026-10-20): `.sefer/`, a documented limitation, and the PO asked later whether it should be shared.">Per device or committed?</Question>
 
-<Followup id="persist-approvals">Persist key-term approvals, keyed by address plus a verse hash, with a "changed since approved" badge.</Followup>
+<Followup id="ask-po">Ask the PO whether approvals and suppressions should be shared with the team. Sharing means a committed file and a rule for its sync conflicts.</Followup>
 
-**Status:** idea, undecided. Parked by Will on 2026-10-06 so that the
-[Writer migration](/items/2026-10-02-consolidate-book-repos) gets built first. A draft
-direction from 2026-10-12 is at the end; Will is still thinking it over, so
-nothing here is agreed.
+## Two mechanisms, one helper
 
-## The need
+<Question id="one-or-two" answer="Two (2026-10-20): the lifecycles differ. One small helper for a versioned JSON file in `.sefer/` serves both.">One mechanism for approvals and suppressions, or two?</Question>
 
-Several features want state that belongs to a project and outlives a
-session:
+Will, 2026-10-20: approvals have states (approved, approved with edits) and must show when the
+verse changed since; a suppression is just "ignore it", but its list wants pruning when what it
+named goes away. So:
 
-- **Lint and proofreading suppressions.** "This onion or Sous finding is not a
-  problem here."
-- **Key-term approvals.** PR #5 ("Spiritual terms: edit tracking, locked verse
-  numbers, Save changes / Cancel") tracks "Approve" and "Approve with edits" on
-  `/terms`. Will does not plan to accept that PR as is, but the feature needs
-  this state.
-- **Reference picks** (decided 2026-10-06): which source text the reference
-  column shows for a project. These are per device, in `.sefer/project.json`.
+| | Approvals | Suppressions |
+|---|---|---|
+| File | `.sefer/key-term-approvals.json` | `.sefer/sous-chef-suppressions.json`, and `.sefer/onion-suppressions.json` for lint |
+| Key | book/chapter/verse + term | the engine's identity (below) |
+| Stored | hash at open, hash at approval | the identity, when (a note: deferred) |
+| Changed text | stays, badged "changed since approved" | goes stale; pruned |
+| Shown | a badge and a count on `/terms` | the finding hidden; a count of hidden |
 
-## The question to decide
+**Named by subsystem** (Will, 2026-10-20). One file per engine also means each file follows its
+own identity format: when Sous moves to `v2`, only `sous-chef-suppressions.json` migrates.
 
-Is a suppression or an approval this person's state or the team's?
+**A note on a suppression** (the reader's reason) is deferred: not in the first version.
 
-- **Per device** (`.sefer/`, which intake keeps out of every commit):
-  - simple, and it never conflicts;
-  - but each teammate approves and suppresses again, alone.
-- **Shared and committed:**
-  - a teammate sees that Mary approved "love" at Jude 1:21;
-  - but it needs a committed home and a rule for sync conflicts, because
-    Review only judges scripture text.
-  - `.upstreams.json` (Writer migration) is the first committed file of this
-    kind. A second one is the moment to choose:
-    - one dotfile per concern;
-    - or one committed Sefer folder, separate from `.sefer/`.
+**Where it applies: one partition, read by everything.** Suppressions are a `reduce` over the
+findings into `{ shown, suppressed }`, in core beside `hideStale`
+(`src/core/findings/filter.ts`). The editor's diagnostics, the Findings panel and its totals all
+read `shown`; the count reads `suppressed`. Nothing draws a finding and then hides it.
 
-## Also open
+Approvals hash with Galley's `hash(text)` (XXH3-64, seed 0, as `sourceHash`) and name the
+algorithm in the header, so a change marks entries "needs re-check" rather than dropping them.
 
-- **The key.** What identifies a suppression or an approval so that it
-  survives unrelated edits, but reopens when the verse changes? For example:
-  the verse address, the rule or term, and a hash of the verse text.
-- **Whether suppressions and approvals are one mechanism or two.**
+## Key-term approvals
 
-## Draft direction (2026-10-12, not ruled)
+- **Unit:** the verse a hit is in (its TOC unit), not the card's clip. Keyed by address and
+  term, because one verse can hold several terms.
+- **Stored:** the verse's hash when the card opened, and the hash at approval. Nothing else.
+- **Every state but "unapproved" is derived** from those two hashes and the verse's current
+  hash, so nothing has to notice an edit: the state is read when it is shown.
 
-Will's leaning after PR #5 merged with approvals held only in memory:
-probably simpler than this note made it.
+<Machine id="approval" title="One term at one verse" machine={{
+  initial: "unapproved",
+  states: {
+    unapproved: {
+      description: "no entry",
+      on: { APPROVE: "approved", EDIT_THEN_APPROVE: "approvedWithEdits" },
+      note: "Nothing stored. Opening the card records the verse's hash at open (in memory until an approval writes it).",
+    },
+    approved: {
+      tone: "new",
+      description: "open = approval = now",
+      on: { TEXT_CHANGED: "changedSinceApproved", HEADER_CHANGED: "needsRecheck", GUIDE_CHANGED: "termGone", UNAPPROVE: "unapproved" },
+      note: "Approved as it stood: the verse was not edited between opening the card and approving. A check on the row.",
+    },
+    approvedWithEdits: {
+      tone: "new",
+      description: "open ≠ approval = now",
+      on: { TEXT_CHANGED: "changedSinceApproved", HEADER_CHANGED: "needsRecheck", GUIDE_CHANGED: "termGone", UNAPPROVE: "unapproved" },
+      note: "The verse was edited in this session, then approved. The brand mark on the row.",
+    },
+    changedSinceApproved: {
+      tone: "changed",
+      description: "approval ≠ now",
+      on: { REAPPROVE: "approved", TEXT_RESTORED: "approved", UNAPPROVE: "unapproved" },
+      note: "Edited after approval, by anyone, anywhere (the main editor, Review, a pull). A badge on the row and a count at the top. Undoing the edit brings the old state back, because it is derived: TEXT_RESTORED returns to whichever of approved or approved with edits it was. Re-approving records a new approval hash.",
+    },
+    needsRecheck: {
+      tone: "changed",
+      description: "header changed",
+      on: { REAPPROVE: "approved", UNAPPROVE: "unapproved" },
+      note: "The file's hash algorithm or what it hashed no longer matches this build. Kept, not dropped; shown like changed since approved until re-approved.",
+    },
+    termGone: {
+      tone: "changed",
+      description: "dormant: the guide changed",
+      on: { TERM_BACK: "approved" },
+      note: "The key-terms guide no longer serves a term with this id (upstream renamed its English label, or reordered two that collide). Nothing is built for it: the approval stays in the file and is shown nowhere, since there is no term row to show it on. If a later guide serves the id again, it is back as it was. Rare: it needs a new guide edition.",
+    },
+  },
+}} />
 
-**Local first.** Both files live in `.sefer/`, which is per device and kept
-out of every commit, so there is no git diff to show. Sharing is a later
-question: moving the file to a committed path with the same schema, so the
-schema is written as if it may be shared. Still to check: whether a zip export
-carries `.sefer/`.
+<Followup id="persist-approvals">Persist key-term approvals as above, with the "changed since approved" badge.</Followup>
 
-**Two files, not one.** Key-term approvals and proofreading suppressions do
-not share a file. Each needs only the FileSystem and a fixed path, read lazily
-(approvals when `/terms` opens).
+## Proofreading suppressions: the keys
 
-### Key-term approvals
+Kitchen **did** ship stable identities (d526de8, in v0.1.10:
+`@wycliffeassociates/scripture-kitchen/sous-identity`; contract in `galley/sous-messages.md`,
+"Stable identity"). This item said otherwise until 2026-10-20; Sefer does not use them yet.
+None is built from offsets:
 
-- **Unit:** the verse a hit is in (its TOC tile), not the card's clip. Keyed by
-  address and term, because one verse can hold several terms.
-- **Hash:** Galley's `hash(text)` (XXH3-64, seed 0, what `sourceHash`
-  carries) over the verse's raw USFM, stored as hex. The file's header names
-  the algorithm and what was hashed (`"hash": "xxh3-64-seed0"`,
-  `"over": "verse-usfm"`) and a schema version. A header that no longer
-  matches marks every entry "needs re-check" rather than dropping it.
-- **Stored:** approved, the hash when the card opened, the hash at approval.
-- **Derived when read, never stored:**
-  - unapproved: no entry;
-  - approved with edits: hash at open differs from hash at approval;
-  - changed since approved: the verse's current hash differs from hash at
-    approval.
-- **Shown:** "changed since approved" as a badge on the term's row, and a count
-  at the top of the unit. A count of a derived state needs no notification
-  machinery.
+| Identity | Means | Built from |
+|---|---|---|
+| `v1:s:…` | this text here is fine | verse, the flagged text, how many identical texts come before it in the verse |
+| `v1:f:…` | this rule is wrong here | the rule, then the same three |
+| `v1:p:…` | this claim is fine anywhere | the rule and what it claims (the glyph, its neighbour…) |
 
-### Proofreading suppressions
+### The ladder: here, everywhere, never
 
-- Same shape, its own file. Key: rule code + address + verse hash.
-- Kitchen has **not** shipped an id per finding (checked 2026-10-12: master,
-  origin, branches). 0.1.10 shipped finding codes as exported unions, which is
-  an id per rule. Sefer's `Finding.id` (`producer:book:code:from-to`) is
-  offsets and moves with every edit.
-- **Open:** Sous findings about a character pattern across a book have no single
-  verse, so no address. How those are suppressed is the part to rule on.
+Will, 2026-10-20: `v1:p` was built for the middle rung.
+
+> "particle particle" is always right, but don't disable doubled words
+
+So a reader has three answers, from narrowest to widest, each worded by what it allows:
+
+| Says | Allows | Stored as | The rule still watches |
+|---|---|---|---|
+| **Fine here** | this occurrence | `v1:s` (site) | everything else, including the same thing elsewhere |
+| **Always allow “…”** | this exact thing, anywhere in the project | `v1:p` (pattern) | every other word, mark or pair |
+| **Turn off this check** | the whole check | Sous settings, per project | nothing |
+
+The middle rung always names what it allows, quoted, so it never reads as a switch: "Always
+allow “particle particle”", not "Allow doubled words".
+
+**Each option says what it will do**, in a line under its label, with the check's own words
+filled in:
+
+| Option | Its line |
+|---|---|
+| Fine here | Hide this one. It comes back if this text changes. |
+| Always allow “particle particle” | Never flag “particle particle” in this project. Other doubled words are still checked. |
+| Turn off this check | Stop checking doubled words in this project. Turn it back on in Settings. |
+
+Will, 2026-10-20, agreeing:
+
+> v1:s is the more natural way people think of, ok, this text is correct. … for as it stands, I
+> approve this verse so to speak.
+
+**`v1:f`, and why it is not offered.** `v1:s` says "this text is fine": it hides whatever flags
+the spot. `v1:f` says "this rule is fine here": another rule flagging the same spot still shows.
+They differ in two cases:
+
+- A settings change makes a different rule flag the same text (Placement before, RunShape
+  after). `v1:s` keeps it hidden; `v1:f` shows it again.
+- One spot has two real problems and the reader dismisses only one. `v1:f` keeps the other;
+  `v1:s` hides both.
+
+Sous reports one rule per spot (the headline), so the second case is rare, and "fine here" as
+`v1:s` is what a reader means. `v1:f` costs kitchen nothing (it is `v1:p` plus the site) and is
+there if a precise "this rule only" is ever wanted.
+
+**What "always allow" means for each check** (the pattern's key, from `sous-identity.ts`):
+
+| Check | “Always allow …” | Example |
+|---|---|---|
+| Doubled | this word doubled (bare, or separated by punctuation) | “particle particle” |
+| Casing | this word in this casing | “lord” in lower case |
+| WordLength | this word | an unusually long name |
+| Placement | this mark on this side of this kind of character | “—” before a digit |
+| ExactNeighbor | this mark followed by that one | “'.” |
+| PooledNeighbor | this mark beside this kind of character | “«” beside a space |
+| RunShape | runs of this mark of this size | “...” |
+| LetterRun | this letter repeated this many times | “sss” |
+| Rarity, SentenceStart | this character, anywhere | “ʼ” |
+| BookRate | this mark's rate in this one book | “;” in Psalms |
+| Hygiene, Presence, SourceCopy, LengthProportionality | no middle rung: fine here, or turn off | |
+
+Rarity and SentenceStart key only on the character, so "always allow" there is close to
+turning the check off for that character, which is what someone means.
+
+**The same ladder for lint** (onion), with [kitchen ask 15](/items/2026-09-14-scripture-kitchen-asks):
+"fine here" is a site identity for a diagnostic; "always allow" needs a subject, e.g. an
+unknown marker by name ("always allow `\zqq`", without turning off unknown-marker findings).
+Registering a marker as an extension, as `\s5` is, is the stronger form of the same thing.
+
+**Why `v1` and the letters:** `v1` is the format's version, so a saved identity can be migrated;
+the letter is the scope (`s` site, `f` finding, `p` pattern). Readers never see them; the plan
+and the code call the rungs "here", "everywhere" and "off".
+
+<Question id="ladder-words" answer="Agreed 2026-10-20: likely closest to correct.">The rung labels: "Fine here", "Always allow “…”", "Turn off this check"?</Question>
+
+<Question id="ladder-where" answer="&quot;Fine here&quot; on the card; the other two behind More, and the tutorial says why (Will, 2026-10-20).">Does a finding card show all three options, or "Fine here" with the other two behind a "More"?</Question>
+
+**Fixing something else in the verse does not bring a "fine here" back.** `v1:s` is not a hash
+of the verse: it is the verse's reference, the flagged text itself, and its ordinal. Fix a typo
+elsewhere in the verse and the quotes you allowed stay allowed. It comes back only when:
+
+- the flagged text itself is edited (a new site, judged again);
+- an identical text is added or removed EARLIER in the same verse, which shifts the ordinal.
+  For a common single mark (`—`, `"`) that can happen; it is rare, and costs seeing one finding
+  again;
+- the verse is renumbered.
+
+<Question id="book-wide" answer="2026-10-20: the middle rung, always allow (v1:p; a BookRate's includes the book), or turn the check off.">How is a book-wide Sous finding, with no address, suppressed?</Question>
+
+<Question id="onion-key" answer="A kitchen ask (Will, 2026-10-20): ask 15, a site and a subject identity for a diagnostic.">Onion findings: Sefer builds the key itself, or a kitchen ask?</Question>
+
+### Where each is stored, and when it is read
+
+- **`.sefer/sous-chef-suppressions.json`** holds both rungs: `here` (`v1:s`, with when) and `everywhere` (`v1:p`, the same). Turning a check off stays in Sous settings.
+- **Read when the first analysis publishes**, not at app load: suppressions filter findings, so
+  they are needed when findings are, and not before. One small file per project.
+- **`.sefer/key-term-approvals.json` is read when `/terms` opens** (Will, 2026-10-20), never at
+  app load; nothing else reads it.
+
+### Staleness and pruning
+
+A site identity names text, so whether it still applies can be read off the text, with no
+analysis and no settings in the way:
+
+- **Stale:** the verse no longer holds the flagged text at that ordinal. The suppression goes
+  (pruned when the book's suppressions are next read or written).
+- **"Always allow" is never pruned automatically**; it is listed where suppressions are managed.
+- **Not stale because the finding vanished:** a check switched off hides the finding but leaves
+  the text. Pruning on "matched nothing" would lose those, and switching the check back on would
+  bring them back unsuppressed. So prune on text, not on matches.
+
+## Building it: next, before any new rendering work
+
+Will, 2026-10-20: suppressions come first, before form mode or anything else new. The first
+version is **Fine here** on the finding; **Always allow** and **Turn off this check** sit behind
+More, and the tutorial says why.
+
+<Followup id="tutorial">
+
+A tutorial for the PO and the designer on the tour machine (`src/app/tour/tours/`), walking a
+real finding: Fine here, the hidden count, where suppressions are listed and how one comes back,
+what More holds and why it is behind More. Part of this plan, not its own item. Its words should
+cover:
+
+- **On Fine here:** "We could add a note saying why it is fine here; we have left that out for
+  now."
+- **These do not travel, today.** Suppressions and approvals stay on this device: not in the
+  project's history, not in a zip, not on a teammate's machine. They could be exported, or made
+  shared, but two people writing the same file need their own way to merge it (a collaboration
+  UI for this file, as Review is for scripture), so that is a later decision.
+- **Lint findings** (markers, numbering) get Fine here later; this first version is proofreading.
+
+</Followup>
+
+### Still open in this scope
+
+<Question id="verse-text" answer="Raw USFM, always; never a normalised or reading-text version (Will, 2026-10-20). Reasons and the edge cases below.">The ordinal counts identical texts earlier "in the verse". Which text is the verse: the raw USFM of its TOC unit, or the reading text?</Question>
+
+**The verse is its TOC unit's raw USFM**, markers included: the same text the finding's offsets
+slice, which Sefer already holds.
+
+The one alternative is the reading text (galley's mask: what Sous actually judges, without
+markup). It would be steadier in one case: a markup-only edit earlier in the verse can shift an
+ordinal, because raw counting sees marker characters. Suppress a `*` or a `+`, then add a
+footnote before it (`\f + … \f*`), and the count of earlier `*` changes, so the finding shows
+again. It is still raw USFM, because:
+
+- **Raw text cannot be redefined.** The mask can: if what it hides changes (notes in or out,
+  a new marker kind), every saved ordinal moves at once, which is a format change and a
+  migration. Raw USFM only moves when someone edits it.
+- **The failure is visible and small.** A shifted ordinal shows one finding again; it never
+  hides one that should show.
+- It needs no projection to compute, and is the same text on every mode and surface.
+
+**What the reference is:** the unit's Address from `unitAddress`
+(`packages/text/src/location/locate.ts`), in the canonical book code, never a localized name:
+`GEN 1:2`; a segment `GEN 1:3a`; a bridge `GEN 1:1-2`; a list by its hull (`\v 1,3,5` is
+`GEN 1:1-5`); text before verse 1 (a heading, a psalm title) by its chapter, `PSA 3`; the
+introduction `GEN intro`. Whatever string Sefer formats it to is saved, so the format is fixed
+once shipped.
+
+**What should bring a suppression back, and does:**
+
+- Renumbering the verse, splitting a bridge or a segment: the reference changes, so the
+  finding shows again and the old entry is pruned. That is right: it is a different verse now.
+- Editing the flagged text itself.
+
+**Accepted edges:**
+
+- A markup-only edit earlier in the verse that adds the same characters (above). Rare.
+- Two verses with the same number in one chapter (itself a finding): they share a reference,
+  so "fine here" on one also covers the same text at the same ordinal in the other. Rare, and
+  fixed by fixing the numbering.
+
+<Question id="manage" answer="Yes (Will, 2026-10-20).">Where does a reader see what they suppressed, and take one back? Proposed: the Findings panel's filter gains "Show suppressed", which lists them dimmed with their note and an Unsuppress; the hidden count links there.</Question>
+
+<Question id="approvals-now" answer="Together (Will, 2026-10-20): conceptually similar work, one helper.">Do key-term approvals ship with suppressions (same helper, a second file), or after?</Question>
+
+<Question id="onion-interim" answer="Lint waits for kitchen ask 15 (Will, 2026-10-20): Sous only first, lint attached later as its own subsystem.">Until kitchen ask 15 ships, lint findings get no Fine here, or Sefer builds the same-shaped key and migrates later? Proposed: Sous only first; lint waits for the ask.</Question>
+
+<Question id="approval-key" answer="Term + verse, no guide (Will, 2026-10-20): the guide's prose changing should not touch an approval.">An approval's key: the guide, the term and the verse?</Question>
+
+**An approval is keyed by term id + verse reference.** A guide is one file per gateway
+language (`fixtures/stet/en.json`, `es-419.json`, `pt-br.json`); a term's id is its ENGLISH
+label, slugged, with a counter on collision (`idsFor`, `src/core/stet/stet.ts`), so the same
+term has the same id in every guide, and a project that switches guide keeps its approvals. The
+guide's prose (definitions, glosses, its frozen readings) is not in the key, so changing it
+touches nothing.
+
+What can still move an id: upstream renaming a term's English label, or reordering two terms
+whose labels collide (`love`, `love-2`). Upstream has no stable identifier. An approval whose
+term is no longer served goes dormant (kept, shown nowhere) until the term returns; no UI is built
+for it. Approvals also fill
+`Term.done`, which is 0 today for want of a store.
+
+<Question id="undo" answer="Agreed (Will, 2026-10-20).">Taking back a "Fine here" just made: proposed, a toast with Undo, and Unsuppress in the "Show suppressed" list. Not the editor's Undo: a suppression is not a text edit, and mixing it into text history would make Mod-Z undo the wrong thing.</Question>
+
+<Question id="note-when" answer="Deferred (Will, 2026-10-20): no note in the first version. The tutorial says notes were considered and deferred.">When is the optional note written?</Question>
+
+<Question id="tutorial-project" answer="English first, maybe both (Will, 2026-10-20).">Which project and finding does the tutorial walk?</Question>
+
+**The tutorial is for the PO and the designer**, not end users: how and why suppressions work,
+so they can give feedback. English first, since they read it (the sandbox `Will_Kelly/x-en-ulb`
+or another en_ulb copy), on a finding that is plainly fine. Then, if it earns its place, a step
+on the Bisa Bible (`Will_Kelly/leb-x-bisa_reg`) for "Always allow": a doubled word the language
+uses on purpose. It also says what was considered and deferred (notes on a suppression, lint
+findings, sharing with the team).
+
+<Followup id="flood-offer">**Later, not in the first version** (Will, 2026-10-20: it is just turning off the rule, which may move closer to the findings row itself). When a project has unusually many doubled-word findings, offer: "this language may repeat words on purpose; turn off doubled-word checks?" One comparison on Sefer's side, no engine change; it is "Turn off this check" offered before the reader goes looking. From kitchen's 2026-09-29 handoff, the one part of it Sefer has not built.</Followup>
+
+<Followup id="suppressions">Build suppressions: the ladder on a finding (fine here as `v1:s`, always allow as `v1:p`, turn off in Sous settings; onion once ask 15 ships), no note yet; the `{ shown, suppressed }` partition in core; text-based pruning; a count of hidden findings in the panel.</Followup>

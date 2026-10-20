@@ -34,6 +34,7 @@ minimumReleaseAgeExclude:
   - solid-js
   - '@solidjs/*'
   - lucide-solid@1.46.0
+  - ondine@0.0.3
 
 # corvu-next pins its Solid peers to an exact beta (2.0.0-beta.19) and
 # lucide-solid still declares Solid 1 (^1.4.7). Both resolve against the one

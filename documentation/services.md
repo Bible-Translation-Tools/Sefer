@@ -174,11 +174,9 @@ The pinned Scripture Kitchen WASM build (tagged git dependency, v0.1.8). Onion p
 
 ### Constraints and known bugs
 
-- `Tree.spansIn`/`Tree.enclosing` (engine-ask 9) are available and unused: nothing yet needs a markup extent.
+- `Tree.spansIn`/`Tree.enclosing` (delivered on an engine ask) are available and unused: nothing yet needs a markup extent.
 - `setExtensions` is process-wide: the marker table a project opens with is the one every parse reads until the next open — reference texts, review sides and loose parses included. Legacy `\s5` is registered as `standalone` only for a project whose texts already contain it (the policy table is `LEGACY_MARKERS` in `src/app/legacyMarkers.ts`; empty means nothing registered); opening a project without it clears the registration. en_ulb: 20,353 findings → 1,316. Detection is the one deliberate regex over markup, because it must run before the first parse. Stripping `\s5` from text is a separate choice. → [galley](architecture/galley.md#the-marker-table-setextensions)
-- Still open upstream: the Sous character census (engine-asks 2) and chapter labels (engine-asks 4).
-- Not yet asked (2026-09-30): tile the TOC so a unit's opening block markers belong to it. Today a verse that opens a paragraph starts its unit at `\v`, and the `\s5` and `\p` before it trail the previous unit (Mark 14:6). A card is its TOC unit and does not widen itself, so Backspace at such a card's first verse cannot reach the paragraph break that visibly opens it. The ask: attach a `\p` (and like openers) forward to the unit it opens rather than back as trailing text.
-- Not yet asked: an unknown marker closes its paragraph at the end of its line (the recovery `\s5` caused before it was registered). The editor treats unknown markers as passthrough, and for the paragraph to flow through one the engine would have to leave it open, as it does for a registered standalone.
+- Engine asks still open upstream (`planning/items/2026-09-14-scripture-kitchen-asks.mdx`): the Sous character census (2), a stable id for lint findings (15), `resolve` in the engine (14), and tiling the TOC so a `\p` belongs to the unit it opens (12; a card cannot Backspace into the paragraph break that opens its first verse, Mark 14:6).
 
 ### Ideas / future
 

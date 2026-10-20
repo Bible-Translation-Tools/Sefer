@@ -2,9 +2,9 @@
 id: 858618e5-da52-4556-8734-d055729b7b8b
 title: "Editor sharp edges"
 kind: plan
-status: planned
+status: done
 created: 2026-10-14
-updated: 2026-10-15
+updated: 2026-10-20
 sha: 50aa9cd
 priority: 1
 tags: [editor]
@@ -12,52 +12,15 @@ related: [40d3076e-25ac-47fa-91fd-8482173a4162]
 source: sefer-next-features doc, 2026-10-07 to 13
 ---
 
-From the Oct 7 memo: the editor works but has rough edges from the revision push, and its cursor
-code is the gnarliest in the app (binary searches, high cyclomatic complexity).
+**Folded into [form mode, verse per line, and the editor's sharp edges](/items/2026-10-14-form-mode)**
+(2026-10-20). What was fixed here:
 
-<Followup id="headline-rule">State the headline rule at the top of `documentation/architecture/editor.md`: **a CodeMirror line is not a USFM line.** Newlines are drawn by context (a joined newline is a space), so never split on doc lines or use `doc.line` as a unit. (Added Oct 8; check it is committed.)</Followup>
-
-<Followup id="cursor">Refine cursor mechanics on the playground with the arrow keys. Cursor code is a first target for the [fallow pass](/items/2026-10-14-fallow-readability-pass).</Followup>
-
-<Followup id="footnote-backspace" done>
-
-Fixed 2026-10-15 (f10cfb5). Will reported it:
-
-> It's the backsapce key that is deleting the whole note
-
-An open note was one point-painted owned set over everything visible in it.
-So the Book's `deleteMarkersWholeOrNotAtAll`, judging the note editor's edit
-under that editor's own terms, widened any deletion in the body to the whole
-note. An expanded note's BODY parts are now `editable` spans when `note.body`
-is directly mutable. That happens only under the note editor's policy.
-
-This was not a regression from the package move: the same repro deletes the
-note on fea64ef.
-
-</Followup>
-
-<Followup id="pairing-bisa">
-
-"Show what a block corresponds to" did not mark the reference's block for Will
-on Bisa Mark beside Cebuano Marcos (2026-10-15). The editor's own mark was
-there.
-
-It works on master with bsb Genesis beside x-en-ulb: both sides are marked and
-`data-pair` reads `GEN 1:2`. Read `data-pair` on the reference pane's root in
-the failing case. Its value names the cause:
-
-- `unpaired:<sid>`: the reference has no verse with that id.
-- `no-source`: the reference text never reached the engine.
-- `no-caret`: the editor is not reporting the caret.
-
-</Followup>
-
-<Followup id="tests">Put tests back around copy, paste and Enter.</Followup>
-
-<Followup id="formatter">Revisit the USFM formatter, written before the editor drew newlines by context. Consider format-on-save.</Followup>
-
-<Question id="enter">Keep taking over Enter (a line break means nothing, so Enter makes a paragraph), at the cost of no pressing Enter for blank space?</Question>
-
-<Tradeoff id="gutter" chose="a line-based gutter" cost="a project with no paragraphs has no real lines to number">Accepted as a known limit.</Tradeoff>
-
-<Followup id="markdown">Markdown mode: CodeMirror's own Markdown support, for glossaries and notes.</Followup>
+- **The headline rule** is at the top of `documentation/architecture/editor.md`: a CodeMirror line
+  is not a USFM line.
+- **Backspace in an open footnote** deleted the whole note (f10cfb5). An open note was one
+  point-painted set, so a deletion in its body widened to the note. The body is now an editable
+  span when `note.body` is directly mutable. Not a regression from the package move.
+- **The corresponding block** was unpaired on Bisa Mark beside Cebuano (ebe13ad): the two texts
+  wrote the book code in different cases (`\id mrk` and `MRK`). Sids now compare case-blind.
+  `data-pair` on the reference pane's root still names a failure: `unpaired:<sid>`,
+  `no-source` or `no-caret`.
