@@ -353,7 +353,8 @@ export function TourOutlet() {
             label={t("Go to a step")}
             side="bottom"
             align="end"
-            class="w-72"
+            // Above the tutorial's own layer (z-50); a popover sits at z-40.
+            class="z-60! w-72"
             fitViewport
             trigger={
               <IconButton
