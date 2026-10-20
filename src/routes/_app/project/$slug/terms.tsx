@@ -3,6 +3,7 @@ import { createFileRoute, useNavigate } from "@tanstack/solid-router";
 import { Effect, Result } from "effect";
 import { createEffect, createMemo, createSignal, Show, untrack } from "solid-js";
 
+import { createApprovals, type ApprovalsHandle } from "#app/approvals";
 import { t } from "#app/i18n";
 import { useShell } from "#app/ProjectContext";
 import { createExcerptFeed, readBooks, StetView } from "#app/ui/excerpts";
@@ -68,6 +69,14 @@ interface TermsSearch {
 
 function Terms() {
   const shell = useShell();
+  /** This project's key-term approvals, read now the page is open; a different project reads its own. */
+  const approvals = createMemo(
+    (): ApprovalsHandle | undefined => {
+      const project = shell.project();
+      return project === undefined ? undefined : createApprovals(shell.services, project.root);
+    },
+    { name: "termsApprovals" },
+  );
   const navigate = useNavigate();
   const params = Route.useSearch();
 
@@ -313,37 +322,42 @@ function Terms() {
           </p>
         </Show>
 
-        <StetView
-          terms={terms()}
-          selected={selected()?.id ?? ""}
-          onSelect={(id) => ask({ term: id })}
-          filter={filter()}
-          onFilter={(text) => ask({ q: text })}
-          guides={guides()}
-          locale={locale()}
-          onLocale={(next) => ask({ locale: next, term: undefined })}
-          loading={loading()}
-          groups={feed.groups()}
-          views={feed.views}
-          outline={feed.outline()}
-          onOpen={feed.openInEditor}
-          seat={feed.seat}
-          seatedOf={feed.seatedOf}
-          shownOf={feed.shownOf}
-          analyze={feed.analyze}
-          onEdited={feed.edited}
-          initial={feed.initial}
-          onExpand={feed.expand}
-          mode={shell.mode() === "usfm" ? "usfm" : "regular"}
-          sourceOf={(excerpt) => readings().get(excerpt.sid)}
-          additional={additional()}
-          onAdditional={setAdditional}
-          additionalCount={allHits().length - curatedHits().length}
-          coreTotalOf={(id) => coreTotals().get(id) ?? 0}
-          isCurated={(excerpt) =>
-            excerpt.hits.some((hit) => curatedAt().has(`${hit.bookId}:${hit.from}`))
-          }
-        />
+        <Show when={approvals()}>
+          {(held) => (
+            <StetView
+              approvals={held()}
+              terms={terms()}
+              selected={selected()?.id ?? ""}
+              onSelect={(id) => ask({ term: id })}
+              filter={filter()}
+              onFilter={(text) => ask({ q: text })}
+              guides={guides()}
+              locale={locale()}
+              onLocale={(next) => ask({ locale: next, term: undefined })}
+              loading={loading()}
+              groups={feed.groups()}
+              views={feed.views}
+              outline={feed.outline()}
+              onOpen={feed.openInEditor}
+              seat={feed.seat}
+              seatedOf={feed.seatedOf}
+              shownOf={feed.shownOf}
+              analyze={feed.analyze}
+              onEdited={feed.edited}
+              initial={feed.initial}
+              onExpand={feed.expand}
+              mode={shell.mode() === "usfm" ? "usfm" : "regular"}
+              sourceOf={(excerpt) => readings().get(excerpt.sid)}
+              additional={additional()}
+              onAdditional={setAdditional}
+              additionalCount={allHits().length - curatedHits().length}
+              coreTotalOf={(id) => coreTotals().get(id) ?? 0}
+              isCurated={(excerpt) =>
+                excerpt.hits.some((hit) => curatedAt().has(`${hit.bookId}:${hit.from}`))
+              }
+            />
+          )}
+        </Show>
       </Show>
     </main>
   );

@@ -33,14 +33,17 @@ import CheckIcon from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import ChevronUp from "lucide-solid/icons/chevron-up";
+import CircleAlert from "lucide-solid/icons/circle-alert";
 import PencilIcon from "lucide-solid/icons/pencil";
 import ThumbsUpIcon from "lucide-solid/icons/thumbs-up";
 import { For, Show, createMemo, createSignal, onCleanup } from "solid-js";
 
 import type { BookExcerpts, Excerpt, Extent, OutlineRow } from "#core/excerpts/excerpts";
 import type { Analysis } from "#core/galley";
+import { isStanding, type ApprovalState } from "#core/stet/approvals";
 import type { Guide, Term } from "#core/stet/stet";
 
+import type { ApprovalsHandle } from "../../approvals";
 import { t } from "../../i18n";
 import type { SourceReading } from "../../workflows/stet";
 import type { CardViews } from "../multibuffer/cardViews";
@@ -91,6 +94,8 @@ export interface StetViewProps {
   readonly additionalCount: number;
   /** Is this card one of the curated verses — one the sidebar lists? */
   readonly isCurated: (excerpt: Excerpt) => boolean;
+  /** This project's approvals, read when the page opened (`#app/approvals`). */
+  readonly approvals: ApprovalsHandle;
   readonly loading?: boolean;
 }
 
@@ -249,15 +254,27 @@ export function StetView(props: StetViewProps) {
   const CHROME = 164;
   const NEIGHBOUR = 100;
 
-  /**
-   * The verses approved, per term, by card sid. In memory only: nothing in
-   * Sefer stores a settled occurrence yet (`Term.done`), so a reload forgets.
-   */
-  const [approved, setApproved] = createSignal<ReadonlyMap<string, ReadonlySet<string>>>(
-    new Map(),
-    { name: "stetApproved" },
+  /** A card's own unit, by sid, as it is now: what an approval's state is read from. */
+  const nowBySid = createMemo(
+    (): ReadonlyMap<string, string> => {
+      const out = new Map<string, string>();
+      for (const group of props.groups)
+        for (const excerpt of group.excerpts) out.set(excerpt.sid, ownText(excerpt));
+      return out;
+    },
+    { name: "stetNowText" },
   );
-  const isApproved = (sid: string): boolean => approved().get(props.selected)?.has(sid) === true;
+  /** The open term at one verse (`#core/stet/approvals`): derived from the text, never stored. */
+  const stateAt = (sid: string): ApprovalState => {
+    const now = nowBySid().get(sid);
+    return now === undefined ? "unapproved" : props.approvals.state(props.selected, sid, now);
+  };
+  const isApproved = (sid: string): boolean => isStanding(stateAt(sid));
+  /** Approved once, and the verse has changed since (or the file must be re-checked). */
+  const isChanged = (sid: string): boolean => {
+    const state = stateAt(sid);
+    return state === "changedSinceApproved" || state === "needsRecheck";
+  };
 
   /**
    * Which verses have been edited. A card's own unit, as raw USFM, is taken
@@ -292,51 +309,73 @@ export function StetView(props: StetViewProps) {
    */
   const Status = (statusProps: { readonly sid: string; readonly size: number }) => (
     <Show
-      when={isEdited(statusProps.sid)}
+      when={!isChanged(statusProps.sid)}
       fallback={
-        <Show when={isApproved(statusProps.sid)}>
-          <CheckIcon
-            size={statusProps.size}
-            aria-label={t("Approved")}
-            class="shrink-0 text-brand"
-          />
-        </Show>
+        <CircleAlert
+          size={statusProps.size}
+          aria-label={t("Changed since approved")}
+          class="shrink-0 text-on-surface-warning"
+        />
       }
     >
-      <PencilIcon
-        size={statusProps.size}
-        aria-label={isApproved(statusProps.sid) ? t("Approved with edits") : t("Edited")}
-        class={
-          isApproved(statusProps.sid) ? "shrink-0 text-brand" : "shrink-0 text-on-surface-secondary"
+      <Show
+        when={isEdited(statusProps.sid)}
+        fallback={
+          <Show when={isApproved(statusProps.sid)}>
+            <CheckIcon
+              size={statusProps.size}
+              aria-label={t("Approved")}
+              class="shrink-0 text-brand"
+            />
+          </Show>
         }
-      />
+      >
+        <PencilIcon
+          size={statusProps.size}
+          aria-label={isApproved(statusProps.sid) ? t("Approved with edits") : t("Edited")}
+          class={
+            isApproved(statusProps.sid)
+              ? "shrink-0 text-brand"
+              : "shrink-0 text-on-surface-secondary"
+          }
+        />
+      </Show>
     </Show>
   );
-  /**
-   * Approvals of CORE verses, per term: each row's numerator, kept whether
-   * the term is open or not. An additional verse can be approved too; it does
-   * not count here, since the row counts the core set.
-   */
-  const [coreApproved, setCoreApproved] = createSignal<ReadonlyMap<string, ReadonlySet<string>>>(
-    new Map(),
-    { name: "stetCoreApproved" },
-  );
   const toggleApproved = (excerpt: Excerpt): void => {
-    const term = props.selected;
     const sid = excerpt.sid;
-    const flip = (map: ReadonlyMap<string, ReadonlySet<string>>, on: boolean) => {
-      const next = new Map(map);
-      const held = new Set(next.get(term) ?? []);
-      if (on) held.add(sid);
-      else held.delete(sid);
-      next.set(term, held);
-      return next;
-    };
-    const on = !isApproved(sid);
-    setApproved(flip(approved(), on));
-    if (props.isCurated(excerpt)) setCoreApproved(flip(coreApproved(), on));
+    if (isApproved(sid)) {
+      props.approvals.unapprove(props.selected, sid);
+      return;
+    }
+    const now = ownText(excerpt);
+    props.approvals.approve(props.selected, sid, baseline.get(sid) ?? now, now);
   };
-  const coreDone = (termId: string): number => coreApproved().get(termId)?.size ?? 0;
+  /** Each term's curated verses, by sid: what a row's count is out of. */
+  const curatedOf = createMemo(
+    (): ReadonlyMap<string, ReadonlySet<string>> =>
+      new Map(
+        props.terms.map((term) => [
+          term.id,
+          new Set(term.occurrences.filter((each) => each.curated).map((each) => each.sid)),
+        ]),
+      ),
+    { name: "stetCuratedSids" },
+  );
+  /**
+   * Approvals of CORE verses, per term: each row's numerator, whether the term
+   * is open or not. An additional verse can be approved too; it does not
+   * count here, since the row counts the core set. Counted from the file: a
+   * term not open has no text on screen to say whether a verse changed since.
+   */
+  const coreDone = (termId: string): number => {
+    const curated = curatedOf().get(termId);
+    if (curated === undefined) return 0;
+    let done = 0;
+    for (const entry of props.approvals.held().byKey.values())
+      if (entry.term === termId && curated.has(entry.verse)) done += 1;
+    return done;
+  };
 
   /** The open term's curated verses this project has, in list order. */
   const verses = createMemo(
@@ -402,20 +441,22 @@ export function StetView(props: StetViewProps) {
       ),
       onActivate: (excerpt) => activate(excerpt.sid, "card"),
       status: (excerpt) =>
-        isApproved(excerpt.sid) || isEdited(excerpt.sid) ? (
+        isApproved(excerpt.sid) || isEdited(excerpt.sid) || isChanged(excerpt.sid) ? (
           <Status sid={excerpt.sid} size={20} />
         ) : undefined,
       actions: (excerpt) => [
         {
           kind: "button",
           id: "approve",
-          label: isApproved(excerpt.sid)
-            ? isEdited(excerpt.sid)
-              ? t("Approved with edits")
-              : t("Approved")
-            : isEdited(excerpt.sid)
-              ? t("Approve with edits")
-              : t("Approve"),
+          label: isChanged(excerpt.sid)
+            ? t("Approve again")
+            : isApproved(excerpt.sid)
+              ? isEdited(excerpt.sid)
+                ? t("Approved with edits")
+                : t("Approved")
+              : isEdited(excerpt.sid)
+                ? t("Approve with edits")
+                : t("Approve"),
           icon: isApproved(excerpt.sid) ? CheckIcon : ThumbsUpIcon,
           // As wide as its longest words ("Approved with edits"), whatever it
           // says now, so approving never shifts the row.
