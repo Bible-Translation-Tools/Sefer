@@ -21,7 +21,9 @@ export type Layout = "split" | "panels";
 
 // Module state, not context: the tweak is one value for the whole window, and
 // the panel writes it from outside any component.
-const [layout, setLayout] = createSignal<Layout>("split", {
+// `panels` by default on this design branch, so a shared link opens on it;
+// the tweak can still switch back to `split` (what ships).
+const [layout, setLayout] = createSignal<Layout>(__SEFER_DESIGN__ ? "panels" : "split", {
   name: "refineLayout",
   ownedWrite: true,
 });
@@ -61,9 +63,9 @@ export function useLayoutTweak(): void {
     }
     release = design.register({
       namespace: "refine",
-      tweaks: [{ key: "layout", label: "Layout", kind: "choice", options: ["split", "panels"] }],
+      tweaks: [{ key: "layout", label: "Layout", kind: "choice", options: ["panels", "split"] }],
       onChange: (values) => {
-        setLayout(values["refine.layout"] === "panels" ? "panels" : "split");
+        setLayout(values["refine.layout"] === "split" ? "split" : "panels");
       },
     });
   };
