@@ -1372,21 +1372,6 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
                   />
                 )}
               </For>
-              <Show when={props.heart}>
-                {(heart) => (
-                  <LanguageTab
-                    testId="language-tab-heart"
-                    name={heart().name}
-                    code={heart().code}
-                    refining
-                    active={heart().active}
-                    onSelect={() => {
-                      setManaging(false);
-                      heart().onActivate(true);
-                    }}
-                  />
-                )}
-              </Show>
             </div>
             <Popover
               label={t("Add a reference language")}
@@ -1407,6 +1392,25 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
               <LanguageList />
             </Popover>
             {props.trailing}
+            {/* The heart language, flush right: gateways, then Add and Split,
+                then the one being refined at the far end. */}
+            <Show when={props.heart}>
+              {(heart) => (
+                <div class="ms-auto flex min-w-0">
+                  <LanguageTab
+                    testId="language-tab-heart"
+                    name={heart().name}
+                    code={heart().code}
+                    refining
+                    active={heart().active}
+                    onSelect={() => {
+                      setManaging(false);
+                      heart().onActivate(true);
+                    }}
+                  />
+                </div>
+              )}
+            </Show>
           </div>
           <Show when={fetching() !== ""}>
             <p role="status" class="text-small text-on-surface-secondary">
