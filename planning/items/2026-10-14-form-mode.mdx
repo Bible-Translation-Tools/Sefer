@@ -4,7 +4,7 @@ title: "Form mode, verse per line, and the editor's sharp edges"
 kind: idea
 status: discussing
 created: 2026-10-14
-updated: 2026-10-20
+updated: 2026-10-21
 sha: 50aa9cd
 priority: 1
 tags: [editor]
@@ -38,7 +38,61 @@ No new mode, only drivers: tab through empty verses, or step through every dupli
 out-of-order verse ([workflows](/items/2026-10-14-workflows-routes-and-state-in-the-url)). Falls
 out of the step machine, which is now built.
 
-<Question id="which">Option 1, option 2, or both? The roadmap's lean: option 2 first, option 1 only if that isn't enough.</Question>
+<Question id="which" answer="Option 1, spiked on its own branch (form-mode). Option 2's workflows can come alongside later (Will, 2026-10-21).">Option 1, option 2, or both? The roadmap's lean: option 2 first, option 1 only if that isn't enough.</Question>
+
+> I thought 2, but I'm changing my mind cause I do think 1 is cheaper than sounds.
+> — Will, 2026-10-21
+
+## The spike (branch `form-mode`)
+
+**One verse, one line, whatever the file's layout.** Both shapes occur:
+
+```usfm
+\v 1 In the beginning \v 2 And the earth \v 3 And God said
+```
+
+```usfm
+\v 1 In the beginning
+\v 2 And the earth
+\v 3 And God said
+```
+
+The second already is one verse per line. For the first, the mode draws a break before each `\v`
+that does not start a line: the editor's existing `BreakWidget`
+(`packages/editor/src/core/decorations.ts`), which already draws paragraph breaks that are not in
+the text. No newline is written; the text and its offsets stay as they are.
+
+**What shows:** the verse number (locked, as today) and the verse text. Everything else between
+verses is hidden but not lost: it stays in the string, untouched, and the cursor cannot enter it.
+
+<Question id="structure">How do `\p`, `\q1`, `\s` and friends show in line-by-line mode? Proposal:
+a section heading (`\s`) is a quiet, read-only label row between verses, because people copying
+from paper use it to keep their place; a paragraph or poetry marker BETWEEN verses is a small
+mark in the gutter of the verse it opens (¶, q1), read-only; a poetry break INSIDE a verse
+(`\v 3 … \q2 …`) shows inline as a thin `/`, so the verse stays one line. Changing structure is
+the normal editor's job.</Question>
+
+<Question id="verse-actions">Structured actions on the verse number? Proposal for the spike:
+the number's popup offers **Change number** and **Remove** (the verse's text joins the one before),
+nothing else. Split and join wait to see if people ask.</Question>
+
+**Keys, first draft of the matrix** (mode × key → policy):
+
+| Key | Normal editor | Line-by-line |
+|---|---|---|
+| Enter | new paragraph | move to the start of the next verse; at the last verse, nothing |
+| Shift+Enter | — | the previous verse |
+| Tab / Shift+Tab | indent (today) | next / previous empty verse |
+| Backspace at a verse's start | joins across the marker (sealed rules) | nothing: a verse never merges by accident |
+| Delete at a verse's end | same | nothing |
+| Paste | as today | newlines in the paste become spaces; never creates a marker |
+| Selection | free | clamped to the verse it starts in |
+| `\` | blocked | blocked |
+
+<Question id="enter-next" answer="Yes: Enter takes over; in line-by-line it moves to the start of the next verse (Will, 2026-10-21).">Enter in line-by-line: move to the next verse?</Question>
+
+**Risk:** `plan.ts` (the edit plan) must refuse any edit that touches a hidden range or a verse
+marker in this mode; that is what the spike proves first, with Will at the keyboard.
 
 <Question id="keys">How is key handling organised by mode: branch on mode inside each key, or one handler per key that checks the mode? Ideally a matrix, mode × behaviour = policy.</Question>
 
@@ -50,7 +104,7 @@ Folded in from [editor sharp edges](/items/2026-10-14-editor-sharp-edges) (2026-
 handling by mode is the same work as the Enter question, and the tests belong on the
 [package's](/items/2026-10-14-embeddable-editor) harness.
 
-<Question id="enter">Keep taking over Enter (a line break means nothing, so Enter makes a paragraph), at the cost of no pressing Enter for blank space?</Question>
+<Question id="enter" answer="Keep taking over Enter (Will, 2026-10-21).">Keep taking over Enter (a line break means nothing, so Enter makes a paragraph), at the cost of no pressing Enter for blank space?</Question>
 
 <Followup id="tests">Tests around copy, paste and Enter, on the package's harness (`@sefer/editor/testing`).</Followup>
 
