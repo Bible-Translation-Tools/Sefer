@@ -4,7 +4,7 @@ import { createMemo } from "solid-js";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import { IconButton, Switch } from "../primitives";
+import { IconButton, SegmentedControl, Switch } from "../primitives";
 import { bookName, CANON } from "./books";
 import { Crumbs, LocationStrip } from "./Crumbs";
 import { metadataOf } from "./project";
@@ -58,9 +58,20 @@ function ReferencesToggle() {
   );
 }
 
+type BookView = "reading" | "lines" | "usfm";
+
 export function LocationBar(props: LocationBarProps) {
   const shell = useShell();
   const navigate = useNavigate();
+
+  const bookView = (): BookView => {
+    if (shell.mode() === "usfm") return "usfm";
+    return shell.lineByLine() ? "lines" : "reading";
+  };
+  const chooseBookView = (view: BookView): void => {
+    shell.setMode(view === "usfm" ? "usfm" : "default");
+    if (view !== "usfm") shell.setLineByLine(view === "lines");
+  };
 
   const table = () => shell.outline();
 
@@ -135,22 +146,28 @@ export function LocationBar(props: LocationBarProps) {
           },
         }}
         end={
-          <>
-            {__SEFER_DESIGN__ ? (
-              <Switch
-                class="ms-2"
-                label={t("Line by line")}
-                checked={shell.lineByLine()}
-                onChange={(on) => shell.setLineByLine(on)}
+          __SEFER_DESIGN__ ? (
+            <span id="editor-view-switch" class="ms-2">
+              <SegmentedControl
+                size="sm"
+                label={t("Show the book as")}
+                items={[
+                  { value: "reading", label: t("Reading") },
+                  { value: "lines", label: t("Line by line") },
+                  { value: "usfm", label: t("USFM") },
+                ]}
+                value={bookView()}
+                onChange={chooseBookView}
               />
-            ) : null}
+            </span>
+          ) : (
             <Switch
               class="ms-2"
               label={t("USFM")}
               checked={shell.mode() === "usfm"}
               onChange={(on) => shell.setMode(on ? "usfm" : "default")}
             />
-          </>
+          )
         }
       />
     </LocationStrip>

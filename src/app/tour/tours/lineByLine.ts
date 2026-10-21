@@ -1,0 +1,177 @@
+import type { Tour, TourContext } from "../machine";
+
+/**
+ * Line by line (form mode, first attempt): one verse per line over the same
+ * text, its keys, and what it will not let you change. For the PO and the
+ * designer to try and argue with, so each stop says why it is so and what
+ * could change. Design builds only, like the control it uses.
+ *
+ * Key steps move on when the caret actually lands where the key sends it:
+ * the start of the next (or previous) verse.
+ */
+
+const present = (selector: string): boolean => document.querySelector(selector) !== null;
+
+/** The verse the caret is in, and whether it sits exactly at that verse's first letter. */
+const caretVerse = (context: TourContext): { index: number; atStart: boolean } | undefined => {
+  const caret = context.shell.caret();
+  const book = context.shell.focused();
+  if (caret === undefined || book === undefined) return undefined;
+  const verses = book.structure().verses;
+  let index = -1;
+  for (let k = 0; k < verses.length; k++) {
+    if (verses[k].markerFrom > caret) break;
+    index = k;
+  }
+  if (index < 0) return undefined;
+  return { index, atStart: verses[index].contentFrom === caret };
+};
+
+/** True once the caret moves `by` verses and lands at that verse's start; it watches from wherever the caret is first seen. */
+const steppedBy = (by: number): ((context: TourContext) => boolean) => {
+  let seen: number | undefined;
+  return (context) => {
+    const now = caretVerse(context);
+    if (now === undefined) return false;
+    if (seen !== undefined && now.index === seen + by && now.atStart) {
+      seen = undefined;
+      return true;
+    }
+    seen = now.index;
+    return false;
+  };
+};
+
+const toBook = (context: TourContext): void => {
+  if (present("[data-testid=editor-host]")) return;
+  const book = context.shell.focused()?.id ?? context.shell.project()?.books[0]?.id;
+  if (book === undefined) return;
+  void context.navigate({
+    to: "/project/$slug/book/$book",
+    params: { slug: context.shell.slug(), book },
+  });
+};
+
+export const lineByLineTour: Tour = {
+  id: "line-by-line",
+  kind: "tutorial",
+  title: "Line by line",
+  summary:
+    "A view of your book with one verse per line, for typing in or copying from paper one verse at a time. Its keys, and what it keeps you from changing.",
+  needsProject: true,
+  steps: [
+    {
+      go: (context) => {
+        if (context.shell.mode() === "usfm") context.shell.setMode("default");
+        toBook(context);
+      },
+      ready: () => present("#editor-view-switch"),
+      spotlight: {
+        anchor: "#editor-view-switch",
+        title: "Choose Line by line",
+        body: "A second way to show the same book: every verse on its own line, numbered, with nothing else in the way.",
+        try: "Choose Line by line. The walk-through moves on when you do.",
+        notes: [
+          {
+            label: "What this walk-through is",
+            text: "The first attempt at form mode. Each stop says what the view does, why, and what we could do instead. Tell us where it gets in your way.",
+          },
+          {
+            label: "Same text, not a copy",
+            text: "This is the editor you already use, drawn differently. What you type here is in the book the moment you type it, proofreading keeps working, and switching back loses nothing.",
+          },
+        ],
+      },
+      advance: (context) => context.shell.lineByLine() && context.shell.mode() !== "usfm",
+    },
+    {
+      spotlight: {
+        anchor: "[data-testid=editor-host]",
+        side: "right",
+        title: "One verse, one line",
+        body: "Each verse starts a new line, however the file is laid out: one verse per line already, or several verses run together on one line. Nothing is written to the file to do it.",
+        notes: [
+          {
+            label: "Poetry",
+            text: "A verse split over poetry lines (\\q, \\q2) is drawn as one line, with a faint / where each poetry line begins.",
+          },
+          {
+            label: "Headings and paragraphs",
+            text: "Section headings, paragraph and poetry markers between verses are hidden for now, but kept exactly as they are in the file. Next we will try showing them quietly: a heading as a read-only label, a ¶ or q1 beside the verse it opens.",
+          },
+        ],
+      },
+      advance: "user",
+    },
+    {
+      spotlight: {
+        anchor: "[data-testid=editor-host]",
+        side: "right",
+        title: "Enter: the next verse",
+        body: "Enter never breaks a line here. It takes you to the start of the next verse, ready to type, which is what you want when you copy a passage verse by verse.",
+        try: "Click in a verse, then press Enter.",
+        notes: [
+          {
+            label: "Why not a new line",
+            text: "A line break means nothing in USFM, and in this view a new line is a new verse. So Enter moves instead of adding anything.",
+          },
+        ],
+      },
+      advance: steppedBy(1),
+    },
+    {
+      spotlight: {
+        anchor: "[data-testid=editor-host]",
+        side: "right",
+        title: "Shift+Enter: the verse before",
+        body: "Shift+Enter goes back one verse, to its start.",
+        try: "Press Shift+Enter.",
+      },
+      advance: steppedBy(-1),
+    },
+    {
+      spotlight: {
+        anchor: "[data-testid=editor-host]",
+        side: "right",
+        title: "Tab: the next empty verse",
+        body: "Tab jumps to the next verse that has no text yet, and Shift+Tab to the one before. For filling in a chapter that is only verse numbers so far.",
+        try: "Press Tab. If every verse after this one has text, nothing happens.",
+        notes: [
+          {
+            label: "Home and End",
+            text: "Home goes to the start of this verse and End to the end of it, never into the verse next door.",
+          },
+        ],
+      },
+      advance: "user",
+    },
+    {
+      spotlight: {
+        anchor: "[data-testid=editor-host]",
+        side: "right",
+        title: "What it keeps safe",
+        body: "Verse numbers, and the paragraph and poetry breaks between verses, cannot be deleted here. Backspace at the start of a verse, or Delete at its end, does nothing, so two verses never merge by accident.",
+        try: "Put the caret at the start of a verse and press Backspace.",
+        notes: [
+          {
+            label: "Changing structure",
+            text: "Choose Reading or USFM to change paragraphs, poetry or headings. Coming here next: a menu on a verse number to change it, remove the verse, or add one after it.",
+          },
+          {
+            label: "Paste",
+            text: "Pasting is not changed yet. The plan is that a paste with line breaks becomes one line, so it can never make a verse.",
+          },
+        ],
+      },
+      advance: "user",
+    },
+    {
+      spotlight: {
+        anchor: "#editor-view-switch",
+        title: "Back to the full view",
+        body: "Choose Reading to see paragraphs, poetry and headings again, or USFM to see the markers themselves. This device remembers which you used last.",
+      },
+      advance: "user",
+    },
+  ],
+};
