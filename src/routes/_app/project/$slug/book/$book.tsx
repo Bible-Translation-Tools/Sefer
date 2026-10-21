@@ -170,17 +170,21 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
                               <BookEditor book={book()} bare />
                             </Show>
                           }
+                          // No Split while the project's language is the only one:
+                          // there is nothing to put beside it.
                           trailing={
-                            <Button
-                              variant="tertiary"
-                              class="shrink-0 [&>svg]:shrink-0"
-                              data-testid="refine-split"
-                              title={t("Move the gateway languages to their own panel")}
-                              onClick={() => shell.setReferenceSplit(true)}
-                            >
-                              <Columns2 aria-hidden="true" />
-                              {t("Split")}
-                            </Button>
+                            references() === 0 ? undefined : (
+                              <Button
+                                variant="tertiary"
+                                class="shrink-0 [&>svg]:shrink-0"
+                                data-testid="refine-split"
+                                title={t("Move the gateway languages to their own panel")}
+                                onClick={() => shell.setReferenceSplit(true)}
+                              >
+                                <Columns2 aria-hidden="true" />
+                                {t("Split")}
+                              </Button>
+                            )
                           }
                         />
                       }
