@@ -110,6 +110,7 @@ export interface DocPlan {
   readonly revision: number;
   readonly docLen: number;
   readonly joinWidget: WidgetKey | null;
+  readonly verseLines: boolean;
   readonly notes: readonly ResolvedNote[];
   readonly noteAt: ReadonlyMap<number, ResolvedNote>;
   readonly words: readonly ResolvedWord[];
@@ -554,6 +555,7 @@ export function resolvePlan(structure: DocStructure, a: Assignment): DocPlan {
     revision: structure.revision,
     docLen,
     joinWidget,
+    verseLines: a.verseLines,
     notes,
     noteAt,
     words,

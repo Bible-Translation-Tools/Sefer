@@ -16,6 +16,7 @@ import {
 
 import { blockHost } from "./blockHost";
 import { lineIndexAt, type DocStructure, type NoteRange } from "./docStructure";
+import type { DocLine } from "./fold";
 import type { DocPlan, PlanSpan, ResolvedSlot } from "./plan";
 import type { WidgetKey } from "./registry";
 
@@ -520,39 +521,42 @@ export function buildRegular(
     });
   }
 
-  for (let i = 0; i < structure.blocks.length; i++) {
-    if (outside(structure.blocks.fromAt(i), structure.blocks.toAt(i))) continue;
-    const b = structure.blocks.at(i);
-    const resolvedBlock = plan.block(i);
-    for (const r of resolvedBlock.reflow) {
-      if (r.kind === "hide") {
-        add.push({ from: r.from, to: r.to, deco: HIDDEN });
+  if (plan.verseLines) joined += layOutVerseLines(structure, plan, add, outside);
+  else
+    for (let i = 0; i < structure.blocks.length; i++) {
+      if (outside(structure.blocks.fromAt(i), structure.blocks.toAt(i))) continue;
+      const b = structure.blocks.at(i);
+      const resolvedBlock = plan.block(i);
+      for (const r of resolvedBlock.reflow) {
+        if (r.kind === "hide") {
+          add.push({ from: r.from, to: r.to, deco: HIDDEN });
+          continue;
+        }
+        add.push({ from: r.from, to: r.to, deco: join });
+      }
+      joined += resolvedBlock.joined;
+      const head = b.cls === "block.heading" ? " usfm-head" : "";
+      const className = resolvedBlock.paints ? `usfm-block usfm-${b.kind}${head}` : "";
+      if (resolvedBlock.startsLine) {
+        if (className)
+          add.push({ from: b.from, to: b.from, deco: Decoration.line({ class: className }) });
         continue;
       }
-      add.push({ from: r.from, to: r.to, deco: join });
+      if (resolvedBlock.headHidden)
+        hide(resolvedBlock.headHidden.from, resolvedBlock.headHidden.to);
+      if (resolvedBlock.breakAt !== null)
+        add.push({
+          from: resolvedBlock.breakAt,
+          to: resolvedBlock.breakAt,
+          deco: Decoration.widget({ widget: new BreakWidget(className), side: -1 }),
+        });
+      if (resolvedBlock.inblk)
+        add.push({
+          from: resolvedBlock.inblk.from,
+          to: resolvedBlock.inblk.to,
+          deco: Decoration.mark({ class: `usfm-inblk usfm-${b.kind}` }),
+        });
     }
-    joined += resolvedBlock.joined;
-    const head = b.cls === "block.heading" ? " usfm-head" : "";
-    const className = resolvedBlock.paints ? `usfm-block usfm-${b.kind}${head}` : "";
-    if (resolvedBlock.startsLine) {
-      if (className)
-        add.push({ from: b.from, to: b.from, deco: Decoration.line({ class: className }) });
-      continue;
-    }
-    if (resolvedBlock.headHidden) hide(resolvedBlock.headHidden.from, resolvedBlock.headHidden.to);
-    if (resolvedBlock.breakAt !== null)
-      add.push({
-        from: resolvedBlock.breakAt,
-        to: resolvedBlock.breakAt,
-        deco: Decoration.widget({ widget: new BreakWidget(className), side: -1 }),
-      });
-    if (resolvedBlock.inblk)
-      add.push({
-        from: resolvedBlock.inblk.from,
-        to: resolvedBlock.inblk.to,
-        deco: Decoration.mark({ class: `usfm-inblk usfm-${b.kind}` }),
-      });
-  }
 
   for (const note of plan.notes) {
     if (outside(note.from, note.to)) continue;
@@ -592,6 +596,102 @@ export function buildRegular(
   }
 
   return finish(add, doc, opts, { joined, blocks: structure.blocks.length });
+}
+
+class VerseSeparatorWidget extends WidgetType {
+  readonly poetry: boolean;
+  constructor(poetry: boolean) {
+    super();
+    this.poetry = poetry;
+  }
+  eq(other: VerseSeparatorWidget) {
+    return other.poetry === this.poetry;
+  }
+  toDOM() {
+    const span = document.createElement("span");
+    span.className = this.poetry ? "usfm-verse-sep usfm-verse-sep-poetry" : "usfm-verse-sep";
+    span.textContent = this.poetry ? " / " : " ";
+    return span;
+  }
+  ignoreEvent() {
+    return false;
+  }
+}
+
+const separator = (poetry: boolean): Decoration =>
+  Decoration.replace({ widget: new VerseSeparatorWidget(poetry), ...UNIT });
+
+const VERSE_BREAK = Decoration.widget({ widget: new BreakWidget("usfm-verse-break"), side: -1 });
+
+const isPoetryMarker = (marker: string | null): boolean => marker?.startsWith("q") === true;
+
+/**
+ * Line-by-line: one verse per visual line, whatever the file's layout. A line
+ * that opens a verse, a chapter or a heading keeps its newline before it; any
+ * other newline is inside a verse and is drawn as a space, or a thin slash
+ * before poetry. A verse that starts mid-line gets a drawn break. Nothing is
+ * written: the text and its offsets stay as they are.
+ */
+function layOutVerseLines(
+  structure: DocStructure,
+  plan: DocPlan,
+  add: Pending[],
+  outside: (from: number, to: number) => boolean,
+): number {
+  const verseStarts = new Set(structure.verses.map((verse) => verse.markerFrom));
+  const opensVerse = (line: DocLine): boolean =>
+    verseStarts.has(line.contentFrom) || verseStarts.has(line.from);
+  const standsAlone = (line: DocLine): boolean =>
+    line.cls === "slot.c" ||
+    line.cls === "block.heading" ||
+    line.cls === "block.meta" ||
+    line.cls === "block.front";
+  const showsNothing = (line: DocLine): boolean =>
+    line.cls !== "slot.c" && line.contentFrom >= line.to;
+  const lineStarts = new Set<number>();
+
+  let joined = 0;
+  let previous: DocLine | null = null;
+  for (const line of structure.lines) {
+    if (showsNothing(line)) continue;
+    const visibleFrom = opensVerse(line) ? line.from : line.contentFrom;
+    if (previous !== null && !outside(previous.to, line.contentFrom)) {
+      const keepsBreak = opensVerse(line) || standsAlone(line) || standsAlone(previous);
+      if (keepsBreak) {
+        if (line.from > previous.to + 1)
+          add.push({ from: previous.to + 1, to: line.from, deco: HIDDEN });
+      } else {
+        add.push({
+          from: previous.to,
+          to: line.contentFrom,
+          deco: separator(isPoetryMarker(line.marker)),
+        });
+        joined++;
+      }
+    }
+    if (line.cls === "block.para" && line.contentFrom > line.from && visibleFrom === line.from)
+      add.push({ from: line.from, to: line.contentFrom, deco: HIDDEN });
+    lineStarts.add(line.from);
+    lineStarts.add(line.contentFrom);
+    previous = line;
+  }
+
+  for (let i = 0; i < structure.blocks.length; i++) {
+    const block = structure.blocks.at(i);
+    if (plan.block(i).startsLine || outside(block.from, block.contentFrom)) continue;
+    if (verseStarts.has(block.contentFrom)) {
+      if (block.contentFrom > block.from)
+        add.push({ from: block.from, to: block.contentFrom, deco: HIDDEN });
+      continue;
+    }
+    add.push({ from: block.from, to: block.contentFrom, deco: separator(block.poetry) });
+  }
+
+  for (const verse of structure.verses) {
+    if (lineStarts.has(verse.markerFrom) || outside(verse.markerFrom, verse.markerFrom)) continue;
+    add.push({ from: verse.markerFrom, to: verse.markerFrom, deco: VERSE_BREAK });
+  }
+  return joined;
 }
 
 function setOfPending(add: Pending[]): DecorationSet {

@@ -241,7 +241,23 @@ export interface Assignment {
    * under the same projection by installing the same deltas.
    */
   deltas: readonly AssignmentDelta[];
+  /** One verse per visual line (`line-by-line`): a layout the decorations read, not a cell. */
+  verseLines: boolean;
 }
+
+const LINE_BY_LINE: AssignmentDelta = {
+  chrome: { mutability: "immortal", stop: true },
+  "newline.between": { mutability: "immortal", stop: true },
+  "newline.inside": { mutability: "immortal", stop: true },
+  "block.para": { mutability: "immortal", stop: true },
+  "block.heading": { mutability: "immortal", stop: true },
+  "block.front": { mutability: "immortal", stop: true },
+  "block.meta": { mutability: "immortal", stop: true },
+  blank: { mutability: "immortal", stop: true },
+  standalone: { stop: true },
+  "slot.c": { mutability: "immortal", stop: true },
+  "slot.v": { mutability: "immortal", stop: true },
+};
 
 class UnclampableDelta extends Error {}
 
@@ -302,7 +318,7 @@ function resolve(base: Registry, deltas: readonly AssignmentDelta[]): Assignment
       `"${k}" would land at the struck cell ${cellKey(c)} — ${STRUCK[cellKey(c)]}`,
     );
   }
-  return { rows, clamped, deltas };
+  return { rows, clamped, deltas, verseLines: deltas.includes(LINE_BY_LINE) };
 }
 
 export const PROJECTIONS: Record<string, AssignmentDelta> = {
@@ -331,19 +347,7 @@ export const PROJECTIONS: Record<string, AssignmentDelta> = {
   "hide-notes": { "note.caller": { paint: "none" } },
   "hide-verse-numbers": { "slot.v": { paint: "none" } },
   "lock-verse-numbers": { "slot.v": { paint: "none", mutability: "immortal", stop: true } },
-  "line-by-line": {
-    chrome: { mutability: "immortal", stop: true },
-    "newline.between": { mutability: "immortal", stop: true },
-    "newline.inside": { mutability: "immortal", stop: true },
-    "block.para": { mutability: "immortal", stop: true },
-    "block.heading": { mutability: "immortal", stop: true },
-    "block.front": { mutability: "immortal", stop: true },
-    "block.meta": { mutability: "immortal", stop: true },
-    blank: { mutability: "immortal", stop: true },
-    standalone: { stop: true },
-    "slot.c": { mutability: "immortal", stop: true },
-    "slot.v": { mutability: "immortal", stop: true },
-  },
+  "line-by-line": LINE_BY_LINE,
 };
 
 export const assignment = Facet.define<AssignmentDelta, Assignment>({

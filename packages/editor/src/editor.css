@@ -634,6 +634,10 @@
   height: 0;
 }
 
+.cm-mode-regular .usfm-verse-sep-poetry {
+  opacity: 0.45;
+}
+
 .cm-mode-regular .usfm-inblk.usfm-p,
 .cm-mode-regular .usfm-inblk.usfm-q,
 .cm-mode-regular .usfm-inblk.usfm-q1,
