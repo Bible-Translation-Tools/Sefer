@@ -162,6 +162,7 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
                           trailing={
                             <Button
                               variant="tertiary"
+                              class="shrink-0 [&>svg]:shrink-0"
                               data-testid="refine-split"
                               title={t("Move the gateway languages to their own panel")}
                               onClick={() => shell.setReferenceSplit(true)}
@@ -192,6 +193,7 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
                             trailing={
                               <Button
                                 variant="tertiary"
+                                class="shrink-0 [&>svg]:shrink-0"
                                 data-testid="refine-join"
                                 title={t("Join the gateway languages back into this panel")}
                                 onClick={() => shell.setReferenceSplit(false)}

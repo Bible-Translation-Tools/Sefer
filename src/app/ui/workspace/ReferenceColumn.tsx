@@ -1383,7 +1383,11 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
               open={managing()}
               onOpenChange={manage}
               trigger={
-                <Button variant="tertiary" data-testid="reference-add">
+                <Button
+                  variant="tertiary"
+                  class="shrink-0 [&>svg]:shrink-0"
+                  data-testid="reference-add"
+                >
                   <Plus aria-hidden="true" />
                   {t("Add")}
                 </Button>
