@@ -186,7 +186,21 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
                           maxSize={referenceMax}
                           class="flex min-w-0 flex-col"
                         >
-                          <ReferenceColumn variant="panel" onBound={setReferences} />
+                          <ReferenceColumn
+                            variant="panel"
+                            onBound={setReferences}
+                            trailing={
+                              <Button
+                                variant="tertiary"
+                                data-testid="refine-join"
+                                title={t("Join the gateway languages back into this panel")}
+                                onClick={() => shell.setReferenceSplit(false)}
+                              >
+                                <Combine aria-hidden="true" />
+                                {t("Join")}
+                              </Button>
+                            }
+                          />
                         </Resizable.Panel>
                         {/* Nothing between the panels at rest; the line and
                             its grip come up under the pointer. 24px wide, the
@@ -212,15 +226,6 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
                                   active
                                 />
                               </div>
-                              <Button
-                                variant="tertiary"
-                                data-testid="refine-join"
-                                title={t("Join the gateway languages back into this panel")}
-                                onClick={() => shell.setReferenceSplit(false)}
-                              >
-                                <Combine aria-hidden="true" />
-                                {t("Join")}
-                              </Button>
                             </div>
                             <div class="flex min-h-0 flex-1 flex-col">
                               <Show when={book().id} keyed>
