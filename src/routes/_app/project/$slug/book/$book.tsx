@@ -60,6 +60,17 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
    * editor's view beside it.
    */
   const [references, setReferences] = createSignal(0, { name: "boundReferences" });
+  /**
+   * The panels layout, split: the gateways' panel reports what it holds, and
+   * when the last language is removed the two panels merge back into one —
+   * an empty panel beside the editor is only lost width. Reported only once
+   * the panel has read its bindings, so opening a split view does not merge
+   * it before it knows.
+   */
+  const reportSplit = (count: number): void => {
+    setReferences(count);
+    if (count === 0 && untrack(() => shell.referenceSplit())) shell.setReferenceSplit(false);
+  };
   /** The column folded to its cards (its own collapse button). */
   const [folded, setFolded] = createSignal(false, { name: "referencesFolded" });
   const collapsed = (): boolean => references() === 0 || folded();
@@ -189,7 +200,7 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
                         >
                           <ReferenceColumn
                             variant="panel"
-                            onBound={setReferences}
+                            onBound={reportSplit}
                             trailing={
                               <Button
                                 variant="tertiary"
