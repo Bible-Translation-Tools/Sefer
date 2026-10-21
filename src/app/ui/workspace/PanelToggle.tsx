@@ -74,7 +74,7 @@ export function PanelGutter(props: { readonly showing: boolean }) {
         data-testid={props.showing ? "panel-toggle" : "book-fab"}
         aria-expanded={props.showing ? "true" : "false"}
         class={cx(
-          "fixed start-6 top-[88px] z-30 flex h-16 cursor-pointer items-center gap-2 rounded-3xl px-5 text-small font-semibold text-on-surface-primary transition-colors hover:bg-surface-secondary",
+          "fixed start-6 top-[88px] z-30 flex h-12 cursor-pointer items-center gap-1.5 rounded-lg px-3 text-small font-medium text-on-surface-primary transition-colors hover:bg-surface-secondary",
           !props.showing && "bg-surface-primary shadow-medium",
         )}
         onClick={() => shell.setSidebarOpen(!props.showing)}
