@@ -4,7 +4,7 @@ title: "Kitchen 0.1.11 in Sefer: resolve, hygiene fix-all, onion identities, and
 kind: plan
 status: idea
 created: 2026-10-20
-updated: 2026-10-20
+updated: 2026-10-21
 sha: b8c5d48
 priority: 1
 tags: [kitchen]
@@ -54,7 +54,7 @@ The calls hand over a `TocView`; `galley.resolve` takes the held text's id. So e
 the id of the text it means, which the editor and analysis already hold. A caller that has only a
 TOC (excerpts over a unit list?) is the one to check first.
 
-<Question id="generic">Is there a form that does not need the text resident? Checked v0.1.11's
+<Question id="generic" answer="Kitchen is building it now; step 1 (and 2, which rides on it) waits for that bump (Will, 2026-10-21).">Is there a form that does not need the text resident? Checked v0.1.11's
 typings (2026-10-20): no. The only export is `Galley.resolve(id, address, opts)` on a registered
 book; onion-wasm has none. A book registered without `keepText` answers a book, an intro or a
 chapter from its TOC, but refuses a verse by name (segment letters and the opening walk need the
