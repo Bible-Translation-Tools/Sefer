@@ -63,6 +63,13 @@ either every caller goes through a registered id, or we ask kitchen for a pure
 `resolve(text_or_toc, address)` export. Leaning: ask for the pure export; the rules live in
 `onion/src/resolve.md`, so it should already exist on the Rust side.</Question>
 
+**Unblocked by v0.1.12 (on master 2026-10-21):** onion-wasm's free
+`resolve(text, address, { utf16 })` (galley re-exports it) answers over text the host holds,
+every kind including verses, with no registration; `Galley.resolveOf` does the same and
+`Galley.resolve(id)` stays for a registered book. So every caller that holds the text can drop
+`locate.ts`'s `resolve`. v0.1.12 also changes the word rule (words/1: only apostrophes,
+hyphens, the maqaf and a few others join letters into one word), which can move Sous findings.
+
 <Question id="coarser">`galley.resolve` says when a hit is coarser than asked (a bridge for verse 2,
 a whole verse for 3a). Today we silently take the coarser span. Show it ("1–2", "verse 3") in the
 location bar, or keep silent?</Question>
