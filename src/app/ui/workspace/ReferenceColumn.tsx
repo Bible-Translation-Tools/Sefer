@@ -1302,7 +1302,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       data-testid="language-list"
       class="scrollbar-padded flex max-h-[min(70vh,32rem)] flex-col overflow-y-auto py-2"
     >
-      <h3 class="px-4 pt-2 pb-1 text-smallest font-semibold text-on-surface-secondary">
+      <h3 class="flex h-12 shrink-0 items-center px-4 text-small font-bold text-on-surface-primary">
         {t("Downloaded")}
       </h3>
       <Show when={downloaded().length === 0}>
@@ -1323,7 +1323,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
           )}
         </For>
       </ul>
-      <h3 class="px-4 pt-2 pb-1 text-smallest font-semibold text-on-surface-secondary">
+      <h3 class="flex h-12 shrink-0 items-center px-4 text-small font-bold text-on-surface-primary">
         {t("Available")}
       </h3>
       <Show when={gateways() === undefined}>
