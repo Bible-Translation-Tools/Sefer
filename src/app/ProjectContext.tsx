@@ -280,6 +280,8 @@ export interface Shell {
    * project from a full-page screen). Held as a preference, so it survives a restart.
    */
   readonly lastLocation: (root: string) => LastLocation | undefined;
+  /** Where the reader last was in this one book of this project; see `bookLocations`. */
+  readonly bookLocation: (root: string, bookId: string) => LastLocation | undefined;
 
   /** The finding the "next/previous finding" commands point at. */
   readonly finding: Accessor<Finding | undefined>;
@@ -750,6 +752,12 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     services.settings.get(keys.lastLocation),
     { name: "lastLocations", equals: false },
   );
+  // And in each book, by `<root>\u0000<book>`.
+  const [bookLocations, setBookLocations] = createSignal<LastLocations>(
+    services.settings.get(keys.bookLocations),
+    { name: "bookLocations", equals: false },
+  );
+  const bookKey = (root: string, bookId: string): string => `${root}\u0000${bookId}`;
 
   const persist = <S,>(key: SettingKey<S>, value: S): void => {
     // `Effect.result` because a rejected preference is a note, not a crash:
@@ -1115,8 +1123,8 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
      * a book opens whole: reopening would land at the top of the right book
      * however far down it the reader had been.
      */
-    const held = lastLocation(staticProject.root);
-    const resume = at === undefined && held?.bookId === bookId ? held.at : undefined;
+    const held = bookLocation(staticProject.root, bookId);
+    const resume = at === undefined ? held?.at : undefined;
 
     const opening = openingChapter(editing, at);
     if (preferChapterView() && resume !== undefined) {
@@ -1176,7 +1184,11 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     const root = live?.root;
     if (root === undefined || bookId === undefined) return;
     const held = untrack(locations);
-    const previous = held[root];
+    const perBook = untrack(bookLocations);
+    // This book's own last place, so a book returned to carries its own
+    // chapter forward rather than another book's.
+    const previous =
+      perBook[bookKey(root, bookId)] ?? (held[root]?.bookId === bookId ? held[root] : undefined);
     // The scrolled-to chapter is carried forward when the caller has no
     // opinion about it: a clip change and a scroll are two different facts,
     // and the one that did not happen must not be erased by the one that did.
@@ -1194,10 +1206,15 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
       },
     };
     setLocations(next);
+    const entry = next[root];
+    const books: LastLocations =
+      entry === undefined ? perBook : { ...perBook, [bookKey(root, bookId)]: entry };
+    setBookLocations(books);
     if (locationWrite !== undefined) clearTimeout(locationWrite);
     locationWrite = setTimeout(() => {
       locationWrite = undefined;
       persist(keys.lastLocation, next);
+      persist(keys.bookLocations, books);
     }, 400);
   };
 
@@ -1283,6 +1300,12 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
   };
 
   const lastLocation = (root: string): LastLocation | undefined => locations()[root];
+  const bookLocation = (root: string, bookId: string): LastLocation | undefined => {
+    const held = bookLocations()[bookKey(root, bookId)];
+    if (held !== undefined) return held;
+    const last = locations()[root];
+    return last?.bookId === bookId ? last : undefined;
+  };
 
   const aim = (bookId: BookId, from: number, to?: number, at?: RevealAt): void => {
     setReveal({ bookId, from, to, at });
@@ -1499,6 +1522,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     resources,
     noteChapterAtTop,
     lastLocation,
+    bookLocation,
     finding,
     findings,
     findingsPending,

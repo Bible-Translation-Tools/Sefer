@@ -274,7 +274,20 @@ export function ProjectSidebar() {
           data-focused={focused() ? "" : undefined}
           aria-expanded={open() ? "true" : "false"}
           class="flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-lg p-3 text-start text-small font-medium transition-colors data-focused:text-brand not-data-focused:text-sidebar-on-surface not-data-focused:hover:bg-sidebar-surface-hover"
-          onClick={() => setOpened(open() ? null : rowProps.row.id)}
+          onClick={() => {
+            // The panels layout (a design tweak): a book's row OPENS it — at
+            // its front matter the first time, where the reader left it after
+            // that (`shell.bookLocation`). Its own row folds it again.
+            if (panels() && !focused()) {
+              setOpened(undefined);
+              void navigate({
+                to: "/project/$slug/book/$book",
+                params: { slug: shell.slug(), book: encodeURIComponent(rowProps.row.id) },
+              });
+              return;
+            }
+            setOpened(open() ? null : rowProps.row.id);
+          }}
         >
           <BookIcon size={20} aria-hidden="true" class="shrink-0" />
           <span class="min-w-0 flex-1 truncate">{rowProps.row.name}</span>

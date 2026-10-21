@@ -91,8 +91,9 @@ export function BookEditor(props: BookEditorProps) {
       const remembered = untrack(() => {
         if (shell.reveal()?.bookId === bookId) return undefined;
         const root = shell.project()?.root;
-        const held = root === undefined ? undefined : shell.lastLocation(root);
-        return held?.bookId === bookId ? held.place : undefined;
+        // This book's own last place: returning to Mark returns to Mark 3,
+        // and a book never opened before opens at its front matter.
+        return root === undefined ? undefined : shell.bookLocation(root, bookId)?.place;
       });
       // A deliberate one-time read, said so the runtime believes it: an
       // effect's callback is an untracked scope in Solid 2, and a bare
