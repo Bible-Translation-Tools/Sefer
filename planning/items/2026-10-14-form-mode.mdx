@@ -110,6 +110,17 @@ block) and keep the one that reads best.
 
 <Question id="enter-next" answer="Yes: Enter takes over; in line-by-line it moves to the start of the next verse (Will, 2026-10-21).">Enter in line-by-line: move to the next verse?</Question>
 
+**Defaults for the spike:** a view switch beside chapter view, remembered per device; a `\c` is a
+read-only label row; notes work as in the normal editor; findings stay on; no tests until the
+behaviour settles (the key table then becomes the test list).
+
+**Order:** (1) refuse edits touching hidden text or a verse marker; (2) one line per verse, with
+the drawn breaks; (3) the keys; (4) the verse popup; (5) the structure marks. Will tries each on
+the branch's dev server.
+
+<Followup id="ship">To `dev` behind `__SEFER_DESIGN__` once it holds up, and finish with a
+tutorial for the PO and designer, as for suppressions (Will, 2026-10-21).</Followup>
+
 **Risk:** `plan.ts` (the edit plan) must refuse any edit that touches a hidden range or a verse
 marker in this mode; that is what the spike proves first, with Will at the keyboard.
 
