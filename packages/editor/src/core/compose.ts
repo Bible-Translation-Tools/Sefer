@@ -25,6 +25,7 @@ import { HOOK, PHASES, type ParserPort, type PhaseRule, type RuleName } from "./
 import { renderRangeField, renderWindow } from "./render";
 import { scrollGuard } from "./scroll";
 import { span } from "./timing";
+import { verseLineKeys } from "./verseLines";
 
 export type { RuleName };
 
@@ -233,6 +234,7 @@ export function usfmKeys(): readonly KeyBinding[] {
 }
 
 export const commandsLayer: Extension = [
+  Prec.highest(keymap.of([...verseLineKeys()])),
   Prec.high(keymap.of([...usfmKeys()])),
   keymap.of([...defaultKeymap, ...historyKeymap]),
 ];

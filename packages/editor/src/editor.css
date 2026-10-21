@@ -634,6 +634,14 @@
   height: 0;
 }
 
+.cm-mode-regular .usfm-verse-line {
+  padding-top: 0.5em;
+}
+
+.cm-mode-regular .usfm-brk.usfm-verse-break {
+  height: 0.5em;
+}
+
 .cm-mode-regular .usfm-verse-sep-poetry {
   opacity: 0.45;
 }

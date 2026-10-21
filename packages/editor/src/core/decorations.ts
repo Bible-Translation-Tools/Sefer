@@ -622,6 +622,7 @@ const separator = (poetry: boolean): Decoration =>
   Decoration.replace({ widget: new VerseSeparatorWidget(poetry), ...UNIT });
 
 const VERSE_BREAK = Decoration.widget({ widget: new BreakWidget("usfm-verse-break"), side: -1 });
+const VERSE_LINE = Decoration.line({ class: "usfm-verse-line" });
 
 const isPoetryMarker = (marker: string | null): boolean => marker?.startsWith("q") === true;
 
@@ -671,6 +672,9 @@ function layOutVerseLines(
     }
     if (line.cls === "block.para" && line.contentFrom > line.from && visibleFrom === line.from)
       add.push({ from: line.from, to: line.contentFrom, deco: HIDDEN });
+    const visualStart = previous === null ? line.from : previous.to + 1;
+    if (opensVerse(line) && !outside(visualStart, visualStart))
+      add.push({ from: visualStart, to: visualStart, deco: VERSE_LINE });
     lineStarts.add(line.from);
     lineStarts.add(line.contentFrom);
     previous = line;
