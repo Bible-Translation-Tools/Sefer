@@ -135,12 +135,22 @@ export function LocationBar(props: LocationBarProps) {
           },
         }}
         end={
-          <Switch
-            class="ms-2"
-            label={t("USFM")}
-            checked={shell.mode() === "usfm"}
-            onChange={(on) => shell.setMode(on ? "usfm" : "default")}
-          />
+          <>
+            {__SEFER_DESIGN__ ? (
+              <Switch
+                class="ms-2"
+                label={t("Line by line")}
+                checked={shell.lineByLine()}
+                onChange={(on) => shell.setLineByLine(on)}
+              />
+            ) : null}
+            <Switch
+              class="ms-2"
+              label={t("USFM")}
+              checked={shell.mode() === "usfm"}
+              onChange={(on) => shell.setMode(on ? "usfm" : "default")}
+            />
+          </>
         }
       />
     </LocationStrip>

@@ -184,10 +184,17 @@ export function BookEditor(props: BookEditorProps) {
   );
 
   createRenderEffect(
-    () => ({ editor: bound(), mode: shell.mode(), chapter: shell.chapter() }),
-    ({ editor, mode, chapter }) => {
+    () => ({
+      editor: bound(),
+      mode: shell.mode(),
+      lines: shell.lineByLine(),
+      chapter: shell.chapter(),
+    }),
+    ({ editor, mode, lines, chapter }) => {
       if (editor === undefined) return;
-      editor.setPolicy(editorPolicy(mode === "usfm" ? "usfm" : "regular"));
+      if (mode === "usfm") editor.setPolicy(editorPolicy("usfm"));
+      else if (lines) editor.setPolicy(editorPolicy("regular", "line-by-line"));
+      else editor.setPolicy(editorPolicy("regular"));
       editor.setChapter(chapter);
     },
   );

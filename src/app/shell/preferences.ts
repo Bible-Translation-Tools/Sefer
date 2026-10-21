@@ -33,6 +33,18 @@ export const createPreferences = ({ services, keys, changed, live }: Preferences
     Effect.runFork(Fiber.interrupt(watching));
   });
 
+  const [lineByLine, setLineByLine] = createSignal(services.settings.get(keys.lineByLine), {
+    name: "lineByLine",
+  });
+  const watchingLines = services.runtime.runFork(
+    Stream.runForEach(services.settings.changes(keys.lineByLine), (on) =>
+      Effect.sync(() => setLineByLine(on)),
+    ),
+  );
+  onCleanup(() => {
+    Effect.runFork(Fiber.interrupt(watchingLines));
+  });
+
   const retime = (idleMs: number): Effect.Effect<void> =>
     services.recovery.setPolicy({
       idleMs,
@@ -82,7 +94,11 @@ export const createPreferences = ({ services, keys, changed, live }: Preferences
     Effect.runFork(Fiber.interrupt(sizing));
   });
 
-  return { preferChapterView };
+  const setLineByLineSetting = (on: boolean): void => {
+    void services.run(Effect.result(services.settings.set(keys.lineByLine, on)));
+  };
+
+  return { preferChapterView, lineByLine, setLineByLine: setLineByLineSetting };
 };
 
 export const createLayoutPreferences = ({

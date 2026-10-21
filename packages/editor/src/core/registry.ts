@@ -331,6 +331,19 @@ export const PROJECTIONS: Record<string, AssignmentDelta> = {
   "hide-notes": { "note.caller": { paint: "none" } },
   "hide-verse-numbers": { "slot.v": { paint: "none" } },
   "lock-verse-numbers": { "slot.v": { paint: "none", mutability: "immortal", stop: true } },
+  "line-by-line": {
+    chrome: { mutability: "immortal", stop: true },
+    "newline.between": { mutability: "immortal", stop: true },
+    "newline.inside": { mutability: "immortal", stop: true },
+    "block.para": { mutability: "immortal", stop: true },
+    "block.heading": { mutability: "immortal", stop: true },
+    "block.front": { mutability: "immortal", stop: true },
+    "block.meta": { mutability: "immortal", stop: true },
+    blank: { mutability: "immortal", stop: true },
+    standalone: { stop: true },
+    "slot.c": { mutability: "immortal", stop: true },
+    "slot.v": { mutability: "immortal", stop: true },
+  },
 };
 
 export const assignment = Facet.define<AssignmentDelta, Assignment>({

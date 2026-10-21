@@ -65,6 +65,8 @@ export interface Shell {
   readonly chapter: Accessor<number | null>;
   readonly setChapter: (ordinal: number | null) => void;
   readonly preferChapterView: Accessor<boolean>;
+  readonly lineByLine: Accessor<boolean>;
+  readonly setLineByLine: (on: boolean) => void;
 
   readonly aim: (bookId: BookId, from: number, to?: number, at?: RevealAt) => void;
   readonly reveal: Accessor<Reveal | undefined>;
@@ -201,7 +203,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
   const [reveal, setReveal] = createSignal<Reveal | undefined>(undefined, { name: "reveal" });
 
   const keys = shellKeys(services.settings);
-  const { preferChapterView } = createPreferences({
+  const { preferChapterView, lineByLine, setLineByLine } = createPreferences({
     services,
     keys,
     changed: (event) => changed(event),
@@ -324,6 +326,8 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
       remember(focused()?.id, ordinal);
     },
     preferChapterView,
+    lineByLine,
+    setLineByLine,
     aim,
     reveal,
     showChapter: reader.showChapter,

@@ -106,6 +106,7 @@ export interface ShellKeys {
   readonly showAdvancedSettings: SettingKey<boolean>;
   readonly backupIdleMs: SettingKey<number>;
   readonly preferChapterView: SettingKey<boolean>;
+  readonly lineByLine: SettingKey<boolean>;
   readonly annotateEmptyParagraphs: SettingKey<boolean>;
   /** Enables the destructive multi-match action in Find. */
   readonly enableReplaceAll: SettingKey<boolean>;
@@ -163,6 +164,7 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
       DEFAULT_JOURNAL_POLICY.idleMs,
     ),
     preferChapterView: settings.register("editor.preferChapterView", Schema.Boolean, false),
+    lineByLine: settings.register("editor.lineByLine", Schema.Boolean, false),
     annotateEmptyParagraphs: settings.register(
       "editor.annotateEmptyParagraphs",
       Schema.Boolean,
