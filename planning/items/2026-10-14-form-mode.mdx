@@ -65,18 +65,37 @@ the text. No newline is written; the text and its offsets stay as they are.
 **What shows:** the verse number (locked, as today) and the verse text. Everything else between
 verses is hidden but not lost: it stays in the string, untouched, and the cursor cannot enter it.
 
-<Question id="structure">How do `\p`, `\q1`, `\s` and friends show in line-by-line mode? Proposal:
+<Question id="structure" answer="Start with this proposal and get a feel for which policies are available; hiding them entirely (an immortal policy) is the other candidate (Will, 2026-10-21).">How do `\p`, `\q1`, `\s` and friends show in line-by-line mode? Proposal:
 a section heading (`\s`) is a quiet, read-only label row between verses, because people copying
 from paper use it to keep their place; a paragraph or poetry marker BETWEEN verses is a small
 mark in the gutter of the verse it opens (¶, q1), read-only; a poetry break INSIDE a verse
 (`\v 3 … \q2 …`) shows inline as a thin `/`, so the verse stays one line. Changing structure is
 the normal editor's job.</Question>
 
-<Question id="verse-actions">Structured actions on the verse number? Proposal for the spike:
+<Question id="verse-actions" answer="Change number, Remove, and Add verse (split is just adding a verse) (Will, 2026-10-21).">Structured actions on the verse number? Proposal for the spike:
 the number's popup offers **Change number** and **Remove** (the verse's text joins the one before),
 nothing else. Split and join wait to see if people ask.</Question>
 
-**Keys, first draft of the matrix** (mode × key → policy):
+> on the \p and q bits, yeah it's hard, cause like p's job is text indentaiton. Q is block and
+> poetry. But if it all becomes a block or each verse does then... You could argue pip it
+> out/immortal policy, but idk. I think let's start with your suggestion and then just get a feel
+> for which policies are avaialble to us?
+> — Will, 2026-10-21
+
+**First attempt, agreed 2026-10-21:**
+
+- **The verse number's popup:** Change number; Remove (the verse's text joins the one before);
+  Add verse (a new `\v` after this one, the next number, empty; at the caret, it is a split).
+- **Section heading (`\s`):** a quiet, read-only label row between verses.
+- **`\p` or `\q` between verses:** a small read-only mark in the gutter of the verse it opens (¶, q1).
+- **`\q` inside a verse:** a thin `/` in the line, so the verse stays one line.
+- **Changing structure** is the normal editor's job.
+- **Keys:** the table below, as defaults.
+
+Then try the other policies for paragraph and poetry markers (hidden entirely; each verse its own
+block) and keep the one that reads best.
+
+**Keys, the defaults** (mode × key → policy):
 
 | Key | Normal editor | Line-by-line |
 |---|---|---|
