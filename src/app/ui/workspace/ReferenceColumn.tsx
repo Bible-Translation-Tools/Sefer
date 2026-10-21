@@ -1180,9 +1180,9 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
   /**
    * How tight the tab strip is, so it gives up room in order: 0, everything;
    * 1, + Add and Split/Join fold into a "…" menu; 2, the language icons go
-   * too. Past that, names shorten to codes (each tab's own measure). Worked
-   * out by trying: on each resize the strip goes back to 0 and steps up a
-   * frame at a time while any tab's name is cut short.
+   * too. Past that, names shorten to codes (each tab's own measure). It
+   * steps up while any tab has fallen back to its code, and back down once
+   * the strip is clearly wider than where it stepped up.
    */
   const [tight, setTight] = createSignal<0 | 1 | 2>(0, { name: "referenceStripTight" });
   const [strip, setStrip] = createSignal<HTMLElement>();
@@ -1193,29 +1193,42 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     () => ({ element: strip(), tabs: languageTabs().length }),
     ({ element }) => {
       if (element === undefined) return;
+      // The width each step was taken at. A step is only undone once the
+      // strip is clearly wider than that, so a strip on the edge does not
+      // fold and unfold on every frame; and only WIDTH changes count, since
+      // folding changes the strip's own height.
+      const takenAt: number[] = [];
+      let width = -1;
       let frame = 0;
-      const settle = (): void => {
+      // Two frames: one to draw a step, one for each tab's own measure (a
+      // ResizeObserver, which reports after layout) to land.
+      const later = (then: () => void): void => {
         cancelAnimationFrame(frame);
-        setTight(0);
-        // Two frames a step: one to draw it, one for each tab's own measure
-        // (a ResizeObserver, which reports after layout) to land.
-        const later = (then: () => void): void => {
-          frame = requestAnimationFrame(() => {
-            frame = requestAnimationFrame(then);
-          });
-        };
-        const step = (): void => {
-          const now = untrack(tight);
-          if (now < 2 && cramped(element)) {
-            setTight(now === 0 ? 1 : 2);
-            later(step);
-          }
-        };
-        later(step);
+        frame = requestAnimationFrame(() => {
+          frame = requestAnimationFrame(then);
+        });
       };
-      const observer = new ResizeObserver(settle);
+      const check = (): void => {
+        const now = untrack(tight);
+        const room = element.clientWidth;
+        const back = takenAt[now - 1];
+        if (now > 0 && back !== undefined && room > back + 16) {
+          takenAt.length = now - 1;
+          setTight(now === 2 ? 1 : 0);
+          later(check);
+        } else if (now < 2 && cramped(element)) {
+          takenAt[now] = room;
+          setTight(now === 0 ? 1 : 2);
+          later(check);
+        }
+      };
+      const observer = new ResizeObserver(() => {
+        if (element.clientWidth === width) return;
+        width = element.clientWidth;
+        later(check);
+      });
       observer.observe(element);
-      settle();
+      later(check);
       return () => {
         cancelAnimationFrame(frame);
         observer.disconnect();
