@@ -30,7 +30,7 @@ import { tocViewOf } from "#core/galley";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import { Badge, Button, IconButton, Input, SegmentedControl } from "../primitives";
+import { Badge, Button, IconButton, Input, SegmentedControl, cx } from "../primitives";
 import { bookName, testamentOf, type Testament } from "./books";
 import { layout } from "./layoutTweak";
 import { metadataOf, projectLanguage, projectName } from "./project";
@@ -508,7 +508,14 @@ export function ProjectControl() {
   const choosing = (): boolean => path() === "/" || path().startsWith("/start");
 
   return (
-    <div class="px-4 pt-4 pb-2">
+    <div
+      class={cx(
+        "px-4 pt-4 pb-2",
+        // The panels layout: the panel's own show/hide sits fixed at the
+        // window's edge (24px, 64px wide), so the card starts 12px past it.
+        layout() === "panels" && shell.project() !== undefined && "ps-[100px]",
+      )}
+    >
       {/* With no project open the button is an invitation rather than a
         label: two lines of brand text and an arrow. Same destination. */}
       <Show

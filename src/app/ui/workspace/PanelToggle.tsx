@@ -83,9 +83,9 @@ export function PanelGutter(props: { readonly showing: boolean }) {
           </button>
         }
       >
-        <div class="absolute start-0 top-4 z-10">
-          <PanelToggle class="size-16 rounded-3xl!" />
-        </div>
+        {/* The same place as the book button: the control never moves,
+            whether the panel is open or not. The project card makes room. */}
+        <PanelToggle class="fixed start-6 top-[88px] z-30 size-16 rounded-3xl!" />
       </Show>
     </Show>
   );

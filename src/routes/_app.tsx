@@ -139,9 +139,7 @@ function Workspace() {
                 // The panels layout's gutter, so nothing on the page runs under
                 // the panel's toggle (64px at the panel's edge) or, with the
                 // panel hidden, the book button (64px, 24px from the edge).
-                layout() === "panels" &&
-                  shell.project() !== undefined &&
-                  (showing() ? "ps-12" : "ps-[88px]"),
+                layout() === "panels" && shell.project() !== undefined && !showing() && "ps-[88px]",
                 // …on the panels layout's one white surface.
                 layout() === "panels" && "bg-surface-primary",
               )}
