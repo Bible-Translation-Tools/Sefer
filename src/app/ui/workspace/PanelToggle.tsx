@@ -17,7 +17,7 @@ import { Show } from "solid-js";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import { IconButton } from "../primitives";
+import { IconButton, cx } from "../primitives";
 import { layout } from "./layoutTweak";
 import { useScreen } from "./screen";
 
@@ -65,28 +65,28 @@ export function usePanelToggleLeading(): () => JSX.Element | undefined {
  */
 export function PanelGutter(props: { readonly showing: boolean }) {
   const shell = useShell();
+  // One control in one place — 24px from the window's edge, 16px below the
+  // app bar — labelled for what it does now: hide the books, or show them.
   return (
     <Show when={layout() === "panels" && shell.project() !== undefined}>
-      <Show
-        when={props.showing}
-        fallback={
-          <button
-            type="button"
-            data-testid="book-fab"
-            aria-label={t("Show the books")}
-            title={t("Show the books")}
-            // 72px app bar + 16px: level with the project card's 64px row.
-            class="fixed start-6 top-[88px] z-30 flex size-16 cursor-pointer items-center justify-center rounded-3xl bg-surface-primary text-on-surface-primary shadow-medium transition-colors hover:bg-surface-secondary"
-            onClick={() => shell.setSidebarOpen(true)}
-          >
-            <BookIcon aria-hidden="true" class="size-6" />
-          </button>
-        }
+      <button
+        type="button"
+        data-testid={props.showing ? "panel-toggle" : "book-fab"}
+        aria-expanded={props.showing ? "true" : "false"}
+        class={cx(
+          "fixed start-6 top-[88px] z-30 flex h-16 cursor-pointer items-center gap-2 rounded-3xl px-5 text-small font-semibold text-on-surface-primary transition-colors hover:bg-surface-secondary",
+          !props.showing && "bg-surface-primary shadow-medium",
+        )}
+        onClick={() => shell.setSidebarOpen(!props.showing)}
       >
-        {/* The same place as the book button: the control never moves,
-            whether the panel is open or not. The project card makes room. */}
-        <PanelToggle class="fixed start-6 top-[88px] z-30 size-16 rounded-3xl!" />
-      </Show>
+        <Show
+          when={props.showing}
+          fallback={<BookIcon aria-hidden="true" class="size-5 shrink-0" />}
+        >
+          <PanelLeftClose aria-hidden="true" class="size-5 shrink-0" />
+        </Show>
+        {props.showing ? t("Hide books") : t("Show books")}
+      </button>
     </Show>
   );
 }

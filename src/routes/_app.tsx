@@ -136,10 +136,13 @@ function Workspace() {
             <div
               class={cx(
                 "flex h-full min-w-0 flex-col",
-                // The panels layout's gutter, so nothing on the page runs under
-                // the panel's toggle (64px at the panel's edge) or, with the
-                // panel hidden, the book button (64px, 24px from the edge).
-                layout() === "panels" && shell.project() !== undefined && !showing() && "ps-[88px]",
+                // The panels layout, panel hidden: a gutter so nothing on the
+                // page runs under the labelled book button (about 150px, 24px
+                // from the edge); with the page's own 24px, 24px clear of it.
+                layout() === "panels" &&
+                  shell.project() !== undefined &&
+                  !showing() &&
+                  "ps-[176px]",
                 // …on the panels layout's one white surface.
                 layout() === "panels" && "bg-surface-primary",
               )}

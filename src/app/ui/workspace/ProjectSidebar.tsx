@@ -511,9 +511,9 @@ export function ProjectControl() {
     <div
       class={cx(
         "px-4 pt-4 pb-2",
-        // The panels layout: the panel's own show/hide sits fixed at the
-        // window's edge (24px, 64px wide), so the card starts 12px past it.
-        layout() === "panels" && shell.project() !== undefined && "ps-[100px]",
+        // The panels layout: the panel's own show/hide sits fixed above the
+        // card (16px down, 64px tall), so the card starts a row lower.
+        layout() === "panels" && shell.project() !== undefined && "pt-[92px]",
       )}
     >
       {/* With no project open the button is an invitation rather than a
