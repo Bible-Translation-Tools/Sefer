@@ -43,13 +43,14 @@ import Check from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronUp from "lucide-solid/icons/chevron-up";
 import Download from "lucide-solid/icons/download";
+import MoreHorizontal from "lucide-solid/icons/ellipsis";
 import Globe from "lucide-solid/icons/globe";
 import Heart from "lucide-solid/icons/heart";
 import PanelLeftClose from "lucide-solid/icons/panel-left-close";
 import Plus from "lucide-solid/icons/plus";
 import Trash from "lucide-solid/icons/trash-2";
 import X from "lucide-solid/icons/x";
-import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
 
 import { Observability } from "#core/observability";
 import { remoteVerdict } from "#core/remote/remote";
@@ -175,8 +176,11 @@ export function LanguageTab(props: {
   readonly onClose?: () => void;
   /** The language it stands for, for the add list's flight to it. */
   readonly languageKey?: string;
+  /** `false` when the strip is short of room: the icons go before the names do. */
+  readonly showIcon?: boolean;
 }) {
-  const closable = (): boolean => props.onClose !== undefined;
+  // The × only on the tab on show.
+  const closable = (): boolean => props.active && props.onClose !== undefined;
   // The label is two layers in one grid cell: an invisible copy of the full
   // name, which gives the tab its natural width and shrinks when the strip is
   // short of room, and the visible text over it. The name shows while the copy
@@ -201,6 +205,7 @@ export function LanguageTab(props: {
     <div
       data-current={props.active ? "" : undefined}
       data-tab-language={props.languageKey}
+      data-short={fits() ? undefined : ""}
       class="-mb-px flex h-12 min-w-0 shrink items-center rounded-t-[12px] border-b-2 text-small font-semibold transition-colors data-current:border-brand data-current:text-brand not-data-current:border-transparent not-data-current:text-on-surface-primary not-data-current:hover:bg-surface-secondary"
     >
       <button
@@ -217,11 +222,13 @@ export function LanguageTab(props: {
       >
         {/* What kind of language it is: a gateway to read beside, or the
             heart language being refined. */}
-        <Show
-          when={props.refining === true}
-          fallback={<Globe aria-hidden="true" class="size-5 shrink-0" />}
-        >
-          <Heart aria-hidden="true" class="size-5 shrink-0" />
+        <Show when={props.showIcon !== false}>
+          <Show
+            when={props.refining === true}
+            fallback={<Globe aria-hidden="true" class="size-5 shrink-0" />}
+          >
+            <Heart aria-hidden="true" class="size-5 shrink-0" />
+          </Show>
         </Show>
         <span class="grid min-w-0">
           <span
@@ -1170,6 +1177,52 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     );
   };
 
+  /**
+   * How tight the tab strip is, so it gives up room in order: 0, everything;
+   * 1, + Add and Split/Join fold into a "…" menu; 2, the language icons go
+   * too. Past that, names shorten to codes (each tab's own measure). Worked
+   * out by trying: on each resize the strip goes back to 0 and steps up a
+   * frame at a time while any tab's name is cut short.
+   */
+  const [tight, setTight] = createSignal<0 | 1 | 2>(0, { name: "referenceStripTight" });
+  const [strip, setStrip] = createSignal<HTMLElement>();
+  // Cramped: the strip overflows, or some tab has had to fall back to its code.
+  const cramped = (element: HTMLElement): boolean =>
+    element.scrollWidth > element.clientWidth + 1 || element.querySelector("[data-short]") !== null;
+  createEffect(
+    () => ({ element: strip(), tabs: languageTabs().length }),
+    ({ element }) => {
+      if (element === undefined) return;
+      let frame = 0;
+      const settle = (): void => {
+        cancelAnimationFrame(frame);
+        setTight(0);
+        // Two frames a step: one to draw it, one for each tab's own measure
+        // (a ResizeObserver, which reports after layout) to land.
+        const later = (then: () => void): void => {
+          frame = requestAnimationFrame(() => {
+            frame = requestAnimationFrame(then);
+          });
+        };
+        const step = (): void => {
+          const now = untrack(tight);
+          if (now < 2 && cramped(element)) {
+            setTight(now === 0 ? 1 : 2);
+            later(step);
+          }
+        };
+        later(step);
+      };
+      const observer = new ResizeObserver(settle);
+      observer.observe(element);
+      settle();
+      return () => {
+        cancelAnimationFrame(frame);
+        observer.disconnect();
+      };
+    },
+  );
+
   /** One row's action: Add, Remove, Download, or the bar while it downloads. */
   const offerAction = (offer: Offer): JSX.Element => {
     if (offer.kind === "download")
@@ -1341,6 +1394,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
           }
         >
           <div
+            ref={setStrip}
             role="tablist"
             aria-label={t("Languages")}
             class="flex shrink-0 items-center gap-controls border-b border-surface-border"
@@ -1369,33 +1423,67 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
                         : () => unpickLanguage(group.key)
                     }
                     languageKey={group.key}
+                    showIcon={tight() < 2}
                   />
                 )}
               </For>
             </div>
-            <Popover
-              label={t("Add a reference language")}
-              side="bottom"
-              align="start"
-              variant="menu"
-              class="w-96 p-0"
-              fitViewport
-              open={managing()}
-              onOpenChange={manage}
-              trigger={
-                <Button
-                  variant="tertiary"
-                  class="shrink-0 [&>svg]:shrink-0"
-                  data-testid="reference-add"
-                >
-                  <Plus aria-hidden="true" />
-                  {t("Add")}
-                </Button>
+            <Show
+              when={tight() > 0}
+              fallback={
+                <>
+                  <Popover
+                    label={t("Add a reference language")}
+                    side="bottom"
+                    align="start"
+                    variant="menu"
+                    class="w-96 p-0"
+                    fitViewport
+                    open={managing()}
+                    onOpenChange={manage}
+                    trigger={
+                      <Button
+                        variant="tertiary"
+                        class="shrink-0 [&>svg]:shrink-0"
+                        data-testid="reference-add"
+                      >
+                        <Plus aria-hidden="true" />
+                        {t("Add")}
+                      </Button>
+                    }
+                  >
+                    <LanguageList />
+                  </Popover>
+                  {props.trailing}
+                </>
               }
             >
-              <LanguageList />
-            </Popover>
-            {props.trailing}
+              {/* Short of room: Split/Join and the language list behind one "…". */}
+              <Popover
+                label={t("More")}
+                side="bottom"
+                align="start"
+                variant="menu"
+                class="w-96 p-0"
+                fitViewport
+                open={managing()}
+                onOpenChange={manage}
+                trigger={
+                  <IconButton
+                    variant="quiet"
+                    class="shrink-0"
+                    data-testid="reference-more"
+                    label={t("More")}
+                    icon={<MoreHorizontal />}
+                  />
+                }
+              >
+                <Show when={props.trailing !== undefined}>
+                  <div class="flex border-b border-surface-border px-2 py-2">{props.trailing}</div>
+                </Show>
+                <LanguageList />
+              </Popover>
+            </Show>
             {/* The heart language, flush right: gateways, then Add and Split,
                 then the one being refined at the far end. */}
             <Show when={props.heart}>
@@ -1403,6 +1491,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
                 <div class="ms-auto flex min-w-0">
                   <LanguageTab
                     testId="language-tab-heart"
+                    showIcon={tight() < 2}
                     name={heart().name}
                     code={heart().code}
                     refining
