@@ -22,6 +22,7 @@ import type { DocLine, WordRange } from "./fold";
 import type { DocPlan, PlanSpan, ResolvedSlot } from "./plan";
 import type { WidgetKey } from "./registry";
 import { chipRenderer, markupOf } from "./unsupported";
+import { keptAsReading, type KeptAsReading } from "./verseLines";
 import { markerWords } from "./words";
 
 class JoinWidget extends WidgetType {
@@ -748,42 +749,43 @@ export function buildRegular(
       }
     }
 
-  if (plan.verseLines) joined += layOutVerseLines(structure, plan, add, outside);
-  else
-    for (let i = 0; i < structure.blocks.length; i++) {
-      if (outside(structure.blocks.fromAt(i), structure.blocks.toAt(i))) continue;
-      const b = structure.blocks.at(i);
-      const resolvedBlock = plan.block(i);
-      for (const r of resolvedBlock.reflow) {
-        if (r.kind === "hide") {
-          add.push({ from: r.from, to: r.to, deco: HIDDEN });
-          continue;
-        }
-        add.push({ from: r.from, to: r.to, deco: join });
-      }
-      joined += resolvedBlock.joined;
-      const head = b.cls === "block.heading" ? " usfm-head" : "";
-      const className = resolvedBlock.paints ? `usfm-block usfm-${b.kind}${head}` : "";
-      if (resolvedBlock.startsLine) {
-        if (className)
-          add.push({ from: b.from, to: b.from, deco: Decoration.line({ class: className }) });
+  // Line by line keeps a table and a sidebar as Reading draws them, on their own lines.
+  const kept = plan.verseLines ? keptAsReading(structure) : null;
+  if (kept !== null) joined += layOutVerseLines(structure, plan, add, outside, kept);
+  for (let i = 0; i < structure.blocks.length; i++) {
+    if (kept !== null && !kept.blocks.has(i)) continue;
+    if (outside(structure.blocks.fromAt(i), structure.blocks.toAt(i))) continue;
+    const b = structure.blocks.at(i);
+    const resolvedBlock = plan.block(i);
+    for (const r of resolvedBlock.reflow) {
+      if (r.kind === "hide") {
+        add.push({ from: r.from, to: r.to, deco: HIDDEN });
         continue;
       }
-      if (resolvedBlock.headHidden)
-        hide(resolvedBlock.headHidden.from, resolvedBlock.headHidden.to);
-      if (resolvedBlock.breakAt !== null)
-        add.push({
-          from: resolvedBlock.breakAt,
-          to: resolvedBlock.breakAt,
-          deco: Decoration.widget({ widget: new BreakWidget(className), side: -1 }),
-        });
-      if (resolvedBlock.inblk)
-        add.push({
-          from: resolvedBlock.inblk.from,
-          to: resolvedBlock.inblk.to,
-          deco: Decoration.mark({ class: `usfm-inblk usfm-${b.kind}` }),
-        });
+      add.push({ from: r.from, to: r.to, deco: join });
     }
+    joined += resolvedBlock.joined;
+    const head = b.cls === "block.heading" ? " usfm-head" : "";
+    const className = resolvedBlock.paints ? `usfm-block usfm-${b.kind}${head}` : "";
+    if (resolvedBlock.startsLine) {
+      if (className)
+        add.push({ from: b.from, to: b.from, deco: Decoration.line({ class: className }) });
+      continue;
+    }
+    if (resolvedBlock.headHidden) hide(resolvedBlock.headHidden.from, resolvedBlock.headHidden.to);
+    if (resolvedBlock.breakAt !== null)
+      add.push({
+        from: resolvedBlock.breakAt,
+        to: resolvedBlock.breakAt,
+        deco: Decoration.widget({ widget: new BreakWidget(className), side: -1 }),
+      });
+    if (resolvedBlock.inblk)
+      add.push({
+        from: resolvedBlock.inblk.from,
+        to: resolvedBlock.inblk.to,
+        deco: Decoration.mark({ class: `usfm-inblk usfm-${b.kind}` }),
+      });
+  }
 
   for (const note of plan.notes) {
     if (outside(note.from, note.to)) continue;
@@ -866,11 +868,15 @@ function layOutVerseLines(
   plan: DocPlan,
   add: Pending[],
   outside: (from: number, to: number) => boolean,
+  kept: KeptAsReading,
 ): number {
+  const isKept = (pos: number): boolean =>
+    kept.spans.some((span) => pos >= span.from && pos <= span.to);
   const verseStarts = new Set(structure.verses.map((verse) => verse.markerFrom));
   const opensVerse = (line: DocLine): boolean =>
     verseStarts.has(line.contentFrom) || verseStarts.has(line.from);
   const standsAlone = (line: DocLine): boolean =>
+    isKept(line.from) ||
     line.cls === "slot.c" ||
     line.cls === "block.heading" ||
     line.cls === "block.meta" ||
@@ -898,6 +904,12 @@ function layOutVerseLines(
         joined++;
       }
     }
+    if (isKept(line.from)) {
+      lineStarts.add(line.from);
+      lineStarts.add(line.contentFrom);
+      previous = line;
+      continue;
+    }
     if (line.cls === "block.para" && line.contentFrom > line.from && visibleFrom === line.from)
       add.push({ from: line.from, to: line.contentFrom, deco: HIDDEN });
     const visualStart = previous === null ? line.from : previous.to + 1;
@@ -911,6 +923,7 @@ function layOutVerseLines(
   }
 
   for (let i = 0; i < structure.blocks.length; i++) {
+    if (kept.blocks.has(i)) continue;
     const block = structure.blocks.at(i);
     if (plan.block(i).startsLine || outside(block.from, block.contentFrom)) continue;
     if (verseStarts.has(block.contentFrom)) {

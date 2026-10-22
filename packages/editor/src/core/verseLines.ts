@@ -13,7 +13,7 @@ import { EditorView, type KeyBinding } from "@codemirror/view";
 import { docText, structureAt, type DocStructure } from "./docStructure";
 import type { VerseRow } from "./fold";
 import { isVisual, trusted } from "./kernel";
-import { assignmentAt } from "./registry";
+import { assignmentAt, isContainerClass } from "./registry";
 
 /** The verse the caret is in: the last one whose marker starts at or before it, or -1 before the first. */
 export const verseIndexAt = (structure: DocStructure, pos: number): number => {
@@ -125,13 +125,46 @@ export const numbersHaveMenus = (state: EditorState): boolean =>
  */
 export const suggestedNumber = new WeakMap<Diagnostic, string>();
 
-/** Headings and chapter numbers show as labels here: read-only, changed in Reading or USFM. */
+/** What line by line leaves as Reading draws it: the blocks, and the spans their lines cover. */
+export interface KeptAsReading {
+  readonly blocks: ReadonlySet<number>;
+  readonly spans: readonly { readonly from: number; readonly to: number }[];
+}
+
+/**
+ * A table's rows and a sidebar with everything in it: a verse runs on past
+ * them, so they cannot be joined into one, and they keep their own lines.
+ */
+export function keptAsReading(structure: DocStructure): KeptAsReading {
+  const blocks = new Set<number>();
+  const spans: { from: number; to: number }[] = [];
+  let containerTo = -1;
+  for (let i = 0; i < structure.blocks.length; i++) {
+    const cls = structure.blocks.clsAt(i);
+    const from = structure.blocks.fromAt(i);
+    const to = structure.blocks.toAt(i);
+    if (isContainerClass(cls)) containerTo = Math.max(containerTo, to);
+    if (cls !== "table" && !isContainerClass(cls) && from >= containerTo) continue;
+    blocks.add(i);
+    const last = spans[spans.length - 1];
+    if (last !== undefined && from <= last.to + 1) last.to = Math.max(last.to, to);
+    else spans.push({ from, to });
+  }
+  return { blocks, spans };
+}
+
+/**
+ * Headings and chapter numbers show as labels here, and tables and sidebars as
+ * Reading draws them: read-only, changed in Reading or USFM.
+ */
 const labelsStayPut = EditorState.changeFilter.of((tr) => {
   if (!tr.docChanged || !isVerseLines(tr.startState) || tr.annotation(trusted) !== undefined)
     return true;
   const ranges: number[] = [];
-  for (const line of structureAt(tr.startState).lines)
+  const structure = structureAt(tr.startState);
+  for (const line of structure.lines)
     if (line.cls === "block.heading" || line.cls === "slot.c") ranges.push(line.from, line.to);
+  for (const span of keptAsReading(structure).spans) ranges.push(span.from, span.to);
   return ranges.length === 0 ? true : ranges;
 });
 
