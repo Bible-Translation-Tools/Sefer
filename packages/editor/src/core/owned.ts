@@ -11,6 +11,7 @@ import {
   type OwnershipBit,
   type PaintReach,
   CLASS_KEYS,
+  isContainerClass,
   ownershipOf,
   paintsItsOwnLineAmbient,
   setsPaintedBy,
@@ -45,6 +46,12 @@ interface TargetFacts {
   readonly policy: OwnershipBit | null;
   readonly paintsOwnLine: boolean;
   readonly empty: boolean;
+  /**
+   * A container's edge (`sidebar`): the first block inside one, the first
+   * block after one, the container's own opener. Text does not cross it, so
+   * a press that would join across it does nothing.
+   */
+  readonly fenced: boolean;
   readonly mergeTargetPolicy: OwnershipBit | null;
   readonly typable: PlanSpan | null;
   readonly editable: readonly PlanSpan[];
@@ -116,6 +123,7 @@ export function buildOwnedIndex(structure: DocStructure, plan: DocPlan, a: Assig
     box?: number;
     scope?: PlanSpan | null;
     empty?: boolean;
+    fenced?: boolean;
     mergeTargetPolicy?: OwnershipBit | null;
     typable?: PlanSpan | null;
     editable?: readonly PlanSpan[];
@@ -151,6 +159,7 @@ export function buildOwnedIndex(structure: DocStructure, plan: DocPlan, a: Assig
       policy: ownershipOf(row) ?? null,
       paintsOwnLine: paintsItsOwnLineAmbient(classKey),
       empty: extra.empty === true,
+      fenced: extra.fenced === true,
       mergeTargetPolicy: extra.mergeTargetPolicy ?? null,
       typable: extra.typable ?? null,
       editable: extra.editable ?? NONE,
@@ -218,10 +227,50 @@ export function buildOwnedIndex(structure: DocStructure, plan: DocPlan, a: Assig
     else make(out, "char", scope, whole, NONE, r.hidden, { scope, box: scope.from });
   };
 
+  // The blocks a container's edges fence: the first inside each, and the first after it.
+  const doc = structure.analysis?.text ?? "";
+  const fencedBlocks = new Set<number>();
+  for (let c = 0; c < blocks.length; c++) {
+    if (!isContainerClass(blocks.clsAt(c))) continue;
+    if (c + 1 < blocks.length && blocks.fromAt(c + 1) < blocks.toAt(c)) fencedBlocks.add(c + 1);
+    for (let k = c + 1; k < blocks.length; k++)
+      if (blocks.fromAt(k) > blocks.toAt(c)) {
+        fencedBlocks.add(k);
+        break;
+      }
+  }
+
+  /**
+   * A container's own target: its opener the anchor, its closer hidden with
+   * it so a selection over one edge writes around both. With no words left
+   * between them it is empty, and is taken whole, both edges and the lines
+   * they stand on.
+   */
+  const containerTarget = (out: ResolvedOwnedTarget[], j: number): void => {
+    const from = blocks.fromAt(j);
+    const contentFrom = blocks.contentFromAt(j);
+    const to = blocks.toAt(j);
+    const closerFrom = doc.lastIndexOf("\\", to);
+    const chrome = { from, to: contentFrom };
+    const closer = closerFrom >= contentFrom ? { from: closerFrom, to } : null;
+    const inside = doc.slice(contentFrom, closer?.from ?? to).replace(/\\\S+/g, "");
+    const empty = inside.trim() === "";
+    const whole = empty
+      ? { from: from > 0 ? from - 1 : from, to }
+      : { from: from > 0 && doc[from - 1] === "\n" ? from - 1 : from, to: contentFrom };
+    make(out, blocks.clsAt(j), chrome, whole, NONE, closer ? [chrome, closer] : [chrome], {
+      empty,
+      fenced: true,
+      scope: { from, to },
+    });
+  };
+
   const blockTarget = (out: ResolvedOwnedTarget[], j: number, head: number): void => {
+    if (isContainerClass(blocks.clsAt(j))) return containerTarget(out, j);
     const from = blocks.fromAt(j);
     const contentFrom = blocks.contentFromAt(j);
     if (contentFrom <= from) return;
+    const fenced = fencedBlocks.has(j);
     const resolvedBlock = plan.block(j);
     const classKey = blocks.clsAt(j);
     const chrome = { from, to: contentFrom };
@@ -246,7 +295,12 @@ export function buildOwnedIndex(structure: DocStructure, plan: DocPlan, a: Assig
     else whole = { from, to: contentFrom };
     const drawn = resolvedBlock.breakAt === null ? {} : { box: resolvedBlock.breakAt };
     if (!resolvedBlock.paints) {
-      make(out, classKey, chrome, whole, NONE, [whole], { empty, scope, mergeTargetPolicy });
+      make(out, classKey, chrome, whole, NONE, [whole], {
+        empty,
+        fenced,
+        scope,
+        mergeTargetPolicy,
+      });
       return;
     }
     if (empty) {
@@ -260,6 +314,7 @@ export function buildOwnedIndex(structure: DocStructure, plan: DocPlan, a: Assig
         edges.push({ from: contentFrom, to: below });
       make(out, classKey, chrome, whole, edges, [chrome], {
         empty,
+        fenced,
         scope,
         mergeTargetPolicy,
         ...drawn,
@@ -268,12 +323,18 @@ export function buildOwnedIndex(structure: DocStructure, plan: DocPlan, a: Assig
     }
     if (takesItsBreak) {
       make(out, classKey, chrome, whole, [{ from: from - 1, to: from }], [chrome], {
+        fenced,
         scope,
         mergeTargetPolicy,
       });
       return;
     }
-    make(out, classKey, chrome, whole, NONE, [chrome], { scope, mergeTargetPolicy, ...drawn });
+    make(out, classKey, chrome, whole, NONE, [chrome], {
+      fenced,
+      scope,
+      mergeTargetPolicy,
+      ...drawn,
+    });
   };
 
   const firstVerseFrom = (pos: number): number => {

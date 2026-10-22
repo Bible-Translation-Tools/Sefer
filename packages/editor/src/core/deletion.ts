@@ -22,6 +22,7 @@ import {
 import { bindsToItsLine } from "./lineTable";
 import type { Addressed, OwnedIndex, ResolvedOwnedTarget } from "./owned";
 import type { PlanSpan } from "./plan";
+import { isContainerClass } from "./registry";
 import { note, noteTr, type TraceVerdict } from "./trace";
 
 function spaceBefore(state: EditorState, at: number): string {
@@ -150,7 +151,7 @@ const unowned = (a: Addressed, onePaint: (say: string) => Verdict, side: string)
           : "delete one character",
       );
 
-type CellSay = "immortal" | "empty" | "sealed" | "no-merge" | "ordinary";
+type CellSay = "immortal" | "empty" | "fenced" | "sealed" | "no-merge" | "ordinary";
 
 interface CellRule {
   readonly name: CellSay;
@@ -193,6 +194,14 @@ const CELL_RULES: readonly CellRule[] = [
         "unmake-empty-paragraph",
         `cell empty — consume the empty ${t.set}, the inverse of the Enter that made it`,
       ),
+  },
+  {
+    name: "fenced",
+    when: (t) => t.fenced,
+    say: (t) => ({
+      act: "nothing",
+      say: `cell fenced — a ${t.set} edge; text does not cross into or out of a container`,
+    }),
   },
   {
     name: "sealed",
@@ -534,6 +543,17 @@ function rangePlan(
       hi = Math.max(hi, t.wholeSpan.to);
     }
     if (!grew) break;
+  }
+  // A container's edges are fences: a range that takes one edge and not the other would
+  // leave an \esb or \esbe alone, so it is refused. A whole container, or a range inside
+  // one, is ordinary.
+  for (let c = 0; c < structure.blocks.length; c++) {
+    if (!isContainerClass(structure.blocks.clsAt(c))) continue;
+    const opener = { from: structure.blocks.fromAt(c), to: structure.blocks.contentFromAt(c) };
+    const end = structure.blocks.toAt(c);
+    const takesOpener = lo < opener.to && hi > opener.from;
+    const takesCloser = lo < end && hi >= end;
+    if (takesOpener !== takesCloser) refused = true;
   }
   const keep: PlanSpan[] = [];
   let around = 0;
