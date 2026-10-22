@@ -18,7 +18,13 @@ export type EditorAction =
   | "insert.poetry1"
   | "insert.poetry2"
   | "insert.footnote"
-  | "frontmatter.edit";
+  | "frontmatter.edit"
+  | "table.rowAbove"
+  | "table.rowBelow"
+  | "table.deleteRow"
+  | "table.columnBefore"
+  | "table.columnAfter"
+  | "table.deleteColumn";
 
 const WORD = /[\p{L}\p{N}'’‐-]/u;
 

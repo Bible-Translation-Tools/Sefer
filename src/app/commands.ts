@@ -171,7 +171,7 @@ type Helpers = {
   readonly insertion: (
     id: string,
     title: string,
-    keys: string,
+    keys: string | undefined,
     action: EditorAction,
   ) => ReturnType<typeof registerCommand>;
   readonly multibook: ReturnType<typeof makeMultiBook>;
@@ -237,11 +237,11 @@ const shellHelpers = (bridge: ShellBridge): Helpers => {
     return book === undefined ? undefined : services.seated(book.id);
   };
 
-  const insertion = (id: string, title: string, keys: string, action: EditorAction) =>
+  const insertion = (id: string, title: string, keys: string | undefined, action: EditorAction) =>
     registerCommand({
       id,
       title,
-      keys,
+      ...(keys === undefined ? {} : { keys }),
       when: () => seated() !== undefined,
       run: () => {
         seated()?.perform(action);
@@ -598,6 +598,27 @@ const insertCommands = (bridge: ShellBridge, h: Helpers) => {
     insertion("editor.insert.paragraph", t("Insert paragraph"), "Mod-Shift-p", "insert.paragraph"),
     insertion("editor.insert.poetry", t("Insert poetry line"), "Mod-Shift-l", "insert.poetry"),
     insertion("editor.insert.footnote", t("Insert footnote"), "Mod-Shift-n", "insert.footnote"),
+    insertion("editor.table.rowAbove", t("Table: insert row above"), undefined, "table.rowAbove"),
+    insertion("editor.table.rowBelow", t("Table: insert row below"), undefined, "table.rowBelow"),
+    insertion("editor.table.deleteRow", t("Table: delete row"), undefined, "table.deleteRow"),
+    insertion(
+      "editor.table.columnBefore",
+      t("Table: insert column before"),
+      undefined,
+      "table.columnBefore",
+    ),
+    insertion(
+      "editor.table.columnAfter",
+      t("Table: insert column after"),
+      undefined,
+      "table.columnAfter",
+    ),
+    insertion(
+      "editor.table.deleteColumn",
+      t("Table: delete column"),
+      undefined,
+      "table.deleteColumn",
+    ),
 
     registerCommand({
       id: "editor.frontmatter.edit",
