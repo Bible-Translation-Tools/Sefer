@@ -371,7 +371,7 @@ function ReferenceMaterialGroup(props: { readonly model: PickerModel }) {
       />
       <Show when={props.model.showMaterial()}>
         <div
-          class="sticky top-0 z-10 flex flex-col gap-2 border-b border-surface-border bg-surface-primary px-3 pt-1 pb-3"
+          class="sticky -top-1 z-10 flex flex-col gap-2 border-b border-surface-border bg-surface-primary px-3 pt-1 pb-3"
           onKeyDown={(event) => {
             if (KEPT_KEYS.has(event.key)) event.stopPropagation();
           }}
