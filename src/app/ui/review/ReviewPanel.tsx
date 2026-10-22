@@ -175,11 +175,14 @@ export function ReviewPanel() {
   // reader: nothing differs, or nothing is compared yet. The reader's own claim
   // replaces it while it is mounted, and the History tab stays one click away.
   onCleanup(
-    claimSidebar(() => (
-      <ChangesHistorySidebar active="changes" changes={0}>
-        <p class="px-6 pt-3 text-small text-on-surface-tertiary">{t("Nothing differs.")}</p>
-      </ChangesHistorySidebar>
-    )),
+    claimSidebar(
+      () => (
+        <ChangesHistorySidebar active="changes" changes={0}>
+          <p class="px-6 pt-3 text-small text-on-surface-tertiary">{t("Nothing differs.")}</p>
+        </ChangesHistorySidebar>
+      ),
+      { show: t("Show changes"), hide: t("Hide changes") },
+    ),
   );
   const version = createRecordedVersion(shell);
   const shared = createRecordedVersion(shell, "shared", theirsRef);

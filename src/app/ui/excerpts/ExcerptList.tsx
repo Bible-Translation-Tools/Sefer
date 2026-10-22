@@ -246,17 +246,20 @@ export function ExcerptList(props: ExcerptListProps) {
   // Read once: whether a screen owns its sidebar is fixed when it mounts.
   if (untrack(() => props.claimsSidebar) !== false)
     onCleanup(
-      claimSidebar(() => (
-        <ResultsOutline
-          title={props.sections?.title ?? t("Results")}
-          groups={props.groups}
-          outline={props.outline}
-          active={current()}
-          label={(row) => props.sections?.label?.(row) ?? row.name}
-          keyOf={keyOf}
-          onGo={go}
-        />
-      )),
+      claimSidebar(
+        () => (
+          <ResultsOutline
+            title={props.sections?.title ?? t("Results")}
+            groups={props.groups}
+            outline={props.outline}
+            active={current()}
+            label={(row) => props.sections?.label?.(row) ?? row.name}
+            keyOf={keyOf}
+            onGo={go}
+          />
+        ),
+        { show: t("Show results"), hide: t("Hide results") },
+      ),
     );
 
   return (

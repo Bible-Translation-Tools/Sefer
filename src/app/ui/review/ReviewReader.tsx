@@ -829,95 +829,100 @@ export function ReviewReader(props: {
    */
   if (untrack(() => props.claimSidebar) !== false)
     onCleanup(
-      claimSidebar(() => (
-        <ChangesHistorySidebar active="changes" changes={prepared().length}>
-          <div class="px-4 pt-3 pb-2">
-            <p class="px-2 text-small text-on-surface-secondary">
-              {/* The status line's words, so the two never read as different
+      claimSidebar(
+        () => (
+          <ChangesHistorySidebar active="changes" changes={prepared().length}>
+            <div class="px-4 pt-3 pb-2">
+              <p class="px-2 text-small text-on-surface-secondary">
+                {/* The status line's words, so the two never read as different
                   answers: "2 changes in 1 book". */}
-              {(() => {
-                const count = prepared().reduce((sum, held) => sum + held.shown.length, 0);
-                const books = prepared().length;
-                return t("{changes} in {books}", {
-                  changes: t(count === 1 ? "{count} change" : "{count} changes", { count }),
-                  books: t(books === 1 ? "{count} book" : "{count} books", { count: books }),
-                });
-              })()}
-            </p>
-          </div>
-          <nav aria-label={t("Changes")} class="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
-            <ul>
-              <For each={prepared()}>
-                {(held) => {
-                  const here = (): boolean =>
-                    (scope() === "book"
-                      ? selectedBook()?.book.bookId
-                      : (activeBook() ?? prepared()[0]?.book.bookId)) === held.book.bookId;
-                  const done = (): boolean =>
-                    held.shown.length > 0 && decidedOf(held) === held.shown.length;
-                  return (
-                    <li class="flex items-center gap-0.5">
-                      <button
-                        type="button"
-                        data-outline={held.book.bookId}
-                        data-focused={here() ? "" : undefined}
-                        aria-current={here() ? "true" : undefined}
-                        class="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-start text-small transition-colors data-focused:bg-sidebar-surface-active data-focused:font-medium data-focused:text-brand not-data-focused:text-sidebar-on-surface not-data-focused:hover:bg-sidebar-surface-hover"
-                        onClick={() => pickBook(held.book.bookId)}
-                      >
-                        <Show
-                          when={done()}
-                          fallback={<BookIcon size={15} aria-hidden="true" class="shrink-0" />}
+                {(() => {
+                  const count = prepared().reduce((sum, held) => sum + held.shown.length, 0);
+                  const books = prepared().length;
+                  return t("{changes} in {books}", {
+                    changes: t(count === 1 ? "{count} change" : "{count} changes", { count }),
+                    books: t(books === 1 ? "{count} book" : "{count} books", { count: books }),
+                  });
+                })()}
+              </p>
+            </div>
+            <nav aria-label={t("Changes")} class="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+              <ul>
+                <For each={prepared()}>
+                  {(held) => {
+                    const here = (): boolean =>
+                      (scope() === "book"
+                        ? selectedBook()?.book.bookId
+                        : (activeBook() ?? prepared()[0]?.book.bookId)) === held.book.bookId;
+                    const done = (): boolean =>
+                      held.shown.length > 0 && decidedOf(held) === held.shown.length;
+                    return (
+                      <li class="flex items-center gap-0.5">
+                        <button
+                          type="button"
+                          data-outline={held.book.bookId}
+                          data-focused={here() ? "" : undefined}
+                          aria-current={here() ? "true" : undefined}
+                          class="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-start text-small transition-colors data-focused:bg-sidebar-surface-active data-focused:font-medium data-focused:text-brand not-data-focused:text-sidebar-on-surface not-data-focused:hover:bg-sidebar-surface-hover"
+                          onClick={() => pickBook(held.book.bookId)}
                         >
-                          <CheckIcon size={15} aria-hidden="true" class="shrink-0 text-brand" />
+                          <Show
+                            when={done()}
+                            fallback={<BookIcon size={15} aria-hidden="true" class="shrink-0" />}
+                          >
+                            <CheckIcon size={15} aria-hidden="true" class="shrink-0 text-brand" />
+                          </Show>
+                          <span class="min-w-0 flex-1 truncate">{held.book.name}</span>
+                          <span class="shrink-0 text-smallest tabular-nums text-on-surface-tertiary">
+                            {props.decidable
+                              ? `${decidedOf(held)}/${held.shown.length}`
+                              : String(held.shown.length)}
+                          </span>
+                        </button>
+                        <Show when={props.decidable && held.shown.length > 0}>
+                          <Menu
+                            label={t("Decide {book}", { book: held.book.name })}
+                            side="bottom"
+                            align="end"
+                            class="w-56"
+                            trigger={
+                              <IconButton
+                                size="sm"
+                                label={t("Decide all of {book}", { book: held.book.name })}
+                                icon={<MoreVertical />}
+                                data-review-book-menu={held.book.bookId}
+                              />
+                            }
+                          >
+                            <MenuItem
+                              onSelect={() =>
+                                props.decide(held.book.bookId, held.shown, "baseline")
+                              }
+                            >
+                              {t("Take all of {source}'s", { source: props.baselineShort })}
+                            </MenuItem>
+                            <MenuItem
+                              onSelect={() => props.decide(held.book.bookId, held.shown, "current")}
+                            >
+                              {t("Keep all of {source}'s", { source: props.currentShort })}
+                            </MenuItem>
+                            <MenuItem
+                              onSelect={() => props.decide(held.book.bookId, held.shown, undefined)}
+                            >
+                              {t("Clear")}
+                            </MenuItem>
+                          </Menu>
                         </Show>
-                        <span class="min-w-0 flex-1 truncate">{held.book.name}</span>
-                        <span class="shrink-0 text-smallest tabular-nums text-on-surface-tertiary">
-                          {props.decidable
-                            ? `${decidedOf(held)}/${held.shown.length}`
-                            : String(held.shown.length)}
-                        </span>
-                      </button>
-                      <Show when={props.decidable && held.shown.length > 0}>
-                        <Menu
-                          label={t("Decide {book}", { book: held.book.name })}
-                          side="bottom"
-                          align="end"
-                          class="w-56"
-                          trigger={
-                            <IconButton
-                              size="sm"
-                              label={t("Decide all of {book}", { book: held.book.name })}
-                              icon={<MoreVertical />}
-                              data-review-book-menu={held.book.bookId}
-                            />
-                          }
-                        >
-                          <MenuItem
-                            onSelect={() => props.decide(held.book.bookId, held.shown, "baseline")}
-                          >
-                            {t("Take all of {source}'s", { source: props.baselineShort })}
-                          </MenuItem>
-                          <MenuItem
-                            onSelect={() => props.decide(held.book.bookId, held.shown, "current")}
-                          >
-                            {t("Keep all of {source}'s", { source: props.currentShort })}
-                          </MenuItem>
-                          <MenuItem
-                            onSelect={() => props.decide(held.book.bookId, held.shown, undefined)}
-                          >
-                            {t("Clear")}
-                          </MenuItem>
-                        </Menu>
-                      </Show>
-                    </li>
-                  );
-                }}
-              </For>
-            </ul>
-          </nav>
-        </ChangesHistorySidebar>
-      )),
+                      </li>
+                    );
+                  }}
+                </For>
+              </ul>
+            </nav>
+          </ChangesHistorySidebar>
+        ),
+        { show: t("Show changes"), hide: t("Hide changes") },
+      ),
     );
 
   /**

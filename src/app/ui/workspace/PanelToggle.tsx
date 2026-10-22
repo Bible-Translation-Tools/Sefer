@@ -13,13 +13,14 @@ import type { JSX } from "@solidjs/web";
 import BookIcon from "lucide-solid/icons/book";
 import PanelLeftClose from "lucide-solid/icons/panel-left-close";
 import PanelLeftOpen from "lucide-solid/icons/panel-left-open";
-import { Show } from "solid-js";
+import { Show, createEffect, createSignal } from "solid-js";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { IconButton, cx } from "../primitives";
 import { layout } from "./layoutTweak";
 import { useScreen } from "./screen";
+import { sidebarLabel } from "./sidebarSlot";
 
 export function PanelToggle(props: { readonly class?: string }) {
   const shell = useShell();
@@ -63,13 +64,48 @@ export function usePanelToggleLeading(): () => JSX.Element | undefined {
  * beside it keeps its own padding clear of it. Panel hidden: a floating 64px book button, 24px from the window's
  * edge and level with the card's row, that opens it again.
  */
+/**
+ * How far the floating button reaches into the page beside the panel, in
+ * pixels: its right edge past the page's left edge, 0 when it ends short of
+ * it. MEASURED, because its label is not a fixed width — it names what the
+ * panel holds ("Show key terms"), and a translation can be any length. The
+ * page pads its start by this much (`_app.tsx`), so nothing runs under it.
+ */
+const [overlap, setOverlap] = createSignal(0, { name: "panelButtonOverlap", ownedWrite: true });
+export { overlap as panelButtonOverlap };
+
 export function PanelGutter(props: { readonly showing: boolean }) {
   const shell = useShell();
+  const [button, setButton] = createSignal<HTMLButtonElement>();
+  createEffect(
+    () => button(),
+    (element) => {
+      // The page this gutter sits in: the button is `fixed`, so its parent
+      // in the DOM is still the page's panel.
+      const page = element?.parentElement;
+      if (element === undefined || page === null || page === undefined) return;
+      const measure = (): void => {
+        const reach = element.getBoundingClientRect().right - page.getBoundingClientRect().left;
+        setOverlap(Math.max(0, Math.ceil(reach)));
+      };
+      // Its own size (a new label), the page's (the panel shown, hidden or
+      // dragged) and the window's.
+      const observer = new ResizeObserver(measure);
+      observer.observe(element);
+      observer.observe(page);
+      measure();
+      return () => {
+        observer.disconnect();
+        setOverlap(0);
+      };
+    },
+  );
   // One control in one place — 24px from the window's edge, 16px below the
-  // app bar — labelled for what it does now: hide the books, or show them.
+  // app bar — labelled for what it does now, and for what the panel holds.
   return (
     <Show when={layout() === "panels" && shell.project() !== undefined}>
       <button
+        ref={setButton}
         type="button"
         data-testid={props.showing ? "panel-toggle" : "book-fab"}
         aria-expanded={props.showing ? "true" : "false"}
@@ -85,7 +121,13 @@ export function PanelGutter(props: { readonly showing: boolean }) {
         >
           <PanelLeftClose aria-hidden="true" class="size-5 shrink-0" />
         </Show>
-        {props.showing ? t("Hide books") : t("Show books")}
+        {(() => {
+          // Named for what the panel holds now: books, unless a screen has
+          // put something else there (key terms, results, changes…).
+          const label = sidebarLabel();
+          if (props.showing) return label?.hide ?? t("Hide books");
+          return label?.show ?? t("Show books");
+        })()}
       </button>
     </Show>
   );

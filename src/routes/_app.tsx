@@ -12,7 +12,11 @@ import { AppBar } from "#app/ui/workspace/AppBar";
 import { BackToEditor } from "#app/ui/workspace/BackToEditor";
 import { VersionTabs } from "#app/ui/workspace/ChangesHistorySidebar";
 import { layout, useLayoutTweak } from "#app/ui/workspace/layoutTweak";
-import { PanelGutter, usePanelToggleLeading } from "#app/ui/workspace/PanelToggle";
+import {
+  PanelGutter,
+  panelButtonOverlap,
+  usePanelToggleLeading,
+} from "#app/ui/workspace/PanelToggle";
 import { ProjectSidebar } from "#app/ui/workspace/ProjectSidebar";
 import { useScreen } from "#app/ui/workspace/screen";
 import { sidebarClaim } from "#app/ui/workspace/sidebarSlot";
@@ -136,16 +140,18 @@ function Workspace() {
             <div
               class={cx(
                 "flex h-full min-w-0 flex-col",
-                // The panels layout, panel hidden: a gutter so nothing on the
-                // page runs under the labelled book button (about 130px, 24px
-                // from the edge); with the page's own 24px, 24px clear of it.
-                layout() === "panels" &&
-                  shell.project() !== undefined &&
-                  !showing() &&
-                  "ps-[154px]",
                 // …on the panels layout's one white surface.
                 layout() === "panels" && "bg-surface-primary",
               )}
+              // The panels layout: a gutter as wide as the floating panel
+              // button reaches into the page — measured, since its label
+              // changes with the screen and the language — so nothing runs
+              // under it; with the page's own 24px, 24px clear of it.
+              style={
+                layout() === "panels" && panelButtonOverlap() > 0
+                  ? { "padding-inline-start": `${panelButtonOverlap()}px` }
+                  : undefined
+              }
             >
               <Show when={pageTabs()}>
                 {(active) => (

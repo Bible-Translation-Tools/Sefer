@@ -620,90 +620,93 @@ export function HistoryPanel() {
    * its Changes tab: one panel, two tabs, the route says which.
    */
   onCleanup(
-    claimSidebar(() => (
-      <ChangesHistorySidebar active="history" changes={unsaved()}>
-        <div class="flex items-center gap-2 px-4 pt-3 pb-2">
-          <p class="min-w-0 flex-1 px-2 text-small text-on-surface-secondary">
-            {t("{count} version(s)", { count: log()?.length ?? 0 })}
-          </p>
-          <IconButton
-            size="sm"
-            variant="subtle"
-            label={t("Reload")}
-            icon={<RefreshCw />}
-            onClick={() => load(true)}
-          />
-        </div>
-        <nav aria-label={t("Timeline")} class="min-h-0 flex-1 overflow-y-auto pb-4">
-          <ul class="divide-y divide-sidebar-border" data-commits={log()?.length ?? 0}>
-            {/* The first read of the log: the shared short-wait spinner. */}
-            <Show when={log() === undefined && problem() === ""}>
-              <li class="px-4 py-3">
-                <DelayedSpinner />
-              </li>
-            </Show>
-            <For each={log() ?? []}>
-              {(commit, index) => (
-                <>
-                  {/* Only when some versions are not shared yet: a divider
-                      above them, and one where the shared ones begin. */}
-                  <Show when={index() === 0 && onlyHere(commit.id)}>
-                    <li
-                      data-history-divider="local"
-                      class="px-5 py-1 text-smallest font-medium text-on-surface-warning"
-                    >
-                      {t("Only on this device")}
-                    </li>
-                  </Show>
-                  <Show
-                    when={
-                      index() > 0 &&
-                      !onlyHere(commit.id) &&
-                      onlyHere((log() ?? [])[index() - 1]?.id ?? "")
-                    }
-                  >
-                    <li
-                      data-history-divider="shared"
-                      class="px-5 py-1 text-smallest font-medium text-on-surface-tertiary"
-                    >
-                      {t("On the shared project")}
-                    </li>
-                  </Show>
-                  <li>
-                    <Row commit={commit} />
-                  </li>
-                </>
-              )}
-            </For>
-          </ul>
-          <Show when={older() !== "whole"}>
-            <div class="space-y-2 px-5 pt-3" data-history-older={older()}>
-              <p class="text-smallest text-on-surface-secondary">
-                {older() === "loading"
-                  ? t("Bringing the older history to this device…")
-                  : older() === "failed"
-                    ? t(
-                        "The older history could not be brought to this device. What is here is recent history only.",
-                      )
-                    : t(
-                        "Only recent history is on this device. The older history is on the shared project.",
-                      )}
-              </p>
-              <Show when={older() !== "loading"}>
-                <div class="flex gap-2">
-                  <Button variant="secondary" size="sm" onClick={() => loadOlder(HISTORY_STEP)}>
-                    {t("Load {count} more", { count: HISTORY_STEP })}
-                  </Button>
-                  <Button variant="tertiary" size="sm" onClick={() => loadOlder("all")}>
-                    {t("Load all")}
-                  </Button>
-                </div>
+    claimSidebar(
+      () => (
+        <ChangesHistorySidebar active="history" changes={unsaved()}>
+          <div class="flex items-center gap-2 px-4 pt-3 pb-2">
+            <p class="min-w-0 flex-1 px-2 text-small text-on-surface-secondary">
+              {t("{count} version(s)", { count: log()?.length ?? 0 })}
+            </p>
+            <IconButton
+              size="sm"
+              variant="subtle"
+              label={t("Reload")}
+              icon={<RefreshCw />}
+              onClick={() => load(true)}
+            />
+          </div>
+          <nav aria-label={t("Timeline")} class="min-h-0 flex-1 overflow-y-auto pb-4">
+            <ul class="divide-y divide-sidebar-border" data-commits={log()?.length ?? 0}>
+              {/* The first read of the log: the shared short-wait spinner. */}
+              <Show when={log() === undefined && problem() === ""}>
+                <li class="px-4 py-3">
+                  <DelayedSpinner />
+                </li>
               </Show>
-            </div>
-          </Show>
-        </nav>
-      </ChangesHistorySidebar>
-    )),
+              <For each={log() ?? []}>
+                {(commit, index) => (
+                  <>
+                    {/* Only when some versions are not shared yet: a divider
+                      above them, and one where the shared ones begin. */}
+                    <Show when={index() === 0 && onlyHere(commit.id)}>
+                      <li
+                        data-history-divider="local"
+                        class="px-5 py-1 text-smallest font-medium text-on-surface-warning"
+                      >
+                        {t("Only on this device")}
+                      </li>
+                    </Show>
+                    <Show
+                      when={
+                        index() > 0 &&
+                        !onlyHere(commit.id) &&
+                        onlyHere((log() ?? [])[index() - 1]?.id ?? "")
+                      }
+                    >
+                      <li
+                        data-history-divider="shared"
+                        class="px-5 py-1 text-smallest font-medium text-on-surface-tertiary"
+                      >
+                        {t("On the shared project")}
+                      </li>
+                    </Show>
+                    <li>
+                      <Row commit={commit} />
+                    </li>
+                  </>
+                )}
+              </For>
+            </ul>
+            <Show when={older() !== "whole"}>
+              <div class="space-y-2 px-5 pt-3" data-history-older={older()}>
+                <p class="text-smallest text-on-surface-secondary">
+                  {older() === "loading"
+                    ? t("Bringing the older history to this device…")
+                    : older() === "failed"
+                      ? t(
+                          "The older history could not be brought to this device. What is here is recent history only.",
+                        )
+                      : t(
+                          "Only recent history is on this device. The older history is on the shared project.",
+                        )}
+                </p>
+                <Show when={older() !== "loading"}>
+                  <div class="flex gap-2">
+                    <Button variant="secondary" size="sm" onClick={() => loadOlder(HISTORY_STEP)}>
+                      {t("Load {count} more", { count: HISTORY_STEP })}
+                    </Button>
+                    <Button variant="tertiary" size="sm" onClick={() => loadOlder("all")}>
+                      {t("Load all")}
+                    </Button>
+                  </div>
+                </Show>
+              </div>
+            </Show>
+          </nav>
+        </ChangesHistorySidebar>
+      ),
+      { show: t("Show history"), hide: t("Hide history") },
+    ),
   );
 
   return (

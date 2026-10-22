@@ -50,13 +50,16 @@ export function SuggestionsScreen() {
   });
 
   onCleanup(
-    claimSidebar(() => (
-      <ChangesHistorySidebar active="suggestions">
-        <p class="px-6 pt-3 text-small text-on-surface-tertiary">
-          {t("Suggestions are offered from people's own copies.")}
-        </p>
-      </ChangesHistorySidebar>
-    )),
+    claimSidebar(
+      () => (
+        <ChangesHistorySidebar active="suggestions">
+          <p class="px-6 pt-3 text-small text-on-surface-tertiary">
+            {t("Suggestions are offered from people's own copies.")}
+          </p>
+        </ChangesHistorySidebar>
+      ),
+      { show: t("Show suggestions"), hide: t("Hide suggestions") },
+    ),
   );
 
   // Neither list applies: a writer sees what waits, a person in their own copy

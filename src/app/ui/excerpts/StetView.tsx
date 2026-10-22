@@ -572,16 +572,19 @@ export function StetView(props: StetViewProps) {
   }
 
   onCleanup(
-    claimSidebar(() => (
-      <div
-        class="flex h-full flex-col border-e border-sidebar-border bg-sidebar-surface"
-        data-testid="sidebar"
-        data-sidebar="terms"
-      >
-        <ProjectControl />
-        {terms()}
-      </div>
-    )),
+    claimSidebar(
+      () => (
+        <div
+          class="flex h-full flex-col border-e border-sidebar-border bg-sidebar-surface"
+          data-testid="sidebar"
+          data-sidebar="terms"
+        >
+          <ProjectControl />
+          {terms()}
+        </div>
+      ),
+      { show: t("Show key terms"), hide: t("Hide key terms") },
+    ),
   );
 
   return (
