@@ -144,10 +144,14 @@
   font-size: var(--text-small);
   line-height: 1.6;
 }
+/* 1.5rem each side is the findings layer's gutter: its marks sit 6–16px in
+   from the edge (recipes/findingMarks.ts), so a pane narrower than the 40rem
+   column must not run the text under them. Symmetric, so the column stays
+   centred. */
 .cm-mode-regular .cm-content {
   max-width: 40rem;
   margin: 0 auto;
-  padding: 56px 0 30vh;
+  padding: 56px 1.5rem 30vh;
   font-family: var(--font-scripture);
   /* The reader's own size (`editor.fontSize`, written onto <html> by
      `src/app/ui/theme.ts`). The fallback is the value this was hardcoded to,
@@ -339,7 +343,7 @@
   font-size: 13px;
   line-height: 1.6;
   color: #d6d3d1;
-  padding: 14px 18px 30vh;
+  padding: 14px 1.5rem 30vh;
   caret-color: #38bdf8;
 }
 .cm-mode-usfm .cm-cursor {
