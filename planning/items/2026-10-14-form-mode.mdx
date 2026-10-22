@@ -168,6 +168,13 @@ the caret over it and takes nothing, so a verse can be walked through; verse and
 numbers keep stop, so a run of Backspaces never reaches the verse before. Forward Delete
 addresses the next visible glyph past hidden markup, so it checks for a step cell in between.
 
+**Indents on one unit, hung numbers (2026-10-22):** poetry is never italic (in scripture italics
+mean `\add` or emphasis); `\p` indents its first line one unit; `\q1` sits at the edge, each
+level one unit in, a wrap two units deeper than its level (the printed turnover); a verse number
+opening a poetry line hangs in the margin (ecthesis), so a level's words start in one place with
+or without a number; line by line hangs every number. The unit and the hang are
+`--usfm-indent` and `--usfm-hang` on the editor; no Indent size setting for now.
+
 <Followup id="ship">To `dev` behind `__SEFER_DESIGN__` once it holds up, and finish with a
 tutorial for the PO and designer, as for suppressions (Will, 2026-10-21).</Followup>
 

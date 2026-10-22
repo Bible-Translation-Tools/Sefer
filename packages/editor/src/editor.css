@@ -174,41 +174,69 @@
   padding: 0;
 }
 
+/* The reading's indents, in one unit (unitless, so the small verse number and
+   the text it sits in measure alike). A paragraph's first line, a poetry level,
+   a poetry wrap and a hung verse number are all multiples of it. */
+.cm-mode-regular .cm-content {
+  --usfm-indent: 1.5;
+  --usfm-hang: 1.6;
+}
+
 .cm-mode-regular .usfm-block {
   padding-bottom: 0.5em;
 }
 .cm-mode-regular .usfm-p,
 .cm-mode-regular .usfm-pi {
-  text-indent: 1.5em;
+  text-indent: calc(var(--usfm-indent) * 1em);
 }
 .cm-mode-regular .usfm-m,
 .cm-mode-regular .usfm-nb {
   text-indent: 0;
 }
 
-/* Poetry, on the prototype's ladder (16 / 32 / 64 / 96px), with a hanging
-   indent so a wrapped line sits under the one it continues rather than under
-   its verse number. */
+/* Poetry: \q1 at the edge, each level one unit in, and a wrapped line two
+   units deeper than its own level (the printed turnover), so a wrap never
+   reads as the next poetry line. A verse number opening a line hangs in the
+   margin, so the words of one level always start in one place. No italics:
+   in scripture they mean supplied words (\add) or emphasis. */
 .cm-mode-regular .usfm-q,
 .cm-mode-regular .usfm-q1,
 .cm-mode-regular .usfm-q2,
 .cm-mode-regular .usfm-q3,
 .cm-mode-regular .usfm-q4 {
+  --usfm-level: 0;
   padding-bottom: 0;
-  text-indent: -0.9em;
-}
-.cm-mode-regular .usfm-q,
-.cm-mode-regular .usfm-q1 {
-  padding-inline-start: calc(16px + 0.9em);
+  padding-inline-start: calc((var(--usfm-level) + 2) * var(--usfm-indent) * 1em);
+  text-indent: calc(-2 * var(--usfm-indent) * 1em);
 }
 .cm-mode-regular .usfm-q2 {
-  padding-inline-start: calc(32px + 0.9em);
+  --usfm-level: 1;
 }
 .cm-mode-regular .usfm-q3 {
-  padding-inline-start: calc(64px + 0.9em);
+  --usfm-level: 2;
 }
 .cm-mode-regular .usfm-q4 {
-  padding-inline-start: calc(96px + 0.9em);
+  --usfm-level: 3;
+}
+
+/* A hung verse number: a slot of --usfm-hang to the left of the words, the
+   number set to its right edge. Its own font is 0.66em, hence the division. */
+.cm-mode-regular .usfm-num-hung {
+  display: inline-block;
+  box-sizing: border-box;
+  width: calc(var(--usfm-hang) / 0.66 * 1em);
+  margin-inline-start: calc(var(--usfm-hang) / -0.66 * 1em);
+  padding-inline-end: 0.5em;
+  text-align: end;
+  text-indent: 0;
+}
+.cm-mode-regular .usfm-delim-hung {
+  font-size: 0;
+}
+/* Line by line hangs every number: each verse's text, wrapped lines too, starts
+   one hang in from the edge. */
+.cm-mode-regular.cm-line-by-line .usfm-verse-line {
+  padding-inline-start: calc(var(--usfm-hang) * 1em);
 }
 .cm-mode-regular .usfm-b {
   /*min-height: 0.8em;*/

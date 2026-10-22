@@ -393,6 +393,35 @@ export function isIsolate(deco: Decoration) {
 
 const DELIMITER = Decoration.mark({ class: "usfm-delim" });
 
+/** A verse number hung in the margin, and the space after it, which the hang takes up. */
+const NUM_HUNG = Decoration.mark({
+  class: "usfm-num usfm-num-v usfm-num-hung",
+  bidiIsolate: Direction.LTR,
+  usfmIsolate: true,
+});
+const DELIMITER_HUNG = Decoration.mark({ class: "usfm-delim usfm-delim-hung" });
+
+/**
+ * The verses whose number hangs in the margin (ecthesis): in line by line every
+ * verse; otherwise a verse that opens a poetry line, so each poetry level's
+ * words start at the same place with or without a number.
+ */
+function hungVerses(doc: string, structure: DocStructure, plan: DocPlan): Set<number> {
+  const verses = structure.verses;
+  if (plan.verseLines) return new Set(verses.map((verse) => verse.markerFrom));
+  const hung = new Set<number>();
+  let k = 0;
+  for (let i = 0; i < structure.blocks.length; i++) {
+    const block = structure.blocks.at(i);
+    if (!block.poetry || !plan.block(i).startsLine) continue;
+    while (k < verses.length && verses[k].markerFrom < block.contentFrom) k++;
+    const verse = verses[k];
+    if (verse === undefined || verse.markerFrom >= block.to) continue;
+    if (doc.slice(block.contentFrom, verse.markerFrom).trim() === "") hung.add(verse.markerFrom);
+  }
+  return hung;
+}
+
 export function buildRegular(
   doc: string,
   structure: DocStructure,
@@ -416,7 +445,7 @@ export function buildRegular(
     for (const h of spans) hide(h.from, h.to);
   };
 
-  const slot = (r: ResolvedSlot) => {
+  const slot = (r: ResolvedSlot, hung = false) => {
     if (r.form === "pip" && r.residual) {
       add.push({
         from: r.from,
@@ -426,8 +455,18 @@ export function buildRegular(
       return;
     }
     hideAll(r.hidden);
-    if (r.digits) add.push({ from: r.digits.from, to: r.digits.to, deco: NUM_ISOLATE[r.kind] });
-    if (r.delimiter) add.push({ from: r.delimiter.from, to: r.delimiter.to, deco: DELIMITER });
+    if (r.digits)
+      add.push({
+        from: r.digits.from,
+        to: r.digits.to,
+        deco: hung && r.kind === "v" ? NUM_HUNG : NUM_ISOLATE[r.kind],
+      });
+    if (r.delimiter)
+      add.push({
+        from: r.delimiter.from,
+        to: r.delimiter.to,
+        deco: hung ? DELIMITER_HUNG : DELIMITER,
+      });
     if (r.box !== null)
       add.push({
         from: r.box,
@@ -495,10 +534,11 @@ export function buildRegular(
     }
   }
 
+  const hung = hungVerses(doc, structure, plan);
   for (let k = 0; k < structure.verses.length; k++) {
     const v = structure.verses[k];
     if (outside(v.markerFrom, v.contentFrom)) continue;
-    slot(plan.verse(k));
+    slot(plan.verse(k), hung.has(v.markerFrom));
   }
 
   if (opts.highlight) {
