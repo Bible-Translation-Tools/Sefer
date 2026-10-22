@@ -28,3 +28,4 @@
 \v 8 A long verse that goes on for a while so that it wraps onto a second line in the editor, to show where the wrapped text sits under the verse number and its first word.
 \v 9
 \v 10 The last verse, after an empty one.
+\v 11 A verse with a paragraph break \p in the middle of it.

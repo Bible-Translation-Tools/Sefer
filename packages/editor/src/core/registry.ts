@@ -16,6 +16,13 @@ export interface Cell {
    * locked designators are (Will, 2026-09-30).
    */
   stop?: boolean;
+  /**
+   * For an immortal cell: a Backspace or Delete that meets it moves the caret
+   * over it and takes nothing. Line by line's markup inside a verse (a `\p`, a
+   * poetry break), so the caret can still be walked back through a verse with
+   * Backspace (Will, 2026-10-22).
+   */
+  step?: boolean;
 }
 
 export type OwnershipBit = "JOIN" | "REFUSE" | "DISSOLVE";
@@ -246,15 +253,15 @@ export interface Assignment {
 }
 
 const LINE_BY_LINE: AssignmentDelta = {
-  chrome: { mutability: "immortal", stop: true },
-  "newline.between": { mutability: "immortal", stop: true },
-  "newline.inside": { mutability: "immortal", stop: true },
-  "block.para": { mutability: "immortal", stop: true },
+  chrome: { mutability: "immortal", step: true },
+  "newline.between": { mutability: "immortal", step: true },
+  "newline.inside": { mutability: "immortal", step: true },
+  "block.para": { mutability: "immortal", step: true },
   "block.heading": { mutability: "immortal", stop: true },
   "block.front": { mutability: "immortal", stop: true },
   "block.meta": { mutability: "immortal", stop: true },
-  blank: { mutability: "immortal", stop: true },
-  standalone: { stop: true },
+  blank: { mutability: "immortal", step: true },
+  standalone: { step: true },
   "slot.c": { mutability: "immortal", stop: true },
   "slot.v": { mutability: "immortal", stop: true },
 };

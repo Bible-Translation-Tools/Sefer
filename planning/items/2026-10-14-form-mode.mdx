@@ -161,6 +161,13 @@ marks a value that is not a verse number (3, 3a, 3-4) instead of closing silentl
 gutter click shows one finding at a time, anchored at it, with "Next on this line (1 of 3)" when
 the row holds more; in Reading a row is a whole paragraph, and every finding at once was "a lot".
 
+**Step, a third press policy (2026-10-22):** a locked cell either stopped a press (nothing
+happens) or let it pass (the press acts on the next thing beyond). Line by line's markup inside
+a verse (`\p`, a poetry break, its newline, its chrome) now steps: Backspace or Delete moves
+the caret over it and takes nothing, so a verse can be walked through; verse and chapter
+numbers keep stop, so a run of Backspaces never reaches the verse before. Forward Delete
+addresses the next visible glyph past hidden markup, so it checks for a step cell in between.
+
 <Followup id="ship">To `dev` behind `__SEFER_DESIGN__` once it holds up, and finish with a
 tutorial for the PO and designer, as for suppressions (Will, 2026-10-21).</Followup>
 

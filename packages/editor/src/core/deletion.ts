@@ -56,9 +56,10 @@ function reachesImmortal(
   let met: "none" | "pass" = "none";
   for (const h of targets.targetsIn(lo, hi + 1).hits) {
     if (h.target.mutability !== "immortal") continue;
-    const a = anchoredBack(structure, h.target.wholeSpan, h.target.stop);
+    const holds = h.target.stop || h.target.step;
+    const a = anchoredBack(structure, h.target.wholeSpan, holds);
     if (a.to <= lo || a.from >= hi) continue;
-    if (h.target.stop) return "stop";
+    if (holds) return "stop";
     met = "pass";
   }
   return met;
@@ -112,6 +113,7 @@ type Verdict =
       readonly act: "consume";
       readonly say: string;
       readonly span?: PlanSpan;
+      readonly stepOnly?: true;
     }
   | { readonly act: "default"; readonly say: string }
   | {
@@ -160,17 +162,25 @@ const CELL_RULES: readonly CellRule[] = [
   {
     name: "immortal",
     when: (t) => t.mutability === "immortal",
-    say: (t) =>
-      t.stop
-        ? {
-            act: "nothing",
-            say: `cell immortal — the ${t.set} cannot be taken; the press stops at it`,
-          }
-        : {
-            act: "consume",
-            say: `cell immortal — the ${t.set} cannot be taken; the press goes past it`,
-            span: t.wholeSpan,
-          },
+    say: (t) => {
+      if (t.stop)
+        return {
+          act: "nothing",
+          say: `cell immortal — the ${t.set} cannot be taken; the press stops at it`,
+        };
+      if (t.step)
+        return {
+          act: "consume",
+          say: `cell immortal — the ${t.set} cannot be taken; the caret steps over it`,
+          span: t.wholeSpan,
+          stepOnly: true,
+        };
+      return {
+        act: "consume",
+        say: `cell immortal — the ${t.set} cannot be taken; the press goes past it`,
+        span: t.wholeSpan,
+      };
+    },
   },
   {
     name: "empty",
@@ -252,8 +262,26 @@ function backspaceAt(targets: OwnedIndex, pos: number): Verdict {
   return whole("delete.usfm.owned", "own-whole", `take own(${t.set}) whole`);
 }
 
+/** A step cell hidden between the caret and what a press would reach: step over it instead. */
+const stepBetween = (targets: OwnedIndex, from: number, to: number): Verdict | null => {
+  if (to <= from) return null;
+  for (const h of targets.targetsIn(from, to).hits) {
+    const t = h.target;
+    if (t.mutability !== "immortal" || !t.step) continue;
+    return {
+      act: "consume",
+      say: `cell immortal — the ${t.set} cannot be taken; the caret steps over it`,
+      span: { from: Math.max(from, t.wholeSpan.from), to: Math.min(to, t.wholeSpan.to) },
+      stepOnly: true,
+    };
+  }
+  return null;
+};
+
 function deleteAt(targets: OwnedIndex, pos: number): Verdict {
   const a = targets.addressedForward(pos);
+  const stepped = stepBetween(targets, pos, a.at);
+  if (stepped) return stepped;
   const t = a.target;
   const onePaint = (say: string): Verdict =>
     a.at > pos || a.kind !== "glyph"
@@ -334,6 +362,16 @@ function commit(press: Press, v: Verdict): boolean {
     let past: number | null;
     if (v.span === undefined) past = lawfulStop(state, s, r, at, back);
     else past = back ? v.span.from : v.span.to;
+    if (v.stepOnly === true && past !== null && past !== at) {
+      dispatch(
+        state.update({
+          selection: { anchor: past },
+          userEvent: "select.usfm.stepImmortal",
+          scrollIntoView: true,
+        }),
+      );
+      return true;
+    }
     if (press.passed !== true && past !== null && past !== at) {
       const onward: Press = { ...press, at: past, passed: true };
       const next = back ? backspaceAt(ix, past) : deleteAt(ix, past);

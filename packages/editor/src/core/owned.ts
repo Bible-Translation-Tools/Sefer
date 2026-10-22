@@ -41,6 +41,7 @@ interface TargetFacts {
   readonly paint: PaintReach;
   readonly mutability: Mutability;
   readonly stop: boolean;
+  readonly step: boolean;
   readonly policy: OwnershipBit | null;
   readonly paintsOwnLine: boolean;
   readonly empty: boolean;
@@ -146,6 +147,7 @@ export function buildOwnedIndex(structure: DocStructure, plan: DocPlan, a: Assig
       paint: row.cell.paint,
       mutability: row.cell.mutability,
       stop: row.cell.stop === true,
+      step: row.cell.step === true,
       policy: ownershipOf(row) ?? null,
       paintsOwnLine: paintsItsOwnLineAmbient(classKey),
       empty: extra.empty === true,

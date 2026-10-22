@@ -177,6 +177,10 @@ export const lineByLineTour: Tour = {
         try: "Put the caret at the start of a verse and press Backspace.",
         notes: [
           {
+            label: "Inside a verse",
+            text: "A paragraph or poetry break inside a verse is kept too. Backspace or Delete next to one moves the cursor over it without removing it; press again to delete the letter beyond.",
+          },
+          {
             label: "Changing structure",
             text: "Choose Reading or USFM to change paragraphs, poetry or headings. Headings cannot be typed into here.",
           },
