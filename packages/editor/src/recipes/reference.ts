@@ -45,6 +45,7 @@ import { type Analyze, analyzer } from "../core/analyzer";
 import { anchorFrom } from "../core/clip";
 import { readingLayer, viewLayer } from "../core/compose";
 import { structureAt, type ChapterRow } from "../core/docStructure";
+import { hiddenFrontMatter } from "../core/frontmatter";
 import { span } from "../core/timing";
 import { handleFor, markMoved, type EditorHandle } from "../handle";
 import { modeView, pickChapter, type ProjectionName } from "../views";
@@ -122,6 +123,7 @@ export function mountReference(options: ReferenceOptions): ReferenceMount {
       readingLayer,
       viewLayer(),
       projection.of(modeView(options.mode)),
+      hiddenFrontMatter(),
       pairingThere(options.pairBlocks === true),
       EditorState.readOnly.of(true),
       EditorView.editable.of(false),

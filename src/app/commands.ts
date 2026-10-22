@@ -768,15 +768,6 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
     insertion("editor.insert.poetry", t("Insert poetry line"), "Mod-Shift-l", "insert.poetry"),
     insertion("editor.insert.footnote", t("Insert footnote"), "Mod-Shift-n", "insert.footnote"),
 
-    registerCommand({
-      id: "editor.frontmatter.edit",
-      title: t("Edit front matter"),
-      when: () => seated() !== undefined && bridge.mode() !== "usfm",
-      run: () => {
-        seated()?.perform("frontmatter.edit");
-      },
-    }),
-
     // ---------------------------------------------------------------------
     // Format. One `book.apply(…, 'format')` per book, so a formatted book is
     // one Undo step and a formatted project is one per book. The edits are

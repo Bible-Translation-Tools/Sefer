@@ -258,9 +258,11 @@ function cardDecorations(state: EditorState): DecorationSet {
   if (rows.length === 0) return Decoration.none;
   const from = rows[0].from;
   const to = rows[rows.length - 1].to;
-  return Decoration.set([
-    Decoration.replace({ widget: new FrontMatterWidget(rows), block: true }).range(from, to),
-  ]);
+  // Hidden, not drawn: the product owner's ruling is that the book's header
+  // never appears in the normal view. USFM mode still shows it as markup.
+  // The card (`FrontMatterWidget`) is kept for the day that ruling changes.
+  void FrontMatterWidget;
+  return Decoration.set([Decoration.replace({ block: true }).range(from, to)]);
 }
 
 /**
@@ -296,7 +298,12 @@ const frontMatterFocus = ViewPlugin.fromClass(
  * The card, as one extension. Mounted by `BookEditor`, so a headless state (a
  * Book with no view, a satellite) never pays for it.
  */
-export const frontMatterCard = (): Extension => [
-  EditorView.decorations.compute(["doc", structureField, modeFacet], cardDecorations),
-  frontMatterFocus,
-];
+export const frontMatterCard = (): Extension => [hiddenFrontMatter(), frontMatterFocus];
+
+/**
+ * The book's header, hidden in regular mode — on the book being refined and on
+ * every read-only gateway pane beside it alike, because the ruling is "nowhere
+ * in the normal view", not "nowhere editable".
+ */
+export const hiddenFrontMatter = (): Extension =>
+  EditorView.decorations.compute(["doc", structureField, modeFacet], cardDecorations);
