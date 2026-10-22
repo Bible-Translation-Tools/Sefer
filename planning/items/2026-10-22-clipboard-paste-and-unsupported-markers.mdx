@@ -1,0 +1,180 @@
+---
+id: 67e51530-16f0-481f-a7c5-531da917803d
+title: "Clipboard, paste and the markers Reading mode does not draw yet"
+kind: plan
+status: in-progress
+created: 2026-10-22
+updated: 2026-10-22
+sha: 0a4b3f8d
+priority: 1
+tags: [editor]
+related: [40d3076e-25ac-47fa-91fd-8482173a4162, c8b63600-40a8-4937-bc03-e0264e9a13f0]
+source: conversation 2026-10-22, on the editor bench (`pnpm editor:bench`)
+---
+
+Found on the [editor bench](/items/2026-10-14-form-mode), the day it was built: copying
+from the BSB beside the ULB, and the "Every marker" scenario showing what Reading mode still
+draws as raw USFM.
+
+> If I go copy and paste inside of a WYSIWYG editor, such as Microsoft Word, and I copy that
+> as one and then I paste it later. The bold comes with it in Microsoft Word or in Docs and it
+> doesn't here. So I think it's the default of text plain that's odd.
+
+## What the bench showed
+
+- **Copy writes one flavour**, `text/plain`, holding the raw USFM of exactly the selected
+  characters. Dragging across a title in Reading starts after the hidden `\s1 `, so the title
+  comes without its marker; the same for bold. Pasted into an email, the same copy is full of
+  backslashes.
+- **A paste is the text, verbatim.** BSB 1:5's end through "His name was John." pasted at
+  the end of ULB 1:5 gives `…overcome it.\s1 The Witness of John`: the title glued to the
+  verse, not a heading, and a second `\v 6`. With the caret in the number slot (`\v |6`) it
+  gives `\v \s1 The Witness…`. Poetry the same: `comfort me.\v 4 Even though…`. No rule
+  refused or rewrote any of it.
+- **Reading mode still shows backslashes** for `\cp`, `\pb`, tables, `\fig`, sidebars and
+  `\cat`, and a milestone's attributes (`|who="Speaker"`).
+- **Milestone pips are big** (`\list-s\*` draws three boxes), and the caret can stop inside
+  one (`\list-s|\*`).
+
+## The principle: data in the package, the UI an opt-in default
+
+> try to be generic enough that we can do it here in our workbench, but not force it on a
+> caller … if they don't want those attribute popovers they shouldn't 100% have to show them,
+> but also, if the data part is generic / abstracted enough to do with as they want, and we
+> can ship a default solution as well
+
+Each feature splits in two:
+
+- **The data, always in the package, framework-free.** "A milestone at 120–140 with these
+  attributes", "a figure with this caption and `src`", "a marker this surface has no renderer
+  for". Plain queries on the handle, and events (`onActivate({ kind, range, attributes })`)
+  a host can drive its own UI from.
+- **The default UI, as opt-in extensions.** The attribute popover, the figure widget, table
+  layout, chips. The mount takes a feature list, the full set by default; Sefer and the bench
+  take the defaults, another host passes its own, leaves popovers out, or listens to
+  `onActivate`.
+
+The bench is where each is proved first: a feature that only works when Sefer wires it shows
+up there. CodeMirror's own model, a small core and behaviour in extensions.
+
+<Mermaid id="split" caption="One feature, two halves">
+```mermaid
+flowchart LR
+  engine["engine: CST, attrs, MARKERS"] --> data["package: data<br/>queries + onActivate"]
+  data --> ui["package: default UI<br/>popover, widget, chip"]
+  data --> host["a host's own UI"]
+  ui --> sefer["Sefer, the bench"]
+```
+</Mermaid>
+
+## Is it kitchen work?
+
+Almost none of it. Kitchen already ships what is needed: `mask` (reader text), `attrs`
+(attributes), `parseText` (to read a pasted fragment) and `MARKERS` (each marker's kind).
+
+| Piece | Where |
+|---|---|
+| `text/plain` | ours, over kitchen's `mask` "text" recipe (Galley's reader text keeps notes, ours drops them: decide which a copy wants) |
+| `text/html` | ours: kitchen has no HTML renderer; drawn from the classes the editor paints with |
+| the private USFM flavour, widening, the paste rules | ours |
+| milestone stops, pips, popovers, chips, `\cp`, `\pb`, lists | ours |
+| figures, sidebars, tables | ours |
+| two marker configs on one page | kitchen, the per-handle registry, already coming |
+
+<Question id="fragment-door">Widening a selection to whole markers is ours first, over the CST the editor already walks (`notePartsOf` does this kind of walk). If nesting gets hairy (a character marker in a note in a character marker), ask kitchen for "the smallest well-formed fragment covering this range"?</Question>
+
+## 1. The clipboard writes three flavours
+
+| Flavour | Holds | For |
+|---|---|---|
+| `text/plain` | the words a reader sees | email, chat, any plain field |
+| `text/html` | the same words, styled: headings, bold, poetry indents | Word, Docs |
+| `web application/x-sefer-usfm` | the widened USFM, and the book it came from | a paste inside Sefer |
+
+The private flavour is what Sefer's own paste prefers; everything else reads the other two.
+
+## 2. Widening: what a copy covers, Word's rules
+
+- **Character formatting always comes.** Half a bold word copies bold: the fragment is
+  wrapped in the character markers it sits inside.
+- **A block's marker comes when the selection reaches the block's end** (Word's
+  paragraph-mark rule): a title selected through its end copies as `\s1 …`.
+- **A note comes whole** when its caller is in the selection.
+
+## 3. Paste
+
+- **A block-led fragment into an empty block replaces it.** Enter after `\c 1` makes an empty
+  `\p`; pasting a copied title there gives `\s1 The Beginning`, not `\p The Beginning`. Which
+  markers are blocks comes from the engine's `MARKERS` (kind), not a regex.
+- **A block-led fragment mid-line starts a new line.** No more `overcome it.\s1`.
+- **Verse numbers are dropped when the copy came from another book**, and kept for a cut and
+  paste within one's own text, which is moving verses.
+
+> I'm just imaging somehow going, oh, I want a section heading/title here. Copy from source
+> (english) and then backspace it all, then type your heading for example.
+
+- **Never into a number slot.** A paste with the caret in `\v |6` lands at the verse's text.
+
+The paste is still one `input.paste` transaction, so the rules that judge pastes today still
+judge it: `refuseMarkupPastedInsideAWord` and `refusePastesThatWouldAddAChapter`
+(`packages/editor/src/core/input.ts`), and line by line's `pasteAsOneLine`
+(`packages/editor/src/core/verseLines.ts`).
+
+<Source path="packages/editor/src/core/input.ts" lines="209-260" />
+
+## 4. Milestones
+
+One small pip at the start and one at the end, whatever the spelling (`-s`, `\*`); the inside
+is no caret stop, as a character marker's chrome is not. Attributes are not drawn.
+
+## 5. Attribute popovers
+
+Attributes (`|who="Speaker"`, a `\w`'s lemma, a figure's `src`) open in a popover from the
+pip or the run, as a note's attributes already do, read through kitchen's `attrs`. The data
+half is `onActivate`; the popover is the default UI over it.
+
+## 6. Chips: Reading never shows a backslash
+
+Anything without a renderer becomes a small labelled chip ("table cell", "figure", "page
+break"), labelled from the catalogue, that the caret goes around and USFM mode edits. A host
+can replace the chip renderer. Then, cheaply, three of them get their own drawing:
+
+- `\cp`: its value in the chapter number's place.
+- `\pb`: a thin rule, deleted whole, as `\b` is.
+- Lists: an indent per level and a hanging indent; `\li#` are already paragraphs and `\lik`,
+  `\liv` already character markers.
+
+## 7. Last, one at a time: figures, sidebars, tables
+
+Each in its own module, loaded with a dynamic `import()` the first time a document has one,
+so most books never load it.
+
+- **Figures.** `\fig…\fig*` replaced by a widget: the caption, a thumbnail when `src`
+  resolves (usually not, so a placeholder), the caption edited in a satellite as a note's
+  body is.
+- **Sidebars.** `\esb`…`\esbe` drawn as a bordered region with line decorations; `\cat`
+  handled.
+- **Tables.** One row a line, cell markers as small column pips, columns aligned by
+  measuring, not mutating. A mutation observer would fight CodeMirror, which owns its DOM and
+  rewrites lines. Instead, in CodeMirror's measure cycle, measure each cell's text (canvas
+  `measureText`, or [pretext](https://github.com/chenglou/pretext)), take each table's column
+  widths, and give each cell an inline-block mark whose `min-width` reads a per-table CSS
+  variable. Remeasure only when a table's text changes.
+
+> My think on tables is i'd want them like, maybe lazy loaded? Or pretty modular off in terms
+> of own code.
+
+## Order
+
+Clipboard, widening, paste, milestones, popovers, chips; then figures, sidebars and tables,
+one at a time.
+
+<Followup id="clipboard">1–2: the three flavours and widening.</Followup>
+<Followup id="paste">3: the paste rules.</Followup>
+<Followup id="milestones">4: milestone pips and stops.</Followup>
+<Followup id="popovers">5: attribute popovers, data first.</Followup>
+<Followup id="chips">6: chips, then `\cp`, `\pb`, list styling.</Followup>
+<Followup id="figures">7a: figures.</Followup>
+<Followup id="sidebars">7b: sidebars.</Followup>
+<Followup id="tables">7c: tables.</Followup>
+
