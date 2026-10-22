@@ -15,6 +15,7 @@
     "deploy:web": "node tools/deploy/web.ts",
     "branch:preview": "node tools/deploy/branchPreview.ts",
     "design:scaffolding": "node tools/design/scaffolding.ts",
+    "icons": "node tools/icons/generate.ts",
     "dev": "vite",
     "editor:bench": "vite --config packages/editor/bench/vite.config.ts",
     "dev:tauri": "node tools/tauri/run.ts dev",
