@@ -1,20 +1,18 @@
-import { createAlignedGroup } from "@sefer/editor";
+import { createAlignedGroup, type EditorBook } from "@sefer/editor";
 import { createFileRoute } from "@tanstack/solid-router";
-import Columns2 from "lucide-solid/icons/columns-2";
-import Combine from "lucide-solid/icons/combine";
+import PanelLeftClose from "lucide-solid/icons/panel-left-close";
+import PanelLeftOpen from "lucide-solid/icons/panel-left-open";
 import { Show, createEffect, createSignal, untrack } from "solid-js";
 
 import { t } from "#app/i18n";
-import { languageName, languageTag } from "#app/language";
 import { useShell } from "#app/ProjectContext";
 import { REFERENCE_WIDTH } from "#app/settings";
 import { BookEditor } from "#app/ui/BookEditor";
-import { Button, DelayedSpinner, Resizable, cx } from "#app/ui/primitives";
+import { Button, DelayedSpinner, Resizable, Switch, cx } from "#app/ui/primitives";
 import { RecoveryBanner } from "#app/ui/recovery/RecoveryBanner";
 import { AlignedProvider } from "#app/ui/workspace/aligned";
 import { layout } from "#app/ui/workspace/layoutTweak";
-import { metadataOf, projectName } from "#app/ui/workspace/project";
-import { LanguageTab, ReferenceColumn } from "#app/ui/workspace/ReferenceColumn";
+import { ReferenceColumn } from "#app/ui/workspace/ReferenceColumn";
 import { Toolbar } from "#app/ui/workspace/Toolbar";
 
 /**
@@ -33,6 +31,102 @@ import { Toolbar } from "#app/ui/workspace/Toolbar";
  * holds no text, no structure and no analysis — `BookEditor` owns the one
  * subscription, and this component only reads what the shell already knows.
  */
+
+/**
+ * The panels layout's editor: the heart language, the only text that can be
+ * edited, outlined on the page's white, the outline brand while it has focus.
+ * A small action bar over the text: "Show reference" on the left (the only
+ * way to the gateways — joined, there is none on screen), USFM flush right.
+ * Split, its left border is the resize handle's line.
+ */
+function EditorPanel(props: { readonly book: EditorBook; readonly split?: boolean }) {
+  const shell = useShell();
+  /**
+   * The bar's edges, matched to the TEXT's: CodeMirror centres the scripture
+   * in a fixed measure beside its gutter, so the column moves with the
+   * panel's width, the gutter and the font. Measured rather than restated —
+   * the inset from each side of the panel to each side of `.cm-content`.
+   */
+  const [panel, setPanel] = createSignal<HTMLElement>();
+  const [inset, setInset] = createSignal({ start: 24, end: 24 }, { name: "refineBarInset" });
+  createEffect(
+    // Again for a new book: its view is a new element.
+    () => ({ section: panel(), book: props.book.id }),
+    ({ section }) => {
+      if (section === undefined) return;
+      let watched: Element | undefined;
+      const measure = (): void => {
+        const text = section.querySelector(".cm-content");
+        if (text === null) return;
+        // Found: the view is up, and nothing else needs watching for it —
+        // a subtree observer left on would measure on every keystroke.
+        mounted.disconnect();
+        if (text !== watched) {
+          if (watched !== undefined) observer.unobserve(watched);
+          watched = text;
+          observer.observe(text);
+        }
+        const outer = section.getBoundingClientRect();
+        const inner = text.getBoundingClientRect();
+        const border = section.clientLeft;
+        setInset({
+          start: Math.max(0, Math.round(inner.left - outer.left - border)),
+          end: Math.max(0, Math.round(outer.right - inner.right - border)),
+        });
+      };
+      const observer = new ResizeObserver(measure);
+      observer.observe(section);
+      // The view mounts after the panel; catch it when it lands.
+      const mounted = new MutationObserver(measure);
+      mounted.observe(section, { childList: true, subtree: true });
+      measure();
+      return () => {
+        observer.disconnect();
+        mounted.disconnect();
+      };
+    },
+  );
+  return (
+    <section
+      ref={setPanel}
+      aria-label={t("Refinement")}
+      data-testid="refine-editor"
+      class={cx(
+        // The page's own white, outlined: the border goes brand while the
+        // text has focus. Split, its left edge is also the resize handle's line.
+        "flex min-h-0 flex-1 flex-col rounded-[12px] border-2 border-surface-border bg-surface-primary transition-colors focus-within:border-brand",
+      )}
+    >
+      {/* 12px top and bottom; each side lines up with the text's own edge. */}
+      <div
+        class="flex shrink-0 items-center gap-controls py-3"
+        style={{ "padding-inline": `${inset().start}px ${inset().end}px` }}
+      >
+        <Button
+          variant="tertiary"
+          data-testid="refine-reference"
+          onClick={() => shell.setReferenceSplit(props.split !== true)}
+        >
+          <Show when={props.split === true} fallback={<PanelLeftOpen aria-hidden="true" />}>
+            <PanelLeftClose aria-hidden="true" />
+          </Show>
+          {props.split === true ? t("Hide reference") : t("Show reference")}
+        </Button>
+        <Switch
+          class="ms-auto"
+          label={t("USFM")}
+          checked={shell.mode() === "usfm"}
+          onChange={(on) => shell.setMode(on ? "usfm" : "default")}
+        />
+      </div>
+      <div class="flex min-h-0 flex-1 flex-col px-6">
+        <Show when={props.book.id} keyed>
+          <BookEditor book={props.book} bare />
+        </Show>
+      </div>
+    </section>
+  );
+}
 
 function BookPage(props: { readonly root: string; readonly bookId: string }) {
   const shell = useShell();
@@ -60,17 +154,6 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
    * editor's view beside it.
    */
   const [references, setReferences] = createSignal(0, { name: "boundReferences" });
-  /**
-   * The panels layout, split: the gateways' panel reports what it holds, and
-   * when the last language is removed the two panels merge back into one —
-   * an empty panel beside the editor is only lost width. Reported only once
-   * the panel has read its bindings, so opening a split view does not merge
-   * it before it knows.
-   */
-  const reportSplit = (count: number): void => {
-    setReferences(count);
-    if (count === 0 && untrack(() => shell.referenceSplit())) shell.setReferenceSplit(false);
-  };
   /** The column folded to its cards (its own collapse button). */
   const [folded, setFolded] = createSignal(false, { name: "referencesFolded" });
   const collapsed = (): boolean => references() === 0 || folded();
@@ -94,17 +177,6 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
     },
   );
 
-  /** The joined panel's heart-language tab is the one on show, not a gateway. */
-  const [heartActive, setHeartActive] = createSignal(true, { name: "refineHeartActive" });
-  /** The heart language: the project's own, by name and by tag. */
-  const heart = () => {
-    const metadata = metadataOf(shell.project());
-    const code = languageTag(metadata);
-    return {
-      name: languageName(metadata) || projectName(shell.project()),
-      code: code || projectName(shell.project()),
-    };
-  };
   const panels = (): boolean => layout() === "panels";
   /**
    * The panels layout's measure, shared by the toolbar and the panels under it
@@ -140,55 +212,24 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
         {(book) => (
           <>
             <div class={measure()}>
-              <Toolbar usfm={panels()} panelToggle={!panels()} />
+              <Toolbar panelToggle={!panels()} />
             </div>
 
             <Show
               when={layout() === "split"}
               fallback={
-                // The language panels (a design tweak): one white surface, no
-                // cards. Joined, every language is a tab of ONE panel; split,
-                // the gateways have a panel of their own beside the heart
-                // language. Each panel keeps its tabs' places by hiding the
-                // ones not on show rather than unmounting them.
+                // The language panels (a design tweak): one white surface.
+                // Joined, only the heart language is on screen, in its editor
+                // panel; split, the reference sits to its left, bare on the
+                // page, under one language-and-text dropdown.
                 //
                 // NO aligned group: each side scrolls on its own, and the
                 // gateways catch up when the reader clicks in the heart
                 // language — the caret's paired-verse reveal in each pane.
                 // Provided as `null`: none, said explicitly.
                 <AlignedProvider value={null}>
-                  <div class={cx("flex min-h-0 flex-1 gap-6", measure())}>
-                    <Show
-                      when={shell.referenceSplit()}
-                      fallback={
-                        <ReferenceColumn
-                          variant="panel"
-                          onBound={setReferences}
-                          heart={{ ...heart(), active: heartActive(), onActivate: setHeartActive }}
-                          editor={
-                            <Show when={book().id} keyed>
-                              <BookEditor book={book()} bare />
-                            </Show>
-                          }
-                          // No Split while the project's language is the only one:
-                          // there is nothing to put beside it.
-                          trailing={
-                            references() === 0 ? undefined : (
-                              <Button
-                                variant="tertiary"
-                                class="shrink-0 [&>svg]:shrink-0"
-                                data-testid="refine-split"
-                                title={t("Move the gateway languages to their own panel")}
-                                onClick={() => shell.setReferenceSplit(true)}
-                              >
-                                <Columns2 aria-hidden="true" />
-                                {t("Split")}
-                              </Button>
-                            )
-                          }
-                        />
-                      }
-                    >
+                  <div class={cx("flex min-h-0 flex-1", measure())}>
+                    <Show when={shell.referenceSplit()} fallback={<EditorPanel book={book()} />}>
                       <Resizable.Root
                         class="min-h-0 min-w-0 flex-1"
                         onSizesChange={(sizes) => {
@@ -196,60 +237,28 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
                           if (first !== undefined) shell.setReferenceWidth(first);
                         }}
                       >
+                        {/* The reference: no border, no surface, straight on
+                            the page — only the editor beside it is a panel.
+                            14px down: the editor's 2px outline and 12px
+                            padding, so the two control rows share a line. */}
                         <Resizable.Panel
                           initialSize={referenceInitial}
                           minSize={referenceMin}
                           maxSize={referenceMax}
-                          class="flex min-w-0 flex-col"
+                          class="flex min-w-0 flex-col pe-6 pt-3.5"
                         >
-                          <ReferenceColumn
-                            variant="panel"
-                            onBound={reportSplit}
-                            trailing={
-                              <Button
-                                variant="tertiary"
-                                class="shrink-0 [&>svg]:shrink-0"
-                                data-testid="refine-join"
-                                title={t("Join the gateway languages back into this panel")}
-                                onClick={() => shell.setReferenceSplit(false)}
-                              >
-                                <Combine aria-hidden="true" />
-                                {t("Join")}
-                              </Button>
-                            }
-                          />
+                          <ReferenceColumn variant="gateway" onBound={setReferences} />
                         </Resizable.Panel>
-                        {/* Nothing between the panels at rest; the line and
-                            its grip come up under the pointer. 24px wide, the
-                            page's own margin. */}
+                        {/* The editor's left border IS the handle: an edge
+                            handle, nudged 1px so its 2px line lies exactly
+                            over the border it lights up. */}
                         <Resizable.Handle
-                          quiet
-                          class="px-3"
-                          label={t("Resize the gateway languages panel")}
+                          edge
+                          class="translate-x-px"
+                          label={t("Resize the reference panel")}
                         />
                         <Resizable.Panel class="flex min-w-0 flex-col">
-                          <div class="flex min-h-0 flex-1 flex-col gap-3">
-                            <div
-                              role="tablist"
-                              aria-label={t("Languages")}
-                              class="flex shrink-0 items-center gap-controls border-b border-surface-border"
-                            >
-                              <div class="flex min-w-0 items-end">
-                                <LanguageTab
-                                  testId="language-tab-heart"
-                                  name={heart().name}
-                                  code={heart().code}
-                                  refining
-                                  active
-                                />
-                              </div>
-                            </div>
-                            <div class="flex min-h-0 flex-1 flex-col">
-                              <Show when={book().id} keyed>
-                                <BookEditor book={book()} bare />
-                              </Show>
-                            </div>
-                          </div>
+                          <EditorPanel book={book()} split />
                         </Resizable.Panel>
                       </Resizable.Root>
                     </Show>

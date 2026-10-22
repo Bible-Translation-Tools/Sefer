@@ -50,7 +50,7 @@ import PanelLeftClose from "lucide-solid/icons/panel-left-close";
 import Plus from "lucide-solid/icons/plus";
 import Trash from "lucide-solid/icons/trash-2";
 import X from "lucide-solid/icons/x";
-import { For, Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 
 import { Observability } from "#core/observability";
 import { remoteVerdict } from "#core/remote/remote";
@@ -138,9 +138,11 @@ export interface ReferenceColumnProps {
   /**
    * `panel`: Refine's language panels, a design tweak. Every text the project
    * shows is a TAB, one on show at a time, and "+" is the language menu; no
-   * fold, no column padding. `column` otherwise.
+   * fold, no column padding. `gateway`: the split view's reference panel —
+   * no tabs, one split dropdown, language then text, over the text on show.
+   * `column` otherwise.
    */
-  readonly variant?: "column" | "panel";
+  readonly variant?: "column" | "panel" | "gateway";
   /**
    * The heart language, as one more tab after the gateways (the joined panel).
    * The column does not draw the editor; it shows `editor` under the strip
@@ -1119,7 +1121,13 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
    * this device in that language — its scriptures, its Translation Notes… —
    * and, to download, the notes this language has and the device does not.
    */
-  const ResourcePicker = (pickerProps: { readonly resource: Resource }) => {
+  const ResourcePicker = (pickerProps: {
+    readonly resource: Resource;
+    /** The trigger's own look, for the split dropdown's right half. */
+    readonly triggerClass?: string;
+    /** Name the text by its shorthand (`ULB`, `REG`) where it has one, not its full title. */
+    readonly short?: boolean;
+  }) => {
     const key = (): string => languageOf(pickerProps.resource);
     const texts = (): readonly Resource[] =>
       installed().filter((each) => languageOf(each) === key());
@@ -1128,20 +1136,30 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     return (
       <Menu
         label={t("Resource")}
+        triggerClass="min-w-0"
         onOpenChange={(open) => {
           if (open) offer();
         }}
         side="bottom"
-        align="start"
+        // The split dropdown's right half: its menu ends where the control
+        // does, flush with the panel's right edge, not hanging past it.
+        align={pickerProps.short === true ? "end" : "start"}
         class="w-80"
         fitViewport
         trigger={
           <button
             type="button"
             data-testid="resource-picker"
-            class="flex min-h-12 w-full max-w-sm cursor-pointer items-center gap-3 rounded-lg px-3 text-start text-small font-semibold text-on-surface-primary transition-colors hover:bg-surface-secondary"
+            class={
+              pickerProps.triggerClass ??
+              "flex min-h-12 w-full max-w-sm cursor-pointer items-center gap-3 rounded-lg px-3 text-start text-small font-semibold text-on-surface-primary transition-colors hover:bg-surface-secondary"
+            }
           >
-            <span class="min-w-0 flex-1 truncate">{pickerProps.resource.title}</span>
+            <span class="min-w-0 flex-1 truncate" title={pickerProps.resource.title}>
+              {pickerProps.short === true
+                ? (pickerProps.resource.identifier?.toUpperCase() ?? pickerProps.resource.title)
+                : pickerProps.resource.title}
+            </span>
             <ChevronDown aria-hidden="true" class="size-5 shrink-0" />
           </button>
         }
@@ -1356,12 +1374,213 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     </div>
   );
 
+  /** The language a tab group is called by, as the tabs and the split dropdown name it. */
+  const groupName = (group: { readonly key: string; readonly entries: readonly Entry[] }): string =>
+    languageName(group.key) ?? group.entries[0]?.resource.title ?? group.key;
+  /** The language of the text on show, if one is. */
+  const shownLanguage = (): string | undefined => {
+    const held = shown();
+    return held === undefined ? undefined : languageOf(held.entry.resource);
+  };
+  /**
+   * One half of the split dropdown: md — 48px with the 1px border above and
+   * below, 14px, a 20px chevron, 24px sides — level with the editor's action bar.
+   */
+  const HALF =
+    "flex h-[46px] min-w-0 cursor-pointer items-center gap-3 px-6 text-start text-small font-semibold text-on-surface-primary transition-colors hover:bg-surface-secondary";
+
+  /**
+   * The split view's one control: | English ⌄ | ULB ⌄ |. The left half picks
+   * the language — the ones already beside this project, then the add list —
+   * and the right half picks the text within it.
+   */
+  /**
+   * A grace period before a download starts: two seconds in which the row
+   * reads "Starting…" and pressing it again calls it off. Nothing has been
+   * fetched yet, so there is nothing to undo — a mis-tap costs nothing. Once
+   * the clone has begun it runs to the end: the git hosts cannot stop one
+   * part-way yet, and a half-stopped clone leaves a folder that blocks the
+   * next try.
+   */
+  const DOWNLOAD_GRACE_MS = 2000;
+  const [starting, setStarting] = createSignal<ReadonlySet<string>>(new Set(), {
+    name: "referenceStarting",
+  });
+  const graceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const settle = (key: string): void => {
+    graceTimers.delete(key);
+    setStarting((held) => {
+      const next = new Set(held);
+      next.delete(key);
+      return next;
+    });
+  };
+  const startSoon = (key: string, download: () => void): void => {
+    setStarting((held) => new Set(held).add(key));
+    graceTimers.set(
+      key,
+      setTimeout(() => {
+        settle(key);
+        download();
+      }, DOWNLOAD_GRACE_MS),
+    );
+  };
+  const callOff = (key: string): void => {
+    clearTimeout(graceTimers.get(key));
+    settle(key);
+  };
+  // Leaving the screen inside the grace period calls the download off too.
+  onCleanup(() => {
+    for (const timer of graceTimers.values()) clearTimeout(timer);
+  });
+
+  const GatewayPicker = () => (
+    // The panel's whole width. The language takes what is left over; the text,
+    // by its shorthand, only what it needs.
+    <div
+      data-testid="gateway-picker"
+      class="flex w-full shrink-0 overflow-hidden rounded-lg border border-surface-border"
+    >
+      <Popover
+        label={t("Reference language")}
+        side="bottom"
+        align="start"
+        variant="menu"
+        class="w-96 p-0"
+        fitViewport
+        open={managing()}
+        onOpenChange={manage}
+        triggerClass="min-w-0 flex-1"
+        trigger={
+          <button type="button" data-testid="gateway-language" class={cx(HALF, "w-full")}>
+            <span class="min-w-0 flex-1 truncate">
+              {(() => {
+                const key = shownLanguage();
+                const group = languageTabs().find((each) => each.key === key);
+                return group === undefined ? t("Choose a language") : groupName(group);
+              })()}
+            </span>
+            <ChevronDown aria-hidden="true" class="size-5 shrink-0" />
+          </button>
+        }
+      >
+        {/* One list, A–Z, no headings and no add or remove: every language
+            there is, on this device or to download. The one on show is
+            selected; choosing another shows it instead. One still to download
+            says so in its row. */}
+        <ul
+          data-testid="language-list"
+          class="scrollbar-padded flex max-h-[min(70vh,32rem)] flex-col overflow-y-auto py-2"
+        >
+          <Show when={gateways() === undefined}>
+            <li class="px-4 py-2 text-small text-on-surface-tertiary">{t("Loading the list…")}</li>
+          </Show>
+          <For each={[...offers()].sort(byName)}>
+            {(offer) => (
+              <li data-testid={`gateway-language-${offer.key}`}>
+                <Show
+                  when={offer.kind === "held" ? offer : undefined}
+                  fallback={
+                    // To download: the whole row is the action, blue like a
+                    // link. For two seconds it is "Starting…", and pressing
+                    // it again calls it off; then the bar, and nothing to press.
+                    offer.kind === "download" && (
+                      <button
+                        type="button"
+                        aria-label={
+                          starting().has(offer.key)
+                            ? t("Cancel downloading {name}", { name: offer.name })
+                            : t("Download {name}", { name: offer.name })
+                        }
+                        disabled={offer.pulling()}
+                        class="flex min-h-12 w-full cursor-pointer items-center gap-3 px-4 text-start text-small text-on-surface-primary transition-colors hover:bg-surface-secondary disabled:cursor-default disabled:hover:bg-transparent"
+                        onClick={() => {
+                          if (starting().has(offer.key)) callOff(offer.key);
+                          else startSoon(offer.key, () => offer.download());
+                        }}
+                      >
+                        <span class="min-w-0 flex-1 truncate" title={offer.name}>
+                          {offer.name}
+                        </span>
+                        <Show
+                          when={offer.pulling()}
+                          fallback={
+                            <Show
+                              when={starting().has(offer.key)}
+                              fallback={
+                                <span class="flex shrink-0 items-center gap-1.5 font-medium text-brand">
+                                  <Download aria-hidden="true" class="size-5" />
+                                  {t("Download")}
+                                </span>
+                              }
+                            >
+                              <span class="flex shrink-0 items-center gap-3">
+                                <span class="text-on-surface-secondary">{t("Starting…")}</span>
+                                <span class="flex items-center gap-1.5 font-medium text-brand">
+                                  <X aria-hidden="true" class="size-5" />
+                                  {t("Cancel")}
+                                </span>
+                              </span>
+                            </Show>
+                          }
+                        >
+                          {/* No byte count to show, so the bar runs until the copy lands. */}
+                          <span
+                            role="progressbar"
+                            aria-label={t("Downloading {name}", { name: offer.name })}
+                            class="relative h-2 w-24 shrink-0 overflow-hidden rounded-full bg-surface-secondary"
+                          >
+                            <span class="absolute inset-y-0 w-1/3 animate-pulse rounded-full bg-brand" />
+                          </span>
+                        </Show>
+                      </button>
+                    )
+                  }
+                >
+                  {(held) => (
+                    <button
+                      type="button"
+                      aria-current={shownLanguage() === held().key ? "true" : undefined}
+                      class="flex min-h-12 w-full cursor-pointer items-center gap-3 px-4 text-start text-small text-on-surface-primary transition-colors hover:bg-surface-secondary aria-[current]:bg-brand-light aria-[current]:font-semibold aria-[current]:text-brand"
+                      onClick={(event) => {
+                        const group = languageTabs().find((each) => each.key === held().key);
+                        const opening =
+                          group === undefined ? undefined : openingOf(group.entries, group.key);
+                        if (opening !== undefined) setChosen(opening.resource.id);
+                        else held().add(event.currentTarget.getBoundingClientRect());
+                        setManaging(false);
+                      }}
+                    >
+                      <span class="min-w-0 flex-1 truncate" title={held().name}>
+                        {held().name}
+                      </span>
+                      <Show when={shownLanguage() === held().key}>
+                        <Check aria-label={t("Active")} class="size-5 shrink-0" />
+                      </Show>
+                    </button>
+                  )}
+                </Show>
+              </li>
+            )}
+          </For>
+        </ul>
+      </Popover>
+      <Show when={shown()}>
+        {(held) => (
+          <div class="flex max-w-[50%] min-w-0 shrink-0 border-s border-surface-border">
+            <ResourcePicker resource={held().entry.resource} triggerClass={HALF} short />
+          </div>
+        )}
+      </Show>
+    </div>
+  );
+
   return (
     <aside
       ref={setAside}
       aria-label={t("Reference texts")}
       class={
-        props.variant === "panel"
+        props.variant === "panel" || props.variant === "gateway"
           ? "flex h-full min-h-0 min-w-0 flex-1 flex-col gap-3"
           : "flex h-full min-w-0 flex-col gap-3 py-4 pe-[7.5px]"
       }
@@ -1390,7 +1609,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
         }
       >
         <Show
-          when={props.variant === "panel"}
+          when={props.variant === "panel" || props.variant === "gateway"}
           fallback={
             <div class="flex items-center gap-controls">
               <div class="min-w-0 flex-1">
@@ -1406,118 +1625,127 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
             </div>
           }
         >
-          <div
-            ref={setStrip}
-            role="tablist"
-            aria-label={t("Languages")}
-            class="flex shrink-0 items-center gap-controls border-b border-surface-border"
-          >
-            <div class="flex min-w-0 items-end">
-              <For each={languageTabs()}>
-                {(group) => (
-                  <LanguageTab
-                    testId={`language-tab-${group.key}`}
-                    name={languageName(group.key) ?? group.entries[0]?.resource.title ?? group.key}
-                    code={group.key}
-                    active={
-                      props.heart?.active !== true &&
-                      shown() !== undefined &&
-                      languageOf(shown()!.entry.resource) === group.key
-                    }
-                    onSelect={() => {
-                      const opening = openingOf(group.entries, group.key);
-                      if (opening !== undefined) setChosen(opening.resource.id);
-                      setManaging(false);
-                      props.heart?.onActivate(false);
-                    }}
-                    onClose={
-                      group.entries.every((entry) => entry.declared)
-                        ? undefined
-                        : () => unpickLanguage(group.key)
-                    }
-                    languageKey={group.key}
-                    showIcon={tight() < 2}
-                  />
-                )}
-              </For>
-            </div>
-            <Show
-              when={tight() > 0}
-              fallback={
-                <>
-                  <Popover
-                    label={t("Add a reference language")}
-                    side="bottom"
-                    align="start"
-                    variant="menu"
-                    class="w-96 p-0"
-                    fitViewport
-                    open={managing()}
-                    onOpenChange={manage}
-                    trigger={
-                      <Button
-                        variant="tertiary"
-                        class="shrink-0 [&>svg]:shrink-0"
-                        data-testid="reference-add"
-                      >
-                        <Plus aria-hidden="true" />
-                        {t("Add")}
-                      </Button>
-                    }
-                  >
-                    <LanguageList />
-                  </Popover>
-                  {props.trailing}
-                </>
-              }
+          <Show when={props.variant === "gateway"}>
+            <GatewayPicker />
+          </Show>
+          <Show when={props.variant !== "gateway"}>
+            <div
+              ref={setStrip}
+              role="tablist"
+              aria-label={t("Languages")}
+              class="flex shrink-0 items-center gap-controls border-b border-surface-border"
             >
-              {/* Short of room: Split/Join and the language list behind one "…". */}
-              <Popover
-                label={t("More")}
-                side="bottom"
-                align="start"
-                variant="menu"
-                class="w-96 p-0"
-                fitViewport
-                open={managing()}
-                onOpenChange={manage}
-                trigger={
-                  <IconButton
-                    variant="quiet"
-                    class="shrink-0"
-                    data-testid="reference-more"
-                    label={t("More")}
-                    icon={<MoreHorizontal />}
-                  />
+              <div class="flex min-w-0 items-end">
+                <For each={languageTabs()}>
+                  {(group) => (
+                    <LanguageTab
+                      testId={`language-tab-${group.key}`}
+                      name={
+                        languageName(group.key) ?? group.entries[0]?.resource.title ?? group.key
+                      }
+                      code={group.key}
+                      active={
+                        props.heart?.active !== true &&
+                        shown() !== undefined &&
+                        languageOf(shown()!.entry.resource) === group.key
+                      }
+                      onSelect={() => {
+                        const opening = openingOf(group.entries, group.key);
+                        if (opening !== undefined) setChosen(opening.resource.id);
+                        setManaging(false);
+                        props.heart?.onActivate(false);
+                      }}
+                      onClose={
+                        group.entries.every((entry) => entry.declared)
+                          ? undefined
+                          : () => unpickLanguage(group.key)
+                      }
+                      languageKey={group.key}
+                      showIcon={tight() < 2}
+                    />
+                  )}
+                </For>
+              </div>
+              <Show
+                when={tight() > 0}
+                fallback={
+                  <>
+                    <Popover
+                      label={t("Add a reference language")}
+                      side="bottom"
+                      align="start"
+                      variant="menu"
+                      class="w-96 p-0"
+                      fitViewport
+                      open={managing()}
+                      onOpenChange={manage}
+                      trigger={
+                        <Button
+                          variant="tertiary"
+                          class="shrink-0 [&>svg]:shrink-0"
+                          data-testid="reference-add"
+                        >
+                          <Plus aria-hidden="true" />
+                          {t("Add")}
+                        </Button>
+                      }
+                    >
+                      <LanguageList />
+                    </Popover>
+                    {props.trailing}
+                  </>
                 }
               >
-                <Show when={props.trailing !== undefined}>
-                  <div class="flex border-b border-surface-border px-2 py-2">{props.trailing}</div>
-                </Show>
-                <LanguageList />
-              </Popover>
-            </Show>
-            {/* The heart language, flush right: gateways, then Add and Split,
+                {/* Short of room: Split/Join and the language list behind one "…". */}
+                <Popover
+                  label={t("More")}
+                  side="bottom"
+                  align="start"
+                  variant="menu"
+                  class="w-96 p-0"
+                  fitViewport
+                  open={managing()}
+                  onOpenChange={manage}
+                  trigger={
+                    <IconButton
+                      variant="quiet"
+                      class="shrink-0"
+                      data-testid="reference-more"
+                      label={t("More")}
+                      icon={<MoreHorizontal />}
+                    />
+                  }
+                >
+                  <Show when={props.trailing !== undefined}>
+                    <div class="flex border-b border-surface-border px-2 py-2">
+                      {props.trailing}
+                    </div>
+                  </Show>
+                  <LanguageList />
+                </Popover>
+              </Show>
+              {/* The heart language, flush right: gateways, then Add and Split,
                 then the one being refined at the far end. */}
-            <Show when={props.heart}>
-              {(heart) => (
-                <div class="ms-auto flex min-w-0">
-                  <LanguageTab
-                    testId="language-tab-heart"
-                    showIcon={tight() < 2}
-                    name={heart().name}
-                    code={heart().code}
-                    refining
-                    active={heart().active}
-                    onSelect={() => {
-                      setManaging(false);
-                      heart().onActivate(true);
-                    }}
-                  />
-                </div>
-              )}
-            </Show>
-          </div>
+              <Show when={props.heart}>
+                {(heart) => (
+                  <div class="ms-auto flex min-w-0">
+                    <LanguageTab
+                      testId="language-tab-heart"
+                      showIcon={tight() < 2}
+                      name={heart().name}
+                      code={heart().code}
+                      refining
+                      active={heart().active}
+                      onSelect={() => {
+                        setManaging(false);
+                        heart().onActivate(true);
+                      }}
+                    />
+                  </div>
+                )}
+              </Show>
+            </div>
+          </Show>
           <Show when={fetching() !== ""}>
             <p role="status" class="text-small text-on-surface-secondary">
               {t("Getting {language}…", { language: fetching() })}
@@ -1585,7 +1813,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
                 role={held.entry.role}
                 bookId={held.book}
                 clip={clip}
-                followControl={props.variant !== "panel"}
+                followControl={props.variant === "column" || props.variant === undefined}
               />
             </div>
           )}
