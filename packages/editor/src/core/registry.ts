@@ -218,9 +218,10 @@ const DEFAULT_REGISTRY: Registry = {
     note: "a table row (\\tr): a block that opens its own line, its marker hidden chrome",
   },
   cell: {
-    cell: { paint: "point", mutability: "immortal", stop: true },
-    note: "a cell's marker (\\th1 \\tc2 \\tcr3): a column separator. Immortal and a stop: a press never merges two cells; a table's shape is changed in USFM mode. Its words are content",
+    cell: { paint: "point", mutability: "immortal", step: true },
+    note: "a cell's marker (\\th1 \\tc2 \\tcr3): a column separator. Immortal and a step: Backspace or Delete at it moves the caret into the neighbouring cell and takes nothing, so two cells never merge; a table's shape is changed by its commands or in USFM mode. Its words are content",
   },
+
   sidebar: {
     cell: { paint: "ambient", mutability: "via-anchor" },
     ownership: "JOIN",
