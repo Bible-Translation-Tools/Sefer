@@ -43,7 +43,7 @@ the call is to put the module in place now without translating anything yet:
 - The editor package's words now come from the host (`EditorWords`, English by default; the
   other session, 2026-10-22), which is the shape a localized host needs.
 - Sous: ICU through `intl-messageformat`, `LOCALE = "en"` hard-coded; 23 ids, 37 plurals,
-  deeply nested selects.
+  deeply nested selects (flattened to whole sentences in kitchen 0.1.15, 41 ids).
 - `<html lang="en">` with no `dir`; two `Intl.DisplayNames(["en"])`.
 - RTL: about 147 logical Tailwind classes against 7 physical; 14 physical CSS properties and
   45 left/right icons to check.
@@ -65,7 +65,14 @@ the call is to put the module in place now without translating anything yet:
 4. **Crowdin**, after the PO's copy pass: the project, the glossary, a pilot pair (one LTR, one
    RTL).
 5. **RTL** walk through every screen with the RTL pilot.
-6. **Sous**: ask kitchen to own per-locale Sous catalogs and to flatten the nested messages.
+6. **Sous**: per-locale Sous catalogs, owned by kitchen. The flattening is done: kitchen
+   0.1.15 (on master, ec1189cc) puts every Sous message a translator sees in whole sentences,
+   41 ids (was 23), each tier plain text or one select/plural whose every branch is whole; a
+   plural meaning exactly one is `=1`, so a translator adds their own one/few/many beside it;
+   `galley/sous-messages.md` has a "For translators" section. Sefer formats through
+   `describe()` and the English catalog and names no id, so the bump was wording only. Left:
+   Sefer passing `uiLocale()` to the Sous formatter (its `LOCALE = "en"` today) once kitchen
+   ships a second catalog, and the Sous files in the Crowdin project.
 
 The full research report is in this session's scratchpad (localization-research.md); this item
 keeps what was decided from it.
