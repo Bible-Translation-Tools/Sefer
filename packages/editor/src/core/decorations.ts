@@ -6,6 +6,7 @@ import {
   EditorView,
   WidgetType,
 } from "@codemirror/view";
+import { MARKERS } from "@sefer/text/engine/analysis";
 import {
   FLAG,
   NOTE_PART,
@@ -640,7 +641,7 @@ export function buildRegular(
           deco: resolvedWord.figure
             ? FIGURE_CAPTION
             : Decoration.mark({
-                class: "usfm-word",
+                class: `usfm-word usfm-c-${(MARKERS[wd.marker]?.name ?? "").replace(/^\+/, "")}`,
                 attributes: { "data-w": String(resolvedWord.from) },
               }),
         });
@@ -674,6 +675,27 @@ export function buildRegular(
       deco: Decoration.line({ class: "usfm-focus" }),
     });
   }
+
+  if (plan.sidebarBox)
+    for (let i = 0; i < structure.blocks.length; i++) {
+      if (structure.blocks.clsAt(i) !== "sidebar") continue;
+      const from = structure.blocks.fromAt(i);
+      const to = structure.blocks.toAt(i);
+      if (outside(from, to)) continue;
+      const first = doc.lastIndexOf("\n", from - 1) + 1;
+      for (let at = first; at <= to;) {
+        const end = doc.indexOf("\n", at);
+        const lineTo = end < 0 || end > to ? to : end;
+        // The last line shown: a closer alone on the line after is hidden with it (`resolveContainer`).
+        const next = end < 0 || end >= to ? -1 : end + 1;
+        const shownLast =
+          lineTo >= to || (next >= 0 && /^\s*\\[A-Za-z]+\s*$/.test(doc.slice(next, to)));
+        const edges = `${at === first ? " usfm-sidebar-first" : ""}${shownLast ? " usfm-sidebar-last" : ""}`;
+        add.push({ from: at, to: at, deco: Decoration.line({ class: `usfm-sidebar${edges}` }) });
+        if (end < 0 || end >= to) break;
+        at = end + 1;
+      }
+    }
 
   if (plan.verseLines) joined += layOutVerseLines(structure, plan, add, outside);
   else

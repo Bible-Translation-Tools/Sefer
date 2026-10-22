@@ -212,9 +212,9 @@ const DEFAULT_REGISTRY: Registry = {
   },
   table: { cell: { paint: "point", mutability: "direct" }, undecided: true, note: "out of scope" },
   sidebar: {
-    cell: { paint: "point", mutability: "direct" },
-    undecided: true,
-    note: "out of scope",
+    cell: { paint: "ambient", mutability: "via-anchor" },
+    ownership: "JOIN",
+    note: "\\esb … \\esbe: a container whose blocks keep their own classes; its paint is the box around them, its markers hidden chrome",
   },
 };
 
@@ -238,6 +238,7 @@ export const OWNED_SETS = {
   milestone: { painting: ["milestone"], hidden: [] },
   figure: { painting: ["figure"], hidden: ["chrome"] },
   unruled: { painting: ["unruled"], hidden: [] },
+  sidebar: { painting: ["sidebar"], hidden: ["chrome"] },
   optbreak: { painting: ["optbreak"], hidden: [] },
 } satisfies Record<string, OwnedSet>;
 
@@ -397,6 +398,13 @@ export const pipActive = (state: EditorState, classKey: ClassKey) =>
 
 export const ownershipOf = (row: RegistryRow): OwnershipBit | undefined =>
   row.ownership === "DISSOLVE" && row.cell.mutability === "immortal" ? undefined : row.ownership;
+
+/**
+ * A class whose block holds other blocks (`\\esb … \\esbe`): it resolves none of
+ * their lines, and a key acting on "the block at the caret" means the one
+ * inside it, never the container.
+ */
+export const isContainerClass = (classKey: ClassKey): boolean => classKey === "sidebar";
 
 export const paintsItsOwnLineAmbient = (classKey: ClassKey): boolean =>
   classKey === "block.heading" || classKey === "block.front" || classKey === "block.meta";

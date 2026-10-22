@@ -15,6 +15,7 @@ import {
 } from "./docStructure";
 import { buildOwnedIndex, type OwnedIndex } from "./owned";
 import type { Assignment, ClassKey, PaintReach, Registry, WidgetKey } from "./registry";
+import { isContainerClass } from "./registry";
 import { armed, span } from "./timing";
 
 export interface PlanSpan {
@@ -114,6 +115,8 @@ export interface DocPlan {
   readonly docLen: number;
   readonly joinWidget: WidgetKey | null;
   readonly verseLines: boolean;
+  /** Whether a sidebar draws its box (`sidebar` paints ambient). */
+  readonly sidebarBox: boolean;
   readonly notes: readonly ResolvedNote[];
   readonly noteAt: ReadonlyMap<number, ResolvedNote>;
   readonly words: readonly ResolvedWord[];
@@ -481,7 +484,40 @@ export function resolvePlan(structure: DocStructure, a: Assignment): DocPlan {
     return r;
   };
 
+  /**
+   * A container (`sidebar`): its extent holds other blocks, which resolve
+   * their own lines, so it reflows nothing. It hides only its own markup: its
+   * opener up to where its content starts, and its closer, with the line the
+   * closer stands alone on so the box ends on its last words.
+   */
+  const resolveContainer = (b: Block): ResolvedBlock => {
+    const reflow: ReflowSpan[] = [];
+    const head = b.lines[0];
+    if (chromeHidden && head !== undefined && head.contentFrom > head.from)
+      reflow.push({ from: head.from, to: head.contentFrom, kind: "hide" });
+    const last = b.lines[b.lines.length - 1];
+    const text = structure.analysis?.text ?? "";
+    if (chromeHidden && last !== undefined && last !== head) {
+      const closer = text.lastIndexOf("\\", last.to);
+      if (closer >= last.from) {
+        const alone = text.slice(last.from, closer).trim() === "";
+        const from = alone && last.from > 0 ? last.from - 1 : closer;
+        reflow.push({ from, to: last.to, kind: "hide" });
+      }
+    }
+    return {
+      reflow,
+      joined: 0,
+      paints: paint(b.cls) !== "none",
+      startsLine: true,
+      headHidden: null,
+      inblk: null,
+      breakAt: null,
+    };
+  };
+
   const resolveBlock = (b: Block): ResolvedBlock => {
+    if (isContainerClass(b.cls)) return resolveContainer(b);
     const reflow: ReflowSpan[] = [];
     const push = (from: number, to: number, kind: ReflowKind) => {
       if (to > from) reflow.push({ from, to, kind });
@@ -596,6 +632,7 @@ export function resolvePlan(structure: DocStructure, a: Assignment): DocPlan {
     docLen,
     joinWidget,
     verseLines: a.verseLines,
+    sidebarBox: paint("sidebar") === "ambient",
     notes,
     noteAt,
     words,

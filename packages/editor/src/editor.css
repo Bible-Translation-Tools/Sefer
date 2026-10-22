@@ -447,6 +447,44 @@
   color: var(--on-surface-secondary);
 }
 
+/* A sidebar (\esb … \esbe): a box around its own blocks, which keep their classes. */
+.cm-mode-regular .usfm-sidebar {
+  background: var(--surface-secondary);
+  border-inline: 1px solid var(--surface-border);
+  padding-inline: 0.8em;
+}
+.cm-mode-regular .usfm-sidebar-first {
+  border-top: 1px solid var(--surface-border);
+  border-start-start-radius: 6px;
+  border-start-end-radius: 6px;
+  padding-top: 0.5em;
+  margin-top: 0.6em;
+}
+.cm-mode-regular .usfm-sidebar-last {
+  border-bottom: 1px solid var(--surface-border);
+  border-end-start-radius: 6px;
+  border-end-end-radius: 6px;
+  padding-bottom: 0.5em;
+  margin-bottom: 0.6em;
+}
+
+/* A category (\cat): a small tag, not underlined as a word with attributes is. */
+.cm-mode-regular .usfm-c-cat {
+  border-bottom: none;
+  cursor: text;
+  font: 600 0.62em/1 var(--font-ui);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--on-surface-tertiary);
+  border: 1px solid var(--surface-border);
+  border-radius: 3px;
+  padding: 1px 4px;
+  vertical-align: 0.2em;
+}
+.cm-mode-regular .usfm-c-cat:hover {
+  background: none;
+}
+
 /* A page break: a thin rule across the line, its label on it. */
 .cm-mode-regular .usfm-chip-pb {
   display: inline-block;

@@ -222,7 +222,14 @@ const TOKEN_ROWS: readonly Row<TokenShape>[] = [
   {
     id: "sidebar",
     kinds: MARKER_KINDS,
-    when: (t) => t.markerKind === MarkerKind.Sidebar || t.markerKind === MarkerKind.Periph,
+    when: (t) => t.markerKind === MarkerKind.Sidebar,
+    verdict: cls("chrome"),
+    set: "sidebar",
+  },
+  {
+    id: "periph.marker",
+    kinds: MARKER_KINDS,
+    when: (t) => t.markerKind === MarkerKind.Periph,
     verdict: cls("unruled"),
     set: "unruled",
   },
@@ -291,8 +298,9 @@ const TOKEN_ROWS: readonly Row<TokenShape>[] = [
     id: "meta.marker",
     kinds: MARKER_KINDS,
     when: (t) => t.markerKind === MarkerKind.Meta,
-    verdict: cls("unruled"),
-    set: "unruled",
+    // \cat … \cat*: a run around words, as a character marker is (2026-10-22).
+    verdict: cls("chrome"),
+    set: "char",
   },
   { id: "content.bookcode", kinds: [TokenKind.BookCode], verdict: cls("content") },
   { id: "content", kinds: [TokenKind.Text], verdict: cls("content") },
@@ -388,10 +396,8 @@ const NODE_ROWS: readonly Row<NodeShape>[] = [
   {
     id: "sidebar",
     when: (n) => n.markerKind === MarkerKind.Sidebar,
-    verdict: unmapped(
-      "sidebar",
-      "PROPERTIES §8.6 — a container whose extent holds other block extents",
-    ),
+    verdict: cls("sidebar"),
+    set: "sidebar",
     line: true,
     block: true,
     contains: true,
@@ -471,7 +477,8 @@ const NODE_ROWS: readonly Row<NodeShape>[] = [
   {
     id: "meta",
     when: (n) => n.markerKind === MarkerKind.Meta,
-    verdict: unmapped("needs-ruling", "\\cat and friends carry no class today"),
+    verdict: cls("char"),
+    set: "char",
   },
 ];
 

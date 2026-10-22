@@ -37,9 +37,8 @@ const SPANNING = kindsReaching([
   "attrs.unruled",
   "closer.orphan",
   "table",
-  "sidebar",
+  "periph.marker",
   "char.unclosed",
-  "meta.marker",
 ]);
 
 const IN_NOTE = 1;

@@ -14,6 +14,7 @@ import {
   type DocLine,
 } from "./docStructure";
 import type { DocPlan } from "./plan";
+import { isContainerClass } from "./registry";
 
 export type GetStructure = (s: EditorState) => DocStructure;
 
@@ -76,11 +77,16 @@ export function nl(_state: EditorState) {
   return "\n";
 }
 
+/** The block at `pos`: one inside a container before the container itself. */
 export function blockAt(structure: DocStructure, pos: number): Block | null {
   const blocks = structure.blocks;
-  for (let i = 0; i < blocks.length; i++)
-    if (pos >= blocks.fromAt(i) && pos <= blocks.toAt(i)) return blocks.at(i);
-  return null;
+  let container: Block | null = null;
+  for (let i = 0; i < blocks.length; i++) {
+    if (pos < blocks.fromAt(i) || pos > blocks.toAt(i)) continue;
+    if (!isContainerClass(blocks.clsAt(i))) return blocks.at(i);
+    container ??= blocks.at(i);
+  }
+  return container;
 }
 
 export function chromeEnd(line: DocLine): number {
