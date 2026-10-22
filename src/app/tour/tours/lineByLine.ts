@@ -197,7 +197,7 @@ export const lineByLineTour: Tour = {
         anchor: "[data-testid=editor-host]",
         side: "right",
         title: "A verse number's menu",
-        body: "Click a verse number. If proofreading found something wrong with it, a repeated or missing number, that comes first. Change number renumbers it, and when Sefer is sure what the number should be, the box already holds it: press Enter. Remove verse takes the number away and its text joins the verse before. Add verse after puts a new, empty verse below it, ready to type.",
+        body: "Click a verse number. If proofreading found something wrong with it, a repeated or missing number, that comes first. Change number renumbers it, and when Sefer is sure what the number should be, the box already holds it: press Enter. Remove verse marker takes the number away; its text stays and joins the verse before. Add verse after puts a new, empty verse below it, ready to type.",
         try: "Click a verse number to open its menu. Escape closes it.",
         notes: [
           {

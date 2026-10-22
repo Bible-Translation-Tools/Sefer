@@ -122,7 +122,7 @@ the branch's dev server.
 between verses; (3) the keys (Enter, Shift+Enter, Tab, Shift+Tab, Home, End); the view is one
 three-way control, Reading · Line by line · USFM, in design builds (Will: "it's tripartite toggle
 no?"); and a seven-step tutorial (`src/app/tour/tours/lineByLine.ts`, design builds only).
-Then (2026-10-22): (4) the verse number's menu (Change number, Remove verse, Add verse after;
+Then (2026-10-22): (4) the verse number's menu (Change number, Remove verse marker, Add verse after;
 Cmd+Shift+V at the caret still splits); (5) headings as read-only labels and a ¶ / q1 mark in
 the margin of the verse a paragraph or poetry line opens; paste as one line; a selection kept
 inside its verse; typing into an empty verse (`\v 4` gains its space). Synthetic cases are in
@@ -146,7 +146,7 @@ well as line by line (USFM edits the marker as text), and its findings leave the
 in both. Renumber folds into Change number: when the engine's fix is exactly a new number for
 these digits, the box opens holding it (Enter accepts); when the engine is not sure (a duplicate
 with no fix), it holds the current number; a numberless marker is offered the number after the
-verse before. A fix that only deletes the marker is Remove verse, so it is not listed twice.
+verse before. A fix that only deletes the marker is Remove verse marker, so it is not listed twice.
 
 **Fourth scrawl (2026-10-22):** the lint gutter is Sefer's own (`recipes/lintGutter.ts`): a
 marker sits on the row as drawn, at its worst finding. CodeMirror's pinned a marker to the
@@ -156,6 +156,10 @@ A marker is a bigger target than a verse number: a click opens the verse menu wh
 finding on the row is on one number, otherwise the row's findings with their fixes. A
 footnote's caller takes the colour of a finding that starts at its note. Change number
 marks a value that is not a verse number (3, 3a, 3-4) instead of closing silently.
+
+**Fifth scrawl (2026-10-22):** "Remove verse marker", so nobody reads it as taking the text. A
+gutter click shows one finding at a time, anchored at it, with "Next on this line (1 of 3)" when
+the row holds more; in Reading a row is a whole paragraph, and every finding at once was "a lot".
 
 <Followup id="ship">To `dev` behind `__SEFER_DESIGN__` once it holds up, and finish with a
 tutorial for the PO and designer, as for suppressions (Will, 2026-10-21).</Followup>

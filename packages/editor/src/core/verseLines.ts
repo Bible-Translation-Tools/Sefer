@@ -167,9 +167,17 @@ const selectionStaysInVerse = EditorState.transactionFilter.of((tr) => {
 });
 
 /** The open menu: a verse number's, or the findings on one line (from the gutter). */
+/** One finding a gutter row holds: its range, and the verse whose number it is on (-1 for none). */
+interface RowFinding {
+  readonly from: number;
+  readonly to: number;
+  readonly verse: number;
+}
+
+/** The open menu: a verse number's, or one finding of a gutter row's, stepped through in order. */
 type OpenMenu =
   | { readonly verse: number }
-  | { readonly from: number; readonly to: number; readonly at: number }
+  | { readonly row: readonly RowFinding[]; readonly index: number }
   | null;
 
 const openVerseMenu = StateEffect.define<OpenMenu>();
@@ -184,45 +192,72 @@ const verseMenuField = StateField.define<OpenMenu>({
     showTooltip.compute([field], (state): Tooltip | null => {
       const open = state.field(field);
       if (open === null) return null;
-      if ("from" in open)
-        return { pos: open.at, above: false, create: (view) => findingsMenu(view, open) };
-      const k = open.verse;
+      const { k, step } =
+        "row" in open
+          ? { k: open.row[open.index].verse, step: open }
+          : { k: open.verse, step: undefined };
+      if (k < 0 && step !== undefined) {
+        const item = step.row[step.index];
+        return {
+          pos: item.from,
+          above: false,
+          create: (view) => findingMenu(view, item, step),
+        };
+      }
       const verse = structureAt(state).verses[k];
       if (verse === undefined) return null;
-      return { pos: verse.numFrom, above: false, create: (view) => verseMenu(view, k) };
+      return { pos: verse.numFrom, above: false, create: (view) => verseMenu(view, k, step) };
     }),
 });
 
 /**
- * A gutter marker's click, at screen height `y`: the verse menu when every finding on that
- * row is on one verse number, else the row's findings. A finding belongs to the row it is
- * drawn in, as the gutter placed its marker.
+ * A gutter marker's click, at screen height `y`: the first finding drawn on that row,
+ * as the verse menu when it is on a verse number, else on its own; a row with more
+ * steps through them with Next. A finding belongs to the row it is drawn in, as the
+ * gutter placed its marker.
  */
 export const openLineMenu = (view: EditorView, y: number): boolean => {
   if (!numbersHaveMenus(view.state)) return false;
-  const row = view.lineBlockAtHeight(y - view.documentTop);
-  const found: { from: number; to: number }[] = [];
+  const rowFrom = view.lineBlockAtHeight(y - view.documentTop).from;
+  const verses = structureAt(view.state).verses;
+  const row: RowFinding[] = [];
   forEachDiagnostic(view.state, (_diagnostic, from, to) => {
-    if (view.lineBlockAt(from).from === row.from) found.push({ from, to });
+    if (view.lineBlockAt(from).from !== rowFrom) return;
+    const verse = verses.findIndex((each) => onNumber(each, from, to));
+    if (verse >= 0 && row.some((item) => item.verse === verse)) return;
+    row.push({ from, to, verse });
   });
-  if (found.length === 0) return false;
-  const k = structureAt(view.state).verses.findIndex((verse) =>
-    found.every((range) => onNumber(verse, range.from, range.to)),
-  );
-  const at =
-    view.posAtCoords({ x: view.contentDOM.getBoundingClientRect().left + 4, y }) ?? row.from;
-  view.dispatch({
-    effects: openVerseMenu.of(k >= 0 ? { verse: k } : { from: row.from, to: row.to, at }),
-  });
+  if (row.length === 0) return false;
+  row.sort((left, right) => left.from - right.from);
+  view.dispatch({ effects: openVerseMenu.of({ row, index: 0 }) });
   return true;
 };
 
-/** Every finding on one line, as the verse menu draws them: the message, then its fixes. */
-function findingsMenu(view: EditorView, range: { from: number; to: number }): { dom: HTMLElement } {
+/** "Next on this line (1 of 3)", when a gutter row holds more than one finding. */
+const nextOnRow = (
+  view: EditorView,
+  step: { readonly row: readonly RowFinding[]; readonly index: number } | undefined,
+): HTMLElement[] => {
+  if (step === undefined || step.row.length < 2) return [];
+  const next = button(`Next on this line (${step.index + 1} of ${step.row.length})`, () =>
+    view.dispatch({
+      effects: openVerseMenu.of({ row: step.row, index: (step.index + 1) % step.row.length }),
+    }),
+  );
+  next.className = "usfm-verse-next";
+  return [next];
+};
+
+/** One finding not on a verse number: its message, then its fixes. */
+function findingMenu(
+  view: EditorView,
+  item: RowFinding,
+  step: { readonly row: readonly RowFinding[]; readonly index: number },
+): { dom: HTMLElement } {
   const dom = document.createElement("div");
   dom.className = "usfm-verse-menu";
   forEachDiagnostic(view.state, (diagnostic, from, to) => {
-    if (view.lineBlockAt(from).from !== range.from) return;
+    if (from !== item.from || to !== item.to) return;
     const said = document.createElement("div");
     said.className = `usfm-verse-finding usfm-verse-finding-${diagnostic.severity}`;
     said.textContent = sentenceCase(diagnostic.message);
@@ -236,6 +271,7 @@ function findingsMenu(view: EditorView, range: { from: number; to: number }): { 
         }),
       );
   });
+  dom.append(...nextOnRow(view, step));
   return { dom };
 }
 
@@ -255,8 +291,12 @@ const button = (label: string, run: () => void): HTMLButtonElement => {
   return element;
 };
 
-/** The verse number's menu: change it, remove the verse (its text joins the one before), or add one after it. */
-function verseMenu(view: EditorView, k: number): { dom: HTMLElement } {
+/** The verse number's menu: change it, remove its marker (its text joins the verse before), or add one after it. */
+function verseMenu(
+  view: EditorView,
+  k: number,
+  step?: { readonly row: readonly RowFinding[]; readonly index: number },
+): { dom: HTMLElement } {
   const close = (): void => closeMenu(view);
   const edit = (spec: TransactionSpec): void => {
     view.dispatch({ ...spec, annotations: trusted.of("line-by-line"), scrollIntoView: true });
@@ -317,7 +357,7 @@ function verseMenu(view: EditorView, k: number): { dom: HTMLElement } {
     view.focus();
   });
 
-  const remove = button("Remove verse", () => {
+  const remove = button("Remove verse marker", () => {
     const doc = docText(view.state);
     if (doc[verse.markerFrom - 1] !== "\n")
       return edit({ changes: { from: verse.markerFrom, to: verse.contentFrom } });
@@ -334,12 +374,12 @@ function verseMenu(view: EditorView, k: number): { dom: HTMLElement } {
       selection: EditorSelection.cursor(at + insert.length),
     });
   });
-  dom.append(form, remove, add);
+  dom.append(form, remove, add, ...nextOnRow(view, step));
   queueMicrotask(() => input.select());
   return { dom };
 }
 
-/** Whether a finding's only fix deletes this verse's marker, which Remove verse already does. */
+/** Whether a finding's only fix deletes this verse's marker, which Remove verse marker already does. */
 export const removesMarker = new WeakMap<Diagnostic, { from: number; to: number }>();
 const removesTheMarker = (diagnostic: Diagnostic, verse: VerseRow): boolean => {
   const removal = removesMarker.get(diagnostic);

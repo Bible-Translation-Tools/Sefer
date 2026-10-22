@@ -1495,3 +1495,10 @@
 .cm-diff-card .cm-scroller {
   overflow: hidden;
 }
+
+.cm-host .cm-editor .usfm-verse-menu .usfm-verse-next {
+  margin-top: 4px;
+  border-top: 1px solid var(--surface-border);
+  border-radius: 0 0 6px 6px;
+  color: var(--on-surface-secondary);
+}
