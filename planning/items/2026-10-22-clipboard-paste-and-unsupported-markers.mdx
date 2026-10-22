@@ -186,7 +186,7 @@ one at a time.
 <Followup id="chips" done>6: chips. `c96b4f65`. Data: `core/unsupported.ts` (markup the editor's own decorations leave showing, with a reader's label) and `BookEditorMount.unsupportedMarkup`. UI: `markupChips(render?)`, in `editorFeatures()`. The caret's stops learned `featureAtoms`, so a chip is crossed in one step.</Followup>
 
 <Followup id="chip-graduates" done>The three cheap ones get real drawings, after which they stop being chipped on their own: `\cp` in the chapter number's place, `\pb` as a thin rule deleted whole, list levels as indents with a hanging indent. Done: lists in CSS; `\pb` (a rule) and `\cp` (a "published as" caption under the chapter number) in the chips feature's default renderer, since they are already atomic and deleted whole there. `\cp` is not moved into the chapter number's own place: that would hide a line of text Reading could then not edit.</Followup>
-<Followup id="figures">7a: figures.</Followup>
+<Followup id="figures" done>7a: figures. A badge (the picture through the host's `resolveSource`, else a frame and the file name) and the caption as ordinary editable text; attributes and `\fig*` hidden and atomic; the badge opens the attribute popover. Not lazily loaded: the module is small and reads only tokens, so its own file is enough. Tables are where laziness pays.</Followup>
 <Followup id="sidebars">7b: sidebars.</Followup>
 <Followup id="tables">7c: tables.</Followup>
 
