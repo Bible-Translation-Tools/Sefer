@@ -564,10 +564,3 @@ export const isPoetryBlock = (row: AnyRow): boolean => row.poetry === true;
 
 export const chromeEndsAtMarkerToken = (classKey: ClassKey): boolean =>
   classKey === "slot.v" || classKey === "slot.c";
-
-export const MARKUP_TOKEN_KINDS: ReadonlySet<number> = new Set<number>([
-  TokenKind.Marker,
-  TokenKind.ClosingMarker,
-  TokenKind.Milestone,
-  TokenKind.MilestoneTerminator,
-]);

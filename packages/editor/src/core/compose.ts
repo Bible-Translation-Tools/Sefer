@@ -1,7 +1,6 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { EditorState, type Extension, Prec, Transaction } from "@codemirror/state";
 import { Decoration, EditorView, drawSelection, keymap, type KeyBinding } from "@codemirror/view";
-import { type Analysis, TOKEN_SPELLING_BIT } from "@sefer/text/engine/analysis";
 
 import { type Analyze, analyzed, analyzer } from "./analyzer";
 import { caretLineBoundary, extendCaret, moveCaret, moveCaretByWord } from "./caret";
@@ -21,7 +20,6 @@ import { guardedEnter, setBlockMarker } from "./input";
 import { insertFootnote, insertParagraph, insertPoetry, insertVerse } from "./insert";
 import { traceFor, type TraceVerdict } from "./instrument";
 import type { ChangeRule, TransactionRule } from "./kernel";
-import { MARKUP_TOKEN_KINDS } from "./mapping";
 import { HOOK, PHASES, type ParserPort, type PhaseRule, type RuleName } from "./phases";
 import { renderRangeField, renderWindow } from "./render";
 import { scrollGuard } from "./scroll";
@@ -54,34 +52,30 @@ export interface ViewOptions {
   readonly clipboard?: boolean;
 }
 
-function marksUpInContext(
-  doc: string,
-  from: number,
-  to: number,
-  analyze: (t: string) => Analysis,
-): boolean {
+/**
+ * A marker as the lexer opens one: a backslash and a name (`\\v`, `\\+add`, `\\qt-s`), or a
+ * backslash and `*` (`\\*`, a milestone's terminator). A closer (`\\add*`) is the first form.
+ */
+const MARKER = /\\(?:\+?[A-Za-z][\w-]*|\*)/g;
+
+/**
+ * Does `[from, to)` of `doc` hold, or reach into, a marker? Read off the text
+ * rather than parsed: parsing the slice with the book's own analyzer
+ * registered the slice as the book in the engine (`galley.memoize(id)` calls
+ * `update(id, text)`) until the next parse put the book back. A marker that
+ * starts before `from` and runs into the range counts, as an overlapping
+ * token did.
+ */
+function marksUpInContext(doc: string, from: number, to: number): boolean {
   if (!doc.slice(from, to).includes("\\")) return false;
   const lo = doc.lastIndexOf("\n", Math.max(0, from - 1)) + 1;
-  const hiRaw = doc.indexOf("\n", to);
-  const hi = hiRaw === -1 ? doc.length : hiRaw;
-  try {
-    let marks = false;
-    analyze(doc.slice(lo, hi)).dish.tokens.forEach((kindBits, _markerIdx, tf, tt) => {
-      if (tt + lo <= from || tf + lo >= to) return;
-      if (MARKUP_TOKEN_KINDS.has(kindBits & ~TOKEN_SPELLING_BIT)) {
-        marks = true;
-        return false;
-      }
-      return;
-    });
-    return marks;
-  } catch {
-    return false;
-  }
+  for (const match of doc.slice(lo, to).matchAll(MARKER))
+    if (lo + match.index + match[0].length > from) return true;
+  return false;
 }
 
 const enginePort = (analyze: Analyze): ParserPort => ({
-  marksUp: (d, f, t) => marksUpInContext(d, f, t, (x) => analyzed(analyze, x)),
+  marksUp: marksUpInContext,
   chapterCount: (d) => buildStructure(d, analyzed(analyze, d), null).chapters.length,
 });
 
