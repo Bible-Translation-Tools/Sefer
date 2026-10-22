@@ -233,8 +233,12 @@
   text-align: end;
   text-indent: 0;
 }
+/* The space after a hung number stays full size (a zero-size glyph gave
+   CodeMirror a zero-height box at the row's start, and every click and
+   Cmd+Arrow on the line landed on the number); the words are pulled back
+   over it instead. */
 .cm-mode-regular .usfm-delim-hung {
-  font-size: 0;
+  margin-inline-end: -0.25em;
 }
 /* Line by line hangs every number: each verse's text, wrapped lines too, starts
    one hang in from the edge. */

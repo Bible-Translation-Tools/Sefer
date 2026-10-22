@@ -161,14 +161,13 @@ export function caretLineBoundary(
     const sel = view.state.selection.main;
     if (view.textDirectionAt(sel.head) !== Direction.LTR) return false;
     const at = view.moveToLineBoundary(EditorSelection.cursor(sel.head), end, true).head;
-    const to = stopsIn(view.state, structureAt(view.state), paint).settle(
-      at,
-      end ? "forward" : "backward",
-    );
+    // Both settle forward: a row's start can sit before hidden markup that opens it
+    // (`\s5`, `\q`, `\v 3`), and settling back from there lands in the verse before.
+    const to = stopsIn(view.state, structureAt(view.state), paint).settle(at, "forward");
     note(view.state, {
       rule: "caretLineBoundary",
       verdict: to === sel.head ? "passed" : "moved",
-      detail: `${end ? "End" : "Home"} ${sel.head} → ${to} (line boundary ${at}, settled ${end ? "forward" : "backward"})`,
+      detail: `${end ? "End" : "Home"} ${sel.head} → ${to} (line boundary ${at}, settled forward)`,
     });
     view.dispatch({ selection: EditorSelection.cursor(to), scrollIntoView: true });
     return true;
