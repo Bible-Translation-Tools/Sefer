@@ -48,7 +48,7 @@ The generated half looks after itself; the judgement half does not. When a gate 
 | oxlint warnings | 0 | `pnpm lint` fails on any, every commit |
 | fallow dead code (`pnpm deadcode`) | 0 issue(s) | every deploy; advisory on branches |
 | fallow duplication | 1.7% in 58 clone group(s) | none — advisory |
-| suppression comments | 12 | each listed below with its reason |
+| suppression comments | 11 | each listed below with its reason |
 
 ### Oxlint warnings, by rule and file
 
@@ -63,7 +63,6 @@ None.
 | `src/app/ui/cloud/SharedProjectCard.tsx` | `oxlint-disable-next-line` | solid/reactivity |
 | `src/app/ui/cloud/SharedProjectCard.tsx` | `oxlint-disable-next-line` | solid/reactivity |
 | `src/app/ui/workspace/BackToEditor.tsx` | `fallow-ignore-next-line` | unused-export |
-| `src/app/ui/workspace/ReferenceCard.tsx` | `oxlint-disable-next-line` | solid/reactivity |
 | `src/app/ui/workspace/ReferenceColumn.tsx` | `oxlint-disable-next-line` | solid/reactivity |
 | `src/app/ui/workspace/ReferenceColumn.tsx` | `oxlint-disable-next-line` | solid/reactivity |
 | `src/app/ui/workspace/ReferenceColumn.tsx` | `oxlint-disable-next-line` | solid/reactivity |

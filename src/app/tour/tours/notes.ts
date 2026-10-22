@@ -65,7 +65,7 @@ export const notesTour: Tour = {
         anchor: "aside[data-references]",
         side: "right",
         title: "Choose them beside the text",
-        body: "Open the Reference language menu at the top of this column. If “Translation Notes · English (en)” is with the texts on this device, choose it. If not, open Reference material and, under Translation Notes, choose English (en): the notes come down once for this device, a toast in the corner shows how far it has got, and they open here when they arrive.",
+        body: "Open the Reference language menu at the top of this column. If “Translation Notes · English (en)” is with the texts on this device, choose it. If not, open Reference material, choose Translation Notes in the toggle at its top, then English (en): the notes come down once for this device, a toast in the corner shows how far it has got, and they open here when they arrive.",
       },
       advance: () => present("[data-testid=notes-pane]"),
     },

@@ -19,7 +19,6 @@ function BookWorkspace(props: {
   readonly shut: boolean;
   readonly panelClass: string | undefined;
   readonly onBound: (count: number) => void;
-  readonly onFolded: (folded: boolean) => void;
 }) {
   const shell = useShell();
   return (
@@ -38,7 +37,7 @@ function BookWorkspace(props: {
           class={props.panelClass}
         >
           <Show when={!props.shut}>
-            <ReferenceColumn onBound={props.onBound} onFolded={props.onFolded} />
+            <ReferenceColumn onBound={props.onBound} />
           </Show>
         </Resizable.Panel>
         <Resizable.Handle
@@ -68,8 +67,7 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
   const referenceInitial = untrack(() => shell.referenceWidth());
 
   const [references, setReferences] = createSignal(0, { name: "boundReferences" });
-  const [folded, setFolded] = createSignal(false, { name: "referencesFolded" });
-  const collapsed = (): boolean => references() === 0 || folded();
+  const collapsed = (): boolean => references() === 0;
   const shut = (): boolean => !shell.referenceOpen();
   const panelClass = (): string | undefined => {
     if (shut()) return "hidden";
@@ -109,7 +107,6 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
                 shut={shut()}
                 panelClass={panelClass()}
                 onBound={setReferences}
-                onFolded={setFolded}
               />
             </AlignedProvider>
           </>
