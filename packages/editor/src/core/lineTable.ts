@@ -124,8 +124,26 @@ class Line implements DocLine {
         if (this.#breaks === NO_BREAKS) this.#breaks = [];
         this.#breaks.push({ from, to });
       } else if (row.id === "milestone.token") {
+        // One milestone is one span: its marker, any attributes and its `\*`, so it draws as
+        // one pip and the caret never stops between its pieces. A terminator reached on its
+        // own was taken with the marker before it.
+        if (
+          cst.kindAt[i] === TOKEN.MILESTONE_TERMINATOR &&
+          (this.#milestones.at(-1)?.to ?? -1) >= to
+        )
+          continue;
+        let last = i;
+        if (cst.kindAt[i] === TOKEN.MILESTONE)
+          for (let j = i + 1; j < cst.count && startAt[j] < this.to; j++) {
+            if (cst.kindAt[j] === TOKEN.MILESTONE_TERMINATOR) last = j;
+            if (cst.kindAt[j] !== TOKEN.ATTR_LIST && !cst.isHorizontalSpace(j)) break;
+          }
         if (this.#milestones === NO_MILESTONES) this.#milestones = [];
-        this.#milestones.push({ from, to: cst.payloadEnd(i), name: spellingAt(cst, i, f.doc) });
+        this.#milestones.push({
+          from,
+          to: last === i ? cst.payloadEnd(i) : endAt[last],
+          name: spellingAt(cst, i, f.doc),
+        });
       } else if (row.set === "standalone" && row.line !== true) {
         if (this.#standalones === NO_STANDALONES) this.#standalones = [];
         this.#standalones.push({ from, to });

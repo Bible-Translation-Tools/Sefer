@@ -613,13 +613,13 @@
 
 .cm-mode-regular .usfm-pip {
   display: inline-block;
-  font: 600 0.7em/1 var(--font-ui);
+  font: 600 0.58em/1 var(--font-ui);
   color: var(--editor-link-x);
   background: var(--editor-pip-bg);
-  border-radius: 3px;
-  padding: 1px 3px;
-  margin: 0 0.12em;
-  vertical-align: 0.08em;
+  border-radius: 2px;
+  padding: 0 2px;
+  margin: 0 0.06em;
+  vertical-align: 0.2em;
   user-select: none;
 }
 
