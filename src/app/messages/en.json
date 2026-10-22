@@ -1,0 +1,12 @@
+{
+  "reference_language": "Reference language",
+  "reference_none_yet": "None yet",
+  "reference_material": "Reference material",
+  "reference_search_placeholder": "Search by language",
+  "reference_shelf_notes": "Translation Notes",
+  "reference_shelf_bibles": "Bibles",
+  "reference_shelf_projects": "Your projects",
+  "reference_download_title": "Download {title} to read beside this project",
+  "reference_bibles_offered": "{count, plural, =0 {No Bibles to download} one {# Bible to download} other {# Bibles to download}}",
+  "reference_held_by": "{kind, select, notes {Notes on this device} bible {Bible on this device} other {On this device}}"
+}

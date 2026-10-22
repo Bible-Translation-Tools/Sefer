@@ -34,7 +34,8 @@
     "test:desktop": "node tools/verify/desktopTest.ts",
     "test:e2e": "playwright test --config e2e/playwright.config.ts",
     "test:unit": "vitest run --project core",
-    "typecheck": "tsc --noEmit",
+    "i18n": "paraglide-js compile --project ./project.inlang --outdir ./src/app/paraglide --emit-ts-declarations --strategy localStorage preferredLanguage baseLocale",
+    "typecheck": "pnpm i18n && tsc --noEmit",
     "verify:chrome": "node tools/verify/chrome.ts",
     "verify:design": "node tools/verify/designBundle.ts",
     "verify:desktop": "node tools/verify/desktop.ts",
@@ -74,6 +75,8 @@
   },
   "devDependencies": {
     "@effect/platform-node": "4.0.0-rc.112",
+    "@inlang/paraglide-js": "2.29.1",
+    "@inlang/plugin-icu1": "1.3.4",
     "@oxlint/plugins": "1.85.0",
     "@playwright/test": "1.63.0",
     "@solidjs/diagnostics": "^2.0.0-rc.9",

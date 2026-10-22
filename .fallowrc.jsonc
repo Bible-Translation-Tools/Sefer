@@ -20,6 +20,8 @@
   // (astro check, pnpm plans check), as it is for oxlint and oxfmt.
   "ignorePatterns": ["src/routeTree.gen.ts", "planning/**"],
   "ignoreDependencies": [
+    // Loaded by Paraglide's compiler from project.inlang/settings.json `modules`.
+    "@inlang/plugin-icu1",
     // Spawned as a binary by tools/tauri/run.ts (`pnpm exec tauri`).
     "@tauri-apps/cli",
     // Loaded by @solidjs/vite-plugin when `diagnostics: true`.

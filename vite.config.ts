@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import process from "node:process";
 
+import { paraglideVitePlugin } from "@inlang/paraglide-js";
 import solid from "@solidjs/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
@@ -98,6 +99,14 @@ export default defineConfig(({ mode }) => {
       // Tailwind v4 compiles from the CSS itself: `src/app/ui/tokens.css` holds
       // the `@import "tailwindcss"`, the `@source` glob and the `@theme` bridge,
       // so there is no config file to keep in step with it.
+      // Compiles src/app/messages/{locale}.json (ICU, through project.inlang's
+      // plugin) into src/app/paraglide: one typed function per message, `m.id({ … })`.
+      paraglideVitePlugin({
+        project: "./project.inlang",
+        outdir: "./src/app/paraglide",
+        emitTsDeclarations: true,
+        strategy: ["localStorage", "preferredLanguage", "baseLocale"],
+      }),
       tailwindcss(),
       // lucide-solid is a Solid 1 package; this redirects its own solid imports
       // to a shim. See tools/vite/lucideSolid.ts.

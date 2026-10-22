@@ -65,6 +65,7 @@ import { describe, remoteReasonOf } from "../../describe";
 import { t } from "../../i18n";
 import { downloadHelp, helpDownloads, removeHelp } from "../../kinds/download";
 import { KIND_ROLES, roleFor } from "../../kinds/table";
+import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
 import { ResourcePane } from "../kinds/registry";
@@ -207,7 +208,7 @@ function ListedRow(props: {
     <MenuItem
       class={ROW}
       data-testid={props.testId}
-      title={t("Download {title} to read beside this project", { title: props.name })}
+      title={m.reference_download_title({ title: props.name })}
       onSelect={() => props.onSelect()}
     >
       <span class="flex min-w-0 flex-1 flex-col">
@@ -365,7 +366,7 @@ function ReferenceMaterialGroup(props: { readonly model: PickerModel }) {
     <>
       <GroupToggle
         testId="reference-material"
-        label={t("Reference material")}
+        label={m.reference_material()}
         open={props.model.showMaterial()}
         onToggle={() => props.model.setShowMaterial(!props.model.showMaterial())}
       />
@@ -380,9 +381,9 @@ function ReferenceMaterialGroup(props: { readonly model: PickerModel }) {
             label={t("Kind of reference material")}
             class="w-full"
             items={[
-              { value: "notes", label: t("Translation Notes") },
-              { value: "bibles", label: t("Bibles") },
-              { value: "projects", label: t("Your projects") },
+              { value: "notes", label: m.reference_shelf_notes() },
+              { value: "bibles", label: m.reference_shelf_bibles() },
+              { value: "projects", label: m.reference_shelf_projects() },
             ]}
             value={props.model.shelf()}
             onChange={(shelf) => props.model.setShelf(shelf)}
@@ -395,7 +396,7 @@ function ReferenceMaterialGroup(props: { readonly model: PickerModel }) {
             icon={<Search class="size-4" />}
             data-testid="reference-search"
             aria-label={t("Search by language")}
-            placeholder={t("Search by language")}
+            placeholder={m.reference_search_placeholder()}
             value={props.model.query()}
             onInput={(event) => props.model.setQuery(event.currentTarget.value)}
           />
@@ -419,7 +420,7 @@ function ReferenceMaterialGroup(props: { readonly model: PickerModel }) {
 function LanguagePicker(props: { readonly model: PickerModel }) {
   return (
     <Menu
-      label={t("Reference language")}
+      label={m.reference_language()}
       onOpenChange={(open) => {
         if (!open) return;
         props.model.setShowMaterial(false);
@@ -439,10 +440,10 @@ function LanguagePicker(props: { readonly model: PickerModel }) {
           class="flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-2xl bg-surface-primary p-3 text-start transition-colors hover:bg-surface-secondary disabled:cursor-wait"
         >
           <span class="flex min-w-0 flex-1 flex-col">
-            <span class="text-small text-on-surface-secondary">{t("Reference language")}</span>
+            <span class="text-small text-on-surface-secondary">{m.reference_language()}</span>
             <span class="truncate text-small font-semibold text-on-surface-primary">
               {props.model.fetching() === ""
-                ? props.model.nameOf(props.model.shown()?.entry.resource) || t("None yet")
+                ? props.model.nameOf(props.model.shown()?.entry.resource) || m.reference_none_yet()
                 : t("Getting {language}…", { language: props.model.fetching() })}
             </span>
           </span>

@@ -48,7 +48,7 @@ The generated half looks after itself; the judgement half does not. When a gate 
 | oxlint warnings | 0 | `pnpm lint` fails on any, every commit |
 | fallow dead code (`pnpm deadcode`) | 0 issue(s) | every deploy; advisory on branches |
 | fallow duplication | 1.6% in 59 clone group(s) | none — advisory |
-| suppression comments | 11 | each listed below with its reason |
+| suppression comments | 18 | each listed below with its reason |
 
 ### Oxlint warnings, by rule and file
 
@@ -59,6 +59,13 @@ None.
 | file | suppresses | says |
 | --- | --- | --- |
 | `src/app/composition.ts` | `oxlint-disable-next-line` | no-console |
+| `src/app/paraglide/messages.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/_index.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/en.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/fr.js` | `eslint-disable` | — |
+| `src/app/paraglide/registry.js` | `eslint-disable` | — |
+| `src/app/paraglide/runtime.js` | `eslint-disable` | — |
+| `src/app/paraglide/server.js` | `eslint-disable` | — |
 | `src/app/ProjectContext.tsx` | `oxlint-disable-next-line` | solid/reactivity |
 | `src/app/ui/cloud/SharedProjectCard.tsx` | `oxlint-disable-next-line` | solid/reactivity |
 | `src/app/ui/cloud/SharedProjectCard.tsx` | `oxlint-disable-next-line` | solid/reactivity |
@@ -75,6 +82,6 @@ None.
 From `.fallowrc.jsonc`, where each one's reason is written beside it.
 
 - **Extra entries:** `src/App.tsx`, `src/Document.tsx`, `tools/vite/lucideSolidShim.ts`, `e2e-desktop/wdio.conf.ts`, `e2e-desktop/**/*.desktop.ts`, `packages/editor/bench/vite.config.ts`, `packages/editor/bench/main.ts`
-- **Dependencies it cannot see used:** `@tauri-apps/cli`, `@solidjs/diagnostics`, `@tauri-apps/plugin-opener`, `@wdio/cli`, `@wdio/local-runner`, `@wdio/mocha-framework`, `@wdio/spec-reporter`, `@wdio/tauri-service`
+- **Dependencies it cannot see used:** `@inlang/plugin-icu1`, `@tauri-apps/cli`, `@solidjs/diagnostics`, `@tauri-apps/plugin-opener`, `@wdio/cli`, `@wdio/local-runner`, `@wdio/mocha-framework`, `@wdio/spec-reporter`, `@wdio/tauri-service`
 
 <!-- lint-results:end -->
