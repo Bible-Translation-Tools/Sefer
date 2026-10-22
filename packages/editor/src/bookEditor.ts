@@ -1,5 +1,5 @@
 import { forEachDiagnostic, setDiagnosticsEffect } from "@codemirror/lint";
-import { Compartment, EditorState, StateEffect } from "@codemirror/state";
+import { Compartment, EditorState, StateEffect, type TransactionSpec } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { tocViewOf } from "@sefer/text/engine/location";
 import type { Address } from "@sefer/text/location/address";
@@ -20,9 +20,10 @@ import { annotateOpen } from "./core/instrument";
 import { trusted } from "./core/kernel";
 import { keystrokeMeter } from "./core/meter";
 import { span } from "./core/timing";
+import { addVerseAfter, removeVerseMarker, renumberVerse, verseAt } from "./core/verseCommands";
+import type { EditorFeature } from "./features";
 import { handleFor, markMoved, type EditorHandle } from "./handle";
 import { annotateRepaint } from "./observability";
-import { attributePopover } from "./recipes/attributePopover";
 import { annotateEmptyBlocks, blockNamer, showEmptyBlocks } from "./recipes/emptyBlocks";
 import { flash, flashing } from "./recipes/flash";
 import { showCorpusFindings, type CorpusFinding } from "./recipes/lint";
@@ -56,12 +57,12 @@ export interface BookEditorOptions {
   /** A viewer: nothing can be typed, and everything else — lint, reveal, where — still works. */
   readonly readOnly?: boolean;
   /**
-   * The default attribute form, opened by a press on a milestone or an
-   * attributed word (`recipes/attributePopover.ts`). On unless `false`; a host
-   * with its own UI turns it off and uses `onActivate` and `setAttributes`.
-   * Decided by the book's first mount.
+   * The opt-in UI: `editorFeatures()` for all of it, as Sefer mounts, or a
+   * host's choice of `verseMenu()`, `attributePopover()`. None by default; the
+   * commands and queries under them are on the mount either way. Decided by
+   * the book's first mount.
    */
-  readonly attributePopover?: boolean;
+  readonly features?: readonly EditorFeature[];
 }
 
 /** One mark the linter draws: the engine's and the host's (`setHostDiagnostics`) as one set. */
@@ -102,6 +103,15 @@ export interface BookEditorMount extends EditorHandle {
   onActivate(listener: (target: AttributedMarkup | null) => void): () => void;
   /** Gives `target` these attributes, as one Undo step. */
   setAttributes(target: AttributedMarkup, attributes: readonly Attribute[]): void;
+  /**
+   * The verse at an offset (its marker, number or text) gets this number.
+   * False when there is no verse there, or `number` is no verse number.
+   */
+  renumberVerse(offset: number, number: string): boolean;
+  /** Removes the marker of the verse at an offset; its text joins the verse before. */
+  removeVerseMarker(offset: number): boolean;
+  /** Adds an empty verse after the one at an offset, numbered one past it, with the caret in it. */
+  addVerseAfter(offset: number): boolean;
   /** The scripture address an offset is in (a verse, a heading's unit, the intro). */
   addressAt(offset: number): Address | undefined;
   /** Where the caret is, as an address. */
@@ -272,7 +282,7 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
         }),
         frontMatterCard(),
         attributeActivation,
-        ...(options.attributePopover === false ? [] : [attributePopover()]),
+        ...(options.features ?? []),
         EditorView.updateListener.of((update) => {
           const listeners = activateListeners.get(book);
           if (listeners === undefined || listeners.size === 0) return;
@@ -293,6 +303,12 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
   created.dispatch({
     effects: readOnlyCompartment.reconfigure(readOnlyOf(options.readOnly === true)),
   });
+
+  const run = (spec: TransactionSpec | null): boolean => {
+    if (spec === null || created.state.readOnly) return false;
+    created.dispatch(spec);
+    return true;
+  };
 
   const toc = () => {
     const analysis = book.structure().analysis;
@@ -384,6 +400,12 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
         userEvent: "input.attributes",
       });
     },
+    renumberVerse: (offset: number, number: string) =>
+      run(renumberVerse(created.state, verseAt(created.state, offset), number)),
+    removeVerseMarker: (offset: number) =>
+      run(removeVerseMarker(created.state, verseAt(created.state, offset))),
+    addVerseAfter: (offset: number) =>
+      run(addVerseAfter(created.state, verseAt(created.state, offset))),
     setReadOnly: (on: boolean) =>
       created.dispatch({ effects: readOnlyCompartment.reconfigure(readOnlyOf(on)) }),
     addressAt: (offset: number) => addressOf(offset),

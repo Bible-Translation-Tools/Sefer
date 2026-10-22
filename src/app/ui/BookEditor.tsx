@@ -1,6 +1,7 @@
 import {
   annotateRepaint,
   gestureTrace,
+  editorFeatures,
   editorPolicy,
   mountBookEditor,
   type BookEditorMount,
@@ -128,6 +129,7 @@ export function BookEditor(props: BookEditorProps) {
         blockName: nameBlock,
         emptyBlocks: settings.get(keys.annotateEmptyParagraphs),
         pairBlocks: settings.get(keys.pairBlocks),
+        features: editorFeatures(),
       });
 
       const supply = (): void => {

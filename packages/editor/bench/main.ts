@@ -1,4 +1,5 @@
 import {
+  editorFeatures,
   editorPolicy,
   mountBookEditor,
   mountReader,
@@ -297,6 +298,7 @@ const open = (edited: BenchText, beside?: BenchText): void => {
   });
 
   editor = mountBookEditor({
+    features: editorFeatures(),
     parent: editorPane,
     book,
     onCaret: (head) => {
