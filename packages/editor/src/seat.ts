@@ -1,10 +1,10 @@
-import { lintGutter } from "@codemirror/lint";
 import type { Extension } from "@codemirror/state";
 import type { Book } from "@sefer/text/book";
 
 import { editorBook, type EditorBook, type EditorBookOptions } from "./book";
 import { commandsLayer, viewLayer } from "./core/compose";
 import { usfmLinter } from "./recipes/lint";
+import { lintGutter } from "./recipes/lintGutter";
 import { lintHoverGrace } from "./recipes/lintHover";
 import { noteEditing } from "./recipes/noteEditor";
 

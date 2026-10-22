@@ -148,6 +148,15 @@ these digits, the box opens holding it (Enter accepts); when the engine is not s
 with no fix), it holds the current number; a numberless marker is offered the number after the
 verse before. A fix that only deletes the marker is Remove verse, so it is not listed twice.
 
+**Fourth scrawl (2026-10-22):** the lint gutter is Sefer's own (`recipes/lintGutter.ts`): a
+marker sits on the row as drawn, at its worst finding. CodeMirror's pinned a marker to the
+start of the file's line, so a line joined into the one before it (`\p` then `\v 1`, in
+Reading and line by line alike) never showed one; the unclosed footnote had no marker at all.
+A marker is a bigger target than a verse number: a click opens the verse menu when every
+finding on the row is on one number, otherwise the row's findings with their fixes. A
+footnote's caller takes the colour of a finding that starts at its note. Change number
+marks a value that is not a verse number (3, 3a, 3-4) instead of closing silently.
+
 <Followup id="ship">To `dev` behind `__SEFER_DESIGN__` once it holds up, and finish with a
 tutorial for the PO and designer, as for suppressions (Will, 2026-10-21).</Followup>
 

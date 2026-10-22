@@ -700,6 +700,18 @@
   border: 1px solid var(--surface-border);
   border-radius: 6px;
 }
+.cm-host .cm-editor .usfm-verse-menu input[aria-invalid="true"] {
+  border-color: var(--on-surface-error);
+}
+.cm-host .cm-editor .usfm-caller.usfm-caller-error {
+  color: var(--on-surface-error);
+}
+.cm-host .cm-editor .usfm-caller.usfm-caller-warning {
+  color: var(--on-surface-warning);
+}
+.cm-host .cm-editor .cm-gutter-lint .cm-gutterElement {
+  cursor: pointer;
+}
 .cm-host .cm-editor.cm-number-menus .usfm-num-v,
 .cm-host .cm-editor.cm-number-menus .usfm-slot-v {
   cursor: pointer;

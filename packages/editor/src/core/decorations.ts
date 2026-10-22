@@ -135,6 +135,7 @@ class CallerWidget extends WidgetType {
   toDOM(view: EditorView) {
     const span = document.createElement("span");
     span.className = `usfm-caller usfm-caller-${this.kind}`;
+    span.dataset["noteAt"] = String(this.at);
     span.textContent = this.mark;
     span.title = "click to read this note at the foot of the chapter";
     span.onmousedown = (e) => {

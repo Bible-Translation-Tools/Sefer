@@ -166,9 +166,15 @@ const selectionStaysInVerse = EditorState.transactionFilter.of((tr) => {
   return [tr, { selection: EditorSelection.single(anchor, head), sequential: true }];
 });
 
-const openVerseMenu = StateEffect.define<number | null>();
+/** The open menu: a verse number's, or the findings on one line (from the gutter). */
+type OpenMenu =
+  | { readonly verse: number }
+  | { readonly from: number; readonly to: number; readonly at: number }
+  | null;
 
-const verseMenuField = StateField.define<number | null>({
+const openVerseMenu = StateEffect.define<OpenMenu>();
+
+const verseMenuField = StateField.define<OpenMenu>({
   create: () => null,
   update(open, tr) {
     for (const effect of tr.effects) if (effect.is(openVerseMenu)) return effect.value;
@@ -176,12 +182,65 @@ const verseMenuField = StateField.define<number | null>({
   },
   provide: (field) =>
     showTooltip.compute([field], (state): Tooltip | null => {
-      const k = state.field(field);
-      const verse = k === null ? undefined : structureAt(state).verses[k];
-      if (k === null || verse === undefined) return null;
+      const open = state.field(field);
+      if (open === null) return null;
+      if ("from" in open)
+        return { pos: open.at, above: false, create: (view) => findingsMenu(view, open) };
+      const k = open.verse;
+      const verse = structureAt(state).verses[k];
+      if (verse === undefined) return null;
       return { pos: verse.numFrom, above: false, create: (view) => verseMenu(view, k) };
     }),
 });
+
+/**
+ * A gutter marker's click, at screen height `y`: the verse menu when every finding on that
+ * row is on one verse number, else the row's findings. A finding belongs to the row it is
+ * drawn in, as the gutter placed its marker.
+ */
+export const openLineMenu = (view: EditorView, y: number): boolean => {
+  if (!numbersHaveMenus(view.state)) return false;
+  const row = view.lineBlockAtHeight(y - view.documentTop);
+  const found: { from: number; to: number }[] = [];
+  forEachDiagnostic(view.state, (_diagnostic, from, to) => {
+    if (view.lineBlockAt(from).from === row.from) found.push({ from, to });
+  });
+  if (found.length === 0) return false;
+  const k = structureAt(view.state).verses.findIndex((verse) =>
+    found.every((range) => onNumber(verse, range.from, range.to)),
+  );
+  const at =
+    view.posAtCoords({ x: view.contentDOM.getBoundingClientRect().left + 4, y }) ?? row.from;
+  view.dispatch({
+    effects: openVerseMenu.of(k >= 0 ? { verse: k } : { from: row.from, to: row.to, at }),
+  });
+  return true;
+};
+
+/** Every finding on one line, as the verse menu draws them: the message, then its fixes. */
+function findingsMenu(view: EditorView, range: { from: number; to: number }): { dom: HTMLElement } {
+  const dom = document.createElement("div");
+  dom.className = "usfm-verse-menu";
+  forEachDiagnostic(view.state, (diagnostic, from, to) => {
+    if (view.lineBlockAt(from).from !== range.from) return;
+    const said = document.createElement("div");
+    said.className = `usfm-verse-finding usfm-verse-finding-${diagnostic.severity}`;
+    said.textContent = sentenceCase(diagnostic.message);
+    dom.append(said);
+    for (const action of diagnostic.actions ?? [])
+      dom.append(
+        button(sentenceCase(action.name.replace(/^Fix:\s*/, "")), () => {
+          action.apply(view, from, to);
+          closeMenu(view);
+          view.focus();
+        }),
+      );
+  });
+  return { dom };
+}
+
+/** What a verse number can be in USFM: 3, 3a, or a bridge such as 3-4 or 3a-4b. */
+const VERSE_NUMBER = /^\d+[a-z]?(-\d+[a-z]?)?$/;
 
 const nextNumber = (num: string | null): string => {
   const digits = /(\d+)\D*$/.exec(num ?? "");
@@ -235,12 +294,17 @@ function verseMenu(view: EditorView, k: number): { dom: HTMLElement } {
   input.value = suggestion ?? verse.num ?? guess ?? "";
   input.size = 4;
   input.setAttribute("aria-label", "Verse number");
+  input.addEventListener("input", () => input.removeAttribute("aria-invalid"));
   label.append(input);
   form.append(label);
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     const value = input.value.trim();
-    if (!/^\d+[a-z]?(-\d+[a-z]?)?$/.test(value) || value === verse.num) return close();
+    if (value === verse.num) return close();
+    if (!VERSE_NUMBER.test(value)) {
+      input.setAttribute("aria-invalid", "true");
+      return;
+    }
     const spaced = /\s/.test(docText(view.state)[verse.numTo] ?? "");
     edit({
       changes: { from: verse.numFrom, to: verse.numTo, insert: spaced ? value : `${value} ` },
@@ -335,7 +399,7 @@ const verseNumberClicks = EditorView.domEventHandlers({
     );
     if (k < 0) return false;
     event.preventDefault();
-    view.dispatch({ effects: openVerseMenu.of(k) });
+    view.dispatch({ effects: openVerseMenu.of({ verse: k }) });
     return true;
   },
 });
