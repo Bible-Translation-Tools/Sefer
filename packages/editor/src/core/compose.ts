@@ -23,6 +23,7 @@ import type { ChangeRule, TransactionRule } from "./kernel";
 import { HOOK, PHASES, type ParserPort, type PhaseRule, type RuleName } from "./phases";
 import { renderRangeField, renderWindow } from "./render";
 import { scrollGuard } from "./scroll";
+import { tableKeys } from "./tableCommands";
 import { span } from "./timing";
 import { verseLineBehaviour, verseLineKeys } from "./verseLines";
 
@@ -234,7 +235,7 @@ export function usfmKeys(): readonly KeyBinding[] {
 }
 
 export const commandsLayer: Extension = [
-  Prec.highest(keymap.of([...verseLineKeys()])),
+  Prec.highest(keymap.of([...tableKeys(), ...verseLineKeys()])),
   verseLineBehaviour,
   Prec.high(keymap.of([...usfmKeys()])),
   keymap.of([...defaultKeymap, ...historyKeymap]),

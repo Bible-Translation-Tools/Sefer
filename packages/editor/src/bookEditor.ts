@@ -20,6 +20,7 @@ import { frontMatterCard } from "./core/frontmatter";
 import { annotateOpen } from "./core/instrument";
 import { trusted } from "./core/kernel";
 import { keystrokeMeter } from "./core/meter";
+import { deleteColumn, deleteRow, insertColumn, insertRow } from "./core/tableCommands";
 import { span } from "./core/timing";
 import { type UnsupportedMarkup, unsupportedMarkup } from "./core/unsupported";
 import { addVerseAfter, removeVerseMarker, renumberVerse, verseAt } from "./core/verseCommands";
@@ -121,6 +122,11 @@ export interface BookEditorMount extends EditorHandle {
   removeVerseMarker(offset: number): boolean;
   /** Adds an empty verse after the one at an offset, numbered one past it, with the caret in it. */
   addVerseAfter(offset: number): boolean;
+  /** A table's rows and columns, at the cell holding an offset; false where there is no table. */
+  insertTableRow(offset: number, where: "above" | "below"): boolean;
+  deleteTableRow(offset: number): boolean;
+  insertTableColumn(offset: number, side: "before" | "after"): boolean;
+  deleteTableColumn(offset: number): boolean;
   /**
    * Markup Reading has no drawing for in a range (the whole book without one):
    * what the chips feature draws, for a host that draws it its own way.
@@ -424,6 +430,12 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
       figuresIn(created.state, range?.from ?? 0, range?.to ?? created.state.doc.length),
     unsupportedMarkup: (range?: { readonly from: number; readonly to: number }) =>
       unsupportedMarkup(created.state, range?.from ?? 0, range?.to ?? created.state.doc.length),
+    insertTableRow: (offset: number, where: "above" | "below") =>
+      run(insertRow(created.state, offset, where)),
+    deleteTableRow: (offset: number) => run(deleteRow(created.state, offset)),
+    insertTableColumn: (offset: number, side: "before" | "after") =>
+      run(insertColumn(created.state, offset, side)),
+    deleteTableColumn: (offset: number) => run(deleteColumn(created.state, offset)),
     renumberVerse: (offset: number, number: string) =>
       run(renumberVerse(created.state, verseAt(created.state, offset), number)),
     removeVerseMarker: (offset: number) =>
