@@ -305,6 +305,19 @@ const open = (edited: BenchText, beside?: BenchText): void => {
     },
   });
   editor.setPolicy(policy());
+  // The attribute data API on its own: what a press activated, whether or not the popover shows.
+  editor.onActivate((target) => {
+    if (target === null) return;
+    const listed = target.attributes.map((a) => `${a.name ?? "default"}=${a.value}`).join(" ");
+    append(
+      row(
+        "gesture loose",
+        chip("seq", "activate"),
+        chip("input", `\\${target.marker}`),
+        listed || "no attributes",
+      ),
+    );
+  });
 
   const analysis = book.structure().analysis;
   if (analysis === null) throw new Error("bench: the engine returned no parse");

@@ -6,13 +6,23 @@ import type { Address } from "@sefer/text/location/address";
 import { addressAt, resolve } from "@sefer/text/location/locate";
 
 import { seatedOf, type EditorBook } from "./book";
+import {
+  activateMarkup,
+  type Attribute,
+  attributeActivation,
+  attributeChange,
+  type AttributedMarkup,
+  attributesAt,
+} from "./core/attributes";
 import { structureAt } from "./core/editorState";
 import { frontMatterCard } from "./core/frontmatter";
 import { annotateOpen } from "./core/instrument";
+import { trusted } from "./core/kernel";
 import { keystrokeMeter } from "./core/meter";
 import { span } from "./core/timing";
 import { handleFor, markMoved, type EditorHandle } from "./handle";
 import { annotateRepaint } from "./observability";
+import { attributePopover } from "./recipes/attributePopover";
 import { annotateEmptyBlocks, blockNamer, showEmptyBlocks } from "./recipes/emptyBlocks";
 import { flash, flashing } from "./recipes/flash";
 import { showCorpusFindings, type CorpusFinding } from "./recipes/lint";
@@ -45,6 +55,13 @@ export interface BookEditorOptions {
   readonly pairBlocks?: boolean;
   /** A viewer: nothing can be typed, and everything else — lint, reveal, where — still works. */
   readonly readOnly?: boolean;
+  /**
+   * The default attribute form, opened by a press on a milestone or an
+   * attributed word (`recipes/attributePopover.ts`). On unless `false`; a host
+   * with its own UI turns it off and uses `onActivate` and `setAttributes`.
+   * Decided by the book's first mount.
+   */
+  readonly attributePopover?: boolean;
 }
 
 /** One mark the linter draws: the engine's and the host's (`setHostDiagnostics`) as one set. */
@@ -76,6 +93,15 @@ export interface BookEditorMount extends EditorHandle {
   /** Called when the drawn set changes, not on every lint pass. Returns the detach. */
   onDiagnostics(listener: (drawn: readonly DrawnDiagnostic[]) => void): () => void;
   setReadOnly(readOnly: boolean): void;
+  /** The milestone or character run with an attribute list at an offset, or `null`. */
+  attributesAt(offset: number): AttributedMarkup | null;
+  /**
+   * Called when a press activates attributed markup (and with `null` when it
+   * is let go), whether or not the default popover is showing. Returns the detach.
+   */
+  onActivate(listener: (target: AttributedMarkup | null) => void): () => void;
+  /** Gives `target` these attributes, as one Undo step. */
+  setAttributes(target: AttributedMarkup, attributes: readonly Attribute[]): void;
   /** The scripture address an offset is in (a verse, a heading's unit, the intro). */
   addressAt(offset: number): Address | undefined;
   /** Where the caret is, as an address. */
@@ -107,6 +133,7 @@ const mountedConfig = new WeakMap<
   { readonly projection: Compartment; readonly readOnly: Compartment }
 >();
 
+const activateListeners = new WeakMap<EditorBook, Set<(target: AttributedMarkup | null) => void>>();
 const caretListeners = new WeakMap<EditorBook, Set<(head: number) => void>>();
 
 const drawnListeners = new WeakMap<EditorBook, Set<() => void>>();
@@ -244,6 +271,16 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
           for (const listener of heard) listener(update.state.selection.main.head);
         }),
         frontMatterCard(),
+        attributeActivation,
+        ...(options.attributePopover === false ? [] : [attributePopover()]),
+        EditorView.updateListener.of((update) => {
+          const listeners = activateListeners.get(book);
+          if (listeners === undefined || listeners.size === 0) return;
+          for (const tr of update.transactions)
+            for (const effect of tr.effects)
+              if (effect.is(activateMarkup))
+                for (const listener of listeners) listener(effect.value);
+        }),
         ...(options.blockName === undefined ? [] : [blockNamer.of(options.blockName)]),
         annotateEmptyBlocks(options.emptyBlocks === true),
         pairingHere(options.pairBlocks === true),
@@ -333,6 +370,19 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
         drawnHeard.delete(check);
         mine.delete(check);
       };
+    },
+    attributesAt: (offset: number) => attributesAt(created.state, offset),
+    onActivate: (listener: (target: AttributedMarkup | null) => void) => {
+      const held = listenersOf(activateListeners, book);
+      held.add(listener);
+      return () => held.delete(listener);
+    },
+    setAttributes: (target: AttributedMarkup, attributes: readonly Attribute[]) => {
+      created.dispatch({
+        changes: attributeChange(target, attributes),
+        annotations: trusted.of("attributes"),
+        userEvent: "input.attributes",
+      });
     },
     setReadOnly: (on: boolean) =>
       created.dispatch({ effects: readOnlyCompartment.reconfigure(readOnlyOf(on)) }),

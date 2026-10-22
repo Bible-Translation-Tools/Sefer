@@ -10,6 +10,7 @@ export { type EditorBook } from "./book";
 export { seatBook } from "./seat";
 export { type Following } from "./funnel";
 export { type EditorAction } from "./core/actions";
+export { type Attribute, type AttributedMarkup } from "./core/attributes";
 
 export {
   mountBookEditor,
