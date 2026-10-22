@@ -54,11 +54,9 @@ const SPANISH_PHRASES: Partial<Record<PhraseKey, string>> = {
   "attributes.hint": "Intro guarda · Esc cierra",
 };
 
-/** The bench has no pictures: any `src` resolves to one drawn sample, to show the resolved path. */
+/** A URL `src` is used as it is; a bare file name gets a real placeholder image named after it. */
 const samplePicture = (src: string): string =>
-  `data:image/svg+xml,${encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="64"><rect width="96" height="64" rx="6" fill="#8aa4c8"/><circle cx="28" cy="22" r="8" fill="#f4d58d"/><path d="M0 64 L34 34 L54 50 L70 38 L96 60 L96 64 Z" fill="#4d6b8f"/><text x="48" y="60" font-size="8" text-anchor="middle" fill="#fff">${src}</text></svg>`,
-  )}`;
+  /^https?:\/\//.test(src) ? src : `https://placehold.co/200x200?text=${encodeURIComponent(src)}`;
 
 /** A sample translation, to prove the package's words come from the host: partial on purpose. */
 const SPANISH: EditorWords = {

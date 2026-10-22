@@ -414,38 +414,36 @@
   display: none;
 }
 
-/* A figure (`recipes/figures.ts`): a badge for the picture, then its caption. */
+/* A figure (`recipes/figures.ts`): the picture on its own row, as wide as its
+   `size` (col: half the text's width, span: all of it), the caption under it. */
 .cm-mode-regular .usfm-fig {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  margin: 0 0.4em 0 0;
-  vertical-align: middle;
+  display: block;
+  margin: 0.4em 0 0.2em;
   text-indent: 0;
   cursor: pointer;
   user-select: none;
 }
-.cm-mode-regular .usfm-fig img {
-  max-width: 8em;
-  max-height: 6em;
+.cm-mode-regular .usfm-fig img,
+.cm-mode-regular .usfm-fig-frame {
+  display: block;
+  box-sizing: border-box;
+  width: 50%;
   border-radius: 4px;
+}
+.cm-mode-regular .usfm-fig[data-size="span"] img,
+.cm-mode-regular .usfm-fig[data-size="span"] .usfm-fig-frame {
+  width: 100%;
 }
 .cm-mode-regular .usfm-fig-frame {
-  display: inline-block;
-  padding: 1em 1.2em;
+  padding: 2em 0;
   border: 1px dashed var(--surface-border);
-  border-radius: 4px;
-  font: 500 0.62em/1 var(--font-ui);
+  font: 500 0.7em/1 var(--font-ui);
   color: var(--on-surface-tertiary);
-}
-.cm-mode-regular .usfm-fig-src {
-  font: 400 0.55em/1 var(--font-mono);
-  color: var(--on-surface-tertiary);
+  text-align: center;
 }
 /* Muted, not italic: in scripture italics mean supplied words (\add). */
 .cm-mode-regular .usfm-fig-caption {
-  font-size: 0.92em;
+  font-size: 0.85em;
   color: var(--on-surface-secondary);
 }
 
