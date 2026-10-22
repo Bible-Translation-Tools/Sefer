@@ -1,4 +1,4 @@
-import type { EditorState } from "@codemirror/state";
+import { type EditorState, Facet } from "@codemirror/state";
 import { MARKERS, TOKEN, TOKEN_SPELLING_BIT } from "@sefer/text/engine/analysis";
 
 import { forTokensIn } from "./decorations";
@@ -26,6 +26,15 @@ export interface UnsupportedMarkup {
   readonly text: string;
 }
 
+/**
+ * Spans a feature draws itself (a figure, a sidebar): markup inside one is not
+ * unsupported, so the chips leave it to that feature.
+ */
+export const drawnByFeature =
+  Facet.define<
+    (state: EditorState, from: number, to: number) => readonly { from: number; to: number }[]
+  >();
+
 const SHOWN_KINDS = new Set<number>([TOKEN.MARKER, TOKEN.CLOSING_MARKER, TOKEN.ATTR_LIST]);
 
 /**
@@ -43,7 +52,9 @@ export function unsupportedMarkup(
   const doc = docText(state);
   if (analysis === null || analysis.text !== doc) return [];
   const drawn = state.field(decoField, false)?.set;
+  const byFeature = state.facet(drawnByFeature).flatMap((spans) => spans(state, from, to));
   const covered = (a: number, b: number): boolean => {
+    if (byFeature.some((span) => span.from <= a && span.to >= b)) return true;
     let hit = false;
     drawn?.between(a, b, (f, t, deco) => {
       if (deco.point && f <= a && t >= b) hit = true;

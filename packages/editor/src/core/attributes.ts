@@ -3,6 +3,7 @@ import { EditorView } from "@codemirror/view";
 import { MARKER_ATTRIBUTES, MARKERS, MarkerKind } from "@sefer/text/engine/analysis";
 
 import { docText, lineIndexAt, structureAt } from "./docStructure";
+import { figureAt } from "./figures";
 
 /** One attribute: `who="Paul"`, or a bare default value (`\w grace|grace\w*`) with no name. */
 export interface Attribute {
@@ -17,7 +18,7 @@ export interface Attribute {
  * read and write it with no popover at all.
  */
 export interface AttributedMarkup {
-  readonly kind: "milestone" | "char";
+  readonly kind: "milestone" | "char" | "figure";
   /** The marker as spelled, no backslash: `qt-s`, `w`. */
   readonly marker: string;
   /** Its row in the engine's marker catalogue (`MARKERS`), or -1 when it has none. */
@@ -85,6 +86,18 @@ export function attributesAt(state: EditorState, pos: number): AttributedMarkup 
         attributes: readList(state, listFrom, listTo),
       };
     }
+  const figure = figureAt(state, pos);
+  if (figure !== null)
+    return {
+      kind: "figure",
+      marker: "fig",
+      markerIdx: figure.markerIdx,
+      from: figure.from,
+      to: figure.to,
+      listFrom: figure.listFrom,
+      listTo: figure.listTo,
+      attributes: readList(state, figure.listFrom, figure.listTo),
+    };
   for (const w of structure.words) {
     if (pos < w.from || pos > w.to) continue;
     return {
@@ -128,7 +141,7 @@ const takesAttributes = (markerIdx: number): boolean => MARKER_ATTRIBUTES[marker
 export const attributeActivation = EditorView.domEventHandlers({
   mousedown: (event, view) => {
     const element = event.target instanceof Element ? event.target : null;
-    const hit = element?.closest(".usfm-pip, .usfm-word");
+    const hit = element?.closest(".usfm-pip, .usfm-word, .usfm-fig");
     if (hit === null || hit === undefined || !view.contentDOM.contains(hit)) return false;
     const target = attributesAt(view.state, view.posAtDOM(hit));
     if (target === null) return false;

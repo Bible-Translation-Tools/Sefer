@@ -1,6 +1,7 @@
 import type { Extension } from "@codemirror/state";
 
 import { attributePopover } from "./recipes/attributePopover";
+import { type FigureSource, type FiguresOptions, figures } from "./recipes/figures";
 import { type ChipRenderer, markupChips } from "./recipes/markupChips";
 import { verseMenu } from "./recipes/verseMenu";
 
@@ -13,11 +14,26 @@ import { verseMenu } from "./recipes/verseMenu";
  */
 export type EditorFeature = Extension;
 
-export { attributePopover, markupChips, verseMenu, type ChipRenderer };
+export {
+  attributePopover,
+  figures,
+  markupChips,
+  verseMenu,
+  type ChipRenderer,
+  type FigureSource,
+  type FiguresOptions,
+};
+
+/** What `editorFeatures` passes on to the features that take options. */
+export interface FeatureOptions {
+  readonly figures?: FiguresOptions;
+  readonly chips?: ChipRenderer;
+}
 
 /** Every feature, as Sefer mounts the editor: CodeMirror's `basicSetup`, for this editor. */
-export const editorFeatures = (): readonly EditorFeature[] => [
+export const editorFeatures = (options: FeatureOptions = {}): readonly EditorFeature[] => [
   verseMenu(),
   attributePopover(),
-  markupChips(),
+  figures(options.figures),
+  markupChips(options.chips),
 ];

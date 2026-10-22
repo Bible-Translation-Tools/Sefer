@@ -61,7 +61,7 @@ function form(view: EditorView, target: AttributedMarkup): HTMLElement {
   const head = document.createElement("div");
   head.className = "usfm-attrs-head";
   head.textContent =
-    target.kind === "char"
+    target.kind !== "milestone"
       ? view.state.sliceDoc(target.from, target.listFrom).replace(/^\\\+?[\w-]+\s*/, "")
       : `\\${target.marker}`;
   dom.append(head);
@@ -136,7 +136,7 @@ const closeOnPressElsewhere = EditorView.domEventHandlers({
   mousedown: (event, view) => {
     if (view.state.field(openTarget) === null) return false;
     const target = event.target instanceof Element ? event.target : null;
-    if (target?.closest(".usfm-pip, .usfm-word, .cm-attributes") !== null) return false;
+    if (target?.closest(".usfm-pip, .usfm-word, .usfm-fig, .usfm-attrs") !== null) return false;
     view.dispatch({ effects: activateMarkup.of(null) });
     return false;
   },

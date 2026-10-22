@@ -414,6 +414,41 @@
   display: none;
 }
 
+/* A figure (`recipes/figures.ts`): a badge for the picture, then its caption. */
+.cm-mode-regular .usfm-fig {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin: 0 0.4em 0 0;
+  vertical-align: middle;
+  text-indent: 0;
+  cursor: pointer;
+  user-select: none;
+}
+.cm-mode-regular .usfm-fig img {
+  max-width: 8em;
+  max-height: 6em;
+  border-radius: 4px;
+}
+.cm-mode-regular .usfm-fig-frame {
+  display: inline-block;
+  padding: 1em 1.2em;
+  border: 1px dashed var(--surface-border);
+  border-radius: 4px;
+  font: 500 0.62em/1 var(--font-ui);
+  color: var(--on-surface-tertiary);
+}
+.cm-mode-regular .usfm-fig-src {
+  font: 400 0.55em/1 var(--font-mono);
+  color: var(--on-surface-tertiary);
+}
+/* Muted, not italic: in scripture italics mean supplied words (\add). */
+.cm-mode-regular .usfm-fig-caption {
+  font-size: 0.92em;
+  color: var(--on-surface-secondary);
+}
+
 /* A page break: a thin rule across the line, its label on it. */
 .cm-mode-regular .usfm-chip-pb {
   display: inline-block;

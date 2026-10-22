@@ -14,11 +14,16 @@ export { type Attribute, type AttributedMarkup } from "./core/attributes";
 export {
   attributePopover,
   editorFeatures,
+  figures,
   markupChips,
   verseMenu,
   type ChipRenderer,
   type EditorFeature,
+  type FeatureOptions,
+  type FigureSource,
+  type FiguresOptions,
 } from "./features";
+export { type Figure } from "./core/figures";
 export { type UnsupportedMarkup } from "./core/unsupported";
 export { PHRASES, type EditorWords, type PhraseKey } from "./core/words";
 
