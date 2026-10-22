@@ -33,6 +33,7 @@ import { Result } from "effect";
 import { actionCommand, type EditorAction } from "./core/actions";
 import type { Analyze } from "./core/analyzer";
 import { surfaceRange } from "./core/clip";
+import { clipboardOrigin } from "./core/clipboard";
 import { historyLayer, judgeLayer, usfmEditorHeadless } from "./core/compose";
 import { docText, structureAt, type DocStructure } from "./core/docStructure";
 import { traceOf } from "./core/instrument";
@@ -201,6 +202,7 @@ export const editorBook = (plain: Book, options: EditorBookOptions): SeatedBook 
     doc: plain.source().text,
     extensions: [
       usfmEditorHeadless({ analyze: options.analyze }),
+      clipboardOrigin.of(id),
       historyLayer,
       Prec.lowest(
         tracer.of(

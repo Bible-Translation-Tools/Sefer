@@ -5,6 +5,7 @@ import { type Analysis, TOKEN_SPELLING_BIT } from "@sefer/text/engine/analysis";
 
 import { type Analyze, analyzed, analyzer } from "./analyzer";
 import { caretLineBoundary, extendCaret, moveCaret, moveCaretByWord } from "./caret";
+import { clipboardHandlers } from "./clipboard";
 import { guardedBackspace, guardedDelete, mergeParagraphBackwards } from "./deletion";
 import { buildStructure } from "./docStructure";
 import {
@@ -46,6 +47,11 @@ export interface EditorOptions {
 /** The subset `viewLayer` needs; a satellite composes it with no engine. */
 export interface ViewOptions {
   readonly perLineDirection?: boolean;
+  /**
+   * Copy and cut write plain text, HTML and widened USFM (`core/clipboard.ts`).
+   * On by default; `false` leaves CodeMirror's own copy, the raw selection.
+   */
+  readonly clipboard?: boolean;
 }
 
 function marksUpInContext(
@@ -245,6 +251,7 @@ export function viewLayer(options: ViewOptions = {}): Extension {
     drawSelection(),
     EditorView.lineWrapping,
     ...(options.perLineDirection === false ? [] : [EditorView.perLineTextDirection.of(true)]),
+    ...(options.clipboard === false ? [] : [clipboardHandlers]),
     renderWindow,
     scrollGuard,
     EditorView.atomicRanges.of((v) => v.state.field(decoField, false)?.atomic ?? Decoration.none),
