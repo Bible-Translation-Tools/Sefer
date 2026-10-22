@@ -134,3 +134,18 @@ plain buttons here"). So the audience goes on the tour AND on a note:
 So the sprawl is less duplication than volume: about 1,100 distinct field strings after the
 internal tour text leaves, with about 50 drift groups to settle once.
 
+## Built (2026-10-22, on master at 98f64e79)
+
+Phase 2's module, per `documentation/architecture/i18n.md`: `src/app/locale.ts` (one signal that
+Paraglide's `getLocale` reads), `LocaleScope` in the root route (a language change remounts the
+screens; the open project and undo survive, checked), Settings → App appearance → Language as a
+dropdown (Will: "No segmented toggle for language"), `<html lang dir>`, every app formatter on
+`uiLocale()`, tours with `audience` (every tutorial internal, design builds only; Will: "fine as
+long they make the sefer-dev channel"). Pilots: Spanish for the converted menu, a few Persian
+lines; RTL mirrors the frame. No gate on `t()` (Will: "ceremony. We'll burn this down as
+needed").
+
+<Followup id="truncation">Spanish truncates the Reference material segmented labels ("Notas de traducc…"); wrap or shorten when that screen is translated.</Followup>
+
+<Followup id="crowdin">One plural message through Crowdin and back, once the Crowdin project exists.</Followup>
+
