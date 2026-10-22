@@ -325,8 +325,8 @@ untiled). `pnpm icons` (`tools/icons/generate.ts`) puts it on tiles and has
 
 | Output                           | Tile                                                                            |
 | -------------------------------- | ------------------------------------------------------------------------------- |
-| `public/favicon.svg`             | follows the theme: white tile in light, blue in dark                            |
-| `public/favicon.ico`             | white tile — the fallback Safari uses, since it ignores SVG favicons            |
+| `public/favicon.svg`             | blue tile in every theme (an SVG theme switch follows the OS, not Chrome)       |
+| `public/favicon.ico`             | blue tile — the fallback Safari uses, since it ignores SVG favicons             |
 | `public/apple-touch-icon.png`    | blue, full bleed (iOS rounds it)                                                |
 | `src-tauri/icons/*` (desktop)    | blue, rounded, on the macOS grid (100 px inset of 1024)                         |
 | `src-tauri/icons/ios`, `android` | blue, full bleed; Android gets a smaller glyph on its adaptive foreground layer |

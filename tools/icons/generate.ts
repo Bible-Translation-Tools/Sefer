@@ -57,22 +57,6 @@ const tileSvg = (glyph: Glyph, { size, inset, radius, tile, glyph: ink, share }:
   );
 };
 
-// The browser tab follows the theme: white tile in light, blue tile in dark.
-const faviconSvg = (glyph: Glyph): string => {
-  const size = 32;
-  const drawn = size * 0.72;
-  const offset = (size - drawn) / 2;
-  const scale = drawn / glyph.side;
-  return (
-    `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">` +
-    `<style>.tile{fill:${WHITE};stroke:${BLUE};stroke-opacity:.18}.glyph{fill:${BLUE}}` +
-    `@media (prefers-color-scheme:dark){.tile{fill:${BLUE};stroke:none}.glyph{fill:${WHITE}}}</style>` +
-    `<rect class="tile" x=".5" y=".5" width="31" height="31" rx="7"/>` +
-    `<g class="glyph" transform="translate(${String(offset)} ${String(offset)}) scale(${String(scale)})">${glyph.body}</g>` +
-    `</svg>\n`
-  );
-};
-
 // Full bleed: the platform (iOS, Android, a home-screen bookmark) rounds it.
 const BLEED: Tile = { size: 1024, inset: 0, radius: 0, tile: BLUE, glyph: WHITE, share: 0.66 };
 
@@ -96,7 +80,12 @@ const main = (): void => {
   };
 
   try {
-    writeFileSync(path.join(root, "public", "favicon.svg"), faviconSvg(glyph));
+    // The browser tab: one blue tile in every theme. A light/dark switch in the
+    // SVG follows the OS appearance, not Chrome's own theme, so it misfired.
+    writeFileSync(
+      path.join(root, "public", "favicon.svg"),
+      tileSvg(glyph, { ...BLEED, size: 32, radius: 7, share: 0.72 }),
+    );
 
     // Desktop: a padded rounded tile, because macOS does not mask app icons.
     const desktop = write("desktop.svg", tileSvg(glyph, { ...BLEED, inset: 100, radius: 185 }));
@@ -126,11 +115,8 @@ const main = (): void => {
     tauriIcon([bleed, "-o", touch, "-p", "180"]);
     cpSync(path.join(touch, "180x180.png"), path.join(root, "public", "apple-touch-icon.png"));
 
-    // The .ico fallback, for browsers without SVG favicons (Safari): light tile.
-    const ico = write(
-      "ico.svg",
-      tileSvg(glyph, { ...BLEED, radius: 224, tile: WHITE, glyph: BLUE }),
-    );
+    // The .ico fallback, for browsers without SVG favicons (Safari).
+    const ico = write("ico.svg", tileSvg(glyph, { ...BLEED, radius: 224 }));
     const web = path.join(scratch, "web");
     tauriIcon([ico, "-o", web]);
     cpSync(path.join(web, "icon.ico"), path.join(root, "public", "favicon.ico"));
