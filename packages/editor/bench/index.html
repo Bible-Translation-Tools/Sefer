@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Editor bench</title>
+  </head>
+  <body>
+    <header class="bar">
+      <strong>Editor bench</strong>
+      <label>
+        Text
+        <select id="doc">
+          <option value="catalogue">Every marker</option>
+          <option value="edges">Layout edges</option>
+          <option value="file">Open a file…</option>
+        </select>
+      </label>
+      <input id="file" type="file" accept=".usfm,.sfm,.txt" hidden />
+      <label>
+        Mode
+        <select id="mode">
+          <option value="reading">Reading</option>
+          <option value="lines">Line by line</option>
+          <option value="usfm">USFM</option>
+        </select>
+      </label>
+      <label><input type="checkbox" data-preset="hide-notes" /> hide notes</label>
+      <label><input type="checkbox" data-preset="lock-designators" /> lock designators</label>
+      <label><input type="checkbox" data-preset="lock-structure" /> lock structure</label>
+      <span id="status" class="status"></span>
+    </header>
+    <main class="panes">
+      <section class="pane">
+        <h2>Editor</h2>
+        <div id="editor" class="host"></div>
+      </section>
+      <section class="pane">
+        <h2>The USFM underneath</h2>
+        <div id="mirror" class="host"></div>
+      </section>
+      <section class="pane">
+        <h2>Clipboard</h2>
+        <div id="clipboard" class="clipboard">
+          <p class="hint">Copy, cut or paste in the editor.</p>
+        </div>
+      </section>
+    </main>
+    <footer class="logbar">
+      <div class="logtools">
+        <h2>Gestures</h2>
+        <label><input type="checkbox" id="caret-moves" /> caret moves</label>
+        <button id="clear" type="button">Clear</button>
+        <span id="skipped" class="skipped"></span>
+      </div>
+      <ol id="log" class="log"></ol>
+    </footer>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

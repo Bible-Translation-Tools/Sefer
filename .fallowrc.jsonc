@@ -12,6 +12,9 @@
     // WebdriverIO loads the specs it names by glob.
     "e2e-desktop/wdio.conf.ts",
     "e2e-desktop/**/*.desktop.ts",
+    // `pnpm editor:bench` serves this page by config path; nothing imports it.
+    "packages/editor/bench/vite.config.ts",
+    "packages/editor/bench/main.ts",
   ],
   // The planning site (planning/) is its own workspace with its own checks
   // (astro check, pnpm plans check), as it is for oxlint and oxfmt.

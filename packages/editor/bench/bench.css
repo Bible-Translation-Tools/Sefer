@@ -1,0 +1,219 @@
+/*
+ * The bench's frame. The editor's own stylesheet reads Sefer's semantic tokens,
+ * so the bench borrows them as any host would bring its own.
+ */
+@import "../../../src/app/ui/tokens.css";
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--surface-secondary);
+  color: var(--on-surface-primary);
+  font-family: var(--font-ui);
+  font-size: 13px;
+}
+
+body {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) 34vh;
+}
+
+h2 {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--on-surface-tertiary);
+}
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--surface-border);
+  background: var(--surface-primary);
+}
+
+.status {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  color: var(--on-surface-secondary);
+}
+
+.panes {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 0.8fr);
+  gap: 8px;
+  padding: 8px;
+  min-height: 0;
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+}
+
+.host {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--surface-primary);
+  border: 1px solid var(--surface-border);
+  border-radius: 6px;
+}
+
+.host .cm-editor {
+  flex: 1;
+  min-height: 0;
+}
+
+.bench-caret {
+  box-shadow: inset 2px 0 0 #e5484d;
+  background: color-mix(in srgb, #e5484d 18%, transparent);
+}
+
+.bench-caret-after {
+  box-shadow: inset -2px 0 0 #e5484d;
+}
+
+.bench-selection {
+  background: color-mix(in srgb, #e5484d 25%, transparent);
+}
+
+.clipboard {
+  flex: 1;
+  overflow: auto;
+  padding: 8px;
+  background: var(--surface-primary);
+  border: 1px solid var(--surface-border);
+  border-radius: 6px;
+}
+
+.clipboard h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+}
+
+.clipboard .mime {
+  margin-top: 8px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.clipboard pre {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.hint {
+  color: var(--on-surface-tertiary);
+}
+
+.logbar {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-top: 1px solid var(--surface-border);
+  background: var(--surface-primary);
+}
+
+.logtools {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 6px 12px;
+}
+
+.skipped {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  color: var(--on-surface-tertiary);
+}
+
+.log {
+  flex: 1;
+  margin: 0;
+  padding: 0 12px 8px;
+  overflow: auto;
+  list-style: none;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.gesture {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--surface-border);
+}
+
+.gesture.open {
+  border-left: 2px solid var(--editor-accent);
+  padding-left: 4px;
+}
+
+.gesture.selection {
+  color: var(--on-surface-tertiary);
+}
+
+.gesture .seq {
+  min-width: 3.5em;
+  color: var(--on-surface-tertiary);
+}
+
+.gesture .input {
+  min-width: 6em;
+  font-weight: 600;
+}
+
+.gesture .origin {
+  min-width: 5em;
+}
+
+.gesture .head {
+  min-width: 8em;
+}
+
+.gesture .inserted,
+.gesture .removed {
+  white-space: pre;
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
+.gesture .inserted {
+  background: var(--diff-added);
+}
+
+.gesture .removed {
+  background: var(--diff-removed);
+}
+
+.gesture .where {
+  color: var(--on-surface-secondary);
+}
+
+.ruling {
+  color: var(--on-surface-secondary);
+}
+
+.ruling.refused {
+  color: var(--on-surface-error);
+}
+
+.ruling.rewrote,
+.ruling.consumed {
+  color: var(--on-surface-warning);
+}

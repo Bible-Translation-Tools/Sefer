@@ -16,6 +16,7 @@
     "branch:preview": "node tools/deploy/branchPreview.ts",
     "design:scaffolding": "node tools/design/scaffolding.ts",
     "dev": "vite",
+    "editor:bench": "vite --config packages/editor/bench/vite.config.ts",
     "dev:tauri": "node tools/tauri/run.ts dev",
     "format": "oxfmt . '!**/*.gen.*' '!documentation/lint-results.md' '!**/*.yaml' '!**/*.yml' '!vendor/**' '!planning/**'",
     "format:check": "oxfmt --check . '!**/*.gen.*' '!documentation/lint-results.md' '!**/*.yaml' '!**/*.yml' '!vendor/**' '!planning/**'",

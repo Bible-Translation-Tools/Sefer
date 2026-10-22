@@ -51,6 +51,15 @@ Defer Lightpanda for editor verification. Its lack of real rendering makes it un
 
 `pnpm verify:launch` covers the fixture case: a dev server on a free port against `/dev/fixture`, artifacts in `.verify/<runId>/`. Any route also takes `?fixture=1`, which composes over the seeded in-memory `fixtures/small-nt` instead of OPFS — enough to prove a screen renders, not enough to measure one.
 
+## The editor bench
+
+`pnpm editor:bench` serves `packages/editor/bench/` on port 4410: `@sefer/editor` mounted by a host that is not Sefer, over the galley wasm and nothing else. Use it when the question is the editor's alone (keys by mode, the caret, paste, a projection); a bug that shows here is the editor's or the engine's, and one that shows only in Sefer is in the wiring. Sefer's diagnostics, settings and composition are deliberately absent.
+
+- **Three panes.** The editor, with Reading, Line by line and USFM and a few presets; the USFM underneath, a `mountReader` following the same Book with the caret and selection drawn in red; and the clipboard, every MIME type the last copy, cut or paste carried, invisibles drawn.
+- **The gesture log** is the editor's own trace through `EditorObservability`: per gesture, the keys that landed in it, the edit the Book accepted (`− removed + inserted @offset`), the caret before and after, and each phase that refused or rewrote, by name. A row is drawn when the trace opens and updated in place, because a refused key dispatches nothing and its trace stays open until the next gesture; the keys after it join the same row.
+- **The texts.** "Every marker" is generated from the engine's own catalogue (`MARKERS` in kitchen's `reader.ts`), so a kitchen bump that adds a marker adds it to the text; the footer names the rows it has no place for. "Layout edges" (`edges.usfm`) is the layouts a typist meets: a verse across paragraphs, poetry across verses, empty verses, a bridge, out-of-order numbers. Any `.usfm` file opens too.
+- **Driving it.** `globalThis.__bench` has `caretAt(text, offset?)`, `clip("copy" | "cut")` and `paste({ "text/plain": … })` — a headless browser runs neither ⌘C nor ⌘V — plus the live `editor()` and `book()`. Start agent-browser with `--args "--disable-renderer-backgrounding,--disable-backgrounding-occluded-windows"`, or the hidden page paints no frames and the mirror never catches up.
+
 ## Driving a real project over CDP
 
 A dedicated browser profile, so a person's own project is never scratch state. These commands were run, in this order, and work.

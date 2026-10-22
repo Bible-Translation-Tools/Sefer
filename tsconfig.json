@@ -27,6 +27,6 @@
       "#platform/*": ["./src/platform/*"]
     }
   },
-  "include": ["src", "packages/*/src", "tools", "*.ts"],
+  "include": ["src", "packages/*/src", "packages/*/bench", "tools", "*.ts"],
   "exclude": ["node_modules", "dist", "src-tauri"]
 }
