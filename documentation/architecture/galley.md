@@ -12,9 +12,9 @@
 
 `memoize()` returns a per-Book memo: the same text hands back the same `Analysis` instance, so a gesture that reads the analysis three times costs one parse and an undo back to a text we have seen costs none. One memo per Book, held by whatever owns that Book's editor state.
 
-## The marker table: `setExtensions`
+## The marker table: `setCustomMarkers`
 
-`setExtensions(markers, { relaxZPrefix? })` installs user markers into the engine's marker table and answers the entries it would not keep (`ExtensionReport`, a value, never a failure); `[]` clears. A registered marker behaves as its category: a `standalone` is a bare point that opens nothing, closes nothing and leaves its paragraph open. Core holds no list: which markers a project gets is the application's policy.
+`setCustomMarkers(markers, { relaxZPrefix? })` judges the list through kitchen's `customMarkers` (0.1.13; it was `setExtensions`), installs it as the engine's marker table, and answers the entries it would not keep (`MalformedCustomMarker`, a value, never a failure); `[]` clears. A registered marker behaves as its category: a `standalone` is a bare point that opens nothing, closes nothing and leaves its paragraph open. Core holds no list: which markers a project gets is the application's policy.
 
 It is **process-wide**. The table is the wasm module's, not the handle's, so every parse afterwards reads it — a project's books, the reference and source texts `ProjectAnalysis` registers, a review side, a Key terms source card, a loose parse on the landing screen — and the engine invalidates everything it derived under the old table (both caches key on content, and the same bytes are a different document once the rows change). So it is set once per project, when the project opens, **before its first parse**, and never between edits. A reference text is parsed under the table of the project that is open, whatever project it came from.
 

@@ -49,7 +49,9 @@ function ReferencesToggle() {
   return (
     <IconButton
       size="sm"
-      label={shell.referenceOpen() ? t("Hide the reference texts") : t("Show the reference texts")}
+      label={
+        shell.referenceOpen() ? t("Collapse the reference text") : t("Show the reference text")
+      }
       aria-pressed={shell.referenceOpen() ? "true" : "false"}
       data-testid="toggle-references"
       icon={<SquareSplitHorizontal aria-hidden="true" />}

@@ -6,7 +6,7 @@ import { remoteVerdict } from "#core/remote/remote";
 import type { Resource } from "#core/resources/library";
 
 import { describeCopy, noteLibraryChanged, referenceCopy } from "../arrival";
-import type { HelpText } from "../catalogue";
+import type { ListedText } from "../catalogue";
 import { describe, remoteReasonOf } from "../describe";
 import { t } from "../i18n";
 import type { Services } from "../services";
@@ -19,7 +19,7 @@ export const helpDownloads = downloading;
 
 const inFlight = new Map<string, Promise<Resource>>();
 
-export const downloadHelp = (services: Services, help: HelpText): Promise<Resource> => {
+export const downloadHelp = (services: Services, help: ListedText): Promise<Resource> => {
   const running = inFlight.get(help.repository);
   if (running !== undefined) return running;
   const started = startDownload(services, help);
@@ -31,7 +31,7 @@ export const downloadHelp = (services: Services, help: HelpText): Promise<Resour
   return started;
 };
 
-const startDownload = (services: Services, help: HelpText): Promise<Resource> => {
+const startDownload = (services: Services, help: ListedText): Promise<Resource> => {
   const url = help.url;
   const title = t("Downloading {title}", { title: help.title });
   const toast = toasts.progress({ title, message: t("Starting…") });

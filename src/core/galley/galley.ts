@@ -179,12 +179,12 @@ export interface LintReport {
   readonly docLen: number;
 }
 
-export interface ExtensionMarker {
+export interface CustomMarker {
   readonly name: string;
   readonly category: string;
 }
 
-export interface ExtensionReport {
+export interface MalformedCustomMarker {
   readonly name?: string;
   readonly reason: string;
 }
@@ -192,10 +192,10 @@ export interface ExtensionReport {
 export interface GalleyService {
   readonly version: () => EngineVersion;
 
-  readonly setExtensions: (
-    markers: readonly ExtensionMarker[],
+  readonly setCustomMarkers: (
+    markers: readonly CustomMarker[],
     opts?: { readonly relaxZPrefix?: boolean },
-  ) => readonly ExtensionReport[];
+  ) => readonly MalformedCustomMarker[];
 
   readonly analyzeText: (text: string, why?: string) => Analysis;
 
@@ -436,26 +436,29 @@ const makeService = (
     }
   };
 
-  const setExtensions = (
-    markers: readonly ExtensionMarker[],
+  const setCustomMarkers = (
+    markers: readonly CustomMarker[],
     opts?: { readonly relaxZPrefix?: boolean },
-  ): readonly ExtensionReport[] => {
-    const list = JSON.stringify(
-      markers.map((marker) => ({ name: marker.name, category: marker.category })),
+  ): readonly MalformedCustomMarker[] => {
+    const judged = wasmModule.customMarkers(
+      markers.map((marker) => ({
+        name: marker.name,
+        // SAFETY: the engine judges an unknown category word itself and answers it in `malformed`, never a throw.
+        category: marker.category as wasmModule.CustomMarkerCategory,
+      })),
+      { relaxZPrefix: opts?.relaxZPrefix === true },
     );
-    const reports = wasmModule.setExtensions(list, { relaxZPrefix: opts?.relaxZPrefix === true });
-    // SAFETY: the engine answers a JSON array of `{ name, reason }` reports (`onion/src/extensions.rs`); a list report carries no `line`.
-    const parsed = JSON.parse(reports) as ExtensionReport[];
+    wasmModule.setCustomMarkers(judged);
     observe?.note("galley.extensions", "ready", undefined, {
       "galley.extensions": markers.map((marker) => marker.name).join(",") || "none",
-      "galley.extensions_refused": parsed.length,
+      "galley.extensions_refused": judged.malformed.length,
     });
-    return parsed;
+    return judged.malformed;
   };
 
   return {
     version: engineVersion,
-    setExtensions,
+    setCustomMarkers,
     analyzeText,
     analyzeBook,
     memoize,

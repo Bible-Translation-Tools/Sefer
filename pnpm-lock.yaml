@@ -167,8 +167,8 @@ importers:
         specifier: ^2.12.0
         version: 2.12.0
       '@wycliffeassociates/scripture-kitchen':
-        specifier: github:WycliffeAssociates/scripture-kitchen#v0.1.11
-        version: https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/60da17f92baaae82aa2a61cab524d8a01dd988a0
+        specifier: github:WycliffeAssociates/scripture-kitchen#v0.1.13
+        version: https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/f9ecc7e9f4e3b3b764a21fb2da7fa1d41f8b3040
       buffer:
         specifier: 6.0.3
         version: 6.0.3
@@ -309,8 +309,8 @@ importers:
         specifier: workspace:*
         version: link:../text
       '@wycliffeassociates/scripture-kitchen':
-        specifier: github:WycliffeAssociates/scripture-kitchen#v0.1.11
-        version: https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/60da17f92baaae82aa2a61cab524d8a01dd988a0
+        specifier: github:WycliffeAssociates/scripture-kitchen#v0.1.13
+        version: https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/f9ecc7e9f4e3b3b764a21fb2da7fa1d41f8b3040
       effect:
         specifier: 4.0.0-rc.112
         version: 4.0.0-rc.112
@@ -321,8 +321,8 @@ importers:
   packages/text:
     devDependencies:
       '@wycliffeassociates/scripture-kitchen':
-        specifier: github:WycliffeAssociates/scripture-kitchen#v0.1.11
-        version: https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/60da17f92baaae82aa2a61cab524d8a01dd988a0
+        specifier: github:WycliffeAssociates/scripture-kitchen#v0.1.13
+        version: https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/f9ecc7e9f4e3b3b764a21fb2da7fa1d41f8b3040
       effect:
         specifier: 4.0.0-rc.112
         version: 4.0.0-rc.112
@@ -3327,9 +3327,9 @@ packages:
     resolution: {integrity: sha512-K1DL05PngTMKY8mkzMNYpKNqZNPTrdJheuvTeWwwYlm4Yn9hLc8V3hw6EDsuEYw4cyEyiVeukLbLOEW+AhvqVw==}
     engines: {node: '>=18.20.0'}
 
-  '@wycliffeassociates/scripture-kitchen@https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/60da17f92baaae82aa2a61cab524d8a01dd988a0':
-    resolution: {gitHosted: true, integrity: sha512-3IdXIeMkfx0FtBAfUSN4UHjrKbmTGZSiyGkY2eiz+W30uc+tQnAHpqgkHYkanGVgNKt+2hpvPlme1pT2ywR3+Q==, tarball: https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/60da17f92baaae82aa2a61cab524d8a01dd988a0}
-    version: 0.1.11
+  '@wycliffeassociates/scripture-kitchen@https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/f9ecc7e9f4e3b3b764a21fb2da7fa1d41f8b3040':
+    resolution: {gitHosted: true, integrity: sha512-Y5cd62aS/eVWcwdqnhxeMeCuDIE/x9wuQuE0uypfDUIDgdmXgSN4PAxfVtTXwbInsA3fFlMI42iomvxFu/B3Uw==, tarball: https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/f9ecc7e9f4e3b3b764a21fb2da7fa1d41f8b3040}
+    version: 0.1.13
 
   '@zip.js/zip.js@2.23.0':
     resolution: {integrity: sha512-K5obAqfrO7zhycnCupM9aaoZ9kx0SA0kv7+Z2oOUsdpWquv4s/Z4zyD7AdTqxrK3pgPM+ozaUi8kdRQbCWaIrQ==}
@@ -9701,7 +9701,7 @@ snapshots:
     dependencies:
       '@wdio/logger': 9.29.1
 
-  '@wycliffeassociates/scripture-kitchen@https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/60da17f92baaae82aa2a61cab524d8a01dd988a0': {}
+  '@wycliffeassociates/scripture-kitchen@https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/f9ecc7e9f4e3b3b764a21fb2da7fa1d41f8b3040': {}
 
   '@zip.js/zip.js@2.23.0': {}
 

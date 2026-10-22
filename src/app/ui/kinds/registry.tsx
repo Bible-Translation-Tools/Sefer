@@ -1,7 +1,7 @@
 import type { JSX } from "@solidjs/web";
 import { Cause, Exit } from "effect";
 import Library from "lucide-solid/icons/library";
-import { Show, createEffect, createSignal } from "solid-js";
+import { createEffect, createSignal } from "solid-js";
 
 import type { OpenHandle, Unavailable } from "#core/resources/kinds/handle";
 import type { Resource, Role } from "#core/resources/library";
@@ -9,7 +9,6 @@ import type { Resource, Role } from "#core/resources/library";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { DelayedSpinner, EmptyState } from "../primitives";
-import { ReferenceCard } from "../workspace/ReferenceCard";
 import { ReferencePane } from "../workspace/ReferencePane";
 import { NotesPane } from "./NotesPane";
 
@@ -102,37 +101,4 @@ export function ResourcePane(props: ResourcePaneProps) {
     });
   };
   return <>{body()}</>;
-}
-
-export interface ResourceCardProps {
-  readonly resource: Resource;
-  readonly bookId: string;
-  readonly language: string;
-  readonly onOpen: () => void;
-}
-
-export function ResourceCard(props: ResourceCardProps) {
-  return (
-    <Show
-      when={props.resource.content !== "usfm"}
-      fallback={
-        <ReferenceCard
-          resource={props.resource}
-          bookId={props.bookId}
-          language={props.language}
-          onOpen={props.onOpen}
-        />
-      }
-    >
-      <button
-        type="button"
-        data-testid={`reference-card-${props.resource.id}`}
-        class="flex w-full cursor-pointer flex-col gap-1 rounded-2xl bg-surface-primary p-4.5 text-start transition-colors hover:bg-surface-secondary"
-        onClick={() => props.onOpen()}
-      >
-        <span class="truncate text-h4 font-semibold text-on-surface-primary">{props.language}</span>
-        <span class="truncate text-small text-on-surface-secondary">{props.resource.title}</span>
-      </button>
-    </Show>
-  );
 }

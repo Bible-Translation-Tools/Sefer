@@ -62,7 +62,8 @@ export interface CatalogueService {
   readonly writerLanguages: (search: string) => Promise<readonly WriterLanguage[]>;
 }
 
-export interface HelpText {
+/** A text the Language API lists for download: WA's Translation Notes, or a gateway language's Bible. */
+export interface ListedText {
   readonly title: string;
   readonly language: string;
   readonly languageName: string;
@@ -204,17 +205,25 @@ const Regions = Schema.Struct({
 
 const decodeRegions = Schema.decodeUnknownResult(Regions);
 
-const TRANSLATION_NOTES_QUERY = `{
+/**
+ * WA-Catalog's own repositories of one resource type, with each language's
+ * names. `gatewaysOnly` keeps the official gateway languages: the source texts
+ * a project may read from are those and nothing else, not the dozen other
+ * English ULBs a search for "English" turns up (the PO, 2026-10-22).
+ */
+const listedQuery = (type: string, gatewaysOnly: boolean): string => `{
   content(where: {
-    resource_type: { _eq: "tn" }
-    git_repo: { username: { _eq: "WA-Catalog" } }
+    resource_type: { _eq: "${type}" }
+    git_repo: { username: { _eq: "WA-Catalog" } }${
+      gatewaysOnly ? "\n    language: { wa_language_metadata: { is_gateway: { _eq: true } } }" : ""
+    }
   }) {
     language { ietf_code english_name national_name direction }
     git_repo { username repo_name repo_url }
   }
 }`;
 
-const TranslationNotes = Schema.Struct({
+const Listed = Schema.Struct({
   data: Schema.Struct({
     content: Schema.Array(
       Schema.Struct({
@@ -238,7 +247,7 @@ const TranslationNotes = Schema.Struct({
   }),
 });
 
-const decodeTranslationNotes = Schema.decodeUnknownResult(TranslationNotes);
+const decodeListed = Schema.decodeUnknownResult(Listed);
 
 const STATUSES: readonly CandidateStatus[] = ["Primary", "Active", "Inactive"];
 
@@ -466,24 +475,26 @@ const sampleCatalogue = (): CatalogueService => ({
   writerLanguages: () => Promise.resolve([]),
 });
 
-const TRANSLATION_NOTES_API = "https://api.bibleineverylanguage.org/v1/graphql";
+const LANGUAGE_API = "https://api.bibleineverylanguage.org/v1/graphql";
 
-export const listTranslationNotes = async (): Promise<readonly HelpText[]> => {
-  const decoded = decodeTranslationNotes(
-    await graphql(TRANSLATION_NOTES_API, TRANSLATION_NOTES_QUERY),
-  );
+const listed = async (
+  type: string,
+  gatewaysOnly: boolean,
+  titleOf: (repo: string) => string,
+): Promise<readonly ListedText[]> => {
+  const decoded = decodeListed(await graphql(LANGUAGE_API, listedQuery(type, gatewaysOnly)));
   if (Result.isFailure(decoded))
     throw new CatalogueError(
       `Language API payload not understood: ${decoded.failure.message}`,
       "payload",
     );
-  const rows = decoded.success.data.content.flatMap((row): HelpText[] => {
+  const rows = decoded.success.data.content.flatMap((row): ListedText[] => {
     if (row.language === null || row.git_repo === null || row.git_repo.repo_url === "") return [];
     const english = row.language.english_name ?? "";
     const national = row.language.national_name ?? "";
     return [
       {
-        title: "Translation Notes",
+        title: titleOf(row.git_repo.repo_name),
         language: row.language.ietf_code,
         languageName: english === "" ? national : english,
         nationalName: national,
@@ -498,21 +509,17 @@ export const listTranslationNotes = async (): Promise<readonly HelpText[]> => {
   );
 };
 
+export const listTranslationNotes = (): Promise<readonly ListedText[]> =>
+  listed("tn", false, () => "Translation Notes");
+
+/**
+ * The gateway languages' Bibles in WA's catalogue, titled by the repository's
+ * last part: "ULB" mostly, "OPV" and "NMV" for Persian, which has no ULB.
+ */
+export const listSourceTexts = (): Promise<readonly ListedText[]> =>
+  listed("ulb", true, (repo) => (/_([^_]+)$/u.exec(repo)?.[1] ?? repo).toUpperCase());
+
 export const catalogueFor = (settings: SettingsService): CatalogueService => {
   const url = catalogueUrlFor(settings);
   return url === null ? sampleCatalogue() : languageApiCatalogue(url);
-};
-
-export const gatewayTexts = (rows: readonly CatalogueEntry[]): readonly CatalogueEntry[] => {
-  const ulb = (entry: CatalogueEntry): boolean => /_ulb$/iu.test(entry.repo);
-  const best = new Map<string, CatalogueEntry>();
-  for (const row of rows) {
-    if (row.type !== "gateway" || row.owner.toLowerCase() !== "wa-catalog" || row.gitUrl === "")
-      continue;
-    const held = best.get(row.code);
-    if (held === undefined || (!ulb(held) && ulb(row))) best.set(row.code, row);
-  }
-  return [...best.values()].sort((a, b) =>
-    (a.anglicizedName || a.naturalName).localeCompare(b.anglicizedName || b.naturalName),
-  );
 };

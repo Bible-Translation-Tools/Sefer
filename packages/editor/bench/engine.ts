@@ -4,7 +4,13 @@ import {
   declaredVersion,
   deserialize,
 } from "@wycliffeassociates/scripture-kitchen/reader";
-import { Galley, attrs, initSync, setExtensions } from "@wycliffeassociates/scripture-kitchen/web";
+import {
+  Galley,
+  attrs,
+  customMarkers,
+  initSync,
+  setCustomMarkers,
+} from "@wycliffeassociates/scripture-kitchen/web";
 import wasmUrl from "@wycliffeassociates/scripture-kitchen/web/wasm?url";
 
 /**
@@ -45,9 +51,9 @@ export const loadEngine = async (): Promise<{
     // chunk marker, not a fifth-level heading. Process-wide, so set before a scenario opens.
     legacyMarkers: (texts) => {
       const used = texts.some((text) => /^\\s5[ \t]*$/m.test(text));
-      setExtensions(JSON.stringify(used ? [{ name: "s5", category: "standalone" }] : []), {
-        relaxZPrefix: true,
-      });
+      setCustomMarkers(
+        customMarkers(used ? [{ name: "s5", category: "standalone" }] : [], { relaxZPrefix: true }),
+      );
     },
     analyzeBook: (id) => {
       const analyze = analyzeBook(id);

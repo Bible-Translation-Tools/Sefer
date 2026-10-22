@@ -1,6 +1,6 @@
-import type { ExtensionMarker, ExtensionReport, GalleyService } from "#core/galley";
+import type { CustomMarker, GalleyService, MalformedCustomMarker } from "#core/galley";
 
-type LegacyMarker = ExtensionMarker;
+type LegacyMarker = CustomMarker;
 
 const LEGACY_MARKERS: readonly LegacyMarker[] = [{ name: "s5", category: "standalone" }];
 
@@ -26,8 +26,11 @@ const legacyMarkersIn = (texts: () => Iterable<string>): LegacyMarker[] => {
 export const registerLegacyMarkers = (
   galley: GalleyService,
   texts: () => Iterable<string>,
-): { readonly markers: readonly LegacyMarker[]; readonly refused: readonly ExtensionReport[] } => {
+): {
+  readonly markers: readonly LegacyMarker[];
+  readonly refused: readonly MalformedCustomMarker[];
+} => {
   const markers = legacyMarkersIn(texts);
-  const refused = galley.setExtensions(markers, { relaxZPrefix: true });
+  const refused = galley.setCustomMarkers(markers, { relaxZPrefix: true });
   return { markers, refused };
 };

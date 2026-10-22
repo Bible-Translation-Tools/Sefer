@@ -10,20 +10,24 @@
  * regex-sliced passage: that could not show markup, could not be scrolled,
  * and would disagree with the editor about what a verse looks like. A pane is
  * the same `decoField` over the same `DocStructure`, so the two sides cannot
- * drift. The whole column can be shut from the editor's crumb strip
- * (`shell.referenceOpen`), or folded here to a stack of cards, one per text.
+ * drift. The whole column is shut from the editor's crumb strip
+ * (`shell.referenceOpen`) and nowhere else: a second button here that folded
+ * it to cards was one close too many (Will, 2026-10-22).
  *
- * Which text is on show is the "Reference language" menu above the pane. In
- * order: the texts on this device — what the project has picked or declares,
+ * Which text is on show is the "Reference language" menu above the pane:
+ * first the texts on this device — what the project has picked or declares,
  * then the Library's own copies, scripture before helps (the PO's two words:
- * source texts, reference material) — then, folded away, the reader's other
- * projects (a neighbouring heart language reads well beside a translation;
- * Will, 2026-10-08), then reference material — the Translation Notes the
- * Language API lists, one per language, and nothing else (Will, 2026-10-15)
- * — then the catalogue's other gateway languages, to download. A download
- * lands in the Library's folder through `arrival.ts`, never the projects
- * folder, and is then picked. This menu is the one place notes are offered:
- * they are not on the projects page.
+ * source texts, reference material) — then, folded away, Reference material:
+ * one list at a time under a segmented toggle with a search box pinned above
+ * it (Will, 2026-10-22). Translation Notes are the ones the Language API
+ * lists, one per language (Will, 2026-10-15); Bibles are WA-Catalog's ULBs in
+ * the official gateway languages and nothing else (the PO, 2026-10-22: not
+ * the dozen other English ULBs, never the UDB); Your projects are the
+ * reader's other projects (a neighbouring heart language reads well beside a
+ * translation; Will, 2026-10-08). A download lands in the Library's folder
+ * through `arrival.ts`, never the projects folder, and is then picked. This
+ * menu is the one place notes and source texts are offered: they are not on
+ * the projects page.
  *
  * With nothing picked, the pane shows what the project DECLARES
  * (`Library.resolve` falls back to it; Will, 2026-10-06), so there is no
@@ -42,9 +46,9 @@ import Check from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronUp from "lucide-solid/icons/chevron-up";
 import Download from "lucide-solid/icons/download";
-import PanelLeftClose from "lucide-solid/icons/panel-left-close";
+import Search from "lucide-solid/icons/search";
 import Trash from "lucide-solid/icons/trash-2";
-import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
+import { For, Match, Show, Switch, createEffect, createMemo, createSignal } from "solid-js";
 
 import { Observability } from "#core/observability";
 import { remoteVerdict } from "#core/remote/remote";
@@ -56,22 +60,16 @@ import {
 } from "#core/resources/relationships";
 
 import { announceSourceTexts, libraryRevision, sourceTextCopy } from "../../arrival";
-import {
-  catalogueFor,
-  gatewayTexts,
-  listTranslationNotes,
-  type CatalogueEntry,
-  type HelpText,
-} from "../../catalogue";
+import { listSourceTexts, listTranslationNotes, type ListedText } from "../../catalogue";
 import { describe, remoteReasonOf } from "../../describe";
 import { t } from "../../i18n";
 import { downloadHelp, helpDownloads, removeHelp } from "../../kinds/download";
 import { KIND_ROLES, roleFor } from "../../kinds/table";
 import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
-import { ResourceCard, ResourcePane } from "../kinds/registry";
+import { ResourcePane } from "../kinds/registry";
 import { listProjects, type ProjectSummary } from "../landing/summaries";
-import { Button, EmptyState, IconButton, Menu, MenuItem, MenuLabel } from "../primitives";
+import { Button, EmptyState, Input, Menu, MenuItem, SegmentedControl } from "../primitives";
 
 const ROLES: readonly Role[] = KIND_ROLES;
 
@@ -92,10 +90,16 @@ const languageName = (code: string | undefined): string | undefined => {
   }
 };
 
-type HelpsRead =
+type Listing =
   | { readonly state: "loading" }
-  | { readonly state: "ready"; readonly rows: readonly HelpText[] }
+  | { readonly state: "ready"; readonly rows: readonly ListedText[] }
   | { readonly state: "failed"; readonly offline: boolean };
+
+type Shelf = "notes" | "bibles" | "projects";
+
+/** Whether `query` (already lowercased and trimmed) is in any of `fields`; an empty query matches everything. */
+const matches = (query: string, ...fields: readonly (string | undefined)[]): boolean =>
+  query === "" || fields.some((field) => field?.toLowerCase().includes(query) === true);
 
 type Shown = { readonly entry: Entry; readonly book: string } | undefined;
 
@@ -109,20 +113,20 @@ interface PickerModel {
   readonly offer: () => void;
   readonly otherProjects: () => readonly ProjectSummary[];
   readonly showProject: (row: ProjectSummary) => void;
-  readonly notes: () => HelpsRead | undefined;
-  readonly helps: () => readonly HelpText[];
+  readonly notes: () => Listing | undefined;
+  readonly helps: () => readonly ListedText[];
   readonly heldHelps: () => readonly Resource[];
-  readonly notesFailure: () => { readonly state: "failed"; readonly offline: boolean } | undefined;
   readonly removeNotes: (resource: Resource) => void;
-  readonly fetchHelp: (help: HelpText) => void;
-  readonly downloadable: () => readonly CatalogueEntry[];
-  readonly fetchText: (entry: CatalogueEntry) => void;
-  readonly showProjects: () => boolean;
-  readonly setShowProjects: (open: boolean) => void;
-  readonly showOthers: () => boolean;
-  readonly setShowOthers: (open: boolean) => void;
-  readonly showHelps: () => boolean;
-  readonly setShowHelps: (open: boolean) => void;
+  readonly fetchHelp: (help: ListedText) => void;
+  readonly bibles: () => Listing | undefined;
+  readonly offeredBibles: () => readonly ListedText[];
+  readonly fetchBible: (text: ListedText) => void;
+  readonly showMaterial: () => boolean;
+  readonly setShowMaterial: (open: boolean) => void;
+  readonly shelf: () => Shelf;
+  readonly setShelf: (shelf: Shelf) => void;
+  readonly query: () => string;
+  readonly setQuery: (query: string) => void;
 }
 
 const ROW = "px-6";
@@ -162,32 +166,6 @@ function RowText(props: { readonly name: string; readonly detail?: string }) {
   );
 }
 
-function OtherProjectsGroup(props: { readonly model: PickerModel }) {
-  return (
-    <Show when={props.model.otherProjects().length > 0}>
-      <GroupToggle
-        testId="reference-other-projects"
-        label={t("Your other projects ({count})", { count: props.model.otherProjects().length })}
-        open={props.model.showProjects()}
-        onToggle={() => props.model.setShowProjects(!props.model.showProjects())}
-      />
-      <Show when={props.model.showProjects()}>
-        <For each={props.model.otherProjects()}>
-          {(row) => (
-            <MenuItem
-              class={ROW}
-              data-testid={`pick-${row.folder}`}
-              onSelect={() => props.model.showProject(row)}
-            >
-              <RowText name={row.name} detail={languageName(row.language) ?? row.language} />
-            </MenuItem>
-          )}
-        </For>
-      </Show>
-    </Show>
-  );
-}
-
 function HeldNotesRow(props: { readonly resource: Resource; readonly model: PickerModel }) {
   return (
     <div
@@ -217,37 +195,38 @@ function HeldNotesRow(props: { readonly resource: Resource; readonly model: Pick
   );
 }
 
-function HelpRow(props: { readonly help: HelpText; readonly model: PickerModel }) {
+/** One downloadable text: its language, the language's own name under it, and a download mark. */
+function ListedRow(props: {
+  readonly text: ListedText;
+  readonly name: string;
+  readonly testId: string;
+  readonly downloading: boolean;
+  readonly onSelect: () => void;
+}) {
   return (
     <MenuItem
       class={ROW}
-      data-testid={`pick-help-${props.help.repository}`}
-      title={t("Download {title} to read beside this project", {
-        title: t("Translation Notes · {language}", {
-          language: props.help.languageName || props.help.language,
-        }),
-      })}
-      onSelect={() => props.model.fetchHelp(props.help)}
+      data-testid={props.testId}
+      title={t("Download {title} to read beside this project", { title: props.name })}
+      onSelect={() => props.onSelect()}
     >
       <span class="flex min-w-0 flex-1 flex-col">
-        <span class="truncate">
-          {`${props.help.languageName || props.help.language} (${props.help.language})`}
-        </span>
+        <span class="truncate">{props.name}</span>
         <Show
           when={
-            props.help.nationalName !== "" && props.help.nationalName !== props.help.languageName
+            props.text.nationalName !== "" && props.text.nationalName !== props.text.languageName
           }
         >
           <span
-            dir={props.help.direction}
+            dir={props.text.direction}
             class="truncate text-start text-smallest text-on-surface-tertiary"
           >
-            {props.help.nationalName}
+            {props.text.nationalName}
           </span>
         </Show>
       </span>
       <Show
-        when={helpDownloads().has(props.help.repository)}
+        when={props.downloading}
         fallback={<Download aria-hidden="true" class="size-5 shrink-0" />}
       >
         <span
@@ -260,87 +239,180 @@ function HelpRow(props: { readonly help: HelpText; readonly model: PickerModel }
   );
 }
 
-function ReferenceMaterialGroup(props: { readonly model: PickerModel }) {
+function ListingStatus(props: { readonly listing: Listing | undefined; readonly empty: boolean }) {
+  const note = (): string | undefined => {
+    const listing = props.listing;
+    if (listing === undefined || listing.state === "loading") return t("Loading the list…");
+    if (listing.state === "failed")
+      return listing.offline
+        ? t("You are offline. Open this menu again to retry.")
+        : t("Could not read the list. Open this menu again to retry.");
+    return props.empty ? t("Nothing matches.") : undefined;
+  };
   return (
-    <Show
-      when={
-        props.model.notes() !== undefined &&
-        (props.model.notes()?.state !== "ready" ||
-          props.model.helps().length > 0 ||
-          props.model.heldHelps().length > 0)
-      }
-    >
-      <GroupToggle
-        testId="reference-material"
-        label={
-          props.model.notes()?.state === "ready"
-            ? t("Reference material ({count})", {
-                count: props.model.heldHelps().length + props.model.helps().length,
-              })
-            : t("Reference material")
-        }
-        open={props.model.showHelps()}
-        onToggle={() => props.model.setShowHelps(!props.model.showHelps())}
-      />
-      <Show when={props.model.showHelps()}>
-        <div role="group" aria-label={t("Translation Notes")} data-testid="reference-notes">
-          <MenuLabel inset={ROW}>{t("Translation Notes")}</MenuLabel>
-
-          <For each={props.model.heldHelps()}>
-            {(resource) => <HeldNotesRow resource={resource} model={props.model} />}
-          </For>
-          <Show when={props.model.notes()?.state === "loading"}>
-            <p role="status" class={`${ROW} py-3 text-small text-on-surface-tertiary`}>
-              {t("Loading the list…")}
-            </p>
-          </Show>
-          <Show when={props.model.notesFailure()}>
-            {(failure) => (
-              <p role="status" class={`${ROW} py-3 text-small text-on-surface-tertiary`}>
-                {failure().offline
-                  ? t("You are offline. Open this menu again to retry.")
-                  : t("Could not read the list. Open this menu again to retry.")}
-              </p>
-            )}
-          </Show>
-          <For each={props.model.helps()}>
-            {(help) => <HelpRow help={help} model={props.model} />}
-          </For>
-        </div>
-      </Show>
+    <Show when={note()}>
+      {(text) => (
+        <p role="status" class={`${ROW} py-3 text-small text-on-surface-tertiary`}>
+          {text()}
+        </p>
+      )}
     </Show>
   );
 }
 
-function OtherLanguagesGroup(props: { readonly model: PickerModel }) {
+const textName = (text: ListedText): string =>
+  `${text.languageName || text.language} (${text.language})`;
+
+function NotesShelf(props: { readonly model: PickerModel }) {
+  const query = (): string => props.model.query().trim().toLowerCase();
+  const held = () =>
+    props.model
+      .heldHelps()
+      .filter((resource) =>
+        matches(query(), languageName(resource.language), resource.language, resource.title),
+      );
+  const offered = () =>
+    props.model
+      .helps()
+      .filter((help) => matches(query(), help.languageName, help.nationalName, help.language));
   return (
-    <Show when={props.model.downloadable().length > 0}>
-      <GroupToggle
-        testId="reference-other-languages"
-        label={t("Other languages ({count})", { count: props.model.downloadable().length })}
-        open={props.model.showOthers()}
-        onToggle={() => props.model.setShowOthers(!props.model.showOthers())}
+    <div role="group" aria-label={t("Translation Notes")} data-testid="reference-notes">
+      <For each={held()}>
+        {(resource) => <HeldNotesRow resource={resource} model={props.model} />}
+      </For>
+      <For each={offered()}>
+        {(help) => (
+          <ListedRow
+            text={help}
+            name={textName(help)}
+            testId={`pick-help-${help.repository}`}
+            downloading={helpDownloads().has(help.repository)}
+            onSelect={() => props.model.fetchHelp(help)}
+          />
+        )}
+      </For>
+      <ListingStatus
+        listing={props.model.notes()}
+        empty={held().length === 0 && offered().length === 0}
       />
-      <Show when={props.model.showOthers()}>
-        <For each={props.model.downloadable()}>
-          {(entry) => (
-            <MenuItem
-              class={ROW}
-              data-testid={`pick-${entry.code}`}
-              title={t("Download {language} to read beside this project", {
-                language: entry.anglicizedName || entry.naturalName,
-              })}
-              onSelect={() => props.model.fetchText(entry)}
-            >
-              <span class="min-w-0 flex-1 truncate">
-                {entry.anglicizedName || entry.naturalName}
-              </span>
-              <Download aria-hidden="true" class="size-5 shrink-0" />
-            </MenuItem>
-          )}
-        </For>
+    </div>
+  );
+}
+
+function BiblesShelf(props: { readonly model: PickerModel }) {
+  const offered = () => {
+    const query = props.model.query().trim().toLowerCase();
+    return props.model
+      .offeredBibles()
+      .filter((text) =>
+        matches(query, text.languageName, text.nationalName, text.language, text.title),
+      );
+  };
+  return (
+    <div role="group" aria-label={t("Bibles")} data-testid="reference-bibles">
+      <For each={offered()}>
+        {(text) => (
+          <ListedRow
+            text={text}
+            name={text.title === "ULB" ? textName(text) : `${textName(text)} · ${text.title}`}
+            testId={`pick-${text.repository}`}
+            downloading={false}
+            onSelect={() => props.model.fetchBible(text)}
+          />
+        )}
+      </For>
+      <ListingStatus listing={props.model.bibles()} empty={offered().length === 0} />
+    </div>
+  );
+}
+
+function ProjectsShelf(props: { readonly model: PickerModel }) {
+  const offered = () => {
+    const query = props.model.query().trim().toLowerCase();
+    return props.model
+      .otherProjects()
+      .filter((row) => matches(query, row.name, row.language, languageName(row.language)));
+  };
+  return (
+    <div role="group" aria-label={t("Your projects")} data-testid="reference-other-projects">
+      <For each={offered()}>
+        {(row) => (
+          <MenuItem
+            class={ROW}
+            data-testid={`pick-${row.folder}`}
+            onSelect={() => props.model.showProject(row)}
+          >
+            <RowText name={row.name} detail={languageName(row.language) ?? row.language} />
+          </MenuItem>
+        )}
+      </For>
+      <Show when={offered().length === 0}>
+        <p role="status" class={`${ROW} py-3 text-small text-on-surface-tertiary`}>
+          {props.model.otherProjects().length === 0
+            ? t("No other projects on this device.")
+            : t("Nothing matches.")}
+        </p>
       </Show>
-    </Show>
+    </div>
+  );
+}
+
+/** Keys the menu would take to move between its rows, kept for the toggle and the search box. */
+const KEPT_KEYS = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End"]);
+
+function ReferenceMaterialGroup(props: { readonly model: PickerModel }) {
+  return (
+    <>
+      <GroupToggle
+        testId="reference-material"
+        label={t("Reference material")}
+        open={props.model.showMaterial()}
+        onToggle={() => props.model.setShowMaterial(!props.model.showMaterial())}
+      />
+      <Show when={props.model.showMaterial()}>
+        <div
+          class="sticky -top-1 z-10 flex flex-col gap-2 border-b border-surface-border bg-surface-primary px-3 pt-1 pb-3"
+          onKeyDown={(event) => {
+            if (KEPT_KEYS.has(event.key)) event.stopPropagation();
+          }}
+        >
+          <SegmentedControl
+            label={t("Kind of reference material")}
+            class="w-full"
+            items={[
+              { value: "notes", label: t("Translation Notes") },
+              { value: "bibles", label: t("Bibles") },
+              { value: "projects", label: t("Your projects") },
+            ]}
+            value={props.model.shelf()}
+            onChange={(shelf) => props.model.setShelf(shelf)}
+          />
+          <Input
+            type="search"
+            size="sm"
+            wrapperClass="w-full"
+            class="w-full"
+            icon={<Search class="size-4" />}
+            data-testid="reference-search"
+            aria-label={t("Search by language")}
+            placeholder={t("Search by language")}
+            value={props.model.query()}
+            onInput={(event) => props.model.setQuery(event.currentTarget.value)}
+          />
+        </div>
+        <Switch>
+          <Match when={props.model.shelf() === "notes"}>
+            <NotesShelf model={props.model} />
+          </Match>
+          <Match when={props.model.shelf() === "bibles"}>
+            <BiblesShelf model={props.model} />
+          </Match>
+          <Match when={props.model.shelf() === "projects"}>
+            <ProjectsShelf model={props.model} />
+          </Match>
+        </Switch>
+      </Show>
+    </>
   );
 }
 
@@ -350,14 +422,14 @@ function LanguagePicker(props: { readonly model: PickerModel }) {
       label={t("Reference language")}
       onOpenChange={(open) => {
         if (!open) return;
-        props.model.setShowProjects(false);
-        props.model.setShowOthers(false);
-        props.model.setShowHelps(false);
+        props.model.setShowMaterial(false);
+        props.model.setQuery("");
+        props.model.setShelf(props.model.installed().some(isBible) ? "notes" : "bibles");
         props.model.offer();
       }}
       side="bottom"
       align="start"
-      class="w-80"
+      class="w-96"
       fitViewport
       trigger={
         <button
@@ -389,9 +461,7 @@ function LanguagePicker(props: { readonly model: PickerModel }) {
             </MenuItem>
           )}
         </For>
-        <OtherProjectsGroup model={props.model} />
         <ReferenceMaterialGroup model={props.model} />
-        <OtherLanguagesGroup model={props.model} />
       </div>
     </Menu>
   );
@@ -418,7 +488,6 @@ const readLibraryState = (
 
 export interface ReferenceColumnProps {
   readonly onBound?: (count: number) => void;
-  readonly onFolded?: (folded: boolean) => void;
 }
 
 export function ReferenceColumn(props: ReferenceColumnProps) {
@@ -430,10 +499,10 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
   const [projects, setProjects] = createSignal<readonly ProjectSummary[] | undefined>(undefined, {
     name: "referenceProjects",
   });
-  const [gateways, setGateways] = createSignal<readonly CatalogueEntry[] | undefined>(undefined, {
-    name: "referenceGateways",
+  const [bibles, setBibles] = createSignal<Listing | undefined>(undefined, {
+    name: "referenceBibles",
   });
-  const [notes, setNotes] = createSignal<HelpsRead | undefined>(undefined, {
+  const [notes, setNotes] = createSignal<Listing | undefined>(undefined, {
     name: "referenceNotes",
   });
   const [missing, setMissing] = createSignal<readonly RelatedResource[]>([], {
@@ -490,6 +559,25 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
 
   const clip = (): number | null => numberAt(shell.chapter()) ?? null;
 
+  /** Reads a Language API list once, and again only after it failed. */
+  const list = (
+    read: () => Listing | undefined,
+    write: (listing: Listing) => void,
+    fetchList: () => Promise<readonly ListedText[]>,
+  ): void => {
+    const held = read();
+    if (held !== undefined && held.state !== "failed") return;
+    write({ state: "loading" });
+    void fetchList()
+      .then((rows) => write({ state: "ready", rows }))
+      .catch((cause: unknown) =>
+        write({
+          state: "failed",
+          offline: cause instanceof TypeError || globalThis.navigator?.onLine === false,
+        }),
+      );
+  };
+
   const offer = (): void => {
     if (projects() === undefined) {
       const recent = services.settings.get(shellKeys(services.settings).recentProjects);
@@ -497,23 +585,8 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
         .run(listProjects(services.projectsRoot, services.fixtureProject, recent))
         .then(setProjects);
     }
-    if (gateways() === undefined)
-      void catalogueFor(services.settings)
-        .entries()
-        .then(({ rows }) => setGateways(gatewayTexts(rows)))
-        .catch(() => setGateways([]));
-    const read = notes();
-    if (read === undefined || read.state === "failed") {
-      setNotes({ state: "loading" });
-      void listTranslationNotes()
-        .then((rows) => setNotes({ state: "ready", rows }))
-        .catch((cause: unknown) =>
-          setNotes({
-            state: "failed",
-            offline: cause instanceof TypeError || globalThis.navigator?.onLine === false,
-          }),
-        );
-    }
+    list(notes, setNotes, listTranslationNotes);
+    list(bibles, setBibles, listSourceTexts);
   };
 
   const installed = (): readonly Resource[] => {
@@ -534,17 +607,20 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     );
   };
 
-  const downloadable = (): readonly CatalogueEntry[] => {
+  /** The gateway Bibles with no copy here; English first for a project that declares no source text. */
+  const offeredBibles = (): readonly ListedText[] => {
+    const read = bibles();
+    if (read?.state !== "ready") return [];
     const held = new Set(
       copies().flatMap((resource) =>
         resource.upstream === undefined ? [] : [normaliseRepoUrl(resource.upstream.url)],
       ),
     );
-    const offered = (gateways() ?? []).filter((entry) => !held.has(normaliseRepoUrl(entry.gitUrl)));
+    const offered = read.rows.filter((text) => !held.has(normaliseRepoUrl(text.url)));
     if (declared().length > 0) return offered;
     return [
-      ...offered.filter((entry) => entry.code === "en"),
-      ...offered.filter((entry) => entry.code !== "en"),
+      ...offered.filter((text) => text.language === "en"),
+      ...offered.filter((text) => text.language !== "en"),
     ];
   };
 
@@ -582,19 +658,19 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       });
   };
 
-  const fetchText = (entry: CatalogueEntry): void => {
-    const name = entry.anglicizedName || entry.naturalName;
+  const fetchBible = (text: ListedText): void => {
+    const name = text.languageName || text.language;
     const operation = services.composition.observability.operation("import.remote", {
       "import.source": "reference",
       "import.host": services.hostInfo.kind(),
-      "catalogue.type": entry.type,
+      "catalogue.type": "gateway",
     });
     setBusy(true);
     setFetching(name);
     void services
       .run(
         Effect.provideService(
-          sourceTextCopy(services, entry.gitUrl, entry.id),
+          sourceTextCopy(services, text.url, text.repository),
           Observability,
           operation,
         ),
@@ -623,7 +699,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
    * `WA-Catalog/en_tn` as a second English (Will, 2026-10-15; their book
    * folders are the same git trees).
    */
-  const helps = (): readonly HelpText[] => {
+  const helps = (): readonly ListedText[] => {
     const read = notes();
     if (read?.state !== "ready") return [];
     const urls = new Set(
@@ -647,12 +723,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     void removeHelp(services, resource);
   };
 
-  const notesFailure = () => {
-    const read = notes();
-    return read?.state === "failed" ? read : undefined;
-  };
-
-  const fetchHelp = (help: HelpText): void => {
+  const fetchHelp = (help: ListedText): void => {
     setBusy(true);
     setFetching(
       t("Translation Notes · {language}", { language: help.languageName || help.language }),
@@ -702,15 +773,9 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       : `${resource.title} · ${name} (${resource.language ?? ""})`;
   };
 
-  const [folded, setFolded] = createSignal(false, { name: "referenceFolded" });
-  const fold = (next: boolean): void => {
-    setFolded(next);
-    props.onFolded?.(next);
-  };
-
-  const [showProjects, setShowProjects] = createSignal(false, { name: "referenceShowProjects" });
-  const [showOthers, setShowOthers] = createSignal(false, { name: "referenceShowOthers" });
-  const [showHelps, setShowHelps] = createSignal(false, { name: "referenceShowHelps" });
+  const [showMaterial, setShowMaterial] = createSignal(false, { name: "referenceShowMaterial" });
+  const [shelf, setShelf] = createSignal<Shelf>("notes", { name: "referenceShelf" });
+  const [query, setQuery] = createSignal("", { name: "referenceQuery" });
   const picker: PickerModel = {
     busy,
     fetching,
@@ -724,17 +789,17 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     notes,
     helps,
     heldHelps,
-    notesFailure,
     removeNotes,
     fetchHelp,
-    downloadable,
-    fetchText,
-    showProjects,
-    setShowProjects,
-    showOthers,
-    setShowOthers,
-    showHelps,
-    setShowHelps,
+    bibles,
+    offeredBibles,
+    fetchBible,
+    showMaterial,
+    setShowMaterial,
+    shelf,
+    setShelf,
+    query,
+    setQuery,
   };
   return (
     <aside
@@ -742,95 +807,61 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       class="flex h-full min-w-0 flex-col gap-3 py-4 pe-[7.5px]"
       data-references={entries().length}
     >
+      <LanguagePicker model={picker} />
+
+      <Show when={!loading() && missing().length > 0 && entries().every((entry) => entry.declared)}>
+        <div
+          data-testid="declared-missing"
+          class="flex shrink-0 flex-col gap-1.5 rounded-md bg-surface-secondary px-3 py-2 text-small"
+        >
+          <p class="text-on-surface-secondary">
+            {t("This project's source text is not on this device: {texts}.", {
+              texts: missing()
+                .map((ref) =>
+                  ref.version === undefined
+                    ? `${ref.language}_${ref.resource}`
+                    : `${ref.language}_${ref.resource} ${ref.version}`,
+                )
+                .join(", "),
+            })}
+          </p>
+          <Button variant="secondary" size="sm" disabled={busy()} onClick={download}>
+            {t("Download")}
+          </Button>
+        </div>
+      </Show>
+
       <Show
-        when={!folded()}
+        when={shown()}
+        keyed
         fallback={
-          <div class="flex min-h-0 flex-col gap-3 overflow-y-auto">
-            <For each={installed()}>
-              {(resource) => (
-                <ResourceCard
-                  resource={resource}
-                  bookId={shell.focused()?.id ?? ""}
-                  language={languageName(resource.language) ?? resource.title}
-                  onOpen={() => {
-                    show(resource);
-                    fold(false);
-                  }}
-                />
-              )}
-            </For>
-          </div>
+          <Show when={!loading()}>
+            <EmptyState
+              icon={<BookMarked size={22} />}
+              title={
+                fetching() === ""
+                  ? t("No source text yet")
+                  : t("Getting {language}…", { language: fetching() })
+              }
+              description={
+                fetching() === ""
+                  ? t("Choose a reference language above to read beside this project.")
+                  : t("Downloading it once, to read beside this project.")
+              }
+            />
+          </Show>
         }
       >
-        <div class="flex items-center gap-controls">
-          <div class="min-w-0 flex-1">
-            <LanguagePicker model={picker} />
+        {(held) => (
+          <div class="flex min-h-0 flex-1 flex-col">
+            <ResourcePane
+              resource={held.entry.resource}
+              role={held.entry.role}
+              bookId={held.book}
+              clip={clip}
+            />
           </div>
-          <IconButton
-            variant="subtle"
-            data-testid="reference-fold"
-            label={t("Collapse the reference text")}
-            icon={<PanelLeftClose />}
-            onClick={() => fold(true)}
-          />
-        </div>
-
-        <Show
-          when={!loading() && missing().length > 0 && entries().every((entry) => entry.declared)}
-        >
-          <div
-            data-testid="declared-missing"
-            class="flex shrink-0 flex-col gap-1.5 rounded-md bg-surface-secondary px-3 py-2 text-small"
-          >
-            <p class="text-on-surface-secondary">
-              {t("This project's source text is not on this device: {texts}.", {
-                texts: missing()
-                  .map((ref) =>
-                    ref.version === undefined
-                      ? `${ref.language}_${ref.resource}`
-                      : `${ref.language}_${ref.resource} ${ref.version}`,
-                  )
-                  .join(", "),
-              })}
-            </p>
-            <Button variant="secondary" size="sm" disabled={busy()} onClick={download}>
-              {t("Download")}
-            </Button>
-          </div>
-        </Show>
-
-        <Show
-          when={shown()}
-          keyed
-          fallback={
-            <Show when={!loading()}>
-              <EmptyState
-                icon={<BookMarked size={22} />}
-                title={
-                  fetching() === ""
-                    ? t("No source text yet")
-                    : t("Getting {language}…", { language: fetching() })
-                }
-                description={
-                  fetching() === ""
-                    ? t("Choose a reference language above to read beside this project.")
-                    : t("Downloading it once, to read beside this project.")
-                }
-              />
-            </Show>
-          }
-        >
-          {(held) => (
-            <div class="flex min-h-0 flex-1 flex-col">
-              <ResourcePane
-                resource={held.entry.resource}
-                role={held.entry.role}
-                bookId={held.book}
-                clip={clip}
-              />
-            </div>
-          )}
-        </Show>
+        )}
       </Show>
     </aside>
   );
