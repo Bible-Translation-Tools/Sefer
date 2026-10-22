@@ -31,8 +31,13 @@ export const createSlugs = (
     return root === undefined ? "" : slugFor(root);
   };
 
+  const fixtureFor = (slug: string): string | undefined => {
+    const fixture = services.fixtureProject;
+    return fixture !== undefined && slugFor(fixture) === slug ? fixture : undefined;
+  };
+
   const rootForSlug = (slug: string): string | undefined =>
-    justMinted.get(slug) ?? services.settings.get(keys.projectSlugs)[slug];
+    justMinted.get(slug) ?? services.settings.get(keys.projectSlugs)[slug] ?? fixtureFor(slug);
 
   const asRows = (held: RecentProjects): readonly RecentProject[] =>
     Object.entries(held)

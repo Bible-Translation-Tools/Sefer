@@ -52,6 +52,27 @@ const toBook = (context: TourContext): void => {
   });
 };
 
+/** On the fixture, BAD chapter 2 holds the synthetic cases: verses run together, empty verses, headings, poetry. */
+const FIXTURE_BOOK = "BAD";
+const FIXTURE_CHAPTER = "2";
+
+const toFixtureCases = (context: TourContext): void => {
+  void context.navigate({
+    to: "/project/$slug/book/$book",
+    params: { slug: context.shell.slug(), book: FIXTURE_BOOK },
+  });
+  const startedAt = Date.now();
+  const timer = setInterval(() => {
+    const book = context.shell.focused();
+    const ordinal =
+      book?.id === FIXTURE_BOOK
+        ? book.structure().chapters.findIndex((chapter) => chapter.label === FIXTURE_CHAPTER)
+        : -1;
+    if (ordinal >= 0) context.shell.showChapter(ordinal);
+    if (ordinal >= 0 || Date.now() - startedAt > 10_000) clearInterval(timer);
+  }, 200);
+};
+
 export const lineByLineTour: Tour = {
   id: "line-by-line",
   kind: "tutorial",
@@ -63,7 +84,9 @@ export const lineByLineTour: Tour = {
     {
       go: (context) => {
         if (context.shell.mode() === "usfm") context.shell.setMode("default");
-        toBook(context);
+        if (context.shell.services.fixtureProject === context.shell.project()?.root)
+          toFixtureCases(context);
+        else toBook(context);
       },
       ready: () => present("#editor-view-switch"),
       spotlight: {
