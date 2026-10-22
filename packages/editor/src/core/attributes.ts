@@ -1,6 +1,6 @@
 import { type ChangeSpec, type EditorState, StateEffect } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import { MARKERS } from "@sefer/text/engine/analysis";
+import { MARKER_ATTRIBUTES, MARKERS, MarkerKind } from "@sefer/text/engine/analysis";
 
 import { docText, lineIndexAt, structureAt } from "./docStructure";
 
@@ -20,6 +20,8 @@ export interface AttributedMarkup {
   readonly kind: "milestone" | "char";
   /** The marker as spelled, no backslash: `qt-s`, `w`. */
   readonly marker: string;
+  /** Its row in the engine's marker catalogue (`MARKERS`), or -1 when it has none. */
+  readonly markerIdx: number;
   /** The whole markup, marker to terminator or closer. */
   readonly from: number;
   readonly to: number;
@@ -53,6 +55,12 @@ function writeAttributes(attributes: readonly Attribute[]): string {
   return `|${kept.map((a) => `${a.name ?? "default"}="${a.value.replaceAll('"', "'")}"`).join(" ")}`;
 }
 
+/** `qt-s` → the `qt` milestone's catalogue row; -1 for a name the catalogue lacks. */
+const milestoneRow = (spelled: string): number =>
+  MARKERS.findIndex(
+    (row) => row.kind === MarkerKind.Milestone && row.name === spelled.replace(/-[se]$/, ""),
+  );
+
 /** The attributed markup at `pos`: a milestone whose span holds it, or a character run. */
 export function attributesAt(state: EditorState, pos: number): AttributedMarkup | null {
   const structure = structureAt(state);
@@ -69,6 +77,7 @@ export function attributesAt(state: EditorState, pos: number): AttributedMarkup 
       return {
         kind: "milestone",
         marker: m.name,
+        markerIdx: milestoneRow(m.name),
         from: m.from,
         to: m.to,
         listFrom,
@@ -81,6 +90,7 @@ export function attributesAt(state: EditorState, pos: number): AttributedMarkup 
     return {
       kind: "char",
       marker: (MARKERS[w.marker]?.name ?? "").replace(/^\+/, ""),
+      markerIdx: w.marker,
       from: w.from,
       to: w.to,
       listFrom: w.attrFrom,
@@ -106,8 +116,8 @@ export function attributeChange(target: AttributedMarkup, next: readonly Attribu
 /** A press on attributed markup: what the default popover, and any host listener, answers. */
 export const activateMarkup = StateEffect.define<AttributedMarkup | null>();
 
-/** Character markers whose words take attributes even before they have any. */
-const TAKES_ATTRIBUTES = new Set(["w", "rb", "jmp", "fig", "ref", "xt"]);
+/** Whether the spec defines attributes for a marker: kitchen's table (`MARKER_ATTRIBUTES`). */
+const takesAttributes = (markerIdx: number): boolean => MARKER_ATTRIBUTES[markerIdx] !== undefined;
 
 /**
  * A press on a milestone's pip, or on a word that has attributes or whose
@@ -125,7 +135,7 @@ export const attributeActivation = EditorView.domEventHandlers({
     if (
       target.kind === "char" &&
       target.attributes.length === 0 &&
-      !TAKES_ATTRIBUTES.has(target.marker)
+      !takesAttributes(target.markerIdx)
     )
       return false;
     view.dispatch({ effects: activateMarkup.of(target) });

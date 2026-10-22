@@ -14,6 +14,7 @@ export {
   ClosingBehavior,
   DiagnosticView,
   isMarkerKind,
+  MARKER_ATTRIBUTES,
   MARKERS,
   MarkerKind,
   NODE_ID_BIT,
