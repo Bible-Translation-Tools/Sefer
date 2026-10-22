@@ -180,6 +180,7 @@
 .cm-mode-regular .cm-content {
   --usfm-indent: 1.5;
   --usfm-hang: 1.6;
+  --usfm-poetry-gap: 0.25;
 }
 
 .cm-mode-regular .usfm-block {
@@ -198,14 +199,16 @@
    its own words. On screen an indent only ever means a marker, never a wrap:
    the width moves, and a printed turnover two units in read as a \q3 (Will,
    2026-10-22). A verse number opening a line hangs in the margin, so the
-   words of one level always start in one place. No italics: in scripture they
-   mean supplied words (\add) or emphasis. */
+   words of one level always start in one place, and a small gap above each
+   poetry line tells a new line from a wrap, which gets none. No italics: in
+   scripture they mean supplied words (\add) or emphasis. */
 .cm-mode-regular .usfm-q,
 .cm-mode-regular .usfm-q1,
 .cm-mode-regular .usfm-q2,
 .cm-mode-regular .usfm-q3,
 .cm-mode-regular .usfm-q4 {
   --usfm-level: 0;
+  padding-top: calc(var(--usfm-poetry-gap) * 1em);
   padding-bottom: 0;
   padding-inline-start: calc(var(--usfm-level) * var(--usfm-indent) * 1em);
 }
