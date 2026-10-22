@@ -20,7 +20,7 @@ import { carryForward } from "../core/forward";
 import { reportOutcome } from "../core/instrument";
 import { trusted } from "../core/kernel";
 import { span } from "../core/timing";
-import { leaveNumbersToTheMenu } from "../core/verseLines";
+import { leaveNumbersToTheMenu, removesMarker, suggestedNumber } from "../core/verseLines";
 
 interface Finding {
   code: number;
@@ -233,12 +233,13 @@ function onionDiagnostics(
   suppressHidden: () => boolean,
 ): CmDiagnostic[] {
   const out: CmDiagnostic[] = [];
+  const verses = structureAt(state).verses;
   for (const f of findings(state, isHidden)) {
     if (f.severity === null) continue;
     if (f.hidden && suppressHidden()) continue;
     const fix = f.fix;
     const stamp = f.stamp;
-    out.push({
+    const diagnostic: CmDiagnostic = {
       from: f.from,
       to: f.point ? f.to : Math.max(f.to, f.from + 1),
       severity: f.severity,
@@ -257,7 +258,21 @@ function onionDiagnostics(
                 },
               },
             ],
-    });
+    };
+    const only = fix?.length === 1 ? fix[0] : undefined;
+    const verse =
+      only === undefined
+        ? undefined
+        : verses.find((row) => row.numFrom === only.from && row.numTo === only.to);
+    if (verse !== undefined && only !== undefined && /^\d/.test(only.insert))
+      suggestedNumber.set(diagnostic, only.insert);
+    if (
+      only !== undefined &&
+      only.insert === "" &&
+      verses.some((row) => row.markerFrom === only.from)
+    )
+      removesMarker.set(diagnostic, { from: only.from, to: only.to });
+    out.push(diagnostic);
   }
   return out;
 }

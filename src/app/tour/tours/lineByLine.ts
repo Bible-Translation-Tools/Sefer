@@ -197,12 +197,16 @@ export const lineByLineTour: Tour = {
         anchor: "[data-testid=editor-host]",
         side: "right",
         title: "A verse number's menu",
-        body: "Click a verse number. If proofreading found something wrong with it, a repeated or missing number, that comes first with its fix. Then: Change number renumbers it; Remove verse takes the number away and its text joins the verse before; Add verse after puts a new, empty verse below it, ready to type.",
+        body: "Click a verse number. If proofreading found something wrong with it, a repeated or missing number, that comes first. Change number renumbers it, and when Sefer is sure what the number should be, the box already holds it: press Enter. Remove verse takes the number away and its text joins the verse before. Add verse after puts a new, empty verse below it, ready to type.",
         try: "Click a verse number to open its menu. Escape closes it.",
         notes: [
           {
             label: "Splitting a verse",
             text: "Add verse after, then cut and paste the text that belongs in it. Ctrl+Shift+V (Cmd+Shift+V on a Mac) also puts a verse number at the caret, which splits the verse there.",
+          },
+          {
+            label: "In Reading too",
+            text: "The same menu opens from a verse number in Reading, so there is one way to change a number in either view. USFM shows the marker itself, to edit as text.",
           },
           {
             label: "What it does not do",

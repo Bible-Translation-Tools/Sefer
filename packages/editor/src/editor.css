@@ -700,8 +700,8 @@
   border: 1px solid var(--surface-border);
   border-radius: 6px;
 }
-.cm-host .cm-editor.cm-line-by-line .usfm-num-v,
-.cm-host .cm-editor.cm-line-by-line .usfm-slot-v {
+.cm-host .cm-editor.cm-number-menus .usfm-num-v,
+.cm-host .cm-editor.cm-number-menus .usfm-slot-v {
   cursor: pointer;
 }
 

@@ -13,7 +13,7 @@ import { EditorView, type KeyBinding, showTooltip, type Tooltip } from "@codemir
 
 import { docText, structureAt, type DocStructure } from "./docStructure";
 import type { VerseRow } from "./fold";
-import { trusted } from "./kernel";
+import { isVisual, trusted } from "./kernel";
 import { assignmentAt } from "./registry";
 
 /** The verse the caret is in: the last one whose marker starts at or before it, or -1 before the first. */
@@ -107,6 +107,15 @@ export function verseLineKeys(): readonly KeyBinding[] {
 
 const isVerseLines = (state: EditorState): boolean => assignmentAt(state).verseLines;
 
+/** Reading and line by line give a verse number a menu; USFM shows the marker itself. */
+const numbersHaveMenus = (state: EditorState): boolean => isVisual(state);
+
+/**
+ * The number a finding's fix would give a verse, when the fix is exactly that: one edit
+ * replacing the number's digits. The linter records it here; the menu pre-fills it.
+ */
+export const suggestedNumber = new WeakMap<Diagnostic, string>();
+
 /** Headings and chapter numbers show as labels here: read-only, changed in Reading or USFM. */
 const labelsStayPut = EditorState.changeFilter.of((tr) => {
   if (!tr.docChanged || !isVerseLines(tr.startState) || tr.annotation(trusted) !== undefined)
@@ -199,11 +208,14 @@ function verseMenu(view: EditorView, k: number): { dom: HTMLElement } {
 
   const dom = document.createElement("div");
   dom.className = "usfm-verse-menu";
+  let suggestion: string | undefined;
   for (const { diagnostic, from, to } of findingsOnNumber(view.state, verse)) {
     const said = document.createElement("div");
     said.className = `usfm-verse-finding usfm-verse-finding-${diagnostic.severity}`;
-    said.textContent = diagnostic.message;
+    said.textContent = sentenceCase(diagnostic.message);
     dom.append(said);
+    suggestion ??= suggestedNumber.get(diagnostic);
+    if (suggestedNumber.has(diagnostic) || removesTheMarker(diagnostic, verse)) continue;
     for (const action of diagnostic.actions ?? [])
       dom.append(
         button(sentenceCase(action.name.replace(/^Fix:\s*/, "")), () => {
@@ -218,7 +230,9 @@ function verseMenu(view: EditorView, k: number): { dom: HTMLElement } {
   const label = document.createElement("label");
   label.textContent = "Change number";
   const input = document.createElement("input");
-  input.value = verse.num ?? "";
+  const before = structureAt(view.state).verses[k - 1];
+  const guess = verse.num === null && before !== undefined ? nextNumber(before.num) : undefined;
+  input.value = suggestion ?? verse.num ?? guess ?? "";
   input.size = 4;
   input.setAttribute("aria-label", "Verse number");
   label.append(input);
@@ -227,7 +241,10 @@ function verseMenu(view: EditorView, k: number): { dom: HTMLElement } {
     event.preventDefault();
     const value = input.value.trim();
     if (!/^\d+[a-z]?(-\d+[a-z]?)?$/.test(value) || value === verse.num) return close();
-    edit({ changes: { from: verse.numFrom, to: verse.numTo, insert: value } });
+    const spaced = /\s/.test(docText(view.state)[verse.numTo] ?? "");
+    edit({
+      changes: { from: verse.numFrom, to: verse.numTo, insert: spaced ? value : `${value} ` },
+    });
   });
   dom.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
@@ -258,6 +275,13 @@ function verseMenu(view: EditorView, k: number): { dom: HTMLElement } {
   return { dom };
 }
 
+/** Whether a finding's only fix deletes this verse's marker, which Remove verse already does. */
+export const removesMarker = new WeakMap<Diagnostic, { from: number; to: number }>();
+const removesTheMarker = (diagnostic: Diagnostic, verse: VerseRow): boolean => {
+  const removal = removesMarker.get(diagnostic);
+  return removal !== undefined && removal.from === verse.markerFrom;
+};
+
 const sentenceCase = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
 
 const closeMenu = (view: EditorView): void => view.dispatch({ effects: openVerseMenu.of(null) });
@@ -287,7 +311,7 @@ export const leaveNumbersToTheMenu = (
   diagnostics: readonly Diagnostic[],
   state: EditorState,
 ): Diagnostic[] => {
-  if (!isVerseLines(state)) return [...diagnostics];
+  if (!numbersHaveMenus(state)) return [...diagnostics];
   const verses = structureAt(state).verses;
   return diagnostics.filter(
     (diagnostic) => !verses.some((verse) => onNumber(verse, diagnostic.from, diagnostic.to)),
@@ -297,7 +321,7 @@ export const leaveNumbersToTheMenu = (
 /** A click on a verse number opens its menu; anywhere else closes it. */
 const verseNumberClicks = EditorView.domEventHandlers({
   mousedown(event, view) {
-    if (!isVerseLines(view.state) || !(event.target instanceof Element)) return false;
+    if (!numbersHaveMenus(view.state) || !(event.target instanceof Element)) return false;
     if (event.target.closest(".usfm-verse-menu") !== null) return false;
     const number = event.target.closest(".usfm-num-v, .usfm-slot-v");
     if (number === null) {
@@ -340,10 +364,11 @@ const typeIntoEmptyVerse = EditorView.inputHandler.of((view, from, to, text) => 
   return true;
 });
 
-/** `cm-line-by-line` on the editor, for what the stylesheet does only in this view. */
-const lineByLineClass = EditorView.editorAttributes.of((view) =>
-  isVerseLines(view.state) ? { class: "cm-line-by-line" } : null,
-);
+/** `cm-line-by-line` and `cm-number-menus` on the editor, for what the stylesheet does only there. */
+const lineByLineClass = EditorView.editorAttributes.of((view) => {
+  if (isVerseLines(view.state)) return { class: "cm-line-by-line cm-number-menus" };
+  return numbersHaveMenus(view.state) ? { class: "cm-number-menus" } : null;
+});
 
 /** Everything line-by-line adds besides its keys and its layout. */
 export const verseLineBehaviour: Extension = [
