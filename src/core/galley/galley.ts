@@ -5,6 +5,7 @@ import {
 } from "@wycliffeassociates/scripture-kitchen/find-reader";
 import { MaskMap } from "@wycliffeassociates/scripture-kitchen/mask-reader";
 import {
+  attrList,
   deserialize,
   declaredVersion,
   FORMAT_VERSION as ONION_FORMAT_VERSION,
@@ -358,6 +359,7 @@ const makeService = (
       revision,
       engineMs,
       usfmVersion: declaredVersion(dish),
+      attrs: (from, to) => attrList(wasmModule.attrs(text, from, to, { utf16: true })),
     };
   };
 

@@ -87,7 +87,7 @@ Almost none of it. Kitchen already ships what is needed: `mask` (reader text), `
 | figures, sidebars, tables | ours |
 | two marker configs on one page | kitchen, the per-handle registry, already coming |
 
-<Followup id="kitchen-attrs">Attributes through kitchen, not our parser. Interim: the host binds kitchen's `attrs` and `attrResolve` onto `Analysis`, so every surface with an analysis reads them and `parseAttributes` and the `TAKES_ATTRIBUTES` list go. Ask (RFC handed off 2026-10-22): carry each `AttrList`'s name/value spans in the parse itself, so there is no second call; then the `Analysis` member reads from the dish.</Followup>
+<Followup id="kitchen-attrs">Attributes through kitchen. Kitchen declined the dish section (an aligned book carries 4 to 8 attributes a word; most parses never read them) and ships instead: `MARKERS` gains `attributes` and `defaultAttribute` columns, and `reader.ts` a pure-TS `attrResolve(name, markerIdx)` kept identical to onion's by a conformance test. No wire change. Done on our side (`Analysis.attrs`, kitchen's `attrs` bound by the host; `parseAttributes` gone). Left for the tag: delete `TAKES_ATTRIBUTES` in `core/attributes.ts` for the `MARKERS` columns, and decide a word's pip by whether it has an `AttrList` token.</Followup>
 
 <Question id="fragment-door">Widening a selection to whole markers is ours first, over the CST the editor already walks (`notePartsOf` does this kind of walk). If nesting gets hairy (a character marker in a note in a character marker), ask kitchen for "the smallest well-formed fragment covering this range"?</Question>
 

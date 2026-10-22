@@ -1,5 +1,5 @@
 import { declaredVersion } from "@wycliffeassociates/scripture-kitchen/reader";
-import type { Dish, DiagnosticView } from "@wycliffeassociates/scripture-kitchen/reader";
+import type { AttrList, Dish, DiagnosticView } from "@wycliffeassociates/scripture-kitchen/reader";
 import {
   Category,
   MARKERS,
@@ -28,7 +28,7 @@ export {
   TokenView,
   Tree,
 } from "@wycliffeassociates/scripture-kitchen/reader";
-export type { Dish } from "@wycliffeassociates/scripture-kitchen/reader";
+export type { AttrList, Dish } from "@wycliffeassociates/scripture-kitchen/reader";
 
 /**
  * One parse, with everything needed to prove which text it describes.
@@ -52,6 +52,14 @@ export interface Analysis {
   readonly engineMs: number;
   /** The `\usfm` version the document declares, or `null`. Gates severity. */
   readonly usfmVersion: string | null;
+  /**
+   * One attribute list broken into names and values: the engine's `attrs`
+   * over `text`, bound by the host that built this analysis, so every surface
+   * holding one reads attributes the engine's way with no wiring of its own.
+   * `[from, to)` is an `AttrList` token's span; spans come back in UTF-16.
+   * Lazy: the parse carries no attributes, and a list is broken on demand.
+   */
+  readonly attrs: (from: number, to: number) => AttrList;
 }
 
 /**

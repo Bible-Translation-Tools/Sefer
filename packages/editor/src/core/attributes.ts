@@ -29,14 +29,19 @@ export interface AttributedMarkup {
   readonly attributes: readonly Attribute[];
 }
 
-const PAIR = /([A-Za-z][\w-]*)\s*=\s*"([^"]*)"/g;
-
-/** `|who="Paul" x-id="2"` → two attributes; `|grace` → one bare default. */
-function parseAttributes(list: string): Attribute[] {
-  const body = list.replace(/^\s*\|/, "").trim();
-  if (body === "") return [];
-  const pairs = [...body.matchAll(PAIR)].map((m) => ({ name: m[1] ?? "", value: m[2] ?? "" }));
-  return pairs.length > 0 ? pairs : [{ name: null, value: body }];
+/**
+ * One list's attributes, broken by the engine (`Analysis.attrs`, kitchen's
+ * `attrs` bound by the host): a bare default value has an empty name span.
+ * None when the parse is not of this text.
+ */
+function readList(state: EditorState, from: number, to: number): Attribute[] {
+  const analysis = structureAt(state).analysis;
+  const doc = docText(state);
+  if (from >= to || analysis === null || analysis.text !== doc) return [];
+  return analysis.attrs(from, to).attrs.map(({ name, value }) => ({
+    name: name.from === name.to ? null : doc.slice(name.from, name.to),
+    value: doc.slice(value.from, value.to),
+  }));
 }
 
 /** The list as written back: `|who="Paul"`, `|grace` for a bare default, `""` for none. */
@@ -68,7 +73,7 @@ export function attributesAt(state: EditorState, pos: number): AttributedMarkup 
         to: m.to,
         listFrom,
         listTo,
-        attributes: parseAttributes(doc.slice(listFrom, listTo)),
+        attributes: readList(state, listFrom, listTo),
       };
     }
   for (const w of structure.words) {
@@ -80,7 +85,7 @@ export function attributesAt(state: EditorState, pos: number): AttributedMarkup 
       to: w.to,
       listFrom: w.attrFrom,
       listTo: w.attrTo,
-      attributes: parseAttributes(doc.slice(w.attrFrom, w.attrTo)),
+      attributes: readList(state, w.attrFrom, w.attrTo),
     };
   }
   return null;

@@ -1,6 +1,10 @@
 import type { Analysis } from "@sefer/text/engine/analysis";
-import { declaredVersion, deserialize } from "@wycliffeassociates/scripture-kitchen/reader";
-import { Galley, initSync, setExtensions } from "@wycliffeassociates/scripture-kitchen/web";
+import {
+  attrList,
+  declaredVersion,
+  deserialize,
+} from "@wycliffeassociates/scripture-kitchen/reader";
+import { Galley, attrs, initSync, setExtensions } from "@wycliffeassociates/scripture-kitchen/web";
 import wasmUrl from "@wycliffeassociates/scripture-kitchen/web/wasm?url";
 
 /**
@@ -32,6 +36,7 @@ export const loadEngine = async (): Promise<{
         revision,
         engineMs: performance.now() - started,
         usfmVersion: declaredVersion(dish),
+        attrs: (from, to) => attrList(attrs(text, from, to, { utf16: true })),
       };
     };
 
