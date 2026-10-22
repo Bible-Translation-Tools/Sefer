@@ -194,11 +194,12 @@
   text-indent: 0;
 }
 
-/* Poetry: \q1 at the edge, each level one unit in, and a wrapped line two
-   units deeper than its own level (the printed turnover), so a wrap never
-   reads as the next poetry line. A verse number opening a line hangs in the
-   margin, so the words of one level always start in one place. No italics:
-   in scripture they mean supplied words (\add) or emphasis. */
+/* Poetry: \q1 at the edge, each level one unit in, and a wrapped line under
+   its own words. On screen an indent only ever means a marker, never a wrap:
+   the width moves, and a printed turnover two units in read as a \q3 (Will,
+   2026-10-22). A verse number opening a line hangs in the margin, so the
+   words of one level always start in one place. No italics: in scripture they
+   mean supplied words (\add) or emphasis. */
 .cm-mode-regular .usfm-q,
 .cm-mode-regular .usfm-q1,
 .cm-mode-regular .usfm-q2,
@@ -206,8 +207,7 @@
 .cm-mode-regular .usfm-q4 {
   --usfm-level: 0;
   padding-bottom: 0;
-  padding-inline-start: calc((var(--usfm-level) + 2) * var(--usfm-indent) * 1em);
-  text-indent: calc(-2 * var(--usfm-indent) * 1em);
+  padding-inline-start: calc(var(--usfm-level) * var(--usfm-indent) * 1em);
 }
 .cm-mode-regular .usfm-q2 {
   --usfm-level: 1;

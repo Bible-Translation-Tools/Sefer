@@ -170,10 +170,13 @@ addresses the next visible glyph past hidden markup, so it checks for a step cel
 
 **Indents on one unit, hung numbers (2026-10-22):** poetry is never italic (in scripture italics
 mean `\add` or emphasis); `\p` indents its first line one unit; `\q1` sits at the edge, each
-level one unit in, a wrap two units deeper than its level (the printed turnover); a verse number
+level one unit in, a wrap under its own words (the printed turnover, two units in, read as a
+`\q3` on screen, so it went the same day: an indent only ever means a marker); a verse number
 opening a poetry line hangs in the margin (ecthesis), so a level's words start in one place with
 or without a number; line by line hangs every number. The unit and the hang are
 `--usfm-indent` and `--usfm-hang` on the editor; no Indent size setting for now.
+
+<Followup id="poetry-spacing">If a wrapped `\q1` still reads as a new `\q1` line, give each real poetry line a little space above it (a wrap gets none). Wait to see whether it is needed.</Followup>
 
 <Followup id="ship">To `dev` behind `__SEFER_DESIGN__` once it holds up, and finish with a
 tutorial for the PO and designer, as for suppressions (Will, 2026-10-21).</Followup>
