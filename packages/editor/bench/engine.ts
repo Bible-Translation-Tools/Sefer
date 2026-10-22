@@ -1,6 +1,6 @@
 import type { Analysis } from "@sefer/text/engine/analysis";
 import { declaredVersion, deserialize } from "@wycliffeassociates/scripture-kitchen/reader";
-import { Galley, initSync } from "@wycliffeassociates/scripture-kitchen/web";
+import { Galley, initSync, setExtensions } from "@wycliffeassociates/scripture-kitchen/web";
 import wasmUrl from "@wycliffeassociates/scripture-kitchen/web/wasm?url";
 
 /**
@@ -11,6 +11,7 @@ import wasmUrl from "@wycliffeassociates/scripture-kitchen/web/wasm?url";
  */
 export const loadEngine = async (): Promise<{
   analyzeBook: (id: string) => (text: string) => Analysis;
+  legacyMarkers: (texts: readonly string[]) => void;
 }> => {
   initSync({ module: await (await fetch(wasmUrl)).arrayBuffer() });
   const handle = new Galley();
@@ -35,6 +36,14 @@ export const loadEngine = async (): Promise<{
     };
 
   return {
+    // As Sefer's `src/app/legacyMarkers.ts`: en_ulb's `\s5`, alone on a line, is a standalone
+    // chunk marker, not a fifth-level heading. Process-wide, so set before a scenario opens.
+    legacyMarkers: (texts) => {
+      const used = texts.some((text) => /^\\s5[ \t]*$/m.test(text));
+      setExtensions(JSON.stringify(used ? [{ name: "s5", category: "standalone" }] : []), {
+        relaxZPrefix: true,
+      });
+    },
     analyzeBook: (id) => {
       const analyze = analyzeBook(id);
       let last: Analysis | undefined;

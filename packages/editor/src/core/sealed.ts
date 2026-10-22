@@ -18,6 +18,22 @@ const endsALine = (structure: DocStructure, pos: number): boolean => {
   return i >= 0 && structure.lines.toAt(i) === pos;
 };
 
+/**
+ * A paste of whole lines at a line's start: it puts lines BEFORE the markup
+ * that opens the line, not inside it, so the marker still opens its line
+ * after it. How a heading pasted at a verse's first word lands above the
+ * verse's `\v` (`core/clipboard.ts`).
+ */
+const pastesWholeLinesAt = (tr: Parameters<ChangeRule>[0], at: number): boolean => {
+  if (!tr.isUserEvent("input.paste")) return false;
+  if (at > 0 && tr.startState.doc.sliceString(at - 1, at) !== "\n") return false;
+  let whole = true;
+  tr.changes.iterChanges((_fA, _tA, _fB, _tB, ins) => {
+    whole &&= ins.length > 0 && ins.line(ins.lines).length === 0;
+  });
+  return whole;
+};
+
 const mergedPairs = (out: readonly number[]): number[] => {
   const pairs: [number, number][] = [];
   for (let i = 0; i < out.length; i += 2) pairs.push([out[i], out[i + 1]]);
@@ -57,6 +73,7 @@ export function refuseKeystrokesInsideHiddenMarkup(
       hi === lo
     )
       return true;
+    if (!deletes && lo === hi && pastesWholeLinesAt(tr, lo)) return true;
     const structure = structureAt(state);
     const doc = state.doc;
     const out: number[] = [];

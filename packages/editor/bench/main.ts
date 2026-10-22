@@ -269,6 +269,7 @@ const open = (edited: BenchText, beside?: BenchText): void => {
   referencePane.replaceChildren();
   logList.replaceChildren();
 
+  engine.legacyMarkers([edited.text, beside?.text ?? ""]);
   $("#editor-title").textContent = `Editor · ${edited.label}`;
   $("#reference-pane").hidden = beside === undefined;
   $("#panes").classList.toggle("with-reference", beside !== undefined);
