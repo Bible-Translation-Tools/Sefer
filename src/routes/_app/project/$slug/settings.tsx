@@ -20,6 +20,7 @@ import {
   Input,
   PanelHeader,
   SegmentedControl,
+  Select,
   Switch,
 } from "#app/ui/primitives";
 import { ShellGate } from "#app/ui/ShellGate";
@@ -286,6 +287,20 @@ const widget = (descriptor: AnyDescriptor, model: SettingsModel): JSX.Element =>
         />
       );
     case "choice":
+      if (descriptor.as === "select")
+        return (
+          <Select
+            id={descriptor.key.name}
+            size="sm"
+            wrapperClass="w-64"
+            value={model.read(descriptor.key)}
+            onChange={(event) => model.write(descriptor.key, event.currentTarget.value)}
+          >
+            <For each={descriptor.options}>
+              {(option) => <option value={option.value}>{t(option.label)}</option>}
+            </For>
+          </Select>
+        );
       return (
         <SegmentedControl
           label={t(descriptor.label)}

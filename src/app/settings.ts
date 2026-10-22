@@ -46,6 +46,8 @@ export interface ChoiceSetting extends Described {
   readonly options: readonly { readonly value: string; readonly label: string }[];
   /** A sample drawn under the row that shows the choice in force. */
   readonly preview?: "diff";
+  /** A dropdown instead of the segmented toggle, for a list that grows (languages). */
+  readonly as?: "select";
 }
 
 const FindingsFilterPreference = Schema.Struct({
@@ -218,6 +220,7 @@ const appearanceRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
     description:
       "The language of Sefer's menus, buttons and messages. It does not change the text of your projects.",
     kind: "choice",
+    as: "select",
     group: "appearance",
     options: [
       {
