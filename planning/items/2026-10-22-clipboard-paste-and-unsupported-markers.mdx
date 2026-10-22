@@ -63,6 +63,16 @@ for all of them (the `basicSetup` of this editor); Sefer and the bench pass `edi
 The verse menu's edits are plain commands (`core/verseCommands.ts`, and `renumberVerse`,
 `removeVerseMarker`, `addVerseAfter` on the mount). Chips' UI joins the bundle the same way.
 
+Ruled 2026-10-22, after figures and chips first went around it: **every kind of markup goes
+through the registry**: a class, an owned set, mapping rows, the plan's resolution and atoms.
+Keys then follow the cells (what a press may do to a figure, a chip, a caption), deletion
+follows the owned set, and a projection can lock or hide any of it. A feature only draws:
+`figures()` is the picture resolver over the `figure` class, `markupChips()` the renderer over
+the `unruled` class. If the abstractions do not fit, they are extended (as `step` and `stop`
+were) and talked over, not routed around.
+
+> Stick to our abstractions, and if those don't work, let's talk.
+
 <Mermaid id="split" caption="One feature, two halves">
 ```mermaid
 flowchart LR
@@ -187,6 +197,6 @@ one at a time.
 
 <Followup id="chip-graduates" done>The three cheap ones get real drawings, after which they stop being chipped on their own: `\cp` in the chapter number's place, `\pb` as a thin rule deleted whole, list levels as indents with a hanging indent. Done: lists in CSS; `\pb` (a rule) and `\cp` (a "published as" caption under the chapter number) in the chips feature's default renderer, since they are already atomic and deleted whole there. `\cp` is not moved into the chapter number's own place: that would hide a line of text Reading could then not edit.</Followup>
 <Followup id="figures" done>7a: figures. A badge (the picture through the host's `resolveSource`, else a frame and the file name) and the caption as ordinary editable text; attributes and `\fig*` hidden and atomic; the badge opens the attribute popover. Not lazily loaded: the module is small and reads only tokens, so its own file is enough. Tables are where laziness pays.</Followup>
-<Followup id="sidebars">7b: sidebars.</Followup>
-<Followup id="tables">7c: tables.</Followup>
+<Followup id="sidebars">7b: sidebars. A `sidebar` class and owned set (today its markers are `unruled` chips), as figures were done.</Followup>
+<Followup id="tables">7c: tables. A `table` class (rows and cells; today `unruled` chips), then the measured column layout, in its own module.</Followup>
 
