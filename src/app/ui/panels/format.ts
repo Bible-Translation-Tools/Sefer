@@ -1,3 +1,5 @@
+import { uiLocale } from "../../locale";
+
 const UNITS: readonly (readonly [Intl.RelativeTimeFormatUnit, number])[] = [
   ["second", 1000],
   ["minute", 60_000],
@@ -18,14 +20,14 @@ export const ago = (at: number, now = Date.now()): string => {
     unit = name;
     size = milliseconds;
   }
-  const format = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+  const format = new Intl.RelativeTimeFormat(uiLocale(), { numeric: "auto" });
   return format.format(Math.round(elapsed / size), unit);
 };
 
-export const exact = (at: number): string => new Date(at).toLocaleString();
+export const exact = (at: number): string => new Date(at).toLocaleString(uiLocale());
 
 export const dated = (at: number): string =>
-  new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(at);
+  new Intl.DateTimeFormat(uiLocale(), { dateStyle: "medium", timeStyle: "short" }).format(at);
 
 export const lines = (text: string): readonly string[] => {
   if (text === "") return [];

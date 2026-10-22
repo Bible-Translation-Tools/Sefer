@@ -47,6 +47,14 @@ export interface Step {
 export interface Tour {
   readonly id: string;
   readonly kind: "tutorial" | "workflow";
+  /**
+   * Who it is for. A `field` tour is part of the product: permanent, and its
+   * words are messages, translated. An `internal` tour is a note to the PO
+   * and the designer about a design and its trade-offs (Line by line's): it
+   * ships only in design builds and stays English, outside the catalog
+   * (Will, 2026-10-22: "they are different purposes").
+   */
+  readonly audience: "field" | "internal";
   readonly title: string;
   readonly summary: string;
   readonly needsProject: boolean;

@@ -105,7 +105,7 @@ export default defineConfig(({ mode }) => {
         project: "./project.inlang",
         outdir: "./src/app/paraglide",
         emitTsDeclarations: true,
-        strategy: ["localStorage", "preferredLanguage", "baseLocale"],
+        strategy: ["baseLocale"],
       }),
       tailwindcss(),
       // lucide-solid is a Solid 1 package; this redirects its own solid imports

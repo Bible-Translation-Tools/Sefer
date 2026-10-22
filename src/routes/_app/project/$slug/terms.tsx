@@ -5,6 +5,7 @@ import { createEffect, createMemo, createSignal, Show, untrack } from "solid-js"
 
 import { createApprovals, type ApprovalsHandle } from "#app/approvals";
 import { t } from "#app/i18n";
+import { uiLocale } from "#app/locale";
 import { useShell } from "#app/ProjectContext";
 import { createExcerptFeed, readBooks, StetView } from "#app/ui/excerpts";
 import { PanelHeader, SegmentedControl } from "#app/ui/primitives";
@@ -16,7 +17,7 @@ import type { Guide, Term } from "#core/stet/stet";
 
 const languageOf = (locale: string): string => {
   try {
-    return new Intl.DisplayNames(["en"], { type: "language" }).of(locale) ?? locale;
+    return new Intl.DisplayNames([uiLocale()], { type: "language" }).of(locale) ?? locale;
   } catch {
     return locale;
   }

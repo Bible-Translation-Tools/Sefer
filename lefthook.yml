@@ -14,5 +14,9 @@ pre-commit:
     # Regenerates the generated half of documentation/lint-results.md and
     # stages it, so every commit records what it leaves unfixed. Deterministic:
     # the file only changes when a finding appears or goes away.
+    # New copy is a Paraglide message; the old t() calls only go down. Lowers
+    # tools/quality/legacy-copy.json when a commit removes some, and stages it.
+    legacy-copy:
+      run: pnpm lint:copy && git add tools/quality/legacy-copy.json
     lint-results:
       run: pnpm lint:results && git add documentation/lint-results.md

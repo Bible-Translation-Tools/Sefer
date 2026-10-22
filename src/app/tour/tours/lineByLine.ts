@@ -76,6 +76,7 @@ const toFixtureCases = (context: TourContext): void => {
 export const lineByLineTour: Tour = {
   id: "line-by-line",
   kind: "tutorial",
+  audience: "internal",
   title: "Line by line",
   summary:
     "A view of your book with one verse per line, for typing in or copying from paper one verse at a time. Its keys, and what it keeps you from changing.",

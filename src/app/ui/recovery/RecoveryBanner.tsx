@@ -6,6 +6,7 @@ import type { Restorable } from "#core/recovery/recovery";
 
 import { describe } from "../../describe";
 import { t } from "../../i18n";
+import { uiLocale } from "../../locale";
 import { useShell } from "../../ProjectContext";
 import { Button, Card, PanelHeader, toasts } from "../primitives";
 
@@ -16,7 +17,7 @@ const lastTouched = (journals: readonly Restorable[]): string => {
     if (at !== undefined && (latest === undefined || at > latest)) latest = at;
   }
   if (latest === undefined) return "";
-  return new Date(latest).toLocaleString(undefined, {
+  return new Date(latest).toLocaleString(uiLocale(), {
     month: "short",
     day: "numeric",
     hour: "2-digit",

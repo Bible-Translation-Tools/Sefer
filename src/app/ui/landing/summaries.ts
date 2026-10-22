@@ -13,6 +13,7 @@ import {
 import { firstArrival, type ProjectOrigin } from "#core/project/provenance";
 
 import { languageName, languageTag, projectDisplayName } from "../../language";
+import { uiLocale } from "../../locale";
 import type { Domain } from "../../services";
 
 export interface ProjectSummary {
@@ -134,5 +135,5 @@ export const formatDate = (isoDate: string | undefined): string => {
   if (isoDate === undefined) return "";
   const at = new Date(isoDate);
   if (Number.isNaN(at.getTime())) return "";
-  return at.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  return at.toLocaleDateString(uiLocale(), { year: "numeric", month: "short", day: "numeric" });
 };

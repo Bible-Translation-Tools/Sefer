@@ -11,6 +11,7 @@ import {
 } from "#core/galley";
 
 import { t } from "../i18n";
+import { uiLocale } from "../locale";
 import { useServices } from "../ProjectContext";
 import { shellKeys } from "../settings";
 import { fits, SOUS_GROUPS, sousValues, withSetting, type SousOverrides } from "../sousSettings";
@@ -26,8 +27,8 @@ const stepOf = (kind: string): number => {
 const shown = (key: SousSettingKey, value: boolean | number): string => {
   const kind = SOUS_SETTINGS[key].kind;
   if (typeof value === "boolean") return value ? t("on") : t("off");
-  if (kind === "share-bp") return `${percent(value).toLocaleString("en")}%`;
-  return value.toLocaleString("en");
+  if (kind === "share-bp") return `${percent(value).toLocaleString(uiLocale())}%`;
+  return value.toLocaleString(uiLocale());
 };
 
 // SAFETY: `SOUS_GROUPS` satisfies `Record<SousSettingGroup, …>`, so its keys are exactly the groups, in the order it declares them.

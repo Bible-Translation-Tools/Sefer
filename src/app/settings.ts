@@ -4,6 +4,8 @@ import { PRODUCERS, SEVERITIES } from "#core/findings/filter";
 import type { SettingKey, SettingsService } from "#core/host/settings";
 import { DEFAULT_JOURNAL_POLICY } from "#core/recovery/recovery";
 
+import { automaticLocale, nativeName, shippedLocales } from "./locale";
+import { m } from "./paraglide/messages";
 import { SousOverrides } from "./sousSettings";
 import { DEFAULT_EDITOR_FONT_SIZE, EDITOR_FONT_SIZE_RANGE } from "./ui/theme";
 
@@ -97,6 +99,8 @@ export type LastLocation = LastLocations[string];
 /** The tokens the shell keeps after registering, by the name the code uses. */
 export interface ShellKeys {
   readonly theme: SettingKey<string>;
+  /** The interface language: a locale tag, or "" for the browser's best match (`locale.ts`). */
+  readonly locale: SettingKey<string>;
   /** The diff's hues: `standard` red and green, or `blue-orange` for red-green colour blindness. */
   readonly diffPalette: SettingKey<string>;
   /** What marks a removed word besides its colour: `strike`, `underline` or `none`. */
@@ -154,6 +158,7 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
   if (held !== undefined) return held;
   const keys: ShellKeys = {
     theme: settings.register("shell.theme", Schema.String, "system"),
+    locale: settings.register("ui.locale", Schema.String, ""),
     diffPalette: settings.register("review.palette", Schema.String, "standard"),
     diffRemoved: settings.register("review.removedWords", Schema.String, "strike"),
     startInUsfmMode: settings.register("shell.startInUsfmMode", Schema.Boolean, false),
@@ -207,6 +212,21 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
 };
 
 const appearanceRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
+  {
+    key: keys.locale,
+    label: "Language",
+    description:
+      "The language of Sefer's menus, buttons and messages. It does not change the text of your projects.",
+    kind: "choice",
+    group: "appearance",
+    options: [
+      {
+        value: "",
+        label: m.settings_language_automatic({ language: nativeName(automaticLocale()) }),
+      },
+      ...shippedLocales().map(({ tag, name }) => ({ value: tag, label: name })),
+    ],
+  },
   {
     key: keys.theme,
     label: "Display mode",

@@ -65,6 +65,7 @@ import { describe, remoteReasonOf } from "../../describe";
 import { t } from "../../i18n";
 import { downloadHelp, helpDownloads, removeHelp } from "../../kinds/download";
 import { KIND_ROLES, roleFor } from "../../kinds/table";
+import { uiLocale } from "../../locale";
 import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
@@ -85,7 +86,7 @@ const isBible = (resource: Resource): boolean => roleFor(resource) === "source";
 const languageName = (code: string | undefined): string | undefined => {
   if (code === undefined || code === "") return undefined;
   try {
-    return new Intl.DisplayNames(["en"], { type: "language" }).of(code) ?? code;
+    return new Intl.DisplayNames([uiLocale()], { type: "language" }).of(code) ?? code;
   } catch {
     return code;
   }

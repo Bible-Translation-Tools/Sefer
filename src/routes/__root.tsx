@@ -1,8 +1,11 @@
 import { HeadContent, Outlet, createRootRoute, useNavigate } from "@tanstack/solid-router";
-import { onCleanup } from "solid-js";
+import { Effect, Fiber, Stream } from "effect";
+import { Show, createEffect, onCleanup, type ParentProps } from "solid-js";
 
 import { t } from "#app/i18n";
-import { ProjectProvider } from "#app/ProjectContext";
+import { applyLocale, uiLocale } from "#app/locale";
+import { ProjectProvider, readyShell, useShellState } from "#app/ProjectContext";
+import { shellKeys } from "#app/settings";
 import "#app/ui/theme";
 
 const useDesignSurface = (): void => {
@@ -16,6 +19,37 @@ const useDesignSurface = (): void => {
   });
 };
 
+/**
+ * The screens, remounted when the interface language changes. Inside the
+ * project shell on purpose: the open project, its books and their undo history
+ * live in `ProjectProvider` and the services, so a language change redraws
+ * every string and keeps every edit (Will, 2026-10-22).
+ */
+function LocaleScope(props: ParentProps) {
+  const state = useShellState();
+  createEffect(
+    () => readyShell(state()),
+    (shell) => {
+      if (shell === undefined) return;
+      const { settings, runtime } = shell.services;
+      const key = shellKeys(settings).locale;
+      applyLocale(settings.get(key));
+      const watching = runtime.runFork(
+        Stream.runForEach(settings.changes(key), (next) => Effect.sync(() => applyLocale(next))),
+      );
+      // Returned, not onCleanup: a Solid 2 effect's callback has no owner.
+      return () => {
+        Effect.runFork(Fiber.interrupt(watching));
+      };
+    },
+  );
+  return (
+    <Show when={uiLocale()} keyed>
+      {props.children}
+    </Show>
+  );
+}
+
 function Root() {
   const navigate = useNavigate();
   useDesignSurface();
@@ -23,7 +57,9 @@ function Root() {
     <>
       <HeadContent />
       <ProjectProvider navigate={navigate}>
-        <Outlet />
+        <LocaleScope>
+          <Outlet />
+        </LocaleScope>
       </ProjectProvider>
     </>
   );

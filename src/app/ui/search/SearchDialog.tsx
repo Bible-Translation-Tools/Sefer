@@ -13,6 +13,7 @@ import { createReadings, type Readings } from "#core/search/reading";
 import * as Search from "#core/search/search";
 
 import { t } from "../../i18n";
+import { uiLocale } from "../../locale";
 import { useShell } from "../../ProjectContext";
 import { Dialog, IconButton, Kbd, cx } from "../primitives";
 
@@ -248,7 +249,7 @@ function Hits(props: {
           <span class="text-smallest text-on-surface-tertiary">{t("whole word")}</span>
         </Show>
         <span class="ms-auto tabular-nums text-on-surface-secondary">
-          {hits().length.toLocaleString()}
+          {hits().length.toLocaleString(uiLocale())}
         </span>
       </p>
       <Show
@@ -267,7 +268,7 @@ function Hits(props: {
           <p class="text-smallest text-on-surface-tertiary">
             {t("The first {shown} of {count}.", {
               shown: SHOWN,
-              count: hits().length.toLocaleString(),
+              count: hits().length.toLocaleString(uiLocale()),
             })}
           </p>
         </Show>

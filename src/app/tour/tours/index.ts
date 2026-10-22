@@ -6,13 +6,16 @@ import { notesTour } from "./notes";
 import { suppressionsTour } from "./suppressions";
 import { verseNumbersWorkflow } from "./verseNumbers";
 
+/**
+ * Field tours ship everywhere; internal ones (notes to the PO about a design,
+ * `audience: "internal"`) only in design builds, so production bundles none of
+ * their code or copy. No field tutorial has shipped yet (Will, 2026-10-22).
+ */
 export const TOURS: readonly Tour[] = [
-  findingsTour,
-  suppressionsTour,
-  expectTour,
-  notesTour,
   verseNumbersWorkflow,
-  ...(__SEFER_DESIGN__ ? [lineByLineTour] : []),
+  ...(__SEFER_DESIGN__
+    ? [findingsTour, suppressionsTour, expectTour, notesTour, lineByLineTour]
+    : []),
 ];
 
 export const tourById = (id: string): Tour | undefined => TOURS.find((tour) => tour.id === id);

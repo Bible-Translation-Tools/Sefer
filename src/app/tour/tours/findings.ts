@@ -22,6 +22,7 @@ const toFindings = (context: TourContext): void => {
 export const findingsTour: Tour = {
   id: "findings",
   kind: "tutorial",
+  audience: "internal",
   title: "Working through findings",
   summary: "Where Sefer lists the problems it finds, and how to step through them.",
   needsProject: true,

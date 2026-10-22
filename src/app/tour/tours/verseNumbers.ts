@@ -177,6 +177,7 @@ const settled = (context: TourContext): boolean => {
 export const verseNumbersWorkflow: Tour = {
   id: "triage-verse-numbers",
   kind: "workflow",
+  audience: "field",
   title: "Triage verse numbers",
   summary:
     "Every verse number out of order, repeated, missing or empty, against your source text, one at a time; each moves on once fixed.",
