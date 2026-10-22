@@ -199,7 +199,9 @@ Tab between cells, an empty row taken by Backspace). What opens a table menu ove
 press on a verse number opens the verse menu: a press on a cell's separator, a row handle in
 the margin, or none (a host's own UI)?</Question>
 
-<Followup id="context-request">**A context request from the editor, for the host to answer.**
+<Followup id="context-request">
+
+**A context request from the editor, for the host to answer.**
 
 > likely editor should trigger an "onContextClick" or something of that nature, and then in TR
 > can offer inserting table stuff? Or just expose marker catalog
@@ -212,7 +214,9 @@ The host draws its own menu from that and runs the choice with `book.perform`. O
 default menu ships as an opt-in recipe (`contextMenu()` in `editorFeatures`), as `verseMenu()`
 does. That is "data in package, default UI opt-in" again. Exposing the marker catalogue alone is
 not enough: the host would have to work out what applies at the caret, which the editor already
-knows.</Followup>
+knows.
+
+</Followup>
 
 ## Order
 
