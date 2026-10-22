@@ -497,8 +497,34 @@
 }
 .cm-mode-regular .usfm-cell {
   display: inline-block;
-  min-width: var(--usfm-cell-width, 0);
   padding: 0 0.5em;
+}
+/* A column's width, measured by the table layout (`recipes/tableLayout.ts`) and set
+   on its rows' lines, plus the cell's padding (the box is border-box); without it a
+   cell is as wide as its words. */
+.cm-mode-regular .usfm-cell[data-col="1"] {
+  min-width: calc(var(--usfm-col-1, 0px) + 1em);
+}
+.cm-mode-regular .usfm-cell[data-col="2"] {
+  min-width: calc(var(--usfm-col-2, 0px) + 1em);
+}
+.cm-mode-regular .usfm-cell[data-col="3"] {
+  min-width: calc(var(--usfm-col-3, 0px) + 1em);
+}
+.cm-mode-regular .usfm-cell[data-col="4"] {
+  min-width: calc(var(--usfm-col-4, 0px) + 1em);
+}
+.cm-mode-regular .usfm-cell[data-col="5"] {
+  min-width: calc(var(--usfm-col-5, 0px) + 1em);
+}
+.cm-mode-regular .usfm-cell[data-col="6"] {
+  min-width: calc(var(--usfm-col-6, 0px) + 1em);
+}
+.cm-mode-regular .usfm-cell[data-col="7"] {
+  min-width: calc(var(--usfm-col-7, 0px) + 1em);
+}
+.cm-mode-regular .usfm-cell[data-col="8"] {
+  min-width: calc(var(--usfm-col-8, 0px) + 1em);
 }
 .cm-mode-regular .usfm-cell-head {
   font-weight: 700;

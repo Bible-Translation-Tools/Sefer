@@ -16,6 +16,7 @@ export {
   editorFeatures,
   figures,
   markupChips,
+  tables,
   verseMenu,
   type ChipRenderer,
   type EditorFeature,
