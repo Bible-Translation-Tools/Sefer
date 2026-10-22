@@ -36,7 +36,7 @@ const SPANNING = kindsReaching([
   "milestone.token",
   "attrs.unruled",
   "closer.orphan",
-  "table",
+  "table.cell.marker",
   "periph.marker",
   "char.unclosed",
 ]);

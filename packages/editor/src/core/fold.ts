@@ -17,6 +17,8 @@ export interface DocLine {
   readonly notes: NoteRange[];
   readonly words: WordRange[];
   readonly milestones: { from: number; to: number; name: string }[];
+  /** A table row's cell markers (`\th1`, `\tc2`): each a column's opening. */
+  readonly cells: { from: number; to: number; name: string }[];
   /** Markup with no class of its own yet (`unruled`): each token, drawn as a chip. */
   readonly unruled: { from: number; to: number; name: string }[];
   readonly breaks: { from: number; to: number }[];

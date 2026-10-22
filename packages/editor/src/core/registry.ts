@@ -51,6 +51,7 @@ export type ClassKey =
   | "standalone"
   | "clamp.replaced"
   | "table"
+  | "cell"
   | "sidebar";
 
 export const CLASS_KEYS: readonly ClassKey[] = [
@@ -77,6 +78,7 @@ export const CLASS_KEYS: readonly ClassKey[] = [
   "standalone",
   "clamp.replaced",
   "table",
+  "cell",
   "sidebar",
 ];
 
@@ -210,7 +212,15 @@ const DEFAULT_REGISTRY: Registry = {
     elided: true,
     note: "region override, not a class",
   },
-  table: { cell: { paint: "point", mutability: "direct" }, undecided: true, note: "out of scope" },
+  table: {
+    cell: { paint: "ambient", mutability: "via-anchor" },
+    ownership: "JOIN",
+    note: "a table row (\\tr): a block that opens its own line, its marker hidden chrome",
+  },
+  cell: {
+    cell: { paint: "point", mutability: "immortal", stop: true },
+    note: "a cell's marker (\\th1 \\tc2 \\tcr3): a column separator. Immortal and a stop: a press never merges two cells; a table's shape is changed in USFM mode. Its words are content",
+  },
   sidebar: {
     cell: { paint: "ambient", mutability: "via-anchor" },
     ownership: "JOIN",
@@ -239,6 +249,8 @@ export const OWNED_SETS = {
   figure: { painting: ["figure"], hidden: ["chrome"] },
   unruled: { painting: ["unruled"], hidden: [] },
   sidebar: { painting: ["sidebar"], hidden: ["chrome"] },
+  table: { painting: ["table"], hidden: ["chrome"] },
+  cell: { painting: ["cell"], hidden: [] },
   optbreak: { painting: ["optbreak"], hidden: [] },
 } satisfies Record<string, OwnedSet>;
 

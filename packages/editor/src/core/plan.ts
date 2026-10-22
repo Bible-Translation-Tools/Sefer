@@ -68,7 +68,7 @@ export interface ResolvedSlot {
 export interface ResolvedMark {
   readonly from: number;
   readonly to: number;
-  readonly kind: "milestone" | "optbreak" | "standalone" | "unruled";
+  readonly kind: "milestone" | "optbreak" | "standalone" | "unruled" | "cell";
   readonly name: string;
   readonly form: MarkForm;
 }
@@ -244,6 +244,7 @@ class PlanLine implements ResolvedLine {
   readonly #optbreak: MarkForm;
   readonly #standaloneForm: MarkForm;
   readonly #unruledForm: MarkForm;
+  readonly #cellForm: MarkForm;
   #marks: readonly ResolvedMark[] | null = null;
 
   constructor(
@@ -256,6 +257,7 @@ class PlanLine implements ResolvedLine {
     optbreak: MarkForm,
     standaloneForm: MarkForm,
     unruledForm: MarkForm,
+    cellForm: MarkForm,
   ) {
     this.#line = line;
     this.hidden = hidden;
@@ -266,6 +268,7 @@ class PlanLine implements ResolvedLine {
     this.#optbreak = optbreak;
     this.#standaloneForm = standaloneForm;
     this.#unruledForm = unruledForm;
+    this.#cellForm = cellForm;
   }
 
   get marks(): readonly ResolvedMark[] {
@@ -274,6 +277,8 @@ class PlanLine implements ResolvedLine {
     const out: ResolvedMark[] = [];
     for (const m of line.milestones)
       out.push({ from: m.from, to: m.to, kind: "milestone", name: m.name, form: this.#milestone });
+    for (const c of line.cells)
+      out.push({ from: c.from, to: c.to, kind: "cell", name: c.name, form: this.#cellForm });
     for (const u of line.unruled)
       out.push({ from: u.from, to: u.to, kind: "unruled", name: u.name, form: this.#unruledForm });
     for (const b of line.breaks)
@@ -362,6 +367,7 @@ export function resolvePlan(structure: DocStructure, a: Assignment): DocPlan {
   const milestoneForm: MarkForm = paint("milestone") === "point" ? "point" : "hidden";
   const optbreakForm: MarkForm = paint("optbreak") === "point" ? "point" : "hidden";
   const unruledForm: MarkForm = paint("unruled") === "point" ? "point" : "hidden";
+  const cellForm: MarkForm = paint("cell") === "point" ? "point" : "hidden";
   const blankElided = paint("blank") === "none";
   const breaks = paint("newline.between") === "boundary";
   const joinWidget: WidgetKey | null =
@@ -471,6 +477,7 @@ export function resolvePlan(structure: DocStructure, a: Assignment): DocPlan {
       optbreakForm,
       standaloneForm,
       unruledForm,
+      cellForm,
     );
   };
 

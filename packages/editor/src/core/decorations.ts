@@ -139,6 +139,37 @@ class FigureWidget extends WidgetType {
 
 const FIGURE_CAPTION = Decoration.mark({ class: "usfm-fig-caption" });
 
+/**
+ * A table cell's marker: a thin column separator, none before the row's first
+ * cell. Its words are an ordinary run after it (`usfm-cell`, its column in
+ * `data-col` for a layout to align on).
+ */
+class CellWidget extends WidgetType {
+  constructor(readonly first: boolean) {
+    super();
+  }
+  eq(other: CellWidget) {
+    return other.first === this.first;
+  }
+  toDOM() {
+    const separator = document.createElement("span");
+    separator.className = this.first ? "usfm-cell-sep usfm-cell-sep-first" : "usfm-cell-sep";
+    return separator;
+  }
+  ignoreEvent() {
+    return false;
+  }
+}
+
+/** `\thr3` → a header cell, right-aligned, column 3. */
+const cellShape = (
+  spelled: string,
+): { header: boolean; align: "start" | "center" | "end"; col: number } => {
+  const m = /^\\t([hc])([rc]?)(\d*)/.exec(spelled);
+  const align = m?.[2] === "r" ? "end" : m?.[2] === "c" ? "center" : "start";
+  return { header: m?.[1] === "h", align, col: Number(m?.[3] || "1") };
+};
+
 /** A published chapter's (`\cp`) line, a caption under the chapter number. */
 const CP_LINE = Decoration.line({ class: "usfm-cp" });
 
@@ -601,7 +632,7 @@ export function buildRegular(
         hide(m.from, m.to);
         continue;
       }
-      if (m.kind === "standalone") continue;
+      if (m.kind === "standalone" || m.kind === "cell") continue;
       if (m.kind === "unruled") {
         const text = doc.slice(m.from, m.to);
         if (m.from === l.from && /^\\cp\b/.test(text))
@@ -623,6 +654,26 @@ export function buildRegular(
         ),
       });
     }
+
+    const cells = resolvedLine.marks.filter((m) => m.kind === "cell" && m.form === "point");
+    cells.forEach((cell, at) => {
+      const shape = cellShape(doc.slice(cell.from, cell.to));
+      add.push({
+        from: cell.from,
+        to: cell.to,
+        deco: Decoration.replace({ widget: new CellWidget(at === 0), ...UNIT }),
+      });
+      const contentTo = cells[at + 1]?.from ?? l.to;
+      if (contentTo > cell.to)
+        add.push({
+          from: cell.to,
+          to: contentTo,
+          deco: Decoration.mark({
+            class: `usfm-cell${shape.header ? " usfm-cell-head" : ""} usfm-cell-${shape.align}`,
+            attributes: { "data-col": String(shape.col) },
+          }),
+        });
+    });
 
     for (const wd of l.words) {
       const resolvedWord = plan.wordAt.get(wd.from);

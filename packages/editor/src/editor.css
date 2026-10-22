@@ -487,6 +487,39 @@
   background: none;
 }
 
+/* A table (\tr, \th#, \tc#): a row a line, its cells separated by a thin rule;
+   headers bold, \t?r# and \t?c# aligned. Columns line up once the table layout
+   measures them; until then a cell is as wide as its words. */
+.cm-mode-regular .usfm-tr {
+  text-indent: 0;
+  padding: 0.15em 0;
+  border-bottom: 1px solid var(--surface-border);
+}
+.cm-mode-regular .usfm-cell {
+  display: inline-block;
+  min-width: var(--usfm-cell-width, 0);
+  padding: 0 0.5em;
+}
+.cm-mode-regular .usfm-cell-head {
+  font-weight: 700;
+}
+.cm-mode-regular .usfm-cell-center {
+  text-align: center;
+}
+.cm-mode-regular .usfm-cell-end {
+  text-align: end;
+}
+.cm-mode-regular .usfm-cell-sep {
+  display: inline-block;
+  width: 1px;
+  height: 1.1em;
+  vertical-align: text-bottom;
+  background: var(--surface-border);
+}
+.cm-mode-regular .usfm-cell-sep-first {
+  width: 0;
+}
+
 /* A page break: a thin rule across the line, its label on it. */
 .cm-mode-regular .usfm-chip-pb {
   display: inline-block;

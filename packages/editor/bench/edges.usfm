@@ -36,6 +36,16 @@
 \p
 \v 1 A short chapter, one paragraph,
 \v 2 two verses.
+\s1 A table
+\p
+\v 3 The census of the tribes:
+\tr \th1 Tribe \thr2 Number
+\tr \tc1 Reuben \tcr2 46,500
+\tr \tc1 Simeon \tcr2 59,300
+\tr \tc1 Gad \tcr2 45,650
+\tr \tc1 Judah, the largest \tcr2 74,600
+\p
+\v 4 And the counting ended.
 \c 3
 \s1 A heading before anything else
 \m

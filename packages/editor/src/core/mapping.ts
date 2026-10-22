@@ -215,9 +215,16 @@ const TOKEN_ROWS: readonly Row<TokenShape>[] = [
   {
     id: "table",
     kinds: MARKER_KINDS,
-    when: (t) => t.markerKind === MarkerKind.TableRow || t.markerKind === MarkerKind.TableCell,
-    verdict: cls("unruled"),
-    set: "unruled",
+    when: (t) => t.markerKind === MarkerKind.TableRow,
+    verdict: cls("chrome"),
+    set: "table",
+  },
+  {
+    id: "table.cell.marker",
+    kinds: MARKER_KINDS,
+    when: (t) => t.markerKind === MarkerKind.TableCell,
+    verdict: cls("cell"),
+    set: "cell",
   },
   {
     id: "sidebar",
@@ -377,20 +384,16 @@ const NODE_ROWS: readonly Row<NodeShape>[] = [
   {
     id: "table.row",
     when: (n) => n.markerKind === MarkerKind.TableRow,
-    verdict: unmapped(
-      "table",
-      "PROPERTIES §8.6 — no ownership bit; the row is a block extent and paints as one",
-    ),
+    verdict: cls("table"),
+    set: "table",
     line: true,
     block: true,
   },
   {
     id: "table.cell",
     when: (n) => n.markerKind === MarkerKind.TableCell,
-    verdict: unmapped(
-      "table",
-      "PROPERTIES §8.6 — no ownership bit; a cell nests inside its row and opens no block",
-    ),
+    verdict: cls("cell"),
+    set: "cell",
     line: true,
   },
   {

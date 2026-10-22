@@ -59,6 +59,7 @@ class Line implements DocLine {
   #breaks = NO_BREAKS;
   #standalones = NO_STANDALONES;
   #unruled = NO_UNRULED;
+  #cells = NO_UNRULED;
 
   constructor(fold: Fold, n: number, from: number, to: number) {
     this.#f = fold;
@@ -146,6 +147,9 @@ class Line implements DocLine {
           to: last === i ? cst.payloadEnd(i) : endAt[last],
           name: spellingAt(cst, i, f.doc),
         });
+      } else if (row.set === "cell") {
+        if (this.#cells === NO_UNRULED) this.#cells = [];
+        this.#cells.push({ from, to, name: spellingAt(cst, i, f.doc) });
       } else if (row.set === "unruled") {
         // A milestone's own span already holds its attribute list.
         const milestone = this.#milestones.at(-1);
@@ -186,6 +190,10 @@ class Line implements DocLine {
   get num(): string | null {
     this.#open();
     return this.#num;
+  }
+  get cells(): { from: number; to: number; name: string }[] {
+    this.#walk();
+    return this.#cells;
   }
   get unruled(): { from: number; to: number; name: string }[] {
     this.#walk();
@@ -283,6 +291,7 @@ export const bindsToItsLine = (line: DocLine): boolean =>
   line.cls === "blank" || line.cls.startsWith("block.");
 
 export const opensAParagraph = (line: DocLine): boolean =>
-  line.marker !== null && (line.cls === "block.para" || line.cls === "blank");
+  line.marker !== null &&
+  (line.cls === "block.para" || line.cls === "blank" || line.cls === "table");
 
 export const paintsItsOwnLine = (line: DocLine): boolean => paintsItsOwnLineAmbient(line.cls);
