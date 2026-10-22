@@ -115,16 +115,12 @@ export const lineByLineTour: Tour = {
         body: "Each verse starts a new line, however the file is laid out: one verse per line already, or several verses run together on one line. Nothing is written to the file to do it.",
         notes: [
           {
-            label: "Poetry",
-            text: "A verse split over poetry lines (\\q, \\q2) is drawn as one line, with a faint / where each poetry line begins.",
+            label: "Poetry and paragraphs",
+            text: "Poetry already in the file shows a faint / where each poetry line breaks, to give an idea of its shape. Paragraphs cannot show here at all: this view promises one verse, one line, and a paragraph break would split it. Both stay in the file exactly as they are.",
           },
           {
             label: "Headings",
-            text: "The grey capitals are section headings (\\s1 in the file). Few of our projects have them; they stand here for everything that is not verse text, and how this view should treat it.",
-          },
-          {
-            label: "Headings and paragraphs",
-            text: "A section heading shows as a quiet label you cannot edit here. Paragraph and poetry markers are not shown at all, but stay exactly as they are in the file. Showing them, or giving each verse its own block, are the other ways we could go.",
+            text: "The grey capitals are section headings (\\s1 in the file). Few of our projects have them. They show one way this view can still show what is in the file without making it the focus of editing here: you see a heading, and change it in Reading or USFM.",
           },
         ],
       },
@@ -135,12 +131,12 @@ export const lineByLineTour: Tour = {
         anchor: "[data-testid=editor-host]",
         side: "right",
         title: "Enter: the next verse",
-        body: "Enter never breaks a line here. It takes you to the start of the next verse, ready to type, which is what you want when you copy a passage verse by verse.",
+        body: "Pressing the Enter key on your keyboard never starts a new line here. It takes you to the start of the next verse, ready to type, which is what you want when you copy a passage verse by verse.",
         try: "Click in a verse, then press Enter.",
         notes: [
           {
             label: "Why not a new line",
-            text: "A line break means nothing in USFM, and in this view a new line is a new verse. So Enter moves instead of adding anything.",
+            text: "A line break (what the Enter key on your keyboard makes) means nothing in USFM, and in this view a new line is a new verse. So Enter moves you instead of adding anything.",
           },
         ],
       },
@@ -186,7 +182,7 @@ export const lineByLineTour: Tour = {
           },
           {
             label: "Paste and select",
-            text: "A paste with line breaks comes in as one line, so it can never make a verse. A selection stays inside the verse it starts in.",
+            text: "Text you paste that has line breaks in it (copied across several lines) comes in as one line, so it can never make a verse. A selection stays inside the verse it starts in.",
           },
         ],
       },
