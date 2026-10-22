@@ -8,14 +8,7 @@
   <body>
     <header class="bar">
       <strong>Editor bench</strong>
-      <label>
-        Text
-        <select id="doc">
-          <option value="catalogue">Every marker</option>
-          <option value="edges">Layout edges</option>
-          <option value="file">Open a file…</option>
-        </select>
-      </label>
+      <nav id="scenarios" class="tabs" aria-label="Scenarios"></nav>
       <input id="file" type="file" accept=".usfm,.sfm,.txt" hidden />
       <label>
         Mode
@@ -29,10 +22,15 @@
       <label><input type="checkbox" data-preset="lock-designators" /> lock designators</label>
       <label><input type="checkbox" data-preset="lock-structure" /> lock structure</label>
       <span id="status" class="status"></span>
+      <p id="note" class="note"></p>
     </header>
-    <main class="panes">
+    <main id="panes" class="panes">
+      <section id="reference-pane" class="pane" hidden>
+        <h2 id="reference-title">Reference</h2>
+        <div id="reference" class="host"></div>
+      </section>
       <section class="pane">
-        <h2>Editor</h2>
+        <h2 id="editor-title">Editor</h2>
         <div id="editor" class="host"></div>
       </section>
       <section class="pane">
