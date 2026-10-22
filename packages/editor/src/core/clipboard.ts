@@ -297,7 +297,8 @@ export const clipboardHandlers = EditorView.domEventHandlers({
 
 function write(event: ClipboardEvent, view: EditorView): boolean {
   const data = event.clipboardData;
-  if (data === null) return false;
+  // USFM mode shows the text as it is: copy is CodeMirror's own, the raw selection.
+  if (data === null || !isVisual(view.state)) return false;
   const copied = copiedSelection(view.state);
   if (copied === null) return false;
   event.preventDefault();
@@ -472,14 +473,15 @@ const spaced = (state: EditorState, at: number, words: string): string =>
 
 /**
  * Paste prefers Sefer's own flavour. In Reading it goes through the paste
- * rules (`pasteChange`); in USFM mode the fragment lands as written; line by
- * line takes its verse words only (`wordsOf`). Anything else falls through
+ * rules (`pasteChange`); line by line takes its verse words only (`wordsOf`);
+ * USFM mode is CodeMirror's own paste of the text. Anything else falls through
  * to CodeMirror, and every paste is still one `input.paste` transaction for
  * the phases to judge.
  */
 function paste(event: ClipboardEvent, view: EditorView): boolean {
   const data = event.clipboardData;
-  if (data === null || view.state.readOnly) return false;
+  // USFM mode pastes the text as it is: CodeMirror's own paste of `text/plain`.
+  if (data === null || view.state.readOnly || !isVisual(view.state)) return false;
   const copied = readUsfm(data);
   if (copied === null) return false;
   event.preventDefault();
@@ -490,9 +492,7 @@ function paste(event: ClipboardEvent, view: EditorView): boolean {
         to: range.to,
         insert: spaced(view.state, range.from, wordsOf(copied.usfm)),
       }
-    : isVisual(view.state)
-      ? pasteChange(view.state, range.from, range.to, copied)
-      : { from: range.from, to: range.to, insert: copied.usfm };
+    : pasteChange(view.state, range.from, range.to, copied);
   view.dispatch({
     changes: change,
     selection: { anchor: change.from + change.insert.length },
