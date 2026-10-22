@@ -189,12 +189,12 @@ Found on the bench, 2026-10-22: line by line lays its lines out on its own path
 into the verse they sit in ("…tribes: Tribe | Number Reuben | 46,500 …"); a sidebar shows
 its `\p` and `\esbe` raw; a figure loses its picture and its caption runs into what follows.
 
-<Question id="lbl-containers">In line by line, should a table, a sidebar and a figure keep
+<Question id="lbl-containers" answer="Yes, as proposed (Will, 2026-10-22). Built: `keptAsReading` in `core/verseLines.ts` names a table's rows and a sidebar with its contents; line by line draws them as Reading does and its `labelsStayPut` filter refuses edits in them. A figure needed nothing: it is a point inside its verse.">In line by line, should a table, a sidebar and a figure keep
 their own lines and draw as in Reading, read-only there as headings are ("changed in Reading
 or USFM"), or be editable? Proposed: own lines, drawn as in Reading, read-only; line by line
 stays a verse-by-verse drafting surface, and its Tab keeps meaning "next empty verse".</Question>
 
-<Question id="table-menu">Table commands are built (`core/tableCommands.ts`: rows and columns,
+<Question id="table-menu" answer="Deferred (Will, 2026-10-22): the commands come first, as named actions (`table.rowAbove` … `table.deleteColumn`, run through `book.perform`) in Sefer's command palette; a click target later.">Table commands are built (`core/tableCommands.ts`: rows and columns,
 Tab between cells, an empty row taken by Backspace). What opens a table menu over them, as a
 press on a verse number opens the verse menu: a press on a cell's separator, a row handle in
 the margin, or none (a host's own UI)?</Question>
