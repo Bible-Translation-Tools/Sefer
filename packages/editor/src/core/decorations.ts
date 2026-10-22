@@ -300,7 +300,7 @@ function windowLines(
 
 type TokenRows = NonNullable<DocStructure["analysis"]>["dish"]["tokens"]["rows"];
 
-function forTokensIn(
+export function forTokensIn(
   rows: TokenRows,
   windowRange: { from: number; to: number } | null,
   visit: (kindBits: number, markerIdx: number, from: number, to: number) => void,

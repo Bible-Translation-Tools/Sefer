@@ -20,6 +20,7 @@ import { annotateOpen } from "./core/instrument";
 import { trusted } from "./core/kernel";
 import { keystrokeMeter } from "./core/meter";
 import { span } from "./core/timing";
+import { type UnsupportedMarkup, unsupportedMarkup } from "./core/unsupported";
 import { addVerseAfter, removeVerseMarker, renumberVerse, verseAt } from "./core/verseCommands";
 import type { EditorFeature } from "./features";
 import { handleFor, markMoved, type EditorHandle } from "./handle";
@@ -112,6 +113,14 @@ export interface BookEditorMount extends EditorHandle {
   removeVerseMarker(offset: number): boolean;
   /** Adds an empty verse after the one at an offset, numbered one past it, with the caret in it. */
   addVerseAfter(offset: number): boolean;
+  /**
+   * Markup Reading has no drawing for in a range (the whole book without one):
+   * what the chips feature draws, for a host that draws it its own way.
+   */
+  unsupportedMarkup(range?: {
+    readonly from: number;
+    readonly to: number;
+  }): readonly UnsupportedMarkup[];
   /** The scripture address an offset is in (a verse, a heading's unit, the intro). */
   addressAt(offset: number): Address | undefined;
   /** Where the caret is, as an address. */
@@ -400,6 +409,8 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
         userEvent: "input.attributes",
       });
     },
+    unsupportedMarkup: (range?: { readonly from: number; readonly to: number }) =>
+      unsupportedMarkup(created.state, range?.from ?? 0, range?.to ?? created.state.doc.length),
     renumberVerse: (offset: number, number: string) =>
       run(renumberVerse(created.state, verseAt(created.state, offset), number)),
     removeVerseMarker: (offset: number) =>

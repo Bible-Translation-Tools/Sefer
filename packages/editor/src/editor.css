@@ -381,6 +381,20 @@
 }
 
 .cm-mode-regular .usfm-num,
+/* Markup Reading has no drawing for yet (`recipes/markupChips.ts`): a label, not a backslash. */
+.cm-mode-regular .usfm-chip {
+  display: inline-block;
+  text-indent: 0;
+  font: 500 0.62em/1.2 var(--font-ui);
+  color: var(--on-surface-tertiary);
+  border: 1px dashed var(--surface-border);
+  border-radius: 3px;
+  padding: 0 3px;
+  margin: 0 0.15em;
+  vertical-align: 0.15em;
+  user-select: none;
+}
+
 .cm-mode-regular .usfm-verse-pip {
   unicode-bidi: isolate;
   direction: ltr;

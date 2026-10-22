@@ -11,7 +11,15 @@ export { seatBook } from "./seat";
 export { type Following } from "./funnel";
 export { type EditorAction } from "./core/actions";
 export { type Attribute, type AttributedMarkup } from "./core/attributes";
-export { attributePopover, editorFeatures, verseMenu, type EditorFeature } from "./features";
+export {
+  attributePopover,
+  editorFeatures,
+  markupChips,
+  verseMenu,
+  type ChipRenderer,
+  type EditorFeature,
+} from "./features";
+export { type UnsupportedMarkup } from "./core/unsupported";
 
 export {
   mountBookEditor,

@@ -1,6 +1,7 @@
 import type { Extension } from "@codemirror/state";
 
 import { attributePopover } from "./recipes/attributePopover";
+import { type ChipRenderer, markupChips } from "./recipes/markupChips";
 import { verseMenu } from "./recipes/verseMenu";
 
 /**
@@ -12,7 +13,11 @@ import { verseMenu } from "./recipes/verseMenu";
  */
 export type EditorFeature = Extension;
 
-export { attributePopover, verseMenu };
+export { attributePopover, markupChips, verseMenu, type ChipRenderer };
 
 /** Every feature, as Sefer mounts the editor: CodeMirror's `basicSetup`, for this editor. */
-export const editorFeatures = (): readonly EditorFeature[] => [verseMenu(), attributePopover()];
+export const editorFeatures = (): readonly EditorFeature[] => [
+  verseMenu(),
+  attributePopover(),
+  markupChips(),
+];
