@@ -1,0 +1,68 @@
+---
+id: 3c27978f-d353-4d34-a81b-e79c20a575c0
+title: "Proofreading settings by check, and a finding's link to its check"
+kind: plan
+status: planned
+created: 2026-10-22
+updated: 2026-10-22
+sha: 1c4025da
+priority: 3
+tags: [findings]
+---
+
+
+Scripture Kitchen v0.1.14 (on master since 07eadb17) gives Sefer two things to use here:
+
+- Every `SOUS_SETTINGS` entry has `check: SousCheck | "general"`: the check it tunes. The list
+  already runs check by check (each check's switch, then its sub-switches, then its thresholds,
+  `general` last), and no setting key changed, so saved settings carry over.
+- `checkOf(code)` gives a finding code's `SousCheck` (`null` for hygiene), so a finding can link
+  to the settings that tune it.
+
+The third, the attribute table (`MARKER_ATTRIBUTES`, `attrResolution`), is done: the attribute
+popover reads it (0ec0237d, the other session).
+
+> For sure what to change to group config that changes together to present together, but
+> otherwise not urgent (Will, 2026-10-22)
+
+## Today
+
+<Source id="today" path="src/app/ui/SousSettingsPanel.tsx" lines="104-150" />
+
+The panel sections by `group` (`SOUS_GROUPS`: what KIND of setting it is), so a check's switch
+sits in one section and its thresholds in another. Turning a check off leaves its thresholds
+looking live. The same panel is mounted in Settings and inside the Findings panel.
+
+## The change
+
+1. **One section per check, in `SOUS_SETTINGS` order.** The check's own switch is the section's
+   header toggle; its sub-switches and thresholds sit under it and are disabled while the check
+   is off. `general` settings come last in their own section ("Shared by several checks"), which
+   is where `word_support_floor` now lives (it tunes Casing, WordLength and LetterRun).
+2. **Check names and one-line descriptions are Sefer's**, a small table keyed by `SousCheck`
+   (`Casing` → "Capital letters", `Doubled` → "Repeated words"…), in `src/app/sousSettings.ts`
+   beside the existing labels. A check kitchen adds later shows its id until it gets a row.
+3. **Each section gets an anchor**, `data-sous-check={check}`, and the Settings route accepts
+   `?check=<SousCheck>`: it scrolls to that section and highlights it briefly.
+4. **A finding links to its check.** Wherever a Sous finding shows (the Findings panel row, the
+   inline popover), a **Tune this check** action goes to `?check=${checkOf(code)}`. No action
+   when `checkOf` is `null` (hygiene: a control character is a defect, not a threshold).
+   `code` is Sefer's `sous.<lane>[.<class>]`; strip the `sous.` prefix before `checkOf`.
+5. `SOUS_GROUPS` and `group` stay only as a small label on a row (switch / count / share) if
+   they still help; otherwise they go.
+
+<Files id="files">
+```
+~ src/app/ui/SousSettingsPanel.tsx     -- sections by check; header switch disables the rest
+~ src/app/sousSettings.ts              -- check titles and descriptions
+~ src/routes/_app/project/$slug/settings.tsx  -- ?check= scrolls to a section
+~ src/app/ui/panels/FindingsPanel.tsx  -- "Tune this check" on a Sous row
+~ packages/editor or src/app/ui/BookEditor.tsx -- the same action in the inline popover, if the host can add actions there
+```
+</Files>
+
+<Question id="popover">The inline popover's actions are the editor package's (`setHostDiagnostics` carries none today). Add a host action to a host diagnostic, or keep "Tune this check" in the Findings panel only for now?</Question>
+
+<Question id="names">Who words the check names: Sefer (proposed), or should kitchen ship a title per `SousCheck` beside its English catalog?</Question>
+
+<Followup id="later">Not urgent (Will, 2026-10-22); after the tutorials.</Followup>
