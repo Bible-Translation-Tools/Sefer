@@ -192,27 +192,37 @@ function verseMenu(view: EditorView, k: number): { dom: HTMLElement } {
   const close = (): void => closeMenu(view);
   const edit = (spec: TransactionSpec): void => {
     view.dispatch({ ...spec, annotations: trusted.of("line-by-line"), scrollIntoView: true });
-    view.dispatch({ effects: openVerseMenu.of(null) });
+    close();
     view.focus();
   };
   const verse = structureAt(view.state).verses[k];
 
   const dom = document.createElement("div");
-  dom.className = "cm-tooltip-lint usfm-verse-menu";
-  for (const { diagnostic, from, to } of findingsOnNumber(view.state, verse))
-    dom.append(findingRow(view, diagnostic, from, to));
+  dom.className = "usfm-verse-menu";
+  for (const { diagnostic, from, to } of findingsOnNumber(view.state, verse)) {
+    const said = document.createElement("div");
+    said.className = `usfm-verse-finding usfm-verse-finding-${diagnostic.severity}`;
+    said.textContent = diagnostic.message;
+    dom.append(said);
+    for (const action of diagnostic.actions ?? [])
+      dom.append(
+        button(sentenceCase(action.name.replace(/^Fix:\s*/, "")), () => {
+          action.apply(view, from, to);
+          close();
+          view.focus();
+        }),
+      );
+  }
 
-  const section = document.createElement("div");
-  section.className = "usfm-verse-actions";
   const form = document.createElement("form");
+  const label = document.createElement("label");
+  label.textContent = "Change number";
   const input = document.createElement("input");
   input.value = verse.num ?? "";
   input.size = 4;
   input.setAttribute("aria-label", "Verse number");
-  form.append(
-    input,
-    button("Change number", () => form.requestSubmit()),
-  );
+  label.append(input);
+  form.append(label);
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     const value = input.value.trim();
@@ -243,41 +253,12 @@ function verseMenu(view: EditorView, k: number): { dom: HTMLElement } {
       selection: EditorSelection.cursor(at + insert.length),
     });
   });
-  section.append(form, remove, add);
-  dom.append(section);
+  dom.append(form, remove, add);
   queueMicrotask(() => input.select());
   return { dom };
 }
 
-/** One finding as the lint popover draws it: the message, where it came from, and its fixes. */
-function findingRow(
-  view: EditorView,
-  diagnostic: Diagnostic,
-  from: number,
-  to: number,
-): HTMLElement {
-  const row = document.createElement("div");
-  row.className = `cm-diagnostic cm-diagnostic-${diagnostic.severity}`;
-  const text = document.createElement("span");
-  text.className = "cm-diagnosticText";
-  text.textContent = diagnostic.message;
-  row.append(text);
-  for (const action of diagnostic.actions ?? []) {
-    const fix = button(action.name, () => {
-      action.apply(view, from, to);
-      closeMenu(view);
-    });
-    fix.className = "cm-diagnosticAction";
-    row.append(fix);
-  }
-  if (diagnostic.source !== undefined) {
-    const source = document.createElement("div");
-    source.className = "cm-diagnosticSource";
-    source.textContent = diagnostic.source;
-    row.append(source);
-  }
-  return row;
-}
+const sentenceCase = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
 
 const closeMenu = (view: EditorView): void => view.dispatch({ effects: openVerseMenu.of(null) });
 
@@ -359,8 +340,14 @@ const typeIntoEmptyVerse = EditorView.inputHandler.of((view, from, to, text) => 
   return true;
 });
 
+/** `cm-line-by-line` on the editor, for what the stylesheet does only in this view. */
+const lineByLineClass = EditorView.editorAttributes.of((view) =>
+  isVerseLines(view.state) ? { class: "cm-line-by-line" } : null,
+);
+
 /** Everything line-by-line adds besides its keys and its layout. */
 export const verseLineBehaviour: Extension = [
+  lineByLineClass,
   typeIntoEmptyVerse,
   labelsStayPut,
   pasteAsOneLine,

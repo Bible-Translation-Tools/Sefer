@@ -646,31 +646,30 @@
   opacity: 0.6;
 }
 
-.cm-host .cm-editor .usfm-verse-actions {
+.cm-host .cm-editor .usfm-verse-menu {
   display: flex;
   flex-direction: column;
-  padding: 6px;
+  min-width: 13rem;
+  max-width: 22rem;
+  padding: 4px;
 }
-.cm-host .cm-editor .cm-diagnostic + .usfm-verse-actions {
-  border-top: 1px solid var(--surface-border);
+.cm-host .cm-editor .usfm-verse-finding {
+  padding: 6px 8px 4px;
+  font: 500 12px/1.45 var(--font-ui);
 }
-.cm-host .cm-editor .usfm-verse-actions form {
+.cm-host .cm-editor .usfm-verse-finding-warning {
+  color: var(--on-surface-warning);
+}
+.cm-host .cm-editor .usfm-verse-finding-error {
+  color: var(--on-surface-error);
+}
+.cm-host .cm-editor .usfm-verse-menu button,
+.cm-host .cm-editor .usfm-verse-menu label {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 2px 6px 4px;
-}
-.cm-host .cm-editor .usfm-verse-actions input {
-  width: 4.5em;
-  padding: 2px 6px;
-  font: 500 12px/1.5 var(--font-ui);
-  color: var(--on-surface-primary);
-  background: var(--surface-secondary);
-  border: 1px solid var(--surface-border);
-  border-radius: 6px;
-}
-.cm-host .cm-editor .usfm-verse-actions button {
-  padding: 4px 6px;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 8px;
   font: 400 12px/1.5 var(--font-ui);
   color: var(--on-surface-primary);
   text-align: start;
@@ -679,8 +678,31 @@
   border-radius: 6px;
   cursor: pointer;
 }
-.cm-host .cm-editor .usfm-verse-actions button:hover {
+.cm-host .cm-editor .usfm-verse-menu button:hover,
+.cm-host .cm-editor .usfm-verse-menu label:hover {
   background: var(--surface-secondary);
+}
+.cm-host .cm-editor .usfm-verse-finding + button {
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+.cm-host .cm-editor .usfm-verse-finding ~ form {
+  margin-top: 0;
+  padding-top: 4px;
+  border-top: 1px solid var(--surface-border);
+}
+.cm-host .cm-editor .usfm-verse-menu input {
+  width: 4.5em;
+  padding: 1px 6px;
+  font: 500 12px/1.5 var(--font-ui);
+  color: var(--on-surface-primary);
+  background: var(--surface-secondary);
+  border: 1px solid var(--surface-border);
+  border-radius: 6px;
+}
+.cm-host .cm-editor.cm-line-by-line .usfm-num-v,
+.cm-host .cm-editor.cm-line-by-line .usfm-slot-v {
+  cursor: pointer;
 }
 
 .cm-mode-regular .usfm-brk.usfm-verse-break {
@@ -932,11 +954,17 @@
 .cm-host .cm-editor .cm-lintPoint:has(~ .usfm-slot) {
   display: none;
 }
-/* A finding on a verse number: the number keeps its colour and the margin's mark says it. */
+/* A finding on a verse number: no fill or underline; the number itself takes the severity's colour. */
 .cm-host .cm-editor .cm-lintRange:has(> .usfm-num) {
   background: none;
   box-shadow: none;
   text-decoration: none;
+}
+.cm-host .cm-editor .cm-lintRange-warning > .usfm-num {
+  color: var(--on-surface-warning);
+}
+.cm-host .cm-editor .cm-lintRange-error > .usfm-num {
+  color: var(--on-surface-error);
 }
 .cm-host .cm-editor .cm-lintRange-error {
   text-decoration-color: var(--on-surface-error);

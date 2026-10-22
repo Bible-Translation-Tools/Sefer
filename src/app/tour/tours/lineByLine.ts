@@ -119,6 +119,10 @@ export const lineByLineTour: Tour = {
             text: "A verse split over poetry lines (\\q, \\q2) is drawn as one line, with a faint / where each poetry line begins.",
           },
           {
+            label: "Headings",
+            text: "The grey capitals are section headings (\\s1 in the file). Few of our projects have them; they stand here for everything that is not verse text, and how this view should treat it.",
+          },
+          {
             label: "Headings and paragraphs",
             text: "A section heading shows as a quiet label you cannot edit here. Paragraph and poetry markers are not shown at all, but stay exactly as they are in the file. Showing them, or giving each verse its own block, are the other ways we could go.",
           },
