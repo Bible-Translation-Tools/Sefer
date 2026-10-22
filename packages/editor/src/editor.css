@@ -448,8 +448,10 @@
 }
 
 /* A sidebar (\esb … \esbe): a box around its own blocks, which keep their classes. */
+/* Translucent: CodeMirror draws the selection on a layer behind the lines, and an opaque
+   line background would hide it. */
 .cm-mode-regular .usfm-sidebar {
-  background: var(--surface-secondary);
+  background: color-mix(in srgb, var(--surface-secondary) 55%, transparent);
   border-inline: 1px solid var(--surface-border);
   padding-inline: 0.8em;
 }
