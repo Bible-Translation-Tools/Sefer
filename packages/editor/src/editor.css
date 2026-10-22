@@ -613,6 +613,8 @@
 
 .cm-mode-regular .usfm-pip {
   display: inline-block;
+  /* An inline block inherits its paragraph's first-line indent and indents its own glyph. */
+  text-indent: 0;
   font: 600 0.58em/1 var(--font-ui);
   color: var(--editor-link-x);
   background: var(--editor-pip-bg);
