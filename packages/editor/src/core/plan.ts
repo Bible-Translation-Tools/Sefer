@@ -67,7 +67,7 @@ export interface ResolvedSlot {
 export interface ResolvedMark {
   readonly from: number;
   readonly to: number;
-  readonly kind: "milestone" | "optbreak" | "standalone";
+  readonly kind: "milestone" | "optbreak" | "standalone" | "unruled";
   readonly name: string;
   readonly form: MarkForm;
 }
@@ -240,6 +240,7 @@ class PlanLine implements ResolvedLine {
   readonly #milestone: MarkForm;
   readonly #optbreak: MarkForm;
   readonly #standaloneForm: MarkForm;
+  readonly #unruledForm: MarkForm;
   #marks: readonly ResolvedMark[] | null = null;
 
   constructor(
@@ -251,6 +252,7 @@ class PlanLine implements ResolvedLine {
     milestone: MarkForm,
     optbreak: MarkForm,
     standaloneForm: MarkForm,
+    unruledForm: MarkForm,
   ) {
     this.#line = line;
     this.hidden = hidden;
@@ -260,6 +262,7 @@ class PlanLine implements ResolvedLine {
     this.#milestone = milestone;
     this.#optbreak = optbreak;
     this.#standaloneForm = standaloneForm;
+    this.#unruledForm = unruledForm;
   }
 
   get marks(): readonly ResolvedMark[] {
@@ -268,6 +271,8 @@ class PlanLine implements ResolvedLine {
     const out: ResolvedMark[] = [];
     for (const m of line.milestones)
       out.push({ from: m.from, to: m.to, kind: "milestone", name: m.name, form: this.#milestone });
+    for (const u of line.unruled)
+      out.push({ from: u.from, to: u.to, kind: "unruled", name: u.name, form: this.#unruledForm });
     for (const b of line.breaks)
       out.push({ from: b.from, to: b.to, kind: "optbreak", name: "", form: this.#optbreak });
     for (const m of line.standalones)
@@ -353,6 +358,7 @@ export function resolvePlan(structure: DocStructure, a: Assignment): DocPlan {
   const standaloneForm: MarkForm = paint("standalone") === "point" ? "point" : "hidden";
   const milestoneForm: MarkForm = paint("milestone") === "point" ? "point" : "hidden";
   const optbreakForm: MarkForm = paint("optbreak") === "point" ? "point" : "hidden";
+  const unruledForm: MarkForm = paint("unruled") === "point" ? "point" : "hidden";
   const blankElided = paint("blank") === "none";
   const breaks = paint("newline.between") === "boundary";
   const joinWidget: WidgetKey | null =
@@ -461,6 +467,7 @@ export function resolvePlan(structure: DocStructure, a: Assignment): DocPlan {
       milestoneForm,
       optbreakForm,
       standaloneForm,
+      unruledForm,
     );
   };
 

@@ -44,6 +44,7 @@ export type ClassKey =
   | "blank"
   | "milestone"
   | "figure"
+  | "unruled"
   | "note.caller"
   | "note.markup"
   | "note.body"
@@ -69,6 +70,7 @@ export const CLASS_KEYS: readonly ClassKey[] = [
   "blank",
   "milestone",
   "figure",
+  "unruled",
   "note.caller",
   "note.markup",
   "note.body",
@@ -172,6 +174,10 @@ const DEFAULT_REGISTRY: Registry = {
     note: "\\b — its blank line IS its paint; no interior stop, C2-empty consumes it whole",
   },
   milestone: { cell: { paint: "point", mutability: "via-anchor" }, note: "pips" },
+  unruled: {
+    cell: { paint: "point", mutability: "via-anchor" },
+    note: "markup with no class of its own yet (a table's cell markers, \\pb, \\cat, a stray closer or attribute list): one point, a chip, deleted whole; edited in USFM mode",
+  },
   figure: {
     cell: { paint: "point", mutability: "via-anchor" },
     note: "\\fig's marker as one point, the picture; its caption is content, its attributes and closer hidden chrome. The anchor of the whole figure, as a note's caller is of its note",
@@ -231,6 +237,7 @@ export const OWNED_SETS = {
   join: { painting: ["newline.inside"], hidden: ["standalone"] },
   milestone: { painting: ["milestone"], hidden: [] },
   figure: { painting: ["figure"], hidden: ["chrome"] },
+  unruled: { painting: ["unruled"], hidden: [] },
   optbreak: { painting: ["optbreak"], hidden: [] },
 } satisfies Record<string, OwnedSet>;
 

@@ -15,6 +15,7 @@ import { type ClassKey, paintsItsOwnLineAmbient } from "./registry";
 const NO_NOTES: NoteRange[] = [];
 const NO_WORDS: WordRange[] = [];
 const NO_MILESTONES: { from: number; to: number; name: string }[] = [];
+const NO_UNRULED: { from: number; to: number; name: string }[] = [];
 const NO_BREAKS: { from: number; to: number }[] = [];
 const NO_STANDALONES: { from: number; to: number }[] = [];
 
@@ -57,6 +58,7 @@ class Line implements DocLine {
   #milestones = NO_MILESTONES;
   #breaks = NO_BREAKS;
   #standalones = NO_STANDALONES;
+  #unruled = NO_UNRULED;
 
   constructor(fold: Fold, n: number, from: number, to: number) {
     this.#f = fold;
@@ -144,6 +146,12 @@ class Line implements DocLine {
           to: last === i ? cst.payloadEnd(i) : endAt[last],
           name: spellingAt(cst, i, f.doc),
         });
+      } else if (row.set === "unruled") {
+        // A milestone's own span already holds its attribute list.
+        const milestone = this.#milestones.at(-1);
+        if (milestone !== undefined && from >= milestone.from && to <= milestone.to) continue;
+        if (this.#unruled === NO_UNRULED) this.#unruled = [];
+        this.#unruled.push({ from, to, name: spellingAt(cst, i, f.doc) });
       } else if (row.set === "standalone" && row.line !== true) {
         if (this.#standalones === NO_STANDALONES) this.#standalones = [];
         this.#standalones.push({ from, to });
@@ -178,6 +186,10 @@ class Line implements DocLine {
   get num(): string | null {
     this.#open();
     return this.#num;
+  }
+  get unruled(): { from: number; to: number; name: string }[] {
+    this.#walk();
+    return this.#unruled;
   }
   get milestones(): { from: number; to: number; name: string }[] {
     this.#walk();

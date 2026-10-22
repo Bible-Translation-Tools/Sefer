@@ -1,24 +1,22 @@
-import type { EditorState } from "@codemirror/state";
-import { MARKERS, TOKEN, TOKEN_SPELLING_BIT } from "@sefer/text/engine/analysis";
+import { type EditorState, Facet } from "@codemirror/state";
+import type { EditorView } from "@codemirror/view";
 
-import { forTokensIn } from "./decorations";
-import { docText, structureAt } from "./docStructure";
-import { decoField } from "./editorState";
+import { docText, lineIndexAt, structureAt } from "./docStructure";
 import { isVisual } from "./kernel";
 import { markerWords } from "./words";
 
 /**
- * Markup Reading has no drawing for yet: a marker, closer or attribute list
- * that no decoration hides or replaces, so it would show as raw USFM. The
- * DATA half of the chips (`recipes/markupChips.ts`): a host can read it and
- * draw it its own way.
+ * Markup with no class of its own yet, the registry's `unruled` class: a
+ * table's cell markers, `\pb`, `\cat`, a stray closer or attribute list. One
+ * point each, a chip, deleted whole, edited in USFM mode. The DATA half: a
+ * host can read it and draw it its own way.
  */
 export interface UnsupportedMarkup {
   readonly from: number;
   readonly to: number;
   /** The marker as spelled, no backslash or `*`: `tr`, `fig`; `null` for an attribute list. */
   readonly marker: string | null;
-  /** A closer (`\fig*`) rather than an opener. */
+  /** A closer (`\cat*`) rather than an opener. */
   readonly closing: boolean;
   /** What a reader calls it, in the host's words (`EditorWords.marker`) or English: "table row". */
   readonly label: string;
@@ -26,46 +24,43 @@ export interface UnsupportedMarkup {
   readonly text: string;
 }
 
-const SHOWN_KINDS = new Set<number>([TOKEN.MARKER, TOKEN.CLOSING_MARKER, TOKEN.ATTR_LIST]);
+/** How a chip is drawn. Without one (`markupChips` installs a richer one) it is a plain label. */
+export type ChipRenderer = (markup: UnsupportedMarkup, view: EditorView) => HTMLElement;
 
-/**
- * The unsupported markup in `[from, to)`: in Reading only, and only where the
- * editor's own decorations leave a marker showing. A marker the editor draws
- * (a verse number, a heading's marker, a milestone) is never one.
- */
+export const chipRenderer = Facet.define<ChipRenderer, ChipRenderer | null>({
+  combine: (values) => values[0] ?? null,
+});
+
+const SPELLED = /^\\(\+?)([A-Za-z][\w-]*)(\*)?/;
+
+/** One `unruled` span as a reader's markup: its marker, whether it closes, its label. */
+export function markupOf(
+  state: EditorState,
+  from: number,
+  to: number,
+  text: string = docText(state).slice(from, to),
+): UnsupportedMarkup {
+  const spelled = SPELLED.exec(text);
+  const marker = spelled === null ? null : (spelled[2] ?? null);
+  const closing = spelled?.[3] === "*";
+  return { from, to, marker, closing, label: markerWords(state, marker, closing), text };
+}
+
+/** The unsupported markup in `[from, to)`, in Reading only: the plan's `unruled` marks. */
 export function unsupportedMarkup(
   state: EditorState,
   from: number,
   to: number,
 ): UnsupportedMarkup[] {
   if (!isVisual(state)) return [];
-  const analysis = structureAt(state).analysis;
-  const doc = docText(state);
-  if (analysis === null || analysis.text !== doc) return [];
-  const drawn = state.field(decoField, false)?.set;
-  const covered = (a: number, b: number): boolean => {
-    let hit = false;
-    drawn?.between(a, b, (f, t, deco) => {
-      if (deco.point && f <= a && t >= b) hit = true;
-      return hit ? false : undefined;
-    });
-    return hit;
-  };
+  const structure = structureAt(state);
   const found: UnsupportedMarkup[] = [];
-  forTokensIn(analysis.dish.tokens.rows, { from, to }, (kindBits, markerIdx, a, b) => {
-    const kind = kindBits & ~TOKEN_SPELLING_BIT;
-    if (!SHOWN_KINDS.has(kind) || b <= from || a >= to || b <= a || covered(a, b)) return;
-    const closing = kind === TOKEN.CLOSING_MARKER;
-    const marker =
-      kind === TOKEN.ATTR_LIST ? null : (MARKERS[markerIdx]?.name ?? "").replace(/^\+/, "") || null;
-    found.push({
-      from: a,
-      to: b,
-      marker,
-      closing,
-      label: markerWords(state, marker, closing),
-      text: doc.slice(a, b),
-    });
-  });
+  const first = Math.max(0, lineIndexAt(structure, from));
+  for (let i = first; i < structure.lines.length; i++) {
+    const line = structure.lines.at(i);
+    if (line.from > to) break;
+    for (const span of line.unruled)
+      if (span.to > from && span.from < to) found.push(markupOf(state, span.from, span.to));
+  }
   return found;
 }

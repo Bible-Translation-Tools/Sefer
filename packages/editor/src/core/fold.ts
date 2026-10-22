@@ -17,6 +17,8 @@ export interface DocLine {
   readonly notes: NoteRange[];
   readonly words: WordRange[];
   readonly milestones: { from: number; to: number; name: string }[];
+  /** Markup with no class of its own yet (`unruled`): each token, drawn as a chip. */
+  readonly unruled: { from: number; to: number; name: string }[];
   readonly breaks: { from: number; to: number }[];
   /** Standalone markers inside the line; one that opens the line is the line's class instead. */
   readonly standalones: { from: number; to: number }[];

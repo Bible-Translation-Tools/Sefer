@@ -1,4 +1,4 @@
-import { type EditorState, Facet, findClusterBreak } from "@codemirror/state";
+import { type EditorState, findClusterBreak } from "@codemirror/state";
 
 import type { DocLine, DocStructure } from "./docStructure";
 import { inDesignatorDelimiter } from "./exceptions";
@@ -51,16 +51,6 @@ export function alignedOnACluster(state: EditorState, pos: number): number {
   return prev !== off && findClusterBreak(line.text, prev, true) !== off ? line.from + prev : pos;
 }
 
-/**
- * Spans a feature draws as one unit, beyond the paint layer's own atoms: the
- * caret steps over each whole and never stops inside. How an opt-in feature
- * that decorates from a view plugin (the chips) tells the caret about them.
- */
-export const featureAtoms =
-  Facet.define<
-    (state: EditorState, from: number, to: number) => readonly { from: number; to: number }[]
-  >();
-
 export function stopsIn(state: EditorState, structure: DocStructure, paint: PaintPort): Stops {
   const end = state.doc.length;
   const visual = isVisual(state);
@@ -81,8 +71,6 @@ export function stopsIn(state: EditorState, structure: DocStructure, paint: Pain
 
   const atomAround = (line: DocLine, pos: number): { from: number; to: number } | null => {
     for (const a of paint.atomic(state, line)) if (pos > a.from && pos < a.to) return a;
-    for (const atoms of state.facet(featureAtoms))
-      for (const a of atoms(state, line.from, line.to)) if (pos > a.from && pos < a.to) return a;
     return null;
   };
 

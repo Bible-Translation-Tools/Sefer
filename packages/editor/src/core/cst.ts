@@ -31,7 +31,16 @@ import {
   trimsRecoveryNewline,
 } from "./mapping";
 
-const SPANNING = kindsReaching(["optbreak", "milestone.token"]);
+const SPANNING = kindsReaching([
+  "optbreak",
+  "milestone.token",
+  "attrs.unruled",
+  "closer.orphan",
+  "table",
+  "sidebar",
+  "char.unclosed",
+  "meta.marker",
+]);
 
 const IN_NOTE = 1;
 const IN_ORIGIN = 2;

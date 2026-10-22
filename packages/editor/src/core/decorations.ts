@@ -20,6 +20,7 @@ import { figureSource } from "./figures";
 import type { DocLine, WordRange } from "./fold";
 import type { DocPlan, PlanSpan, ResolvedSlot } from "./plan";
 import type { WidgetKey } from "./registry";
+import { chipRenderer, markupOf } from "./unsupported";
 import { markerWords } from "./words";
 
 class JoinWidget extends WidgetType {
@@ -136,6 +137,39 @@ class FigureWidget extends WidgetType {
 }
 
 const FIGURE_CAPTION = Decoration.mark({ class: "usfm-fig-caption" });
+
+/** A published chapter's (`\cp`) line, a caption under the chapter number. */
+const CP_LINE = Decoration.line({ class: "usfm-cp" });
+
+/**
+ * An `unruled` mark: a chip, drawn by the host's renderer (`chipRenderer`)
+ * or as a plain label in the host's words.
+ */
+class ChipWidget extends WidgetType {
+  constructor(
+    readonly from: number,
+    readonly to: number,
+    readonly text: string,
+  ) {
+    super();
+  }
+  eq(other: ChipWidget) {
+    return other.text === this.text;
+  }
+  toDOM(view: EditorView) {
+    const markup = markupOf(view.state, this.from, this.to, this.text);
+    const render = view.state.facet(chipRenderer);
+    if (render !== null) return render(markup, view);
+    const chip = document.createElement("span");
+    chip.className = markup.closing ? "usfm-chip usfm-chip-end" : "usfm-chip";
+    chip.textContent = markup.label;
+    chip.title = markup.text.trim();
+    return chip;
+  }
+  ignoreEvent() {
+    return false;
+  }
+}
 
 /** A figure's widget, its `src` and `size` broken from its attribute list by the engine. */
 function figureWidget(doc: string, structure: DocStructure, word: WordRange): FigureWidget {
@@ -360,7 +394,7 @@ function windowLines(
 
 type TokenRows = NonNullable<DocStructure["analysis"]>["dish"]["tokens"]["rows"];
 
-export function forTokensIn(
+function forTokensIn(
   rows: TokenRows,
   windowRange: { from: number; to: number } | null,
   visit: (kindBits: number, markerIdx: number, from: number, to: number) => void,
@@ -567,6 +601,17 @@ export function buildRegular(
         continue;
       }
       if (m.kind === "standalone") continue;
+      if (m.kind === "unruled") {
+        const text = doc.slice(m.from, m.to);
+        if (m.from === l.from && /^\\cp\b/.test(text))
+          add.push({ from: l.from, to: l.from, deco: CP_LINE });
+        add.push({
+          from: m.from,
+          to: m.to,
+          deco: Decoration.replace({ widget: new ChipWidget(m.from, m.to, text), ...UNIT }),
+        });
+        continue;
+      }
       add.push({
         from: m.from,
         to: m.to,

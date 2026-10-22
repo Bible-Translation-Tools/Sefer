@@ -110,10 +110,8 @@ const TOKEN_ROWS: readonly Row<TokenShape>[] = [
   {
     id: "designator.unruled",
     kinds: [TokenKind.Designator],
-    verdict: unmapped(
-      "needs-ruling",
-      "\\ca \\cp \\va \\vp carry a Designator no toc row points at; and a Designator whose payload is not a number",
-    ),
+    // \ca \cp \va \vp: an alternate or published number is text a reader sees (2026-10-22).
+    verdict: cls("content"),
   },
   { id: "note.caller", kinds: [TokenKind.NoteCaller], verdict: cls("note.caller"), set: "note" },
   {
@@ -189,16 +187,15 @@ const TOKEN_ROWS: readonly Row<TokenShape>[] = [
   {
     id: "attrs.unruled",
     kinds: [TokenKind.AttrList],
-    verdict: unmapped("needs-ruling", "an AttrList on a Milestone or a \\periph has no class"),
+    verdict: cls("unruled"),
+    set: "unruled",
   },
   {
     id: "closer.orphan",
     kinds: [TokenKind.ClosingMarker],
     when: (t) => !t.closesNode,
-    verdict: unmapped(
-      "needs-ruling",
-      "a ClosingMarker that closes no node prints raw; a P5 leak with no row",
-    ),
+    verdict: cls("unruled"),
+    set: "unruled",
   },
   {
     id: "unknown.line",
@@ -219,13 +216,15 @@ const TOKEN_ROWS: readonly Row<TokenShape>[] = [
     id: "table",
     kinds: MARKER_KINDS,
     when: (t) => t.markerKind === MarkerKind.TableRow || t.markerKind === MarkerKind.TableCell,
-    verdict: unmapped("table", "PROPERTIES §8.6 — no ownership bit"),
+    verdict: cls("unruled"),
+    set: "unruled",
   },
   {
     id: "sidebar",
     kinds: MARKER_KINDS,
     when: (t) => t.markerKind === MarkerKind.Sidebar || t.markerKind === MarkerKind.Periph,
-    verdict: unmapped("sidebar", "PROPERTIES §8.6"),
+    verdict: cls("unruled"),
+    set: "unruled",
   },
   {
     id: "chrome.char",
@@ -238,10 +237,8 @@ const TOKEN_ROWS: readonly Row<TokenShape>[] = [
     id: "char.unclosed",
     kinds: MARKER_KINDS,
     when: (t) => t.markerKind === MarkerKind.Character,
-    verdict: unmapped(
-      "needs-ruling",
-      "a wrapper that never closed; DISSOLVE is defined over a wrapper with a closer",
-    ),
+    verdict: cls("unruled"),
+    set: "unruled",
   },
   {
     id: "chrome.designator.v",
@@ -262,6 +259,13 @@ const TOKEN_ROWS: readonly Row<TokenShape>[] = [
     kinds: MARKER_KINDS,
     when: (t) => t.markerKind === MarkerKind.Chapter || t.markerKind === MarkerKind.Verse,
     verdict: cls("chrome"),
+  },
+  {
+    id: "published.chapter",
+    kinds: MARKER_KINDS,
+    when: (t) => t.markerKind === MarkerKind.Paragraph && t.category === Category.ChapterVerse,
+    verdict: cls("unruled"),
+    set: "unruled",
   },
   {
     id: "chrome.block",
@@ -287,7 +291,8 @@ const TOKEN_ROWS: readonly Row<TokenShape>[] = [
     id: "meta.marker",
     kinds: MARKER_KINDS,
     when: (t) => t.markerKind === MarkerKind.Meta,
-    verdict: unmapped("needs-ruling", "\\cat and friends carry no class today"),
+    verdict: cls("unruled"),
+    set: "unruled",
   },
   { id: "content.bookcode", kinds: [TokenKind.BookCode], verdict: cls("content") },
   { id: "content", kinds: [TokenKind.Text], verdict: cls("content") },
