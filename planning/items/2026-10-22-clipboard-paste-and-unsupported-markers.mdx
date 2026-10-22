@@ -182,6 +182,23 @@ so most books never load it.
 > My think on tables is i'd want them like, maybe lazy loaded? Or pretty modular off in terms
 > of own code.
 
+## Line by line and the containers
+
+Found on the bench, 2026-10-22: line by line lays its lines out on its own path
+(`layOutVerseLines`), so it knows none of figures, sidebars or tables. A table's rows flow
+into the verse they sit in ("…tribes: Tribe | Number Reuben | 46,500 …"); a sidebar shows
+its `\p` and `\esbe` raw; a figure loses its picture and its caption runs into what follows.
+
+<Question id="lbl-containers">In line by line, should a table, a sidebar and a figure keep
+their own lines and draw as in Reading, read-only there as headings are ("changed in Reading
+or USFM"), or be editable? Proposed: own lines, drawn as in Reading, read-only; line by line
+stays a verse-by-verse drafting surface, and its Tab keeps meaning "next empty verse".</Question>
+
+<Question id="table-menu">Table commands are built (`core/tableCommands.ts`: rows and columns,
+Tab between cells, an empty row taken by Backspace). What opens a table menu over them, as a
+press on a verse number opens the verse menu: a press on a cell's separator, a row handle in
+the margin, or none (a host's own UI)?</Question>
+
 ## Order
 
 Clipboard, widening, paste, milestones, popovers, chips; then figures, sidebars and tables,
