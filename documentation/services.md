@@ -170,7 +170,7 @@ A bounded ring of events, spans and verdicts, and a second ring of 200 for `fail
 
 ### Overview
 
-The pinned Scripture Kitchen WASM build (tagged git dependency, v0.1.13). Onion parses, Sous proofreads, and Galley composes both. It is one in-process synchronous handle: `analyze`, `setCustomMarkers` (the process-wide marker table), the corpus (`update`, `updateReference`, `publish`), `find`, `lint`, `toc`, `mask`, `diff`/`merge`, `formatEdits`, `skeleton`/`overlay`, `hash`, and the judging settings (`settings`/`setSettings`, the whole set, through kitchen's generated `fromSettings`/`toSettings`). It also re-exports kitchen's finding descriptors (`describeFinding`, the English catalog) and the typed settings list (`SOUS_SETTINGS`). `src/core/galley`; loading happens in `src/platform/{web,node}/galley.ts`. → [galley](architecture/galley.md)
+The pinned Scripture Kitchen WASM build (tagged git dependency, v0.1.14). Onion parses, Sous proofreads, and Galley composes both. It is one in-process synchronous handle: `analyze`, `setCustomMarkers` (the process-wide marker table), the corpus (`update`, `updateReference`, `publish`), `find`, `lint`, `toc`, `mask`, `diff`/`merge`, `formatEdits`, `skeleton`/`overlay`, `hash`, and the judging settings (`settings`/`setSettings`, the whole set, through kitchen's generated `fromSettings`/`toSettings`). It also re-exports kitchen's finding descriptors (`describeFinding`, the English catalog) and the typed settings list (`SOUS_SETTINGS`). `src/core/galley`; loading happens in `src/platform/{web,node}/galley.ts`. → [galley](architecture/galley.md)
 
 ### Constraints and known bugs
 
