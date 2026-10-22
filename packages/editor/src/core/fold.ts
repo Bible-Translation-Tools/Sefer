@@ -33,6 +33,11 @@ export interface WordRange {
   from: number;
   to: number;
   marker: number;
+  /**
+   * A figure (`\fig … \fig*`): a run whose opener paints a point, the picture,
+   * where a character run's is hidden. Its surface is the caption.
+   */
+  figure: boolean;
   surfaceFrom: number;
   surfaceTo: number;
   attrFrom: number;

@@ -1,20 +1,19 @@
-import type { EditorState } from "@codemirror/state";
-import { MARKERS, TOKEN, TOKEN_SPELLING_BIT } from "@sefer/text/engine/analysis";
+import { type EditorState, Facet } from "@codemirror/state";
 
-import { forTokensIn } from "./decorations";
 import { docText, structureAt } from "./docStructure";
 
 /**
  * One figure, `\fig Caption|src="a.jpg" size="col" ref="1.5"\fig*`, as its
- * parts' spans. The DATA half of the figures feature (`recipes/figures.ts`):
- * a host can list a book's figures and draw them its own way. Its attributes
- * are read and written as any attributed markup's are (`attributesAt`).
+ * parts' spans: the structure's `WordRange` for it (`figure: true`), named for
+ * what a host wants. The registry's `figure` class draws it; this is the data
+ * a host reads to list a book's figures or draw them its own way. Its
+ * attributes are read and written as any attributed markup's (`attributesAt`).
  */
 export interface Figure {
   /** The whole figure, `\fig` to `\fig*`. */
   readonly from: number;
   readonly to: number;
-  /** The caption's words: `Caption`. Empty (`captionFrom === captionTo`) when there are none. */
+  /** The caption's words. Empty (`captionFrom === captionTo`) when there are none. */
   readonly captionFrom: number;
   readonly captionTo: number;
   /** The attribute list, `|` included; empty where one would go when there is none. */
@@ -24,51 +23,33 @@ export interface Figure {
   readonly markerIdx: number;
 }
 
-const isFig = (markerIdx: number): boolean =>
-  (MARKERS[markerIdx]?.name ?? "").replace(/^\+/, "") === "fig";
+/**
+ * Where a figure's picture is, from its `src`: a URL to show, or `undefined`
+ * for none, when the figure draws a frame. The host's (`figures({ resolveSource })`);
+ * none by default.
+ */
+export const figureSource = Facet.define<
+  (src: string) => string | undefined,
+  ((src: string) => string | undefined) | null
+>({ combine: (values) => values[0] ?? null });
 
-/** The figures that start in `[from, to)`, read off the parse's tokens. */
+/** The figures that overlap `[from, to)`. */
 export function figuresIn(state: EditorState, from: number, to: number): Figure[] {
-  const analysis = structureAt(state).analysis;
-  if (analysis === null || analysis.text !== docText(state)) return [];
-  const found: Figure[] = [];
-  let open: {
-    from: number;
-    markerIdx: number;
-    captionFrom: number;
-    captionTo: number;
-    listFrom: number;
-    listTo: number;
-  } | null = null;
-  forTokensIn(analysis.dish.tokens.rows, { from, to }, (kindBits, markerIdx, a, b) => {
-    const kind = kindBits & ~TOKEN_SPELLING_BIT;
-    if (kind === TOKEN.MARKER && isFig(markerIdx)) {
-      open = { from: a, markerIdx, captionFrom: b, captionTo: b, listFrom: -1, listTo: -1 };
-      return;
-    }
-    if (open === null) return;
-    if (kind === TOKEN.ATTR_LIST) {
-      open.listFrom = a;
-      open.listTo = b;
-    } else if (kind === TOKEN.CLOSING_MARKER && isFig(markerIdx)) {
-      const listFrom = open.listFrom < 0 ? a : open.listFrom;
-      found.push({
-        from: open.from,
-        to: b,
-        captionFrom: open.captionFrom,
-        captionTo: Math.min(open.captionTo, listFrom),
-        listFrom,
-        listTo: open.listFrom < 0 ? a : open.listTo,
-        markerIdx: open.markerIdx,
-      });
-      open = null;
-    } else if (open.listFrom < 0) open.captionTo = b;
-  });
-  return found;
+  const structure = structureAt(state);
+  if (structure.analysis === null || structure.analysis.text !== docText(state)) return [];
+  return structure.words
+    .filter((w) => w.figure && w.to > from && w.from < to)
+    .map((w) => ({
+      from: w.from,
+      to: w.to,
+      captionFrom: w.surfaceFrom,
+      captionTo: w.surfaceTo,
+      listFrom: w.attrFrom,
+      listTo: w.attrTo,
+      markerIdx: w.marker,
+    }));
 }
 
 /** The figure whose span holds `pos`, or `null`. */
-export const figureAt = (state: EditorState, pos: number): Figure | null => {
-  const line = state.doc.lineAt(pos);
-  return figuresIn(state, line.from, line.to + 1).find((f) => pos >= f.from && pos <= f.to) ?? null;
-};
+export const figureAt = (state: EditorState, pos: number): Figure | null =>
+  figuresIn(state, pos, pos + 1).find((f) => pos >= f.from && pos <= f.to) ?? null;

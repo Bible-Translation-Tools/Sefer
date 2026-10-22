@@ -46,6 +46,9 @@ export interface ResolvedWord {
   to: number;
   scope: PlanSpan | null;
   hidden: readonly PlanSpan[];
+  /** A figure's opener, drawn as the picture; `null` for a character run. */
+  point: PlanSpan | null;
+  figure: boolean;
 }
 
 export interface ResolvedSlot {
@@ -184,6 +187,7 @@ function resolveNote(note: NoteRange, rows: Registry): ResolvedNote {
 }
 
 function resolveWord(word: WordRange, rows: Registry, mask: (pos: number) => number): ResolvedWord {
+  if (word.figure) return resolveFigure(word, rows, mask);
   const paint = rows.char.cell.paint;
   const hidden = new Spans();
   if (paint !== "point") {
@@ -196,6 +200,34 @@ function resolveWord(word: WordRange, rows: Registry, mask: (pos: number) => num
     to: word.to,
     scope: paint === "ambient" ? { from: word.surfaceFrom, to: word.surfaceTo } : null,
     hidden: hidden.out,
+    point: null,
+    figure: false,
+  };
+}
+
+/**
+ * A figure: its opener is the `figure` class's point (the picture) or hidden
+ * with the rest when a projection paints figures `none`; its attributes and
+ * closer are hidden chrome; its caption, the surface, is content and stays.
+ */
+function resolveFigure(
+  word: WordRange,
+  rows: Registry,
+  mask: (pos: number) => number,
+): ResolvedWord {
+  const paint = rows.figure.cell.paint;
+  const hidden = new Spans();
+  const opener = { from: mask(word.from), to: word.surfaceFrom };
+  if (paint !== "point") hidden.push(opener.from, opener.to);
+  hidden.push(mask(word.attrFrom), word.attrTo);
+  hidden.push(mask(word.attrTo), word.to);
+  return {
+    from: word.from,
+    to: word.to,
+    scope: { from: word.surfaceFrom, to: word.surfaceTo },
+    hidden: hidden.out,
+    point: paint === "point" && opener.to > opener.from ? opener : null,
+    figure: true,
   };
 }
 
@@ -540,6 +572,7 @@ export function resolvePlan(structure: DocStructure, a: Assignment): DocPlan {
     for (const w of l.words) {
       const r = wordAt.get(w.from);
       if (r) for (const h of r.hidden) out.push({ from: h.from, to: h.to });
+      if (r?.point) out.push({ from: r.point.from, to: r.point.to });
     }
     for (const n of l.notes) {
       const r = noteAt.get(n.from);

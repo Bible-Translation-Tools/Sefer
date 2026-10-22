@@ -15,6 +15,7 @@ import {
   attributesAt,
 } from "./core/attributes";
 import { structureAt } from "./core/editorState";
+import { type Figure, figuresIn } from "./core/figures";
 import { frontMatterCard } from "./core/frontmatter";
 import { annotateOpen } from "./core/instrument";
 import { trusted } from "./core/kernel";
@@ -128,6 +129,8 @@ export interface BookEditorMount extends EditorHandle {
     readonly from: number;
     readonly to: number;
   }): readonly UnsupportedMarkup[];
+  /** The figures in a range (the whole book without one): their caption and attribute spans. */
+  figures(range?: { readonly from: number; readonly to: number }): readonly Figure[];
   /** The scripture address an offset is in (a verse, a heading's unit, the intro). */
   addressAt(offset: number): Address | undefined;
   /** Where the caret is, as an address. */
@@ -417,6 +420,8 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
         userEvent: "input.attributes",
       });
     },
+    figures: (range?: { readonly from: number; readonly to: number }) =>
+      figuresIn(created.state, range?.from ?? 0, range?.to ?? created.state.doc.length),
     unsupportedMarkup: (range?: { readonly from: number; readonly to: number }) =>
       unsupportedMarkup(created.state, range?.from ?? 0, range?.to ?? created.state.doc.length),
     renumberVerse: (offset: number, number: string) =>

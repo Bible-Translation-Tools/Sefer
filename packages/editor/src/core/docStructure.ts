@@ -177,7 +177,7 @@ export function buildStructure(
       continue;
     }
     const verdict: Mapping = facts.row.verdict;
-    if (!isMapped(verdict) || verdict.class !== "char") continue;
+    if (!isMapped(verdict) || (verdict.class !== "char" && verdict.class !== "figure")) continue;
     if (!wanted(facts.from, facts.to) || at < 0) continue;
     const node = new NodeView(cst.tree, facts.id);
     let surfaceFrom = facts.from;
@@ -205,6 +205,7 @@ export function buildStructure(
         from: facts.from,
         to: facts.to,
         marker: facts.markerIdx,
+        figure: verdict.class === "figure",
         surfaceFrom,
         surfaceTo: attrFrom,
         attrFrom,

@@ -180,6 +180,13 @@ const TOKEN_ROWS: readonly Row<TokenShape>[] = [
     verdict: cls("char"),
   },
   {
+    id: "attrs.figure",
+    kinds: [TokenKind.AttrList],
+    when: (t) => t.parentMarkerKind === MarkerKind.Figure,
+    verdict: cls("chrome"),
+    set: "figure",
+  },
+  {
     id: "attrs.unruled",
     kinds: [TokenKind.AttrList],
     verdict: unmapped("needs-ruling", "an AttrList on a Milestone or a \\periph has no class"),
@@ -263,13 +270,18 @@ const TOKEN_ROWS: readonly Row<TokenShape>[] = [
     verdict: cls("chrome"),
   },
   {
+    id: "figure.closer",
+    kinds: [TokenKind.ClosingMarker],
+    when: (t) => t.markerKind === MarkerKind.Figure,
+    verdict: cls("chrome"),
+    set: "figure",
+  },
+  {
     id: "figure",
     kinds: MARKER_KINDS,
     when: (t) => t.markerKind === MarkerKind.Figure,
-    verdict: unmapped(
-      "needs-ruling",
-      "a \\fig is a Character-shaped node with no class; it renders raw today",
-    ),
+    verdict: cls("figure"),
+    set: "figure",
   },
   {
     id: "meta.marker",
@@ -448,7 +460,8 @@ const NODE_ROWS: readonly Row<NodeShape>[] = [
   {
     id: "figure",
     when: (n) => n.markerKind === MarkerKind.Figure,
-    verdict: unmapped("needs-ruling", "a \\fig node has no class; it renders raw today"),
+    verdict: cls("figure"),
+    set: "figure",
   },
   {
     id: "meta",

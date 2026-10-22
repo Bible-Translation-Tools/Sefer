@@ -16,9 +16,11 @@ import {
 
 import { blockHost } from "./blockHost";
 import { lineIndexAt, type DocStructure, type NoteRange } from "./docStructure";
-import type { DocLine } from "./fold";
+import { figureSource } from "./figures";
+import type { DocLine, WordRange } from "./fold";
 import type { DocPlan, PlanSpan, ResolvedSlot } from "./plan";
 import type { WidgetKey } from "./registry";
+import { markerWords } from "./words";
 
 class JoinWidget extends WidgetType {
   readonly glyph: string;
@@ -90,6 +92,64 @@ class PipWidget extends WidgetType {
   ignoreEvent() {
     return false;
   }
+}
+
+/**
+ * A figure's picture: the host's (`figureSource`) when it resolves the `src`,
+ * else a frame labelled in the host's words. As wide as USFM's `size` says:
+ * `col` one text column, drawn half the text's width; `span` the page, all of it.
+ */
+class FigureWidget extends WidgetType {
+  constructor(
+    readonly src: string,
+    readonly size: "col" | "span",
+    readonly title: string,
+  ) {
+    super();
+  }
+  eq(other: FigureWidget) {
+    return other.src === this.src && other.size === this.size && other.title === this.title;
+  }
+  toDOM(view: EditorView) {
+    const figure = document.createElement("span");
+    figure.className = "usfm-fig";
+    figure.dataset.size = this.size;
+    figure.title = this.title;
+    const picture = this.src === "" ? undefined : view.state.facet(figureSource)?.(this.src);
+    if (picture !== undefined) {
+      const image = document.createElement("img");
+      image.src = picture;
+      image.alt = "";
+      image.draggable = false;
+      figure.append(image);
+    } else {
+      const frame = document.createElement("span");
+      frame.className = "usfm-fig-frame";
+      frame.textContent = markerWords(view.state, "fig", false);
+      figure.append(frame);
+    }
+    return figure;
+  }
+  ignoreEvent() {
+    return false;
+  }
+}
+
+const FIGURE_CAPTION = Decoration.mark({ class: "usfm-fig-caption" });
+
+/** A figure's widget, its `src` and `size` broken from its attribute list by the engine. */
+function figureWidget(doc: string, structure: DocStructure, word: WordRange): FigureWidget {
+  const list =
+    word.attrTo > word.attrFrom && structure.analysis !== null
+      ? structure.analysis.attrs(word.attrFrom, word.attrTo).attrs
+      : [];
+  const named = list.map(({ name, value }) => ({
+    name: name.from === name.to ? "default" : doc.slice(name.from, name.to),
+    value: doc.slice(value.from, value.to),
+  }));
+  const src = named.find((a) => a.name === "src")?.value ?? "";
+  const size = named.find((a) => a.name === "size")?.value === "span" ? "span" : "col";
+  return new FigureWidget(src, size, named.map((a) => `${a.name}: ${a.value}`).join("\n"));
 }
 
 class VersePipWidget extends WidgetType {
@@ -522,14 +582,22 @@ export function buildRegular(
       const resolvedWord = plan.wordAt.get(wd.from);
       if (!resolvedWord) continue;
       hideAll(resolvedWord.hidden);
-      if (resolvedWord.scope)
+      if (resolvedWord.point)
+        add.push({
+          from: resolvedWord.point.from,
+          to: resolvedWord.point.to,
+          deco: Decoration.replace({ widget: figureWidget(doc, structure, wd), ...UNIT }),
+        });
+      if (resolvedWord.scope && resolvedWord.scope.to > resolvedWord.scope.from)
         add.push({
           from: resolvedWord.scope.from,
           to: resolvedWord.scope.to,
-          deco: Decoration.mark({
-            class: "usfm-word",
-            attributes: { "data-w": String(resolvedWord.from) },
-          }),
+          deco: resolvedWord.figure
+            ? FIGURE_CAPTION
+            : Decoration.mark({
+                class: "usfm-word",
+                attributes: { "data-w": String(resolvedWord.from) },
+              }),
         });
     }
   }
