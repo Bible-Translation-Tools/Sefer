@@ -58,6 +58,7 @@ import type { Composition } from "./composition";
 import { startLogFiles, type LogFiles } from "./diagnostics";
 import { appIdFor, bootTransport, rememberBootEndpoints, resolveEndpoints } from "./endpoints";
 import { env } from "./env";
+import { legacyMarkersOf } from "./legacyMarkers";
 
 const PROJECTS_ROOT = `${OPFS_ROOT}/projects`;
 
@@ -379,6 +380,7 @@ export const composeServices = async (
   const resolved = await run(resolveDomain());
 
   const { galley } = resolved;
+  galley.setTextMarkers(legacyMarkersOf);
   const version = galley.version();
   const platformStorage: Services["storage"] = tauri === undefined ? "opfs" : "native";
   const storageKind: Services["storage"] = fixture ? "fixture" : platformStorage;

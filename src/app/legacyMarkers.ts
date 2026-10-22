@@ -23,6 +23,10 @@ const legacyMarkersIn = (texts: () => Iterable<string>): LegacyMarker[] => {
   return found;
 };
 
+/** The legacy markers one text holds, for a text read on its own: a reference, a review side, a source. */
+export const legacyMarkersOf = (text: string): readonly LegacyMarker[] =>
+  legacyMarkersIn(() => [text]);
+
 export const registerLegacyMarkers = (
   galley: GalleyService,
   texts: () => Iterable<string>,

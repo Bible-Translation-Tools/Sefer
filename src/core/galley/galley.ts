@@ -197,6 +197,17 @@ export interface GalleyService {
     opts?: { readonly relaxZPrefix?: boolean },
   ) => readonly MalformedCustomMarker[];
 
+  /**
+   * How a text that is not one of the open project's books lexes: a reference,
+   * a review side, a source read for Find or Key terms. Each such text gets the
+   * list `markersOf` decides from the text itself, so en_ulb with its `\s5`
+   * reads the same beside a project as it does as the project (Will,
+   * 2026-10-22; kitchen 0.1.13's per-book lists). The project's books keep the
+   * list `setCustomMarkers` installed. Until this is called, every text follows
+   * the installed list.
+   */
+  readonly setTextMarkers: (markersOf: (text: string) => readonly CustomMarker[]) => void;
+
   readonly analyzeText: (text: string, why?: string) => Analysis;
 
   readonly analyzeBook: (
@@ -326,6 +337,29 @@ const makeService = (
     held?.free();
   };
 
+  let markersOf: ((text: string) => readonly CustomMarker[]) | undefined;
+  const judgedLists = new Map<string, wasmModule.CustomMarkers>();
+
+  /** The `{ customMarkers }` option for a text that is not a project book: its own list, judged once per distinct list. */
+  const textMarkers = (text: string): { customMarkers?: wasmModule.CustomMarkers } => {
+    if (markersOf === undefined) return {};
+    const list = markersOf(text);
+    const key = list.map((marker) => `${marker.name}:${marker.category}`).join(",");
+    let judged = judgedLists.get(key);
+    if (judged === undefined) {
+      judged = wasmModule.customMarkers(
+        list.map((marker) => ({
+          name: marker.name,
+          // SAFETY: the engine judges an unknown category word itself and answers it in `malformed`, never a throw.
+          category: marker.category as wasmModule.CustomMarkerCategory,
+        })),
+        { relaxZPrefix: true },
+      );
+      judgedLists.set(key, judged);
+    }
+    return { customMarkers: judged };
+  };
+
   const parseAnalysis = (
     text: string,
     why: string,
@@ -345,7 +379,7 @@ const makeService = (
     const started = performance.now();
     const dish = deserialize(
       id === undefined
-        ? handle.parseText(text, PARSE_ALL)
+        ? handle.parseText(text, { ...PARSE_ALL, ...textMarkers(text) })
         : (handle.update(id, text), handle.parse(id, PARSE_ALL)),
     );
     const engineMs = Math.round((performance.now() - started) * 1000) / 1000;
@@ -407,7 +441,7 @@ const makeService = (
 
   const readerMask = (text: string, recipe: "text" | "verseText" = "text"): MaskMap | undefined => {
     try {
-      return MaskMap.open(handle.maskOf(text, { recipe, utf16: true }));
+      return MaskMap.open(handle.maskOf(text, { recipe, utf16: true, ...textMarkers(text) }));
     } catch {
       return undefined;
     }
@@ -436,6 +470,10 @@ const makeService = (
     }
   };
 
+  const setTextMarkers = (next: (text: string) => readonly CustomMarker[]): void => {
+    markersOf = next;
+  };
+
   const setCustomMarkers = (
     markers: readonly CustomMarker[],
     opts?: { readonly relaxZPrefix?: boolean },
@@ -459,6 +497,7 @@ const makeService = (
   return {
     version: engineVersion,
     setCustomMarkers,
+    setTextMarkers,
     analyzeText,
     analyzeBook,
     memoize,
@@ -473,7 +512,7 @@ const makeService = (
       decodeHits(handle.findAll(query.text, findOptions(query, scope ?? "targets"))),
     update: (id, text) => handle.update(id, text),
     updateReference: (id, text, keepText) =>
-      handle.updateReference(id, text, { keepText: keepText === true }),
+      handle.updateReference(id, text, { keepText: keepText === true, ...textMarkers(text) }),
     remove: (id) => handle.remove(id),
     publish: () => FindingsSnapshot.open(handle.publish()),
     diff: (baseline, current, opts) => engineDiff(wasmModule, baseline, current, opts),
