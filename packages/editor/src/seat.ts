@@ -3,8 +3,8 @@ import type { Book } from "@sefer/text/book";
 
 import { editorBook, type EditorBook, type EditorBookOptions } from "./book";
 import { commandsLayer, viewLayer } from "./core/compose";
+import { findingMarks } from "./recipes/findingMarks";
 import { usfmLinter } from "./recipes/lint";
-import { lintGutter } from "./recipes/lintGutter";
 import { lintHoverGrace } from "./recipes/lintHover";
 import { noteEditing } from "./recipes/noteEditor";
 
@@ -16,7 +16,7 @@ const canonicalEditor = (): Extension =>
     viewLayer(),
     usfmLinter(),
     lintHoverGrace(),
-    lintGutter(),
+    findingMarks(),
     noteEditing(),
   ]);
 

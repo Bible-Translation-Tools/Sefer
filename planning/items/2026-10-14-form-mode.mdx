@@ -159,7 +159,11 @@ marks a value that is not a verse number (3, 3a, 3-4) instead of closing silentl
 
 **Fifth scrawl (2026-10-22):** "Remove verse marker", so nobody reads it as taking the text. A
 gutter click shows one finding at a time, anchored at it, with "Next on this line (1 of 3)" when
-the row holds more; in Reading a row is a whole paragraph, and every finding at once was "a lot".
+the row holds more; in Reading a row is a whole paragraph, and every finding at once was "a lot". **Then reversed the same day:** the gutter is colour only, for scanning; a finding is acted on
+where it is drawn (its word's hover, its verse number's menu, its caller). The marks are a
+CodeMirror layer (`recipes/findingMarks.ts`), level with each finding's own row through wraps,
+scrolling and resizing, one per row at its worst severity, keeping the circle / triangle / square
+shapes; the gutter click menu and Next on this line are gone.
 
 **Step, a third press policy (2026-10-22):** a locked cell either stopped a press (nothing
 happens) or let it pass (the press acts on the next thing beyond). Line by line's markup inside
