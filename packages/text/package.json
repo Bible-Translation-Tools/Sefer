@@ -8,7 +8,7 @@
     "./*": "./src/*.ts"
   },
   "devDependencies": {
-    "@wycliffeassociates/scripture-kitchen": "github:WycliffeAssociates/scripture-kitchen#v0.1.14",
+    "@wycliffeassociates/scripture-kitchen": "github:WycliffeAssociates/scripture-kitchen#v0.1.15",
     "effect": "4.0.0-rc.112"
   },
   "peerDependencies": {
