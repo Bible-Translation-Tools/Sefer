@@ -4,7 +4,7 @@ title: "Form mode, verse per line, and the editor's sharp edges"
 kind: idea
 status: discussing
 created: 2026-10-14
-updated: 2026-10-21
+updated: 2026-10-22
 sha: 50aa9cd
 priority: 1
 tags: [editor]
@@ -122,8 +122,12 @@ the branch's dev server.
 between verses; (3) the keys (Enter, Shift+Enter, Tab, Shift+Tab, Home, End); the view is one
 three-way control, Reading · Line by line · USFM, in design builds (Will: "it's tripartite toggle
 no?"); and a seven-step tutorial (`src/app/tour/tours/lineByLine.ts`, design builds only).
-Still to do: (4) the verse popup, (5) the structure marks, paste as one line, a selection
-clamped to its verse, and a hanging indent for a wrapped verse.
+Then (2026-10-22): (4) the verse number's menu (Change number, Remove verse, Add verse after;
+Cmd+Shift+V at the caret still splits); (5) headings as read-only labels and a ¶ / q1 mark in
+the margin of the verse a paragraph or poetry line opens; paste as one line; a selection kept
+inside its verse; typing into an empty verse (`\v 4` gains its space). Synthetic cases are in
+`fixtures/small-nt/99-BAD.usfm` chapter 2. Dropped: a hanging indent for a wrapped verse, since
+a verse that starts mid-line shares its line and would be indented too.
 
 <Followup id="ship">To `dev` behind `__SEFER_DESIGN__` once it holds up, and finish with a
 tutorial for the PO and designer, as for suppressions (Will, 2026-10-21).</Followup>

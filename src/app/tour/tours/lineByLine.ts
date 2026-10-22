@@ -97,7 +97,7 @@ export const lineByLineTour: Tour = {
           },
           {
             label: "Headings and paragraphs",
-            text: "Section headings, paragraph and poetry markers between verses are hidden for now, but kept exactly as they are in the file. Next we will try showing them quietly: a heading as a read-only label, a ¶ or q1 beside the verse it opens.",
+            text: "A section heading shows as a quiet label you cannot edit here. A paragraph or poetry marker that opens a verse shows as a small ¶ or q1 in the margin beside it. All of them stay exactly as they are in the file. Hiding them entirely, or giving each verse its own block, are the other ways we could show them.",
           },
         ],
       },
@@ -155,15 +155,35 @@ export const lineByLineTour: Tour = {
         notes: [
           {
             label: "Changing structure",
-            text: "Choose Reading or USFM to change paragraphs, poetry or headings. Coming here next: a menu on a verse number to change it, remove the verse, or add one after it.",
+            text: "Choose Reading or USFM to change paragraphs, poetry or headings. Headings cannot be typed into here.",
           },
           {
-            label: "Paste",
-            text: "Pasting is not changed yet. The plan is that a paste with line breaks becomes one line, so it can never make a verse.",
+            label: "Paste and select",
+            text: "A paste with line breaks comes in as one line, so it can never make a verse. A selection stays inside the verse it starts in.",
           },
         ],
       },
       advance: "user",
+    },
+    {
+      spotlight: {
+        anchor: "[data-testid=editor-host]",
+        side: "right",
+        title: "A verse number's menu",
+        body: "Click a verse number. Change number renumbers it; Remove verse takes the number away and its text joins the verse before; Add verse after puts a new, empty verse below it, ready to type.",
+        try: "Click a verse number to open its menu. Escape closes it.",
+        notes: [
+          {
+            label: "Splitting a verse",
+            text: "Add verse after, then cut and paste the text that belongs in it. Ctrl+Shift+V (Cmd+Shift+V on a Mac) also puts a verse number at the caret, which splits the verse there.",
+          },
+          {
+            label: "What it does not do",
+            text: "It does not renumber the verses after. Proofreading flags a number that is out of order or repeated, and Fix it from there.",
+          },
+        ],
+      },
+      advance: () => present(".usfm-verse-menu"),
     },
     {
       spotlight: {

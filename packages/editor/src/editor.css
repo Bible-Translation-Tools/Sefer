@@ -638,6 +638,58 @@
   padding-top: 0.5em;
 }
 
+.cm-mode-regular .usfm-verse-mark {
+  display: inline-block;
+  width: 0;
+  position: relative;
+  inset-inline-start: -1.6em;
+  font-size: 0.7em;
+  white-space: nowrap;
+  opacity: 0.5;
+  user-select: none;
+}
+
+.cm-mode-regular .usfm-verse-heading {
+  padding-top: 1em;
+  font-size: 0.8em;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+
+.usfm-verse-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.usfm-verse-menu form {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.usfm-verse-menu input {
+  width: 4em;
+  padding: 0.1rem 0.3rem;
+  border: 1px solid var(--editor-faint);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+}
+
+.usfm-verse-menu button {
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  text-align: start;
+  color: inherit;
+}
+
+.usfm-verse-menu button:hover {
+  background: var(--editor-slot-bg);
+}
+
 .cm-mode-regular .usfm-brk.usfm-verse-break {
   height: 0.5em;
 }

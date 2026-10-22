@@ -623,6 +623,28 @@ const separator = (poetry: boolean): Decoration =>
 
 const VERSE_BREAK = Decoration.widget({ widget: new BreakWidget("usfm-verse-break"), side: -1 });
 const VERSE_LINE = Decoration.line({ class: "usfm-verse-line" });
+const VERSE_HEADING = Decoration.line({ class: "usfm-verse-heading" });
+
+class VerseMarkWidget extends WidgetType {
+  readonly marker: string;
+  constructor(marker: string) {
+    super();
+    this.marker = marker;
+  }
+  eq(other: VerseMarkWidget) {
+    return other.marker === this.marker;
+  }
+  toDOM() {
+    const span = document.createElement("span");
+    span.className = "usfm-verse-mark";
+    span.textContent = this.marker === "p" ? "¶" : this.marker;
+    span.title = `\\${this.marker}`;
+    return span;
+  }
+  ignoreEvent() {
+    return false;
+  }
+}
 
 const isPoetryMarker = (marker: string | null): boolean => marker?.startsWith("q") === true;
 
@@ -648,13 +670,17 @@ function layOutVerseLines(
     line.cls === "block.meta" ||
     line.cls === "block.front";
   const showsNothing = (line: DocLine): boolean =>
-    line.cls !== "slot.c" && line.contentFrom >= line.to;
+    line.cls !== "slot.c" && !opensVerse(line) && line.contentFrom >= line.to;
   const lineStarts = new Set<number>();
 
   let joined = 0;
   let previous: DocLine | null = null;
+  let opener: string | null = null;
   for (const line of structure.lines) {
-    if (showsNothing(line)) continue;
+    if (showsNothing(line)) {
+      if (line.cls === "block.para") opener = line.marker;
+      continue;
+    }
     const visibleFrom = opensVerse(line) ? line.from : line.contentFrom;
     if (previous !== null && !outside(previous.to, line.contentFrom)) {
       const keepsBreak = opensVerse(line) || standsAlone(line) || standsAlone(previous);
@@ -673,8 +699,19 @@ function layOutVerseLines(
     if (line.cls === "block.para" && line.contentFrom > line.from && visibleFrom === line.from)
       add.push({ from: line.from, to: line.contentFrom, deco: HIDDEN });
     const visualStart = previous === null ? line.from : previous.to + 1;
-    if (opensVerse(line) && !outside(visualStart, visualStart))
+    if (opensVerse(line) && !outside(visualStart, visualStart)) {
       add.push({ from: visualStart, to: visualStart, deco: VERSE_LINE });
+      const marker = line.cls === "block.para" ? line.marker : opener;
+      if (marker !== null)
+        add.push({
+          from: visualStart,
+          to: visualStart,
+          deco: Decoration.widget({ widget: new VerseMarkWidget(marker), side: -1 }),
+        });
+    }
+    if (line.cls === "block.heading" && !outside(visualStart, visualStart))
+      add.push({ from: visualStart, to: visualStart, deco: VERSE_HEADING });
+    opener = null;
     lineStarts.add(line.from);
     lineStarts.add(line.contentFrom);
     previous = line;

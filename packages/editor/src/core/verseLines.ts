@@ -1,7 +1,17 @@
-import type { EditorState } from "@codemirror/state";
-import type { EditorView, KeyBinding } from "@codemirror/view";
+import {
+  ChangeSet,
+  EditorSelection,
+  EditorState,
+  type Extension,
+  StateEffect,
+  StateField,
+  Transaction,
+  type TransactionSpec,
+} from "@codemirror/state";
+import { EditorView, type KeyBinding, showTooltip, type Tooltip } from "@codemirror/view";
 
 import { docText, structureAt, type DocStructure } from "./docStructure";
+import { trusted } from "./kernel";
 import { assignmentAt } from "./registry";
 
 /** The verse the caret is in: the last one whose marker starts at or before it, or -1 before the first. */
@@ -14,6 +24,10 @@ const verseIndexAt = (structure: DocStructure, pos: number): number => {
   return found;
 };
 
+/** Lines that are not a verse's text: a heading, a chapter number, a book's front matter. */
+const isLabel = (cls: string): boolean =>
+  cls === "block.heading" || cls === "slot.c" || cls === "block.meta" || cls === "block.front";
+
 /** Where verse k's text ends: before the next verse, past no trailing space, newline or marker-only line. */
 const verseEnd = (structure: DocStructure, doc: string, k: number): number => {
   const verse = structure.verses[k];
@@ -21,7 +35,7 @@ const verseEnd = (structure: DocStructure, doc: string, k: number): number => {
   let end = verse.contentFrom;
   for (const line of structure.lines) {
     if (line.from >= next) break;
-    if (line.to <= verse.contentFrom || line.contentFrom >= line.to) continue;
+    if (line.to <= verse.contentFrom || line.contentFrom >= line.to || isLabel(line.cls)) continue;
     end = Math.min(line.to, next);
   }
   while (end > verse.contentFrom && /\s/.test(doc[end - 1])) end--;
@@ -88,3 +102,197 @@ export function verseLineKeys(): readonly KeyBinding[] {
     { key: "End", run: inVerseLines(verseFinish) },
   ];
 }
+
+const isVerseLines = (state: EditorState): boolean => assignmentAt(state).verseLines;
+
+/** Headings and chapter numbers show as labels here: read-only, changed in Reading or USFM. */
+const labelsStayPut = EditorState.changeFilter.of((tr) => {
+  if (!tr.docChanged || !isVerseLines(tr.startState) || tr.annotation(trusted) !== undefined)
+    return true;
+  const ranges: number[] = [];
+  for (const line of structureAt(tr.startState).lines)
+    if (line.cls === "block.heading" || line.cls === "slot.c") ranges.push(line.from, line.to);
+  return ranges.length === 0 ? true : ranges;
+});
+
+/** A paste is one line: its line breaks become spaces, so it can never start a verse. */
+const pasteAsOneLine = EditorState.transactionFilter.of((tr): TransactionSpec | Transaction => {
+  if (!tr.docChanged || !tr.isUserEvent("input.paste") || !isVerseLines(tr.startState)) return tr;
+  let flattened = false;
+  let lastTo = 0;
+  const specs: { from: number; to: number; insert: string }[] = [];
+  tr.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
+    const text = inserted.toString();
+    const flat = text.replace(/[ \t]*\r?\n[ \t]*/g, " ");
+    if (flat !== text) flattened = true;
+    specs.push({ from: fromA, to: toA, insert: flat });
+    lastTo = toA;
+  });
+  if (!flattened) return tr;
+  const changes = ChangeSet.of(specs, tr.startState.doc.length);
+  return {
+    changes,
+    selection: EditorSelection.cursor(changes.mapPos(lastTo, 1)),
+    userEvent: "input.paste",
+    scrollIntoView: true,
+  };
+});
+
+/** A selection stays inside the verse it starts in. */
+const selectionStaysInVerse = EditorState.transactionFilter.of((tr) => {
+  if (!tr.selection || tr.docChanged || !isVerseLines(tr.state)) return tr;
+  const range = tr.selection.main;
+  if (range.empty) return tr;
+  const structure = structureAt(tr.state);
+  const k = verseIndexAt(structure, range.anchor);
+  if (k < 0) return tr;
+  const from = structure.verses[k].contentFrom;
+  const to = Math.max(from, verseEnd(structure, docText(tr.state), k));
+  const clamp = (pos: number): number => Math.min(Math.max(pos, from), to);
+  const anchor = clamp(range.anchor);
+  const head = clamp(range.head);
+  if (anchor === range.anchor && head === range.head) return tr;
+  return [tr, { selection: EditorSelection.single(anchor, head), sequential: true }];
+});
+
+const openVerseMenu = StateEffect.define<number | null>();
+
+const verseMenuField = StateField.define<number | null>({
+  create: () => null,
+  update(open, tr) {
+    for (const effect of tr.effects) if (effect.is(openVerseMenu)) return effect.value;
+    return tr.docChanged ? null : open;
+  },
+  provide: (field) =>
+    showTooltip.compute([field], (state): Tooltip | null => {
+      const k = state.field(field);
+      const verse = k === null ? undefined : structureAt(state).verses[k];
+      if (k === null || verse === undefined) return null;
+      return { pos: verse.numFrom, above: false, create: (view) => verseMenu(view, k) };
+    }),
+});
+
+const nextNumber = (num: string | null): string => {
+  const digits = /(\d+)\D*$/.exec(num ?? "");
+  return digits ? String(Number(digits[1]) + 1) : "";
+};
+
+const button = (label: string, run: () => void): HTMLButtonElement => {
+  const element = document.createElement("button");
+  element.type = "button";
+  element.textContent = label;
+  element.addEventListener("click", run);
+  return element;
+};
+
+/** The verse number's menu: change it, remove the verse (its text joins the one before), or add one after it. */
+function verseMenu(view: EditorView, k: number): { dom: HTMLElement } {
+  const close = (): void => view.dispatch({ effects: openVerseMenu.of(null) });
+  const edit = (spec: TransactionSpec): void => {
+    view.dispatch({ ...spec, annotations: trusted.of("line-by-line"), scrollIntoView: true });
+    view.dispatch({ effects: openVerseMenu.of(null) });
+    view.focus();
+  };
+  const verse = structureAt(view.state).verses[k];
+
+  const dom = document.createElement("div");
+  dom.className = "usfm-verse-menu";
+  const form = document.createElement("form");
+  const input = document.createElement("input");
+  input.value = verse.num ?? "";
+  input.size = 4;
+  input.setAttribute("aria-label", "Verse number");
+  form.append(
+    input,
+    button("Change number", () => form.requestSubmit()),
+  );
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const value = input.value.trim();
+    if (!/^\d+[a-z]?(-\d+[a-z]?)?$/.test(value) || value === verse.num) return close();
+    edit({ changes: { from: verse.numFrom, to: verse.numTo, insert: value } });
+  });
+  dom.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    close();
+    view.focus();
+  });
+
+  const remove = button("Remove verse", () => {
+    const doc = docText(view.state);
+    if (doc[verse.markerFrom - 1] !== "\n")
+      return edit({ changes: { from: verse.markerFrom, to: verse.contentFrom } });
+    const empty = isEmptyVerse(structureAt(view.state), doc, k);
+    edit({
+      changes: { from: verse.markerFrom - 1, to: verse.contentFrom, insert: empty ? "" : " " },
+    });
+  });
+  const add = button("Add verse after", () => {
+    const at = verseEnd(structureAt(view.state), docText(view.state), k);
+    const insert = `\n\\v ${nextNumber(verse.num)} `;
+    edit({
+      changes: { from: at, insert },
+      selection: EditorSelection.cursor(at + insert.length),
+    });
+  });
+  dom.append(form, remove, add);
+  queueMicrotask(() => input.select());
+  return { dom };
+}
+
+/** A click on a verse number opens its menu; anywhere else closes it. */
+const verseNumberClicks = EditorView.domEventHandlers({
+  mousedown(event, view) {
+    if (!isVerseLines(view.state) || !(event.target instanceof Element)) return false;
+    if (event.target.closest(".usfm-verse-menu") !== null) return false;
+    const number = event.target.closest(".usfm-num-v");
+    if (number === null) {
+      if (view.state.field(verseMenuField) !== null)
+        view.dispatch({ effects: openVerseMenu.of(null) });
+      return false;
+    }
+    const pos = view.posAtDOM(number);
+    const k = structureAt(view.state).verses.findIndex(
+      (verse) => verse.numFrom <= pos && pos <= verse.numTo,
+    );
+    if (k < 0) return false;
+    event.preventDefault();
+    view.dispatch({ effects: openVerseMenu.of(k) });
+    return true;
+  },
+});
+
+/**
+ * Typing into an empty verse. Its number is locked here, so the number's own
+ * typable edge is gone; this writes the text after it instead, with the space
+ * that separates them when the file has none (`\v 4` becomes `\v 4 text`).
+ */
+const typeIntoEmptyVerse = EditorView.inputHandler.of((view, from, to, text) => {
+  if (from !== to || !isVerseLines(view.state)) return false;
+  const structure = structureAt(view.state);
+  const doc = docText(view.state);
+  const k = verseIndexAt(structure, from);
+  if (k < 0 || !isEmptyVerse(structure, doc, k)) return false;
+  const verse = structure.verses[k];
+  if (from < verse.numTo) return false;
+  const at = verse.contentFrom;
+  const insert = /\s/.test(doc[at - 1] ?? "") ? text : ` ${text}`;
+  view.dispatch({
+    changes: { from: at, insert },
+    selection: EditorSelection.cursor(at + insert.length),
+    annotations: trusted.of("line-by-line"),
+    userEvent: "input.type",
+  });
+  return true;
+});
+
+/** Everything line-by-line adds besides its keys and its layout. */
+export const verseLineBehaviour: Extension = [
+  typeIntoEmptyVerse,
+  labelsStayPut,
+  pasteAsOneLine,
+  selectionStaysInVerse,
+  verseMenuField,
+  verseNumberClicks,
+];
