@@ -1,3 +1,4 @@
+import { type Diagnostic, forEachDiagnostic } from "@codemirror/lint";
 import {
   ChangeSet,
   EditorSelection,
@@ -11,6 +12,7 @@ import {
 import { EditorView, type KeyBinding, showTooltip, type Tooltip } from "@codemirror/view";
 
 import { docText, structureAt, type DocStructure } from "./docStructure";
+import type { VerseRow } from "./fold";
 import { trusted } from "./kernel";
 import { assignmentAt } from "./registry";
 
@@ -187,7 +189,7 @@ const button = (label: string, run: () => void): HTMLButtonElement => {
 
 /** The verse number's menu: change it, remove the verse (its text joins the one before), or add one after it. */
 function verseMenu(view: EditorView, k: number): { dom: HTMLElement } {
-  const close = (): void => view.dispatch({ effects: openVerseMenu.of(null) });
+  const close = (): void => closeMenu(view);
   const edit = (spec: TransactionSpec): void => {
     view.dispatch({ ...spec, annotations: trusted.of("line-by-line"), scrollIntoView: true });
     view.dispatch({ effects: openVerseMenu.of(null) });
@@ -196,7 +198,12 @@ function verseMenu(view: EditorView, k: number): { dom: HTMLElement } {
   const verse = structureAt(view.state).verses[k];
 
   const dom = document.createElement("div");
-  dom.className = "usfm-verse-menu";
+  dom.className = "cm-tooltip-lint usfm-verse-menu";
+  for (const { diagnostic, from, to } of findingsOnNumber(view.state, verse))
+    dom.append(findingRow(view, diagnostic, from, to));
+
+  const section = document.createElement("div");
+  section.className = "usfm-verse-actions";
   const form = document.createElement("form");
   const input = document.createElement("input");
   input.value = verse.num ?? "";
@@ -236,17 +243,82 @@ function verseMenu(view: EditorView, k: number): { dom: HTMLElement } {
       selection: EditorSelection.cursor(at + insert.length),
     });
   });
-  dom.append(form, remove, add);
+  section.append(form, remove, add);
+  dom.append(section);
   queueMicrotask(() => input.select());
   return { dom };
 }
+
+/** One finding as the lint popover draws it: the message, where it came from, and its fixes. */
+function findingRow(
+  view: EditorView,
+  diagnostic: Diagnostic,
+  from: number,
+  to: number,
+): HTMLElement {
+  const row = document.createElement("div");
+  row.className = `cm-diagnostic cm-diagnostic-${diagnostic.severity}`;
+  const text = document.createElement("span");
+  text.className = "cm-diagnosticText";
+  text.textContent = diagnostic.message;
+  row.append(text);
+  for (const action of diagnostic.actions ?? []) {
+    const fix = button(action.name, () => {
+      action.apply(view, from, to);
+      closeMenu(view);
+    });
+    fix.className = "cm-diagnosticAction";
+    row.append(fix);
+  }
+  if (diagnostic.source !== undefined) {
+    const source = document.createElement("div");
+    source.className = "cm-diagnosticSource";
+    source.textContent = diagnostic.source;
+    row.append(source);
+  }
+  return row;
+}
+
+const closeMenu = (view: EditorView): void => view.dispatch({ effects: openVerseMenu.of(null) });
+
+/** The span a verse number owns: its marker, its digits, and the box of an empty one. */
+const onNumber = (verse: VerseRow, from: number, to: number): boolean =>
+  from === to
+    ? from >= verse.markerFrom && from <= verse.contentFrom
+    : from < verse.contentFrom && to > verse.markerFrom;
+
+const findingsOnNumber = (
+  state: EditorState,
+  verse: VerseRow,
+): { diagnostic: Diagnostic; from: number; to: number }[] => {
+  const found: { diagnostic: Diagnostic; from: number; to: number }[] = [];
+  forEachDiagnostic(state, (diagnostic, from, to) => {
+    if (onNumber(verse, from, to)) found.push({ diagnostic, from, to });
+  });
+  return found;
+};
+
+/**
+ * Line-by-line shows a verse number's findings in its menu, so the hover
+ * popover leaves them out: one popover per number, not two.
+ */
+export const leaveNumbersToTheMenu = (
+  diagnostics: readonly Diagnostic[],
+  state: EditorState,
+): Diagnostic[] => {
+  if (!isVerseLines(state)) return [...diagnostics];
+  const verses = structureAt(state).verses;
+  return diagnostics.filter(
+    (diagnostic) => !verses.some((verse) => onNumber(verse, diagnostic.from, diagnostic.to)),
+  );
+};
 
 /** A click on a verse number opens its menu; anywhere else closes it. */
 const verseNumberClicks = EditorView.domEventHandlers({
   mousedown(event, view) {
     if (!isVerseLines(view.state) || !(event.target instanceof Element)) return false;
     if (event.target.closest(".usfm-verse-menu") !== null) return false;
-    const number = event.target.closest(".usfm-num-v");
+    const number = event.target.closest(".usfm-num-v, .usfm-slot-v");
     if (number === null) {
       if (view.state.field(verseMenuField) !== null)
         view.dispatch({ effects: openVerseMenu.of(null) });
@@ -254,7 +326,7 @@ const verseNumberClicks = EditorView.domEventHandlers({
     }
     const pos = view.posAtDOM(number);
     const k = structureAt(view.state).verses.findIndex(
-      (verse) => verse.numFrom <= pos && pos <= verse.numTo,
+      (verse) => verse.markerFrom <= pos && pos <= verse.contentFrom,
     );
     if (k < 0) return false;
     event.preventDefault();

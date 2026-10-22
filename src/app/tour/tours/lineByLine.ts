@@ -120,7 +120,7 @@ export const lineByLineTour: Tour = {
           },
           {
             label: "Headings and paragraphs",
-            text: "A section heading shows as a quiet label you cannot edit here. A paragraph or poetry marker that opens a verse shows as a small ¶ or q1 in the margin beside it. All of them stay exactly as they are in the file. Hiding them entirely, or giving each verse its own block, are the other ways we could show them.",
+            text: "A section heading shows as a quiet label you cannot edit here. Paragraph and poetry markers are not shown at all, but stay exactly as they are in the file. Showing them, or giving each verse its own block, are the other ways we could go.",
           },
         ],
       },
@@ -193,7 +193,7 @@ export const lineByLineTour: Tour = {
         anchor: "[data-testid=editor-host]",
         side: "right",
         title: "A verse number's menu",
-        body: "Click a verse number. Change number renumbers it; Remove verse takes the number away and its text joins the verse before; Add verse after puts a new, empty verse below it, ready to type.",
+        body: "Click a verse number. If proofreading found something wrong with it, a repeated or missing number, that comes first with its fix. Then: Change number renumbers it; Remove verse takes the number away and its text joins the verse before; Add verse after puts a new, empty verse below it, ready to type.",
         try: "Click a verse number to open its menu. Escape closes it.",
         notes: [
           {

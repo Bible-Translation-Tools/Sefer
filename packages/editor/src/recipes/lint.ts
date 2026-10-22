@@ -20,6 +20,7 @@ import { carryForward } from "../core/forward";
 import { reportOutcome } from "../core/instrument";
 import { trusted } from "../core/kernel";
 import { span } from "../core/timing";
+import { leaveNumbersToTheMenu } from "../core/verseLines";
 
 interface Finding {
   code: number;
@@ -310,6 +311,7 @@ export function usfmLinter(
       },
       {
         delay: 150,
+        tooltipFilter: leaveNumbersToTheMenu,
         needsRefresh: (update) =>
           update.state.field(sousField, false) !== update.startState.field(sousField, false) ||
           update.transactions.some((tr) => tr.reconfigured),

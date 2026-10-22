@@ -638,17 +638,6 @@
   padding-top: 0.5em;
 }
 
-.cm-mode-regular .usfm-verse-mark {
-  display: inline-block;
-  width: 0;
-  position: relative;
-  inset-inline-start: -1.6em;
-  font-size: 0.7em;
-  white-space: nowrap;
-  opacity: 0.5;
-  user-select: none;
-}
-
 .cm-mode-regular .usfm-verse-heading {
   padding-top: 1em;
   font-size: 0.8em;
@@ -657,37 +646,41 @@
   opacity: 0.6;
 }
 
-.usfm-verse-menu {
+.cm-host .cm-editor .usfm-verse-actions {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  padding: 0.5rem;
-  font-size: 0.85rem;
+  padding: 6px;
 }
-
-.usfm-verse-menu form {
+.cm-host .cm-editor .cm-diagnostic + .usfm-verse-actions {
+  border-top: 1px solid var(--surface-border);
+}
+.cm-host .cm-editor .usfm-verse-actions form {
   display: flex;
-  gap: 0.25rem;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px 4px;
 }
-
-.usfm-verse-menu input {
-  width: 4em;
-  padding: 0.1rem 0.3rem;
-  border: 1px solid var(--editor-faint);
-  border-radius: 4px;
-  background: transparent;
-  color: inherit;
+.cm-host .cm-editor .usfm-verse-actions input {
+  width: 4.5em;
+  padding: 2px 6px;
+  font: 500 12px/1.5 var(--font-ui);
+  color: var(--on-surface-primary);
+  background: var(--surface-secondary);
+  border: 1px solid var(--surface-border);
+  border-radius: 6px;
 }
-
-.usfm-verse-menu button {
-  padding: 0.2rem 0.5rem;
-  border-radius: 4px;
+.cm-host .cm-editor .usfm-verse-actions button {
+  padding: 4px 6px;
+  font: 400 12px/1.5 var(--font-ui);
+  color: var(--on-surface-primary);
   text-align: start;
-  color: inherit;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
 }
-
-.usfm-verse-menu button:hover {
-  background: var(--editor-slot-bg);
+.cm-host .cm-editor .usfm-verse-actions button:hover {
+  background: var(--surface-secondary);
 }
 
 .cm-mode-regular .usfm-brk.usfm-verse-break {
@@ -934,6 +927,15 @@
 }
 /* An empty number's finding: the dashed box beside it is the whole mark. */
 .cm-host .cm-editor .cm-lintRange.usfm-lint-slot {
+  text-decoration: none;
+}
+.cm-host .cm-editor .cm-lintPoint:has(~ .usfm-slot) {
+  display: none;
+}
+/* A finding on a verse number: the number keeps its colour and the margin's mark says it. */
+.cm-host .cm-editor .cm-lintRange:has(> .usfm-num) {
+  background: none;
+  box-shadow: none;
   text-decoration: none;
 }
 .cm-host .cm-editor .cm-lintRange-error {
