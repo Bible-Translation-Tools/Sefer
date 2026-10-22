@@ -169,8 +169,10 @@ so most books never load it.
 Clipboard, widening, paste, milestones, popovers, chips; then figures, sidebars and tables,
 one at a time.
 
-<Followup id="clipboard">1–2: the three flavours and widening.</Followup>
-<Followup id="paste">3: the paste rules.</Followup>
+<Followup id="clipboard" done>1–2: the three flavours and widening. `e93ed79f`, `packages/editor/src/core/clipboard.ts`. A block's marker comes when the selection takes the block's whole text or runs out of it; a selection that stops at the block's last word does not take it (Word's paragraph mark, refined on the bench).</Followup>
+<Followup id="paste" done>3: the paste rules. `ba47eee4`. Beyond the plan, found on the bench: a heading pasted at a verse's first word goes before the verse's number; a chapter line takes no text (after its number is the next line's start); a fragment with no block, at a line a block marker opens, goes after that marker; line by line pastes verse words only. `refuseKeystrokesInsideHiddenMarkup` (`core/sealed.ts`) now lets a paste of whole lines at a line's start through, or a heading could never go above a verse.</Followup>
+
+<Followup id="marksup-analyzer">Found while wiring paste: `refuseMarkupPastedInsideAWord` parses a slice of the line through the book's own `analyze` (`marksUpInContext`, `packages/editor/src/core/compose.ts`). In Sefer that is `galley.memoize(book.id)`, which calls `handle.update(id, slice)`: the engine's copy of the book becomes one line until the next keystroke re-parses the whole text, and its memo is spent. Likely harmless today (the next parse restores it), but a lint or TOC read in between sees the slice. A fragment wants the free `analyzeText`, not the book's.</Followup>
 <Followup id="milestones">4: milestone pips and stops.</Followup>
 <Followup id="popovers">5: attribute popovers, data first.</Followup>
 <Followup id="chips">6: chips, then `\cp`, `\pb`, list styling.</Followup>
