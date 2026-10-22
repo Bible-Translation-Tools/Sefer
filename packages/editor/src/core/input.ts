@@ -98,19 +98,28 @@ export function guardedEnter(structureAt: GetStructure, plansAt: GetPlan): State
       const kind = blockKindForEnter(blockAt(structure, sel.from));
       const nlch = nl(state);
       const insert = breakPoint.above ? `\\${kind} ${nlch}` : `${nlch}\\${kind} `;
-      const to = sel.empty ? breakPoint.at : sel.to;
+      // Splitting a paragraph: the new marker's delimiter is the one space its words
+      // need, so spaces at the split go with it, rather than leading the new paragraph
+      // or trailing the old one.
+      const doc = state.doc;
+      let at = breakPoint.at;
+      let to = sel.empty ? breakPoint.at : sel.to;
+      if (!breakPoint.above && sel.empty) {
+        while (to < doc.length && /[ \t]/.test(doc.sliceString(to, to + 1))) to++;
+        while (at > 0 && /[ \t]/.test(doc.sliceString(at - 1, at))) at--;
+      }
       note(state, {
         rule: "guardedEnter",
         verdict: "rewrote",
-        detail: `${breakPoint.why} — put [${breakPoint.at}${to === breakPoint.at ? "" : `,${to}`}]=${JSON.stringify(insert)}`,
+        detail: `${breakPoint.why} — put [${at}${to === at ? "" : `,${to}`}]=${JSON.stringify(insert)}`,
       });
       dispatch(
         state.update({
-          changes: { from: breakPoint.at, to, insert },
+          changes: { from: at, to, insert },
           selection: {
             anchor: breakPoint.travels
               ? sel.from + insert.length
-              : breakPoint.at + insert.length - (breakPoint.above ? nlch.length : 0),
+              : at + insert.length - (breakPoint.above ? nlch.length : 0),
           },
           userEvent: breakPoint.travels ? "input.usfm.paragraphAbove" : "input.usfm.paragraph",
           scrollIntoView: true,
