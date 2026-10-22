@@ -327,8 +327,8 @@ context steps are faint until the pointer or focus is on the card, and
 The differences are drawn ON the two texts, as the editor reads them — the
 diff view recipe (`@sefer/editor` `mountDiffView`) paints units and word runs on each
 side's own document, in regular mode or USFM (the header's **Show USFM
-markup** switch). `src/app/ui/review/ReviewReader.tsx` holds it together, over
-`src/app/ui/diff/`. Three layers, and each can change without the others:
+markup** switch). `src/app/ui/review/ReviewReader.tsx` holds it together (its parts in
+`review/reader/`; the panel's in `review/panel/`), over `src/app/ui/diff/`. Three layers, and each can change without the others:
 
 - **The engine** — decision units and word runs, and the decision map above.
   Every view reads and writes the same map, keyed by book and unit, so

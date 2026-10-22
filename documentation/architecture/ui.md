@@ -378,7 +378,7 @@ migrated routes use:
 
 The ground is `surface-secondary`, cards are `surface-primary` with
 `rounded-lg`, `border-surface-border` and `shadow-small`. Every user-visible
-string still goes through `t()` (`src/app/i18n.ts`).
+string is a message or, on a screen not yet converted, `t()` ([interface language](i18n.md)).
 
 There are no behavioural UI tests yet — behaviour is not locked; the three Playwright smoke checks in `e2e/` only prove the built app mounts and routes. Verify a screen by running
 it: `pnpm verify:launch`, then drive `<url>/projects?fixture=1` with Playwright

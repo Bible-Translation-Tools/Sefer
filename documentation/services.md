@@ -261,7 +261,7 @@ On it today: the palette, the sidebar's filter (`shell.location.books` for every
 
 ### Overview
 
-CodeMirror over an EditorBook: the phases, registry, mapping and plan; one funnel for every write (`packages/editor/src/funnel.ts`); undo; regular and USFM modes; chapter and book views; clip. A projection on a surface is one extension, `modeView(name, surface?)` (`views.ts`). Decoration covers a window round the viewport that moves at most once a frame (`render.ts`), through one windowed loop for both modes; two editors side by side align by verse through a group their container holds (`recipes/align.ts`). `packages/editor`, mounted by `app/ui/BookEditor.tsx`. → [editor](architecture/editor.md), [solid](architecture/solid.md)
+CodeMirror over an EditorBook: the phases, registry, mapping and plan; one funnel for every write (`packages/editor/src/funnel.ts`); undo; three views of one book — Reading, Line by line (one verse per row, numbers and structure locked; the view control is in design builds only) and USFM; chapter and book views; clip. Tables, sidebars, figures and attributed markup are drawn through the registry, so Reading never shows a backslash; the verse menu, the attribute popover, figure pictures, table layout and chips are opt-in features (`editorFeatures()`), and copy writes plain text, HTML and widened USFM. Findings are inline marks plus a colour-and-shape mark per drawn row at the left edge (`recipes/findingMarks.ts`); there is no lint gutter. The editor's UI strings come from the host (`EditorWords`, English by default; Sefer passes none yet). `pnpm editor:bench` mounts it alone. A projection on a surface is one extension, `modeView(name, surface?)` (`views.ts`). Decoration covers a window round the viewport that moves at most once a frame (`render.ts`), through one windowed loop for both modes; two editors side by side align by verse through a group their container holds (`recipes/align.ts`). `packages/editor`, mounted by `app/ui/BookEditor.tsx`. → [editor](architecture/editor.md), [solid](architecture/solid.md)
 
 ### Constraints and known bugs
 
@@ -278,7 +278,6 @@ CodeMirror over an EditorBook: the phases, registry, mapping and plan; one funne
   - choose the target writing systems and IMEs
   - record evidence per mode and per webview
   - make a touch decision
-- USFM-aware copy profiles, and the aligned-word tooltip (both in `planning/items/2026-09-23-parked.mdx`).
 - Chapter-scoped parse, plan and paint, the one way chapter view becomes a typing win; it needs the CST resolved across chapter boundaries. Not before the parse is what is left.
 
 ## Satellites
@@ -317,7 +316,7 @@ One command across several books, with one history event per book and an undo th
 
 ### Overview
 
-One `Finding` shape over engine diagnostics and project checks, with a semantic id and two stamps. Filters, the `/findings` panel, inline lint in the editor, and the `/inventory` character page. `src/core/findings`. → [findings](architecture/findings.md), [inventory](architecture/inventory.md)
+One `Finding` shape over engine diagnostics and project checks, with a semantic id and two stamps. Filters, the `/findings` panel, inline lint in the editor (marks, a hover popover with the fix, a left-edge mark per row for scanning, and a verse number's findings in its menu), and the `/inventory` character page. `src/core/findings`. → [findings](architecture/findings.md), [inventory](architecture/inventory.md)
 
 ### Constraints and known bugs
 
@@ -647,11 +646,10 @@ Composed exactly once (`composeApplication`), with services reached through `use
 
 ### Constraints and known bugs
 
-- Localisation: `t` is an identity function (`src/app/i18n.ts`). No i18n library has been chosen.
+- Localisation: new copy is Paraglide messages (`m.<id>()`, catalogs in `src/app/messages/`), with the interface language as the `ui.locale` setting; the old English-only `t()` (`src/app/i18n.ts`) still carries most screens and goes screen by screen. → [interface language](architecture/i18n.md)
 
 ### Ideas / future
 
-- Lingui, with the catalogue chosen from `HostInfo.locale()`.
 - A service worker so the Web app can cold-start offline.
 - Generate the Tauri command bindings (tauri-specta) once there are about 30 commands (23 today) or a second person edits `git.rs`.
 

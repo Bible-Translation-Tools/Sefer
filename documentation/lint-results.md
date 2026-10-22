@@ -48,7 +48,7 @@ The generated half looks after itself; the judgement half does not. When a gate 
 | oxlint warnings | 0 | `pnpm lint` fails on any, every commit |
 | fallow dead code (`pnpm deadcode`) | 0 issue(s) | every deploy; advisory on branches |
 | fallow duplication | 1.6% in 59 clone group(s) | none — advisory |
-| suppression comments | 20 | each listed below with its reason |
+| suppression comments | 28 | each listed below with its reason |
 
 ### Oxlint warnings, by rule and file
 
@@ -62,9 +62,17 @@ None.
 | `src/app/locale.ts` | `oxlint-disable-next-line` | solid/reactivity |
 | `src/app/paraglide/messages.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/_index.js` | `eslint-disable` | — |
-| `src/app/paraglide/messages/en.js` | `eslint-disable` | — |
-| `src/app/paraglide/messages/es.js` | `eslint-disable` | — |
-| `src/app/paraglide/messages/fa.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/reference_bibles_offered.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/reference_download_title.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/reference_held_by.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/reference_language.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/reference_material.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/reference_none_yet.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/reference_search_placeholder.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/reference_shelf_bibles.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/reference_shelf_notes.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/reference_shelf_projects.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/settings_language_automatic.js` | `eslint-disable` | — |
 | `src/app/paraglide/registry.js` | `eslint-disable` | — |
 | `src/app/paraglide/runtime.js` | `eslint-disable` | — |
 | `src/app/paraglide/server.js` | `eslint-disable` | — |

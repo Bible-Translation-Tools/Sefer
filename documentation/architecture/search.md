@@ -68,7 +68,7 @@ A resource that is not scripture — Translation Notes today — is searched by 
 
 ## Replace
 
-Find offers Replace all behind the Advanced setting `find.enableReplaceAll`, off by default. The user enters literal replacement text, previews the scope and count, then explicitly applies. `src/routes/_app/project/$slug/find.tsx` preflights every book with `planReplace`, then loops the books itself, one `replaceInBook` each, and reports the actual count if a later book refuses. Reference searches are read-only.
+Find offers Replace all behind the Advanced setting `find.enableReplaceAll`, off by default. The user enters literal replacement text, previews the scope and count, then explicitly applies. `src/app/ui/find/createFindReplace.ts` preflights every book with `planReplace`, then loops the books itself, one `replaceInBook` each, and reports the actual count if a later book refuses. Reference searches are read-only.
 
 - `planReplace(book, hits, insert) → readonly Change[] | null` — the change list for several hits of **one** book, in before-text coordinates and ascending order. `null` when the plan cannot be made: no hits, a hit from another book, a moved stamp, two overlapping hits, or a hit that spans markup.
 - `replaceInBook(book, hits, insert) → Result<Receipt, Refusal>` — applies that plan as a single edit, or refuses `Refusal { rule: "search.replace", reason: "Stale" }`.
