@@ -54,7 +54,9 @@ the call is to put the module in place now without translating anything yet:
    our Vite 8 build; `plugin-icu1` compiling a plural and a select; one plural message through
    Crowdin and back; an id naming convention read in real code. Decides ICU or inlang format.
 2. **The module.** A `uiLocale` setting (best match of `navigator.languages`, English fallback;
-   a change reloads the app), `<html lang dir>` set before mount, the locale handed to every
+   a change calls `setLocale(x, { reload: false })` and remounts the UI under a locale-keyed
+   root, with services outside it, so the open project and its undo history survive; no string
+   may be computed at module load), `<html lang dir>` set before mount, the locale handed to every
    `Intl` formatter, per-locale messages loaded lazily, and Paraglide's `m` as the one way to
    say a string. `t()` stays as the old door while screens move, with a gate that it only
    shrinks.
@@ -70,8 +72,65 @@ keeps what was decided from it.
 
 <Question id="ids">Id convention: `<screen>_<thing>` in snake_case (`reference_search_placeholder`)? Agents must search for an existing message before minting one.</Question>
 
-<Question id="reload">A language change reloads the app (recommended: Sefer is local-first, a reload costs nothing, and `m` stays a plain synchronous call). OK?</Question>
+<Question id="reload" answer="No reload. setLocale(x, { reload: false }); a locale signal keys the UI root, so the screens remount and the services (open project, books, undo, recovery) stay as they are. Will: &quot;don't want to lose undo history cause someone decided to change a lang or accidentally did.&quot;">A language change reloads the app?</Question>
 
 <Question id="pilot">Which pilot pair, one LTR and one RTL (French with Arabic? Spanish with Persian?), and who reviews each?</Question>
 
 <Question id="english">What stays English: USFM marker names, finding codes shown as identifiers, tours?</Question>
+
+## Spike result (2026-10-22, branch `i18n-spike`, c0e15731)
+
+The Reference language menu runs on `m.*` in English and French. `@inlang/plugin-icu1` loads
+from `node_modules` (no CDN) and compiles plural (with `=0`) and select. `tsc` catches a
+misspelt id, a missing argument and a wrong parameter name; parameter VALUES are typed
+`unknown`. A message missing in a locale compiles to the English. `pnpm typecheck` runs the
+compile first. Left: one plural message through Crowdin and back.
+
+Bundles: Paraglide never lazy-loads (its reasoning: https://paraglidejs.com/blog/dont-lazy-load);
+each message's module carries every locale and only used messages are kept. Estimated 15–20 KB
+gzipped per locale at today's size, so eager is fine; measure again at about ten locales. Static
+per-locale builds are out: one build and route per language is cost we do not need.
+
+## Tours: field and internal
+
+> tours come in 2 shapes, and we might want to separate them from internal / field. Field would
+> be permanent and localized. internal is like that form mode one you built where what I'm
+> trying to do is tell my PO the tradeoffs I made along with design etc (Will, 2026-10-22)
+
+The split runs through tours, not only between them: `suppressions.ts` is a field tutorial whose
+26 notes are mostly the internal kind ("What we could do instead" ×4, "Could change" ×3, "Why
+plain buttons here"). So the audience goes on the tour AND on a note:
+
+- `Tour.audience: "field" | "internal"`. Internal tours are design builds only (as Line by line
+  is today) and stay English, never in the catalog.
+- `SpotlightNote.audience?: "internal"`. In a field tour such notes are dropped outside design
+  builds and stay English; the steps and the field notes are messages.
+
+## Copy audit (master, 2026-10-22)
+
+1,627 strings in use (every `t("…")` literal plus tour fields), 1,375 distinct:
+
+| area | uses | distinct |
+| --- | --- | --- |
+| screen copy | 812 | 697 |
+| labels, tooltips, aria | 439 | 348 |
+| tours | 211 | 194 (Line by line 48, internal; suppressions 88, mostly internal notes) |
+| errors and toasts | 122 | 107 |
+| settings | 40 | 28 |
+
+- **Drift, the copy pass's first list (41 groups):** the same words with different case or
+  punctuation: "Projects Available on WACS" / "Projects available on WACS", "No differences" /
+  "No differences.", "Checking" / "Checking…" / "checking" / "checking…", "Open Project" /
+  "Open project…", "Nothing has been recorded for / in this project yet", "{count} change(s)" /
+  "{total} changes", "Downloading {name}" / "{title}" / ": {transfer}" / "… {status}".
+- **Shared words (165 texts used more than once):** Cancel ×8, Intro ×7, Undo ×6, Settings,
+  Findings, Download, Done, Save ×5. One message each, where the meaning is the same.
+- **English-only plurals:** 19 `(s)` strings ("Restored {count} book(s)") plus about 25
+  `count === 1` ternaries; each becomes one ICU plural.
+- **Near-duplicates are mostly real pairs** (Assemble / Assembled, Show / Hide), not waste.
+- The heaviest files: `ui/cloud/copy.ts` (79), `GlyphDetail.tsx` (39), `MigrateScreen.tsx`
+  (31), `HistoryPanel.tsx` (29), `commands.ts` (44 across labels and errors).
+
+So the sprawl is less duplication than volume: about 1,100 distinct field strings after the
+internal tour text leaves, with about 50 drift groups to settle once.
+
