@@ -222,6 +222,40 @@
   --usfm-level: 3;
 }
 
+/* Lists: \li# and \lim# a level each, like poetry, with a hanging indent so a
+   wrapped item sits under its own words; \lh and \lf at the edge. */
+.cm-mode-regular .usfm-li,
+.cm-mode-regular .usfm-li1,
+.cm-mode-regular .usfm-li2,
+.cm-mode-regular .usfm-li3,
+.cm-mode-regular .usfm-li4,
+.cm-mode-regular .usfm-lim,
+.cm-mode-regular .usfm-lim1,
+.cm-mode-regular .usfm-lim2,
+.cm-mode-regular .usfm-lim3,
+.cm-mode-regular .usfm-lim4 {
+  --usfm-level: 1;
+  padding-bottom: 0.15em;
+  padding-inline-start: calc(var(--usfm-level) * var(--usfm-indent) * 1em);
+  text-indent: calc(var(--usfm-indent) * -1em);
+}
+.cm-mode-regular .usfm-li2,
+.cm-mode-regular .usfm-lim2 {
+  --usfm-level: 2;
+}
+.cm-mode-regular .usfm-li3,
+.cm-mode-regular .usfm-lim3 {
+  --usfm-level: 3;
+}
+.cm-mode-regular .usfm-li4,
+.cm-mode-regular .usfm-lim4 {
+  --usfm-level: 4;
+}
+.cm-mode-regular .usfm-lh,
+.cm-mode-regular .usfm-lf {
+  text-indent: 0;
+}
+
 /* A hung verse number: a slot of --usfm-hang to the left of the words, the
    number set to its right edge. Its own font is 0.66em, hence the division. */
 .cm-mode-regular .usfm-num-hung {
@@ -380,7 +414,31 @@
   display: none;
 }
 
-.cm-mode-regular .usfm-num,
+/* A page break: a thin rule across the line, its label on it. */
+.cm-mode-regular .usfm-chip-pb {
+  display: inline-block;
+  width: 100%;
+  text-indent: 0;
+  border-top: 1px dashed var(--surface-border);
+  margin: 0.4em 0;
+  font: 500 0.6em/1.4 var(--font-ui);
+  color: var(--on-surface-tertiary);
+  text-align: center;
+  user-select: none;
+}
+/* A published chapter (\cp): a muted caption under the chapter number. */
+.cm-mode-regular .usfm-cp {
+  text-indent: 0;
+  color: var(--on-surface-tertiary);
+  font-size: 0.85em;
+  padding-bottom: 0.4em;
+}
+.cm-mode-regular .usfm-chip-cp {
+  font: 500 0.75em/1 var(--font-ui);
+  margin-inline-end: 0.35em;
+  user-select: none;
+}
+
 /* Markup Reading has no drawing for yet (`recipes/markupChips.ts`): a label, not a backslash. */
 .cm-mode-regular .usfm-chip {
   display: inline-block;
@@ -395,6 +453,7 @@
   user-select: none;
 }
 
+.cm-mode-regular .usfm-num,
 .cm-mode-regular .usfm-verse-pip {
   unicode-bidi: isolate;
   direction: ltr;

@@ -15,13 +15,31 @@ import { type UnsupportedMarkup, unsupportedMarkup } from "../core/unsupported";
 /** How a chip is drawn: the default is a small labelled box; a host may draw its own. */
 export type ChipRenderer = (markup: UnsupportedMarkup) => HTMLElement;
 
+/**
+ * The default chip: a small labelled box. Two markers read better drawn: a
+ * page break is a thin rule across the line, and a published chapter's
+ * marker becomes the caption's "published as" (its line is styled too, in
+ * `build`).
+ */
 const defaultChip: ChipRenderer = (markup) => {
   const chip = document.createElement("span");
+  chip.title = markup.text.trim();
+  if (markup.marker === "pb") {
+    chip.className = "usfm-chip-pb";
+    chip.textContent = "page break";
+    return chip;
+  }
+  if (markup.marker === "cp") {
+    chip.className = "usfm-chip-cp";
+    chip.textContent = "published as";
+    return chip;
+  }
   chip.className = markup.closing ? "usfm-chip usfm-chip-end" : "usfm-chip";
   chip.textContent = markup.label;
-  chip.title = markup.text.trim();
   return chip;
 };
+
+const CP_LINE = Decoration.line({ class: "usfm-cp" });
 
 class ChipWidget extends WidgetType {
   constructor(
@@ -57,12 +75,17 @@ export function markupChips(render: ChipRenderer = defaultChip): Extension {
   const build = (view: EditorView): DecorationSet => {
     const builder = new RangeSetBuilder<Decoration>();
     for (const { from, to } of view.visibleRanges)
-      for (const markup of unsupportedMarkup(view.state, from, to))
+      for (const markup of unsupportedMarkup(view.state, from, to)) {
+        if (markup.marker === "cp" && render === defaultChip) {
+          const line = view.state.doc.lineAt(markup.from);
+          if (line.from === markup.from) builder.add(line.from, line.from, CP_LINE);
+        }
         builder.add(
           markup.from,
           markup.to,
           Decoration.replace({ widget: new ChipWidget(markup, render) }),
         );
+      }
     return builder.finish();
   };
 
