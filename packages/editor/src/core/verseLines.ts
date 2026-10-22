@@ -167,22 +167,9 @@ const selectionStaysInVerse = EditorState.transactionFilter.of((tr) => {
 });
 
 /** The open menu: a verse number's, or the findings on one line (from the gutter). */
-/** One finding a gutter row holds: its range, and the verse whose number it is on (-1 for none). */
-interface RowFinding {
-  readonly from: number;
-  readonly to: number;
-  readonly verse: number;
-}
+const openVerseMenu = StateEffect.define<number | null>();
 
-/** The open menu: a verse number's, or one finding of a gutter row's, stepped through in order. */
-type OpenMenu =
-  | { readonly verse: number }
-  | { readonly row: readonly RowFinding[]; readonly index: number }
-  | null;
-
-const openVerseMenu = StateEffect.define<OpenMenu>();
-
-const verseMenuField = StateField.define<OpenMenu>({
+const verseMenuField = StateField.define<number | null>({
   create: () => null,
   update(open, tr) {
     for (const effect of tr.effects) if (effect.is(openVerseMenu)) return effect.value;
@@ -190,90 +177,12 @@ const verseMenuField = StateField.define<OpenMenu>({
   },
   provide: (field) =>
     showTooltip.compute([field], (state): Tooltip | null => {
-      const open = state.field(field);
-      if (open === null) return null;
-      const { k, step } =
-        "row" in open
-          ? { k: open.row[open.index].verse, step: open }
-          : { k: open.verse, step: undefined };
-      if (k < 0 && step !== undefined) {
-        const item = step.row[step.index];
-        return {
-          pos: item.from,
-          above: false,
-          create: (view) => findingMenu(view, item, step),
-        };
-      }
-      const verse = structureAt(state).verses[k];
-      if (verse === undefined) return null;
-      return { pos: verse.numFrom, above: false, create: (view) => verseMenu(view, k, step) };
+      const k = state.field(field);
+      const verse = k === null ? undefined : structureAt(state).verses[k];
+      if (k === null || verse === undefined) return null;
+      return { pos: verse.numFrom, above: false, create: (view) => verseMenu(view, k) };
     }),
 });
-
-/**
- * A gutter marker's click, at screen height `y`: the first finding drawn on that row,
- * as the verse menu when it is on a verse number, else on its own; a row with more
- * steps through them with Next. A finding belongs to the row it is drawn in, as the
- * gutter placed its marker.
- */
-export const openLineMenu = (view: EditorView, y: number): boolean => {
-  if (!numbersHaveMenus(view.state)) return false;
-  const rowFrom = view.lineBlockAtHeight(y - view.documentTop).from;
-  const verses = structureAt(view.state).verses;
-  const row: RowFinding[] = [];
-  forEachDiagnostic(view.state, (_diagnostic, from, to) => {
-    if (view.lineBlockAt(from).from !== rowFrom) return;
-    const verse = verses.findIndex((each) => onNumber(each, from, to));
-    if (verse >= 0 && row.some((item) => item.verse === verse)) return;
-    row.push({ from, to, verse });
-  });
-  if (row.length === 0) return false;
-  row.sort((left, right) => left.from - right.from);
-  view.dispatch({ effects: openVerseMenu.of({ row, index: 0 }) });
-  return true;
-};
-
-/** "Next on this line (1 of 3)", when a gutter row holds more than one finding. */
-const nextOnRow = (
-  view: EditorView,
-  step: { readonly row: readonly RowFinding[]; readonly index: number } | undefined,
-): HTMLElement[] => {
-  if (step === undefined || step.row.length < 2) return [];
-  const next = button(`Next on this line (${step.index + 1} of ${step.row.length})`, () =>
-    view.dispatch({
-      effects: openVerseMenu.of({ row: step.row, index: (step.index + 1) % step.row.length }),
-    }),
-  );
-  next.className = "usfm-verse-next";
-  return [next];
-};
-
-/** One finding not on a verse number: its message, then its fixes. */
-function findingMenu(
-  view: EditorView,
-  item: RowFinding,
-  step: { readonly row: readonly RowFinding[]; readonly index: number },
-): { dom: HTMLElement } {
-  const dom = document.createElement("div");
-  dom.className = "usfm-verse-menu";
-  forEachDiagnostic(view.state, (diagnostic, from, to) => {
-    if (from !== item.from || to !== item.to) return;
-    const said = document.createElement("div");
-    said.className = `usfm-verse-finding usfm-verse-finding-${diagnostic.severity}`;
-    said.textContent = sentenceCase(diagnostic.message);
-    dom.append(said);
-    for (const action of diagnostic.actions ?? [])
-      dom.append(
-        button(sentenceCase(action.name.replace(/^Fix:\s*/, "")), () => {
-          action.apply(view, from, to);
-          closeMenu(view);
-          view.focus();
-        }),
-      );
-  });
-  dom.append(...nextOnRow(view, step));
-  return { dom };
-}
 
 /** What a verse number can be in USFM: 3, 3a, or a bridge such as 3-4 or 3a-4b. */
 const VERSE_NUMBER = /^\d+[a-z]?(-\d+[a-z]?)?$/;
@@ -292,11 +201,7 @@ const button = (label: string, run: () => void): HTMLButtonElement => {
 };
 
 /** The verse number's menu: change it, remove its marker (its text joins the verse before), or add one after it. */
-function verseMenu(
-  view: EditorView,
-  k: number,
-  step?: { readonly row: readonly RowFinding[]; readonly index: number },
-): { dom: HTMLElement } {
+function verseMenu(view: EditorView, k: number): { dom: HTMLElement } {
   const close = (): void => closeMenu(view);
   const edit = (spec: TransactionSpec): void => {
     view.dispatch({ ...spec, annotations: trusted.of("line-by-line"), scrollIntoView: true });
@@ -374,7 +279,7 @@ function verseMenu(
       selection: EditorSelection.cursor(at + insert.length),
     });
   });
-  dom.append(form, remove, add, ...nextOnRow(view, step));
+  dom.append(form, remove, add);
   queueMicrotask(() => input.select());
   return { dom };
 }
@@ -439,7 +344,7 @@ const verseNumberClicks = EditorView.domEventHandlers({
     );
     if (k < 0) return false;
     event.preventDefault();
-    view.dispatch({ effects: openVerseMenu.of({ verse: k }) });
+    view.dispatch({ effects: openVerseMenu.of(k) });
     return true;
   },
 });
