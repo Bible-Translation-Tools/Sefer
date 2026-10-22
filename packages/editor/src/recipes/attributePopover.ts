@@ -9,6 +9,7 @@ import {
   attributesAt,
 } from "../core/attributes";
 import { trusted } from "../core/kernel";
+import { phrase } from "../core/words";
 
 /**
  * The default UI over the attribute data (`core/attributes.ts`): a press on a
@@ -75,7 +76,7 @@ function form(view: EditorView, target: AttributedMarkup): HTMLElement {
     key.value = attribute.name ?? "default";
     key.readOnly = true;
     key.tabIndex = -1;
-    key.title = "Keys are locked: change one in USFM mode";
+    key.title = phrase(view.state, "attributes.keyLocked");
     const value = document.createElement("input");
     value.className = "usfm-attr-v";
     value.value = attribute.value;
@@ -94,10 +95,10 @@ function form(view: EditorView, target: AttributedMarkup): HTMLElement {
   foot.className = "usfm-attrs-foot";
   foot.textContent =
     target.attributes.length === 0
-      ? "No attributes. Add one in USFM mode."
+      ? phrase(view.state, "attributes.none")
       : editable
-        ? "Enter saves · Esc closes"
-        : "Read only";
+        ? phrase(view.state, "attributes.hint")
+        : phrase(view.state, "attributes.readOnly");
   dom.append(foot);
 
   const commit = (): void => {

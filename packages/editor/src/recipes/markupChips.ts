@@ -11,9 +11,10 @@ import {
 import { decoField } from "../core/editorState";
 import { featureAtoms } from "../core/stops";
 import { type UnsupportedMarkup, unsupportedMarkup } from "../core/unsupported";
+import { phrase } from "../core/words";
 
 /** How a chip is drawn: the default is a small labelled box; a host may draw its own. */
-export type ChipRenderer = (markup: UnsupportedMarkup) => HTMLElement;
+export type ChipRenderer = (markup: UnsupportedMarkup, view: EditorView) => HTMLElement;
 
 /**
  * The default chip: a small labelled box. Two markers read better drawn: a
@@ -21,17 +22,17 @@ export type ChipRenderer = (markup: UnsupportedMarkup) => HTMLElement;
  * marker becomes the caption's "published as" (its line is styled too, in
  * `build`).
  */
-const defaultChip: ChipRenderer = (markup) => {
+const defaultChip: ChipRenderer = (markup, view) => {
   const chip = document.createElement("span");
   chip.title = markup.text.trim();
   if (markup.marker === "pb") {
     chip.className = "usfm-chip-pb";
-    chip.textContent = "page break";
+    chip.textContent = phrase(view.state, "chip.pageBreak");
     return chip;
   }
   if (markup.marker === "cp") {
     chip.className = "usfm-chip-cp";
-    chip.textContent = "published as";
+    chip.textContent = phrase(view.state, "chip.publishedAs");
     return chip;
   }
   chip.className = markup.closing ? "usfm-chip usfm-chip-end" : "usfm-chip";
@@ -51,8 +52,8 @@ class ChipWidget extends WidgetType {
   eq(other: ChipWidget) {
     return other.markup.text === this.markup.text && other.markup.label === this.markup.label;
   }
-  toDOM() {
-    return this.render(this.markup);
+  toDOM(view: EditorView) {
+    return this.render(this.markup, view);
   }
   ignoreEvent() {
     return false;

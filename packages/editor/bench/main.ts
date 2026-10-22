@@ -1,6 +1,8 @@
 import {
   editorFeatures,
   editorPolicy,
+  type EditorWords,
+  type PhraseKey,
   mountBookEditor,
   mountReader,
   mountReference,
@@ -41,6 +43,35 @@ const modeSelect = $<HTMLSelectElement>("#mode");
 const referencePane = $("#reference");
 const presetBoxes = [...document.querySelectorAll<HTMLInputElement>("input[data-preset]")];
 const caretMoves = $<HTMLInputElement>("#caret-moves");
+const wordsSelect = $<HTMLSelectElement>("#words");
+
+const SPANISH_PHRASES: Partial<Record<PhraseKey, string>> = {
+  "chip.pageBreak": "salto de página",
+  "chip.publishedAs": "publicado como",
+  "verseMenu.changeNumber": "Cambiar número",
+  "verseMenu.removeMarker": "Quitar marca de versículo",
+  "verseMenu.addVerseAfter": "Añadir versículo después",
+  "attributes.hint": "Intro guarda · Esc cierra",
+};
+
+/** A sample translation, to prove the package's words come from the host: partial on purpose. */
+const SPANISH: EditorWords = {
+  marker: (marker, { closing }) => {
+    const words: Record<string, string> = {
+      pb: "salto de página",
+      tr: "fila",
+      th: "celda de encabezado",
+      tc: "celda",
+      fig: "figura",
+      cat: "categoría",
+      esbe: "fin del recuadro",
+    };
+    const base = marker?.replace(/\d+$/, "") ?? "";
+    const word = words[base];
+    return word === undefined ? undefined : closing ? `fin de ${word}` : word;
+  },
+  phrase: (key) => SPANISH_PHRASES[key],
+};
 
 /** Shows a string with its invisibles drawn, so a newline or a space is never a guess. */
 const visible = (text: string, breaks = false): string =>
@@ -299,6 +330,7 @@ const open = (edited: BenchText, beside?: BenchText): void => {
 
   editor = mountBookEditor({
     features: editorFeatures(),
+    ...(wordsSelect.value === "es" ? { words: SPANISH } : {}),
     parent: editorPane,
     book,
     onCaret: (head) => {
@@ -361,7 +393,10 @@ const press = (id: string): void => {
     button.setAttribute("aria-pressed", String(button.dataset.id === id));
 };
 
+let current: Scenario | undefined;
+
 const choose = (scenario: Scenario): void => {
+  current = scenario;
   press(scenario.id);
   $("#note").textContent = scenario.note;
   open(scenario.edited, scenario.reference);
@@ -400,6 +435,9 @@ const applyPolicy = (): void => {
   remember("bench.mode", modeSelect.value);
 };
 modeSelect.addEventListener("change", applyPolicy);
+wordsSelect.addEventListener("change", () => {
+  if (current !== undefined) choose(current);
+});
 for (const box of presetBoxes) box.addEventListener("change", applyPolicy);
 $("#clear").addEventListener("click", () => logList.replaceChildren());
 

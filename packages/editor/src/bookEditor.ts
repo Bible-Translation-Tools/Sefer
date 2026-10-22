@@ -22,6 +22,7 @@ import { keystrokeMeter } from "./core/meter";
 import { span } from "./core/timing";
 import { type UnsupportedMarkup, unsupportedMarkup } from "./core/unsupported";
 import { addVerseAfter, removeVerseMarker, renumberVerse, verseAt } from "./core/verseCommands";
+import { type EditorWords, editorWords } from "./core/words";
 import type { EditorFeature } from "./features";
 import { handleFor, markMoved, type EditorHandle } from "./handle";
 import { annotateRepaint } from "./observability";
@@ -64,6 +65,12 @@ export interface BookEditorOptions {
    * the book's first mount.
    */
   readonly features?: readonly EditorFeature[];
+  /**
+   * The words the editor shows, in the host's language: what a marker is
+   * called (the chips) and every UI phrase (`PHRASES`). Anything left out is
+   * English. Decided by the book's first mount.
+   */
+  readonly words?: EditorWords;
 }
 
 /** One mark the linter draws: the engine's and the host's (`setHostDiagnostics`) as one set. */
@@ -292,6 +299,7 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
         frontMatterCard(),
         attributeActivation,
         ...(options.features ?? []),
+        ...(options.words === undefined ? [] : [editorWords.of(options.words)]),
         EditorView.updateListener.of((update) => {
           const listeners = activateListeners.get(book);
           if (listeners === undefined || listeners.size === 0) return;

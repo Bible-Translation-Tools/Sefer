@@ -5,6 +5,7 @@ import { forTokensIn } from "./decorations";
 import { docText, structureAt } from "./docStructure";
 import { decoField } from "./editorState";
 import { isVisual } from "./kernel";
+import { markerWords } from "./words";
 
 /**
  * Markup Reading has no drawing for yet: a marker, closer or attribute list
@@ -19,37 +20,13 @@ export interface UnsupportedMarkup {
   readonly marker: string | null;
   /** A closer (`\fig*`) rather than an opener. */
   readonly closing: boolean;
-  /** What a reader calls it: "table row", "figure", "page break". */
+  /** What a reader calls it, in the host's words (`EditorWords.marker`) or English: "table row". */
   readonly label: string;
   /** The raw text it stands for. */
   readonly text: string;
 }
 
-const LABELS: Readonly<Record<string, string>> = {
-  tr: "table row",
-  th: "heading cell",
-  thc: "heading cell",
-  thr: "heading cell",
-  tc: "cell",
-  tcc: "cell",
-  tcr: "cell",
-  fig: "figure",
-  esb: "sidebar",
-  esbe: "sidebar end",
-  cat: "category",
-  pb: "page break",
-  cp: "published chapter",
-  periph: "peripheral",
-};
-
 const SHOWN_KINDS = new Set<number>([TOKEN.MARKER, TOKEN.CLOSING_MARKER, TOKEN.ATTR_LIST]);
-
-const labelOf = (marker: string | null, closing: boolean): string => {
-  if (marker === null) return "attributes";
-  const base = marker.replace(/\d+$/, "");
-  const label = LABELS[base] ?? LABELS[marker] ?? marker;
-  return closing ? `${label} end` : label;
-};
 
 /**
  * The unsupported markup in `[from, to)`: in Reading only, and only where the
@@ -86,7 +63,7 @@ export function unsupportedMarkup(
       to: b,
       marker,
       closing,
-      label: labelOf(marker, closing),
+      label: markerWords(state, marker, closing),
       text: doc.slice(a, b),
     });
   });

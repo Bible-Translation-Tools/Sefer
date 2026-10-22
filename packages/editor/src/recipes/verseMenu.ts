@@ -18,6 +18,7 @@ import {
   removesMarker,
   suggestedNumber,
 } from "../core/verseLines";
+import { phrase } from "../core/words";
 
 /**
  * The verse number's menu, an opt-in feature (`editorFeatures`): a press on a
@@ -102,13 +103,13 @@ function menu(view: EditorView, k: number): { dom: HTMLElement } {
 
   const form = document.createElement("form");
   const label = document.createElement("label");
-  label.textContent = "Change number";
+  label.textContent = phrase(view.state, "verseMenu.changeNumber");
   const input = document.createElement("input");
   const before = structureAt(view.state).verses[k - 1];
   const guess = verse.num === null && before !== undefined ? nextNumber(before.num) : undefined;
   input.value = suggestion ?? verse.num ?? guess ?? "";
   input.size = 4;
-  input.setAttribute("aria-label", "Verse number");
+  input.setAttribute("aria-label", phrase(view.state, "verseMenu.verseNumber"));
   input.addEventListener("input", () => input.removeAttribute("aria-invalid"));
   label.append(input);
   form.append(label);
@@ -129,8 +130,12 @@ function menu(view: EditorView, k: number): { dom: HTMLElement } {
     view.focus();
   });
 
-  const remove = button("Remove verse marker", () => edit(removeVerseMarker(view.state, k)));
-  const add = button("Add verse after", () => edit(addVerseAfter(view.state, k)));
+  const remove = button(phrase(view.state, "verseMenu.removeMarker"), () =>
+    edit(removeVerseMarker(view.state, k)),
+  );
+  const add = button(phrase(view.state, "verseMenu.addVerseAfter"), () =>
+    edit(addVerseAfter(view.state, k)),
+  );
   dom.append(form, remove, add);
   queueMicrotask(() => input.select());
   return { dom };

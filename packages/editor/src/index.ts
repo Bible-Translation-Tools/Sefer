@@ -20,6 +20,7 @@ export {
   type EditorFeature,
 } from "./features";
 export { type UnsupportedMarkup } from "./core/unsupported";
+export { PHRASES, type EditorWords, type PhraseKey } from "./core/words";
 
 export {
   mountBookEditor,
