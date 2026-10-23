@@ -34,7 +34,14 @@ import { createLifecycle } from "./shell/lifecycle";
 import { createLayoutPreferences, createPreferences } from "./shell/preferences";
 import { createReader } from "./shell/reader";
 import { createSlugs } from "./shell/slugs";
-import type { LiveProject, Navigate, RecentProject, Reveal, RevealAt } from "./shell/types";
+import type {
+  LiveProject,
+  Navigate,
+  RecentProject,
+  Reveal,
+  RevealAt,
+  RevealCaret,
+} from "./shell/types";
 import { createUpdateCheck } from "./shell/updateCheck";
 import type { ShellEvent } from "./shellEvent";
 import { makeShellStores, type SaveState } from "./shellStores";
@@ -68,7 +75,13 @@ export interface Shell {
   readonly lineByLine: Accessor<boolean>;
   readonly setLineByLine: (on: boolean) => void;
 
-  readonly aim: (bookId: BookId, from: number, to?: number, at?: RevealAt) => void;
+  readonly aim: (
+    bookId: BookId,
+    from: number,
+    to?: number,
+    at?: RevealAt,
+    caret?: RevealCaret,
+  ) => void;
   readonly reveal: Accessor<Reveal | undefined>;
 
   readonly showChapter: (ordinal: number) => void;

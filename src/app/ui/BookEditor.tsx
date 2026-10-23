@@ -205,6 +205,14 @@ export function BookEditor(props: BookEditorProps) {
     () => ({ editor: bound(), aimed: shell.reveal() }),
     ({ editor, aimed }) => {
       if (editor === undefined || aimed === undefined || aimed.bookId !== bookId) return;
+      if (aimed.caret === "keep") {
+        // Only into view: the caret, and so the reference's pair, stay put.
+        editor.reveal(
+          { from: aimed.from, ...(aimed.to === undefined ? {} : { to: aimed.to }) },
+          { scroll: aimed.at === "top" ? "start" : "center" },
+        );
+        return;
+      }
       const cancel = editor.jump(
         { from: aimed.from, ...(aimed.to === undefined ? {} : { to: aimed.to }) },
         aimed.at === "top" ? "top" : "center",

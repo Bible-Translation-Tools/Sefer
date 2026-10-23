@@ -23,7 +23,7 @@ import type { Location } from "../location";
 import type { Services } from "../services";
 import type { LastLocation, LastLocations, shellKeys } from "../settings";
 import type { ShellStores } from "../shellStores";
-import type { Navigate, LiveProject, Reveal, RevealAt } from "./types";
+import type { Navigate, LiveProject, Reveal, RevealAt, RevealCaret } from "./types";
 
 export interface ReaderDeps {
   readonly services: Services;
@@ -313,8 +313,14 @@ export const createReader = ({
     remember(bookId, opening, resume);
   };
 
-  const aim = (bookId: BookId, from: number, to?: number, at?: RevealAt): void => {
-    setReveal({ bookId, from, to, at });
+  const aim = (
+    bookId: BookId,
+    from: number,
+    to?: number,
+    at?: RevealAt,
+    caret?: RevealCaret,
+  ): void => {
+    setReveal({ bookId, from, to, at, caret });
   };
 
   const showChapter = (ordinal: number): void => {

@@ -239,6 +239,7 @@ export function ReferencePane(props: ReferencePaneProps) {
         analyze: services.galley.memoize(),
         mode: untrack(() => shell.mode()),
         pairBlocks: untrack(() => services.settings.get(shellKeys(services.settings).pairBlocks)),
+        onPlace: (offset) => showInBook(offset),
       });
       setMounted(view);
       // Returned, not onCleanup: a Solid 2 effect's callback has no owner (NO_OWNER_CLEANUP).
@@ -347,6 +348,19 @@ export function ReferencePane(props: ReferencePaneProps) {
     },
     { name: "pairedRange" },
   );
+
+  /**
+   * A click in the reference shows its pair in the book: the same pairing the
+   * caret uses, read the other way. Into view only — the caret stays where
+   * the person is typing, so the pair this pane marks does not move either.
+   */
+  const showInBook = (offset: number): void => {
+    const source = untrack(sourceSkeleton);
+    const target = untrack(targetSkeleton);
+    if (source === undefined || target === undefined) return;
+    const range = pairedRangeAt(source, target, offset, () => {});
+    if (range !== undefined) shell.aim(bookId, range.from, range.to, "centre", "keep");
+  };
 
   createEffect(
     () => mounted(),

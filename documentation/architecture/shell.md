@@ -72,6 +72,10 @@ as **Intro**, and only when the book actually has any.
 Findings and search navigate by URL, and the route that lands calls `focus(bookId)` with no offset. So
 the offset is left on the shell first: `shell.aim(bookId, from)` records it, `focus` reads it to
 choose the opening chapter, and `shell.reveal()` keeps it for the editor surface to scroll to.
+An aim moves the caret there, unless it says `caret: "keep"`: a click in a reference pane
+(`mountReference`'s `onPlace`) aims the book at the clicked verse's pair — the caret's pairing read
+the other way — and only brings it into view, so the caret, and the pair the pane marks for it, stay
+where the person is typing and nothing bounces back.
 
 ## Where you were: `workspace.lastLocation`
 

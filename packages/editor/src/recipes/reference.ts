@@ -23,6 +23,11 @@ export interface ReferenceOptions {
   readonly mode: ProjectionName;
   /** Draw the paired block? The reader's setting at mount; `pairBlocks` moves it. */
   readonly pairBlocks?: boolean;
+  /**
+   * The reader clicked or tapped the text at `offset` — for the host to show
+   * the same place in the book. A drag that selects text is not a place.
+   */
+  readonly onPlace?: (offset: number) => void;
 }
 
 export interface ReferenceMount extends EditorHandle {
@@ -84,6 +89,14 @@ export function mountReference(options: ReferenceOptions): ReferenceMount {
   const view = new EditorView({ state, parent: options.parent });
   done();
 
+  const { onPlace } = options;
+  const clicked = (event: MouseEvent): void => {
+    if (onPlace === undefined || !view.state.selection.main.empty) return;
+    const at = view.posAtCoords({ x: event.clientX, y: event.clientY });
+    if (at !== null) onPlace(at);
+  };
+  view.contentDOM.addEventListener("click", clicked);
+
   const mount = handleFor(view, {
     setMode: (mode: ProjectionName) => {
       view.dispatch({ effects: projection.reconfigure(modeView(mode)) });
@@ -118,6 +131,7 @@ export function mountReference(options: ReferenceOptions): ReferenceMount {
     },
 
     destroy: () => {
+      view.contentDOM.removeEventListener("click", clicked);
       view.destroy();
     },
   });
