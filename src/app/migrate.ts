@@ -30,10 +30,21 @@ export type Opened =
   | { readonly state: "ready"; readonly staged: StagedBook; readonly health: Health }
   | { readonly state: "refused"; readonly reason: string };
 
-export const writerLanguages = (
-  services: Services,
-  search: string,
-): Promise<readonly WriterLanguage[]> => catalogueFor(services.settings).writerLanguages(search);
+let writerList: Promise<readonly WriterLanguage[]> | undefined;
+
+/**
+ * Every language with Writer projects, asked for once per session (~1.6 s) and
+ * searched in the page after. A failure is not kept, so the next ask retries.
+ */
+export const writerLanguages = (services: Services): Promise<readonly WriterLanguage[]> => {
+  writerList ??= catalogueFor(services.settings)
+    .writerLanguages()
+    .catch((cause: unknown) => {
+      writerList = undefined;
+      throw cause;
+    });
+  return writerList;
+};
 
 export const remoteCandidates = (
   services: Services,

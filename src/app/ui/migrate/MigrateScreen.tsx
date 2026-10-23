@@ -4,7 +4,7 @@ import { Option } from "effect";
 import FileArchive from "lucide-solid/icons/file-archive";
 import FolderOpen from "lucide-solid/icons/folder-open";
 import Link from "lucide-solid/icons/link";
-import { For, Show, createMemo, createSignal, onCleanup, untrack } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 
 import { prefillForm } from "#core/migrate/assemble";
 import {
@@ -335,7 +335,10 @@ function UrlDialog(props: {
   );
 }
 
-export function MigrateScreen(props: { readonly into?: string | undefined }) {
+export function MigrateScreen(props: {
+  readonly into?: string | undefined;
+  readonly language?: string | undefined;
+}) {
   const shell = useShell();
   const { services } = shell;
   const navigate = useNavigate();
@@ -467,6 +470,13 @@ export function MigrateScreen(props: { readonly into?: string | undefined }) {
       () => setBusy(false),
     );
   };
+
+  createEffect(
+    () => props.language,
+    (language) => {
+      if (language !== undefined && online) fromCatalogue(language);
+    },
+  );
 
   const allRows = createMemo(() => groupByBook(candidates()), { name: "migrateAllRows" });
 

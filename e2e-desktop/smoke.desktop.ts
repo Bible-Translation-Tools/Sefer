@@ -159,7 +159,8 @@ describe("the desktop app", () => {
   it("imports a folder onto the native disk and opens it", async () => {
     cpSync(path.join(root, "fixtures", "small-nt"), picked, { recursive: true });
     await answerDialogs({ open: picked });
-    await $("[data-testid='app-bar-import']").click();
+    // Import lives on the projects page only; a fresh launch lands on the empty workspace.
+    await browser.execute(() => location.assign("/projects"));
     await $("[data-testid='import-folder']").click();
     await waitForText("books imported");
     await $("button=Close").click();

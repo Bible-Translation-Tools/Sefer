@@ -59,7 +59,7 @@ export interface CatalogueService {
   readonly origin: string;
   readonly entries: () => Promise<CatalogueRead>;
   readonly writerBooks: (language: string) => Promise<readonly BookCandidate[]>;
-  readonly writerLanguages: (search: string) => Promise<readonly WriterLanguage[]>;
+  readonly writerLanguages: () => Promise<readonly WriterLanguage[]>;
 }
 
 /** A text the Language API lists for download: WA's Translation Notes, or a gateway language's Bible. */
@@ -78,8 +78,6 @@ export interface WriterLanguage {
   readonly naturalName: string;
   readonly anglicizedName: string;
   readonly region: string | undefined;
-  readonly projects: number;
-  readonly updated: string | undefined;
 }
 
 const ConsolidatedRepo = Schema.Struct({
@@ -156,19 +154,14 @@ const WRITER_CONTENT = `{
   }
 }`;
 
-const WRITER_LANGUAGES_QUERY = `query ($s: String!) {
-  language(where: { _and: [
-    { _or: [
-      { ietf_code: { _ilike: $s } }
-      { english_name: { _ilike: $s } }
-      { national_name: { _ilike: $s } }
-      { language_alternate_names: { name: { _ilike: $s } } }
-    ] }
-    { contents: ${WRITER_CONTENT} }
-  ] }) {
-    ietf_code english_name national_name
-    contents_aggregate(where: ${WRITER_CONTENT}) { aggregate { count max { modified_on } } }
-  }
+/**
+ * Every language with Writer projects, names only: 1,731 languages, ~133 KB, ~1.6 s
+ * (probed 2026-10-23). Each language's project count and last update
+ * (`contents_aggregate`) took the same list to ~21 s, so they are not asked for;
+ * the count comes once a language is picked (`writerBooks`).
+ */
+const WRITER_LANGUAGES_QUERY = `{
+  language(where: { contents: ${WRITER_CONTENT} }) { ietf_code english_name national_name }
 }`;
 
 const WriterLanguages = Schema.Struct({
@@ -178,14 +171,6 @@ const WriterLanguages = Schema.Struct({
         ietf_code: Schema.String,
         english_name: Schema.NullOr(Schema.String),
         national_name: Schema.NullOr(Schema.String),
-        contents_aggregate: Schema.Struct({
-          aggregate: Schema.NullOr(
-            Schema.Struct({
-              count: Schema.Number,
-              max: Schema.NullOr(Schema.Struct({ modified_on: Schema.NullOr(Schema.String) })),
-            }),
-          ),
-        }),
       }),
     ),
   }),
@@ -351,10 +336,8 @@ const writerBooksOf = async (origin: string, language: string) => {
   });
 };
 
-const writerLanguagesOf = async (origin: string, search: string) => {
-  const decoded = decodeWriterLanguages(
-    await graphql(origin, WRITER_LANGUAGES_QUERY, { s: `%${search.trim()}%` }),
-  );
+const writerLanguagesOf = async (origin: string) => {
+  const decoded = decodeWriterLanguages(await graphql(origin, WRITER_LANGUAGES_QUERY));
   if (Result.isFailure(decoded))
     throw new CatalogueError(
       `Language API payload not understood: ${decoded.failure.message}`,
@@ -379,8 +362,6 @@ const writerLanguagesOf = async (origin: string, search: string) => {
       naturalName: natural === "" ? english : natural,
       anglicizedName: english === "" ? natural : english,
       region: blankToUndefined(regionOf.get(language.ietf_code.toLowerCase())),
-      projects: language.contents_aggregate.aggregate?.count ?? 0,
-      updated: blankToUndefined(language.contents_aggregate.aggregate?.max?.modified_on),
     };
   });
 };
@@ -420,7 +401,7 @@ const languageApiCatalogue = (origin: string): CatalogueService => ({
   source: "live",
   origin,
   writerBooks: (language) => writerBooksOf(origin, language),
-  writerLanguages: (search) => writerLanguagesOf(origin, search),
+  writerLanguages: () => writerLanguagesOf(origin),
   entries: () => entriesOf(origin),
 });
 

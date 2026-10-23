@@ -8,7 +8,12 @@ import "#app/ui/theme";
 
 interface MigrateSearch {
   readonly into?: string;
+  /** A Writer language picked on the projects page: its books are listed on arrival. */
+  readonly language?: string;
 }
+
+const text = (value: unknown): string | undefined =>
+  typeof value === "string" && value !== "" ? value : undefined;
 
 function MigrateRoute() {
   const search = Route.useSearch();
@@ -21,14 +26,20 @@ function MigrateRoute() {
           { label: t("Migrate from Writer") },
         ]}
       />
-      <MigrateScreen into={search().into} />
+      <MigrateScreen into={search().into} language={search().language} />
     </main>
   );
 }
 
 export const Route = createFileRoute("/_app/migrate")({
-  validateSearch: (search: Record<string, unknown>): MigrateSearch =>
-    typeof search.into === "string" && search.into !== "" ? { into: search.into } : {},
+  validateSearch: (search: Record<string, unknown>): MigrateSearch => {
+    const into = text(search.into);
+    const language = text(search.language);
+    return {
+      ...(into === undefined ? {} : { into }),
+      ...(language === undefined ? {} : { language }),
+    };
+  },
   head: () => ({ meta: [{ title: "Migrate from Writer · Sefer" }] }),
   component: () => <ShellGate>{() => <MigrateRoute />}</ShellGate>,
 });

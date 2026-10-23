@@ -106,6 +106,10 @@ export default defineConfig(({ mode }) => {
         outdir: "./src/app/paraglide",
         emitTsDeclarations: true,
         strategy: ["baseLocale"],
+        // Said outright, and the same in `pnpm i18n`: the plugin and the CLI
+        // otherwise pick different layouts for the same folder, and whichever
+        // ran last breaks the other (`./en.js` missing under the dev server).
+        outputStructure: "message-modules",
       }),
       tailwindcss(),
       // lucide-solid is a Solid 1 package; this redirects its own solid imports

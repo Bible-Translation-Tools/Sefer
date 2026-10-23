@@ -3,9 +3,9 @@ import { Effect, Option, Scope } from "effect";
 import { lastSegment } from "#core/fileSystem/path";
 import { intakeRepository, type IntakeResult } from "#core/git/intake";
 import { Observability, type Verdict } from "#core/observability";
-import { Gitea } from "#core/remote/gitea";
 import { remoteVerdict } from "#core/remote/remote";
 import { classify, commit, stage } from "#core/resources/import";
+import type { Dropped } from "#platform/web/intake";
 
 import { announceSourceTexts, arrivalRoot, cloneArrival } from "../../arrival";
 import { APP_AUTHOR } from "../../author";
@@ -209,6 +209,7 @@ export const importPicked = (
   context: ImportContext,
   title: string,
   source: "folder" | "zip",
+  dropped?: Dropped,
 ): void => {
   const { services } = context;
   const flow = beginImport(context, title, source, t("Choosing files"));
@@ -217,9 +218,11 @@ export const importPicked = (
   void (async () => {
     const intake = await import("#platform/web/intake");
     const picked =
-      source === "zip"
-        ? await intake.pickZip(flow.operation)
-        : await intake.pickFolder(flow.operation);
+      dropped !== undefined
+        ? await intake.readDropped(dropped, flow.operation)
+        : source === "zip"
+          ? await intake.pickZip(flow.operation)
+          : await intake.pickFolder(flow.operation);
     if (picked === undefined) return declineImport(flow);
 
     context.running(title, "stage", t("0 of {total} files", { total: picked.files.length }));
@@ -242,16 +245,6 @@ export const importPicked = (
     });
   })().catch((cause: unknown) => failImport(flow, cause));
 };
-
-export const listCloneRepos = (services: Services, endpoint: string) =>
-  services.run(
-    Effect.gen(function* () {
-      const gitea = yield* Gitea;
-      const held = yield* gitea.session(endpoint);
-      if (Option.isNone(held)) return [];
-      return yield* gitea.listWritableRepos(endpoint);
-    }),
-  );
 
 export const cloneRepository = (context: ImportContext, url: string): void => {
   const { services } = context;

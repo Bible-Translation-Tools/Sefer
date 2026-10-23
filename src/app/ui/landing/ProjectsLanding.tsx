@@ -1,9 +1,14 @@
-import { createSignal } from "solid-js";
+import { Effect } from "effect";
+import { createSignal, onCleanup, untrack } from "solid-js";
 
 import { t } from "../../i18n";
-import { PanelHeader } from "../primitives";
+import { m } from "../../paraglide/messages";
+import { useShell } from "../../ProjectContext";
+import { PROJECTS_WIDTH, shellKeys } from "../../settings";
+import { PanelHeader, Resizable } from "../primitives";
 import { RecoveryBanner } from "../recovery/RecoveryBanner";
 import type { PendingDownload } from "./downloads";
+import { ImportHub } from "./ImportHub";
 import { WacsProjects } from "./WacsProjects";
 import { YourProjects } from "./YourProjects";
 
@@ -13,31 +18,67 @@ export function ProjectsLanding() {
   });
   const [flyFrom, setFlyFrom] = createSignal<DOMRect>();
 
+  const { services } = useShell();
+  const widthKey = shellKeys(services.settings).projectsWidth;
+  // Plain value: Resizable.Panel reads its sizes once, at registration; the split owns the width after.
+  const initialWidth = untrack(() => services.settings.get(widthKey));
+  let widthWrite: ReturnType<typeof setTimeout> | undefined;
+  onCleanup(() => clearTimeout(widthWrite));
+  const rememberWidth = (fraction: number): void => {
+    clearTimeout(widthWrite);
+    widthWrite = setTimeout(() => {
+      void services.run(Effect.result(services.settings.set(widthKey, fraction)));
+    }, 400);
+  };
+
   return (
-    <main class="flex h-full min-w-0 flex-col gap-8 overflow-hidden p-6">
+    <main class="flex h-full min-w-0 flex-col gap-6 overflow-hidden p-6">
       <RecoveryBanner />
 
-      <section class="shrink-0 space-y-3">
-        <PanelHeader title={t("Projects Loaded into Sefer")} />
-        <YourProjects
-          downloads={downloads()}
-          flyFrom={flyFrom()}
-          onDismiss={(id) => setDownloads((held) => held.filter((item) => item.id !== id))}
-        />
-      </section>
-
-      <WacsProjects
-        downloads={{
-          start: (download, from) => {
-            setFlyFrom(from);
-            setDownloads((held) => [download, ...held.filter((item) => item.id !== download.id)]);
-          },
-          update: (id, patch) =>
-            setDownloads((held) =>
-              held.map((item) => (item.id === id ? { ...item, ...patch } : item)),
-            ),
+      {/* Below lg the two stack, and the drag widths give way to the column. */}
+      <Resizable.Root
+        class="min-h-0 flex-1 max-lg:flex-col max-lg:gap-6"
+        onSizesChange={(sizes) => {
+          const first = sizes[0];
+          if (first !== undefined) rememberWidth(first);
         }}
-      />
+      >
+        <Resizable.Panel
+          initialSize={initialWidth}
+          minSize={PROJECTS_WIDTH.min}
+          maxSize={PROJECTS_WIDTH.max}
+          class="flex flex-col gap-3 lg:pe-3 max-lg:[flex-basis:auto]! max-lg:overflow-visible"
+        >
+          <PanelHeader title={t("Projects Loaded into Sefer")} />
+          {/* The drop zone scrolls away with the list; only the title stays. */}
+          <div class="scrollbar-subtle flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pb-24">
+            <ImportHub variant="drop" />
+            <YourProjects
+              downloads={downloads()}
+              flyFrom={flyFrom()}
+              onDismiss={(id) => setDownloads((held) => held.filter((item) => item.id !== id))}
+            />
+          </div>
+        </Resizable.Panel>
+        <Resizable.Handle label={m.landing_resize_columns()} class="max-lg:hidden" />
+        <Resizable.Panel class="flex flex-col lg:ps-3 max-lg:[flex-basis:auto]! max-lg:flex-1">
+          <WacsProjects
+            downloads={{
+              start: (download, from) => {
+                setFlyFrom(from);
+                setDownloads((held) => [
+                  download,
+                  ...held.filter((item) => item.id !== download.id),
+                ]);
+              },
+              update: (id, patch) =>
+                setDownloads((held) =>
+                  held.map((item) => (item.id === id ? { ...item, ...patch } : item)),
+                ),
+            }}
+          />
+        </Resizable.Panel>
+      </Resizable.Root>
     </main>
   );
 }
