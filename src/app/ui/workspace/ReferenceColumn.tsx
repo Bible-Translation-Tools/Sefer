@@ -654,10 +654,13 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
   /**
    * A text's LANGUAGE, as the split dropdown groups by it: one row per
    * language, however many texts it has (ULB, UDB, Notes…). Lower-cased tag;
-   * the id when a text names no language.
+   * "" for every text that names no language, so they share one row.
    */
-  const languageOf = (resource: Resource): string =>
-    (resource.language ?? resource.id).toLowerCase();
+  const languageOf = (resource: Resource): string => (resource.language ?? "").toLowerCase();
+  const projectLanguageOf = (row: ProjectSummary): string => row.languageTag.toLowerCase();
+  /** What the left half calls a language: its name and tag, or that none is set. */
+  const languageLabel = (key: string, fallback?: string): string =>
+    key === "" ? m.reference_no_language() : `${languageName(key) ?? fallback ?? key} (${key})`;
   /** The text last on show in each language, so returning to it returns to that text. */
   const [lastIn, setLastIn] = createSignal<Readonly<Record<string, string>>>(
     {},
@@ -908,73 +911,79 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
   const byName = (a: Offer, b: Offer): number => a.name.localeCompare(b.name);
 
   /**
-   * What the language list offers: everything on this device (and the
-   * reader's other projects), A–Z, then everything to download, A–Z. A
-   * download stays in the list once it lands.
+   * The left half: LANGUAGES only, one row each. Those on this device (its
+   * texts, and the reader's other projects) A–Z, then those to download A–Z.
+   * Choosing a held language opens its scripture; what else it holds is the
+   * right half's.
    */
   const offers = (): readonly Offer[] => {
-    // One row per LANGUAGE on this device, whatever texts it holds; it opens
-    // on its scripture.
-    const languages = new Map<string, Resource[]>();
+    const texts = new Map<string, Resource[]>();
     for (const resource of installed()) {
       const key = languageOf(resource);
-      const held = languages.get(key);
-      if (held === undefined) languages.set(key, [resource]);
-      else held.push(resource);
+      texts.set(key, [...(texts.get(key) ?? []), resource]);
     }
-    const labelOf = (key: string, fallback: string): string =>
-      `${languageName(key) ?? fallback} (${key})`;
-    const held: Offer[] = [...languages].map(([key, texts]): Offer => {
+    const projectsIn = new Map<string, ProjectSummary[]>();
+    for (const row of otherProjects()) {
+      const key = projectLanguageOf(row);
+      projectsIn.set(key, [...(projectsIn.get(key) ?? []), row]);
+    }
+    const heldKeys = new Set([...texts.keys(), ...projectsIn.keys()]);
+    const held: Offer[] = [...heldKeys].map((key): Offer => {
+      const here = texts.get(key) ?? [];
+      const projectsHere = projectsIn.get(key) ?? [];
       return {
         kind: "held",
         key,
-        name: labelOf(key, texts[0]?.title ?? key),
+        name: languageLabel(key, here[0]?.title ?? projectsHere[0]?.language),
         add: () => {
-          const opening = texts.find(isBible) ?? texts[0];
+          const opening = here.find(isBible) ?? here[0];
           if (opening !== undefined) show(opening);
+          else if (projectsHere[0] !== undefined) showProject(projectsHere[0]);
         },
       };
     });
-    for (const row of otherProjects()) {
-      const key = (row.languageTag || row.root).toLowerCase();
-      if (languages.has(key)) continue;
-      languages.set(key, []);
-      held.push({
-        kind: "held",
-        key,
-        name: row.languageTag === "" ? row.name : labelOf(key, row.language || row.name),
-        add: () => showProject(row),
+    // To download: a language with a gateway Bible, or only Translation
+    // Notes, and nothing here yet. Its Bible first when it has one.
+    const toGet = new Map<string, Offer>();
+    for (const text of offeredBibles()) {
+      const key = text.language.toLowerCase();
+      if (heldKeys.has(key) || toGet.has(key)) continue;
+      toGet.set(key, {
+        kind: "download",
+        key: text.repository,
+        name: textName(text),
+        download: () => fetchBible(text, true),
+        pulling: () => pulling().has(text.repository),
       });
     }
-    // Languages to download: one row each, never one already on this device.
-    const offered = new Set<string>();
-    const toGet: Offer[] = offeredBibles().flatMap((text): Offer[] => {
-      const key = text.language.toLowerCase();
-      if (languages.has(key) || offered.has(key)) return [];
-      offered.add(key);
-      return [
-        {
-          kind: "download",
-          key: text.repository,
-          name: textName(text),
-          download: () => fetchBible(text, true),
-          pulling: () => pulling().has(text.repository),
-        },
-      ];
-    });
-    return [...held.sort(byName), ...toGet.sort(byName)];
+    for (const help of helps()) {
+      const key = help.language.toLowerCase();
+      if (heldKeys.has(key) || toGet.has(key)) continue;
+      toGet.set(key, {
+        kind: "download",
+        key: help.repository,
+        name: textName(help),
+        download: () => fetchHelp(help),
+        pulling: () => helpDownloads().has(help.repository),
+      });
+    }
+    return [...held.sort(byName), ...[...toGet.values()].sort(byName)];
   };
   /**
-   * The split dropdown's right half, the choice of text WITHIN a language:
-   * every text on this device in that language — its scriptures, its
-   * Translation Notes… — and, to download, the notes this language has and
-   * the device does not. Named by its shorthand (`ULB`, `REG`) where it has
-   * one, not its full title.
+   * The split dropdown's right half: everything in the language on show, of
+   * every kind. What is on this device (its scriptures, its Translation
+   * Notes…), the reader's other projects in it, then what there is to
+   * download: its gateway Bibles and its Translation Notes. Named by its
+   * shorthand (`ULB`, `REG`) where it has one, not its full title.
    */
   const ResourcePicker = (pickerProps: { readonly resource: Resource }) => {
     const key = (): string => languageOf(pickerProps.resource);
     const texts = (): readonly Resource[] =>
       installed().filter((each) => languageOf(each) === key());
+    const projectsHere = (): readonly ProjectSummary[] =>
+      otherProjects().filter((row) => projectLanguageOf(row) === key());
+    const biblesHere = (): readonly ListedText[] =>
+      offeredBibles().filter((text) => text.language.toLowerCase() === key());
     const notesHere = (): readonly ListedText[] =>
       helps().filter((help) => help.language.toLowerCase() === key());
     return (
@@ -1009,6 +1018,21 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
             </MenuItem>
           )}
         </For>
+        <For each={projectsHere()}>
+          {(row) => (
+            <MenuItem class={ROW} onSelect={() => showProject(row)}>
+              <span class="min-w-0 flex-1 truncate">{row.name}</span>
+            </MenuItem>
+          )}
+        </For>
+        <For each={biblesHere()}>
+          {(text) => (
+            <MenuItem class={ROW} onSelect={() => fetchBible(text)}>
+              <span class="min-w-0 flex-1 truncate">{text.title}</span>
+              <Download aria-hidden="true" class="size-5 shrink-0" />
+            </MenuItem>
+          )}
+        </For>
         <For each={notesHere()}>
           {(help) => (
             <MenuItem class={ROW} onSelect={() => fetchHelp(help)}>
@@ -1031,8 +1055,11 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
   };
 
   /** The language a group is called by, as the split dropdown names it. */
-  const groupName = (group: { readonly key: string; readonly entries: readonly Entry[] }): string =>
-    languageName(group.key) ?? group.entries[0]?.resource.title ?? group.key;
+  const groupName = (group: {
+    readonly key: string;
+    readonly entries: readonly Entry[];
+  }): string =>
+    group.key === "" ? m.reference_no_language() : (languageName(group.key) ?? group.key);
   /** The language of the text on show, if one is. */
   const shownLanguage = (): string | undefined => {
     const held = shown();
