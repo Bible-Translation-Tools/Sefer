@@ -5,6 +5,7 @@ import PanelLeftOpen from "lucide-solid/icons/panel-left-open";
 import { Show, createEffect, createSignal, untrack } from "solid-js";
 
 import { t } from "#app/i18n";
+import { m } from "#app/paraglide/messages";
 import { useShell } from "#app/ProjectContext";
 import { REFERENCE_WIDTH } from "#app/settings";
 import { BookEditor } from "#app/ui/BookEditor";
@@ -77,7 +78,7 @@ function EditorPanel(props: { readonly book: EditorBook; readonly split?: boolea
   const shell = useShell();
   return (
     <section
-      aria-label={t("Refinement")}
+      aria-label={m.refine_editor_label()}
       data-testid="refine-editor"
       class={cx(
         // The page's own white, outlined: the border goes brand while the
@@ -98,7 +99,7 @@ function EditorPanel(props: { readonly book: EditorBook; readonly split?: boolea
             <Show when={props.split === true} fallback={<PanelLeftOpen aria-hidden="true" />}>
               <PanelLeftClose aria-hidden="true" />
             </Show>
-            {props.split === true ? t("Hide reference") : t("Show reference")}
+            {props.split === true ? m.refine_hide_reference() : m.refine_show_reference()}
           </Button>
           <BookViewSwitch class="ms-auto" />
         </div>
@@ -212,7 +213,7 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
                         <Resizable.Handle
                           edge
                           class="translate-x-px"
-                          label={t("Resize the reference panel")}
+                          label={m.refine_resize_reference()}
                         />
                         <Resizable.Panel class="flex min-w-0 flex-col">
                           <EditorPanel book={book()} split />

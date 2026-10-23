@@ -7,6 +7,7 @@ import { Show, createMemo, createSignal, onCleanup, untrack, type Accessor } fro
 import type { Analysis, DecisionUnit, MergeSide } from "#core/galley";
 
 import { t } from "../../i18n";
+import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
 import type { Services } from "../../services";
 import { shellKeys } from "../../settings";
@@ -464,7 +465,7 @@ export function ReviewReader(props: ReviewReaderProps) {
             onDecide={(bookId, units, side) => props.decide(bookId, units, side)}
           />
         ),
-        { show: t("Show changes"), hide: t("Hide changes") },
+        { show: m.sidebar_show_changes(), hide: m.sidebar_hide_changes() },
       ),
     );
 

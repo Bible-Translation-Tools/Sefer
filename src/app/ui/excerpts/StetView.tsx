@@ -16,6 +16,7 @@ import type { Guide, Term } from "#core/stet/stet";
 
 import type { ApprovalsHandle } from "../../approvals";
 import { t } from "../../i18n";
+import { m } from "../../paraglide/messages";
 import type { SourceReading } from "../../workflows/stet";
 import type { CardViews } from "../multibuffer/cardViews";
 import { cardPolicy } from "../multibuffer/policy";
@@ -489,7 +490,7 @@ export function StetView(props: StetViewProps) {
           {terms()}
         </div>
       ),
-      { show: t("Show key terms"), hide: t("Hide key terms") },
+      { show: m.sidebar_show_key_terms(), hide: m.sidebar_hide_key_terms() },
     ),
   );
 

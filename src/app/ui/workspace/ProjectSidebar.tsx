@@ -13,6 +13,7 @@ import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 import { tocViewOf } from "#core/galley";
 
 import { t } from "../../i18n";
+import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
 import { Badge, Button, IconButton, Input, SegmentedControl } from "../primitives";
 import { bookName, testamentOf, type Testament } from "./books";
@@ -334,8 +335,8 @@ export function ProjectSidebar() {
               type="search"
               data-testid="sidebar-search"
               icon={<SearchIcon />}
-              aria-label={t("Search for book and chapter")}
-              placeholder={t("Search…")}
+              aria-label={m.sidebar_search_label()}
+              placeholder={m.sidebar_search_placeholder()}
               value={query()}
               onInput={(event) => setQuery(event.currentTarget.value)}
               onKeyDown={(event) => {
@@ -407,8 +408,8 @@ export function ProjectSidebar() {
                 <For
                   each={
                     [
-                      { testament: "ot", label: t("Old Testament") },
-                      { testament: "nt", label: t("New Testament") },
+                      { testament: "ot", label: m.sidebar_old_testament() },
+                      { testament: "nt", label: m.sidebar_new_testament() },
                     ] as const
                   }
                 >
@@ -511,7 +512,7 @@ export function ProjectControl() {
                 project's language and tag. */}
             <span class="min-w-0 flex-1">
               <span class="block truncate text-smallest text-on-surface-secondary">
-                {t("Project:")}
+                {m.sidebar_project_label()}
               </span>
               <span class="block truncate text-small font-semibold text-on-surface-primary">
                 {projectLanguage(shell.project()) || projectName(shell.project())}

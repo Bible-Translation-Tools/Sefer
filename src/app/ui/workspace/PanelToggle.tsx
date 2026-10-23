@@ -5,6 +5,7 @@ import PanelLeftOpen from "lucide-solid/icons/panel-left-open";
 import { Show } from "solid-js";
 
 import { t } from "../../i18n";
+import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
 import { Button, IconButton } from "../primitives";
 import { layout } from "./layoutTweak";
@@ -60,8 +61,8 @@ export function SidebarButton(props: { readonly showing: boolean }) {
         // Named for what the panel holds now: books, unless a screen has
         // put something else there (key terms, results, changes…).
         const label = sidebarLabel();
-        if (props.showing) return label?.hide ?? t("Hide books");
-        return label?.show ?? t("Show books");
+        if (props.showing) return label?.hide ?? m.sidebar_hide_books();
+        return label?.show ?? m.sidebar_show_books();
       })()}
     </Button>
   );

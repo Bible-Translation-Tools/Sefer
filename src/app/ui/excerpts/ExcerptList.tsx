@@ -13,6 +13,7 @@ import {
 import type { Analysis } from "#core/galley";
 
 import { t } from "../../i18n";
+import { m } from "../../paraglide/messages";
 import { CardList, type CardListProps } from "../multibuffer/CardList";
 import type { CardViews } from "../multibuffer/cardViews";
 import type { VirtualSection } from "../primitives";
@@ -169,7 +170,7 @@ export function ExcerptList(props: ExcerptListProps) {
             onGo={go}
           />
         ),
-        { show: t("Show results"), hide: t("Hide results") },
+        { show: m.sidebar_show_results(), hide: m.sidebar_hide_results() },
       ),
     );
 

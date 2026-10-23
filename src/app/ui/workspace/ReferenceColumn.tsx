@@ -979,7 +979,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       helps().filter((help) => help.language.toLowerCase() === key());
     return (
       <Menu
-        label={t("Resource")}
+        label={m.reference_resource()}
         triggerClass="min-w-0"
         onOpenChange={(open) => {
           if (open) offer();
@@ -1004,7 +1004,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
             <MenuItem class={ROW} onSelect={() => show(text)}>
               <span class="min-w-0 flex-1 truncate">{text.title}</span>
               <Show when={text.id === pickerProps.resource.id}>
-                <Check aria-label={t("Showing")} class="size-5 shrink-0 text-brand" />
+                <Check aria-label={m.reference_showing()} class="size-5 shrink-0 text-brand" />
               </Show>
             </MenuItem>
           )}
@@ -1012,14 +1012,14 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
         <For each={notesHere()}>
           {(help) => (
             <MenuItem class={ROW} onSelect={() => fetchHelp(help)}>
-              <span class="min-w-0 flex-1 truncate">{t("Translation Notes")}</span>
+              <span class="min-w-0 flex-1 truncate">{m.reference_shelf_notes()}</span>
               <Show
                 when={helpDownloads().has(help.repository)}
                 fallback={<Download aria-hidden="true" class="size-5 shrink-0" />}
               >
                 <span
                   role="status"
-                  aria-label={t("Downloading")}
+                  aria-label={m.reference_downloading()}
                   class="size-5 shrink-0 animate-spin rounded-full border-2 border-on-surface-tertiary border-t-transparent"
                 />
               </Show>
@@ -1099,7 +1099,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       class="flex w-full shrink-0 overflow-hidden rounded-lg border border-surface-border"
     >
       <Popover
-        label={t("Reference language")}
+        label={m.reference_language()}
         side="bottom"
         align="start"
         variant="menu"
@@ -1114,7 +1114,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
               {(() => {
                 const key = shownLanguage();
                 const group = languageTabs().find((each) => each.key === key);
-                return group === undefined ? t("Choose a language") : groupName(group);
+                return group === undefined ? m.reference_choose_language() : groupName(group);
               })()}
             </span>
             <ChevronDown aria-hidden="true" class="size-5 shrink-0" />
@@ -1130,7 +1130,9 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
           class="scrollbar-padded flex max-h-[min(70vh,32rem)] flex-col overflow-y-auto py-2"
         >
           <Show when={listing(bibles())}>
-            <li class="px-4 py-2 text-small text-on-surface-tertiary">{t("Loading the list…")}</li>
+            <li class="px-4 py-2 text-small text-on-surface-tertiary">
+              {m.reference_list_loading()}
+            </li>
           </Show>
           <For each={[...offers()].sort(byName)}>
             {(offer) => (
@@ -1146,8 +1148,8 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
                         type="button"
                         aria-label={
                           starting().has(offer.key)
-                            ? t("Cancel downloading {name}", { name: offer.name })
-                            : t("Download {name}", { name: offer.name })
+                            ? m.reference_download_cancel({ name: offer.name })
+                            : m.reference_download_named({ name: offer.name })
                         }
                         disabled={offer.pulling()}
                         class="flex min-h-12 w-full cursor-pointer items-center gap-3 px-4 text-start text-small text-on-surface-primary transition-colors hover:bg-surface-secondary disabled:cursor-default disabled:hover:bg-transparent"
@@ -1167,15 +1169,17 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
                               fallback={
                                 <span class="flex shrink-0 items-center gap-1.5 font-medium text-brand">
                                   <Download aria-hidden="true" class="size-5" />
-                                  {t("Download")}
+                                  {m.reference_download()}
                                 </span>
                               }
                             >
                               <span class="flex shrink-0 items-center gap-3">
-                                <span class="text-on-surface-secondary">{t("Starting…")}</span>
+                                <span class="text-on-surface-secondary">
+                                  {m.reference_download_starting()}
+                                </span>
                                 <span class="flex items-center gap-1.5 font-medium text-brand">
                                   <X aria-hidden="true" class="size-5" />
-                                  {t("Cancel")}
+                                  {m.reference_cancel()}
                                 </span>
                               </span>
                             </Show>
@@ -1184,7 +1188,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
                           {/* No byte count to show, so the bar runs until the copy lands. */}
                           <span
                             role="progressbar"
-                            aria-label={t("Downloading {name}", { name: offer.name })}
+                            aria-label={m.reference_downloading_named({ name: offer.name })}
                             class="relative h-2 w-24 shrink-0 overflow-hidden rounded-full bg-surface-secondary"
                           >
                             <span class="absolute inset-y-0 w-1/3 animate-pulse rounded-full bg-brand" />
@@ -1212,7 +1216,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
                         {held().name}
                       </span>
                       <Show when={shownLanguage() === held().key}>
-                        <Check aria-label={t("Active")} class="size-5 shrink-0" />
+                        <Check aria-label={m.reference_active()} class="size-5 shrink-0" />
                       </Show>
                     </button>
                   )}
@@ -1246,7 +1250,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
         <GatewayPicker />
         <Show when={fetching() !== ""}>
           <p role="status" class="text-small text-on-surface-secondary">
-            {t("Getting {language}…", { language: fetching() })}
+            {m.reference_getting({ language: fetching() })}
           </p>
         </Show>
       </Show>

@@ -27,6 +27,7 @@ import { trackingRef } from "#core/sync";
 
 import { remoteReasonOf } from "../../describe";
 import { t } from "../../i18n";
+import { m } from "../../paraglide/messages";
 import { useShell, type Shell } from "../../ProjectContext";
 import { syncStatus } from "../../syncStatus";
 import type { DiffSides } from "../diff/DiffCard";
@@ -832,7 +833,7 @@ export function HistoryPanel() {
           onLoadOlder={loadOlder}
         />
       ),
-      { show: t("Show history"), hide: t("Hide history") },
+      { show: m.sidebar_show_history(), hide: m.sidebar_hide_history() },
     ),
   );
 

@@ -4,6 +4,7 @@ import { Show, createSignal, onCleanup, untrack } from "solid-js";
 
 import { collaboration } from "../../collaboration";
 import { t } from "../../i18n";
+import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
 import { ago } from "../panels/format";
 import { EmptyState, IconButton, PanelHeader, cx } from "../primitives";
@@ -58,7 +59,7 @@ export function SuggestionsScreen() {
           </p>
         </ChangesHistorySidebar>
       ),
-      { show: t("Show suggestions"), hide: t("Hide suggestions") },
+      { show: m.sidebar_show_suggestions(), hide: m.sidebar_hide_suggestions() },
     ),
   );
 
