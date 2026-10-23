@@ -34,7 +34,7 @@
     "test:desktop": "node tools/verify/desktopTest.ts",
     "test:e2e": "playwright test --config e2e/playwright.config.ts",
     "test:unit": "vitest run --project core",
-    "i18n": "paraglide-js compile --project ./project.inlang --outdir ./src/app/paraglide --emit-ts-declarations --strategy baseLocale",
+    "i18n": "paraglide-js compile --project ./project.inlang --outdir ./src/app/paraglide --emit-ts-declarations --strategy baseLocale --output-structure message-modules",
     "typecheck": "pnpm i18n && tsc --noEmit",
     "verify:chrome": "node tools/verify/chrome.ts",
     "verify:design": "node tools/verify/designBundle.ts",

@@ -1,12 +1,12 @@
 import SearchIcon from "lucide-solid/icons/search";
-import { For, Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
+import { For, Show, createMemo, createSignal, untrack } from "solid-js";
 
 import type { WriterLanguage } from "../../catalogue";
 import { describe } from "../../describe";
 import { t } from "../../i18n";
 import { writerLanguages } from "../../migrate";
+import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
-import { formatDate } from "../landing/summaries";
 import {
   Card,
   Input,
@@ -17,24 +17,19 @@ import {
   type SortDirection,
 } from "../primitives";
 
-type Column = "code" | "language" | "region" | "projects" | "date";
+type Column = "code" | "language" | "region";
 
 const SORTABLE: readonly (readonly [Column, () => string])[] = [
   ["code", () => t("Code")],
   ["language", () => t("Language")],
   ["region", () => t("Region")],
-  ["projects", () => t("Writer projects")],
-  ["date", () => t("Updated")],
 ];
 
-const COLUMNS =
-  "grid grid-cols-[9rem_minmax(0,1fr)_9rem_10rem_8rem] items-center gap-x-6 px-6 text-body";
+const COLUMNS = "grid grid-cols-[9rem_minmax(0,1fr)_9rem] items-center gap-x-6 px-6 text-body";
 
 const ROW_HEIGHT = 57;
 
-const SETTLE_MS = 300;
-
-const sortValue = (column: Column, row: WriterLanguage): string | number => {
+const sortValue = (column: Column, row: WriterLanguage): string => {
   switch (column) {
     case "code":
       return row.code;
@@ -42,57 +37,46 @@ const sortValue = (column: Column, row: WriterLanguage): string | number => {
       return row.naturalName;
     case "region":
       return row.region ?? "";
-    case "projects":
-      return row.projects;
-    case "date":
-      return row.updated ?? "";
   }
 };
 
+/** A code matches from its start ("ni" finds `nij`, not `fni`); a name anywhere in it. */
+const matches = (row: WriterLanguage, needle: string): boolean =>
+  row.code.toLowerCase().startsWith(needle) ||
+  row.naturalName.toLowerCase().includes(needle) ||
+  row.anglicizedName.toLowerCase().includes(needle);
+
+/** The whole list once, then searched here: no round trip per keystroke. */
 const createLanguageSearch = (query: () => string) => {
   const { services } = useShell();
-  const [rows, setRows] = createSignal<readonly WriterLanguage[] | undefined>(undefined, {
-    name: "writerLanguagesRows",
+  const [all, setAll] = createSignal<readonly WriterLanguage[] | undefined>(undefined, {
+    name: "writerLanguagesAll",
   });
   const [problem, setProblem] = createSignal("", { name: "writerLanguagesProblem" });
-  const [loading, setLoading] = createSignal(false, { name: "writerLanguagesLoading" });
-  let asked = 0;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const schedule = (text: string): void => {
-    clearTimeout(timer);
-    asked += 1;
-    const ticket = asked;
-    const needle = text.trim();
-    if (needle.length < 2) {
-      timer = setTimeout(() => setRows(undefined), 0);
-      return;
-    }
-    timer = setTimeout(() => {
-      setLoading(true);
-      void (async () => {
-        try {
-          const found = await writerLanguages(services, needle);
-          if (ticket !== asked) return;
-          setProblem("");
-          setRows(found);
-        } catch (cause) {
-          if (ticket !== asked) return;
-          setProblem(describe(cause));
-          setRows([]);
-        } finally {
-          if (ticket === asked) setLoading(false);
-        }
-      })();
-    }, SETTLE_MS);
-  };
-  createEffect(query, schedule);
+  writerLanguages(services).then(
+    (found) => setAll(found),
+    (cause: unknown) => {
+      setProblem(describe(cause));
+      setAll([]);
+    },
+  );
+  const rows = createMemo(
+    (): readonly WriterLanguage[] | undefined => {
+      const list = all();
+      const needle = query().trim().toLowerCase();
+      if (list === undefined || needle === "") return list;
+      return list.filter((row) => matches(row, needle));
+    },
+    { name: "writerLanguagesRows" },
+  );
+  const loading = (): boolean => all() === undefined;
 
   return { rows, problem, loading };
 };
 
 const createSort = (rows: () => readonly WriterLanguage[] | undefined) => {
-  const [column, setColumn] = createSignal<Column>("date", { name: "writerLanguagesSort" });
-  const [direction, setDirection] = createSignal<SortDirection>("desc", {
+  const [column, setColumn] = createSignal<Column>("language", { name: "writerLanguagesSort" });
+  const [direction, setDirection] = createSignal<SortDirection>("asc", {
     name: "writerLanguagesDirection",
   });
 
@@ -103,12 +87,7 @@ const createSort = (rows: () => readonly WriterLanguage[] | undefined) => {
       return [...(rows() ?? [])].sort((left, right) => {
         const a = sortValue(key, left);
         const b = sortValue(key, right);
-        return (
-          sign *
-          (typeof a === "number" && typeof b === "number"
-            ? a - b
-            : String(a).localeCompare(String(b)))
-        );
+        return sign * a.localeCompare(b);
       });
     },
     { name: "writerLanguagesSorted" },
@@ -120,7 +99,7 @@ const createSort = (rows: () => readonly WriterLanguage[] | undefined) => {
     if (column() === key) setDirection(direction() === "asc" ? "desc" : "asc");
     else {
       setColumn(key);
-      setDirection(key === "date" || key === "projects" ? "desc" : "asc");
+      setDirection("asc");
     }
   };
 
@@ -154,12 +133,6 @@ function LanguageRow(props: {
       <span role="cell" class="truncate text-on-surface-secondary">
         {props.item.region ?? "—"}
       </span>
-      <span role="cell" class="tabular-nums text-on-surface-secondary">
-        {props.item.projects}
-      </span>
-      <span role="cell" class="text-on-surface-secondary">
-        {formatDate(props.item.updated) || "—"}
-      </span>
     </button>
   );
 }
@@ -178,9 +151,7 @@ export function WriterTable(props: {
   );
 
   const emptyNote = (): string => {
-    if (props.query.trim().length < 2)
-      return t("Type two letters or more of a language's name or code.");
-    if (loading() || rows() === undefined) return t("Searching…");
+    if (loading()) return m.writer_languages_loading();
     return t("No language with Writer projects matches “{query}”.", { query: props.query.trim() });
   };
 
@@ -249,7 +220,7 @@ export function WriterLanguages(props: {
           class="w-full"
           icon={<SearchIcon size={20} aria-hidden="true" />}
           aria-label={t("Search Writer projects by language")}
-          placeholder={t("Two letters or more: 'nindi' or 'nxi'…")}
+          placeholder={m.writer_languages_placeholder()}
           data-testid="writer-languages-search"
           value={query()}
           onInput={(event) => setQuery(event.currentTarget.value)}

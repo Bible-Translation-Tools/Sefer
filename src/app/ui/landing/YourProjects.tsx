@@ -252,8 +252,6 @@ const createStrip = (
   props: { readonly downloads: readonly PendingDownload[]; readonly flyFrom: DOMRect | undefined },
   rows: () => readonly ProjectSummary[] | undefined,
 ) => {
-  const [strip, setStrip] = createSignal<HTMLUListElement>();
-
   const pending = (): readonly PendingDownload[] => {
     const listed = new Set((rows() ?? []).map((row) => row.root));
     return props.downloads.filter((download) => !listed.has(download.root));
@@ -265,12 +263,11 @@ const createStrip = (
     flown.add(download.id);
     const from = props.flyFrom;
     requestAnimationFrame(() => {
-      strip()?.scrollTo({ top: 0 });
       flyIn(card, from, download);
     });
   };
 
-  return { setStrip, pending, arrive };
+  return { pending, arrive };
 };
 
 const DownloadLine = (props: { readonly download: PendingDownload }) => (
@@ -451,11 +448,7 @@ const ProjectStrip = (props: {
   readonly actions: ReturnType<typeof createProjectActions> & ReturnType<typeof createRowActions>;
   readonly onDismiss: (id: string) => void;
 }) => (
-  <ul
-    ref={props.list.setStrip}
-    data-projects={props.sorted.length}
-    class="scrollbar-subtle flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto"
-  >
+  <ul data-projects={props.sorted.length} class="flex shrink-0 flex-col gap-3">
     <For each={props.list.pending()}>
       {(download) => (
         <DownloadCard download={download} arrive={props.list.arrive} onDismiss={props.onDismiss} />

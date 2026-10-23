@@ -375,7 +375,7 @@ const CatalogueToolbar = (props: {
       }
       placeholder={
         props.repos === "writer"
-          ? t("Two letters or more: 'nindi' or 'nxi'…")
+          ? m.writer_languages_placeholder()
           : t("Search 'english' or 'axd'…")
       }
       value={props.filters.query()}

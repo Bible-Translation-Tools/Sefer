@@ -26,6 +26,17 @@ type Picker = (source: "zip" | "folder") => void;
 
 type Dropper = (transfer: DataTransfer) => void;
 
+/** The drop hint split round its three links, so a translation can put them anywhere in it. */
+const hintParts = (): readonly string[] =>
+  m
+    .landing_drop_hint({
+      zip: "\u0000zip\u0000",
+      folder: "\u0000folder\u0000",
+      writer: "\u0000writer\u0000",
+    })
+    .split("\u0000")
+    .filter((part) => part !== "");
+
 const DropZone = (props: { readonly pick: Picker; readonly drop: Dropper }) => {
   const navigate = useNavigate();
   const [over, setOver] = createSignal(false, { name: "importDropOver" });
@@ -53,33 +64,30 @@ const DropZone = (props: { readonly pick: Picker; readonly drop: Dropper }) => {
       }}
     >
       <Upload size={20} aria-hidden="true" class="text-on-surface-secondary" />
-      <p class="text-small text-on-surface-secondary">{m.landing_drop_hint()}</p>
-      <div class="flex flex-wrap justify-center gap-controls">
-        <Button
-          size="md"
-          data-testid="import-zip"
-          icon={<FileArchive size={20} aria-hidden="true" />}
-          onClick={() => props.pick("zip")}
-        >
-          {m.landing_import_zip_short()}
-        </Button>
-        <Button
-          size="md"
-          data-testid="import-folder"
-          icon={<FolderOpen size={20} aria-hidden="true" />}
-          onClick={() => props.pick("folder")}
-        >
-          {m.landing_import_folder_short()}
-        </Button>
-        <Button
-          size="md"
-          data-testid="import-writer"
-          icon={<BookCopy size={20} aria-hidden="true" />}
-          onClick={() => void navigate({ to: "/migrate" })}
-        >
-          {m.landing_import_writer_short()}
-        </Button>
-      </div>
+      <p class="text-small text-on-surface-secondary">
+        <For each={hintParts()}>
+          {(part) => {
+            const link = (testid: string, label: string, onClick: () => void) => (
+              <Button variant="link" size="flush" data-testid={testid} onClick={onClick}>
+                {label}
+              </Button>
+            );
+            if (part === "zip")
+              return link("import-zip", m.landing_import_zip_short(), () => props.pick("zip"));
+            if (part === "folder")
+              return link("import-folder", m.landing_import_folder_short(), () =>
+                props.pick("folder"),
+              );
+            if (part === "writer")
+              return link(
+                "import-writer",
+                m.landing_import_writer_short(),
+                () => void navigate({ to: "/migrate" }),
+              );
+            return part;
+          }}
+        </For>
+      </p>
     </div>
   );
 };
