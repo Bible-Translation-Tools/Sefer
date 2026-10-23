@@ -8,10 +8,11 @@ import { t } from "#app/i18n";
 import { useShell } from "#app/ProjectContext";
 import { REFERENCE_WIDTH } from "#app/settings";
 import { BookEditor } from "#app/ui/BookEditor";
-import { Button, DelayedSpinner, Resizable, Switch, cx } from "#app/ui/primitives";
+import { Button, DelayedSpinner, Resizable, cx } from "#app/ui/primitives";
 import { RecoveryBanner } from "#app/ui/recovery/RecoveryBanner";
 import { AlignedProvider } from "#app/ui/workspace/aligned";
 import { layout } from "#app/ui/workspace/layoutTweak";
+import { BookViewSwitch } from "#app/ui/workspace/LocationBar";
 import { ReferenceColumn } from "#app/ui/workspace/ReferenceColumn";
 import { Toolbar } from "#app/ui/workspace/Toolbar";
 
@@ -68,7 +69,8 @@ function BookWorkspace(props: {
  * The panels layout's editor: the heart language, the only text that can be
  * edited, outlined on the page's white, the outline brand while it has focus.
  * A small action bar over the text: "Show reference" on the left (the only
- * way to the gateways — joined, there is none on screen), USFM flush right.
+ * way to the gateways — joined, there is none on screen), the book's view
+ * (Reading, Line by line, USFM) flush right.
  * Split, its left border is the resize handle's line.
  */
 function EditorPanel(props: { readonly book: EditorBook; readonly split?: boolean }) {
@@ -144,12 +146,7 @@ function EditorPanel(props: { readonly book: EditorBook; readonly split?: boolea
           </Show>
           {props.split === true ? t("Hide reference") : t("Show reference")}
         </Button>
-        <Switch
-          class="ms-auto"
-          label={t("USFM")}
-          checked={shell.mode() === "usfm"}
-          onChange={(on) => shell.setMode(on ? "usfm" : "default")}
-        />
+        <BookViewSwitch class="ms-auto" />
       </div>
       <div class="flex min-h-0 flex-1 flex-col px-6">
         <Show when={props.book.id} keyed>
