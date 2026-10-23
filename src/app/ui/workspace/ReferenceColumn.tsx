@@ -605,13 +605,20 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       );
   };
 
+  const readProjects = () =>
+    services.run(
+      listProjects(
+        services.projectsRoot,
+        services.fixtureProject,
+        services.settings.get(shellKeys(services.settings).recentProjects),
+      ),
+    );
+  // Read once up front as well as on opening a menu: a project's metadata is
+  // what names a language the browser cannot (`nxi`), on the closed button too.
+  void readProjects().then(setProjects);
+
   const offer = (): void => {
-    if (projects() === undefined) {
-      const recent = services.settings.get(shellKeys(services.settings).recentProjects);
-      void services
-        .run(listProjects(services.projectsRoot, services.fixtureProject, recent))
-        .then(setProjects);
-    }
+    if (projects() === undefined) void readProjects().then(setProjects);
     list(notes, setNotes, listTranslationNotes);
     list(bibles, setBibles, listSourceTexts);
   };
@@ -658,9 +665,35 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
    */
   const languageOf = (resource: Resource): string => (resource.language ?? "").toLowerCase();
   const projectLanguageOf = (row: ProjectSummary): string => row.languageTag.toLowerCase();
-  /** What the left half calls a language: its name and tag, or that none is set. */
-  const languageLabel = (key: string, fallback?: string): string =>
-    key === "" ? m.reference_no_language() : `${languageName(key) ?? fallback ?? key} (${key})`;
+  /**
+   * Names for tags the browser cannot name (`nxi`), from what names them
+   * here: the reader's projects' and the library texts' own metadata, and
+   * the catalogue's rows.
+   */
+  const knownNames = createMemo(
+    (): ReadonlyMap<string, string> => {
+      const names = new Map<string, string>();
+      const note = (tag: string | undefined, name: string | undefined): void => {
+        const key = tag?.toLowerCase() ?? "";
+        if (key !== "" && name !== undefined && name !== "" && name.toLowerCase() !== key)
+          names.set(key, name);
+      };
+      for (const row of projects() ?? []) note(row.languageTag, row.language);
+      for (const resource of installed()) note(resource.language, resource.languageName);
+      for (const text of [...offeredBibles(), ...helps()]) note(text.language, text.languageName);
+      return names;
+    },
+    { name: "referenceLanguageNames" },
+  );
+  /** A language's name: the browser's when it knows the tag, else the one found here, else the tag. */
+  const nameOfLanguage = (key: string): string => {
+    const browser = languageName(key);
+    if (browser !== undefined && browser.toLowerCase() !== key.toLowerCase()) return browser;
+    return knownNames().get(key.toLowerCase()) ?? browser ?? key;
+  };
+  /** What the left half calls a language: its name and tag, or that it is unknown. */
+  const languageLabel = (key: string): string =>
+    key === "" ? m.reference_no_language() : `${nameOfLanguage(key)} (${key})`;
   /** The text last on show in each language, so returning to it returns to that text. */
   const [lastIn, setLastIn] = createSignal<Readonly<Record<string, string>>>(
     {},
@@ -848,8 +881,9 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
 
   const nameOf = (resource: Resource | undefined): string => {
     if (resource === undefined) return "";
-    const name = languageName(resource.language);
-    if (name === undefined) return resource.title;
+    const tag = resource.language ?? "";
+    if (tag === "") return resource.title;
+    const name = nameOfLanguage(tag);
     return isBible(resource)
       ? `${name} (${resource.language ?? ""})`
       : `${resource.title} · ${name} (${resource.language ?? ""})`;
@@ -934,7 +968,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       return {
         kind: "held",
         key,
-        name: languageLabel(key, here[0]?.title ?? projectsHere[0]?.language),
+        name: languageLabel(key),
         add: () => {
           const opening = here.find(isBible) ?? here[0];
           if (opening !== undefined) show(opening);
@@ -1058,8 +1092,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
   const groupName = (group: {
     readonly key: string;
     readonly entries: readonly Entry[];
-  }): string =>
-    group.key === "" ? m.reference_no_language() : (languageName(group.key) ?? group.key);
+  }): string => (group.key === "" ? m.reference_no_language() : nameOfLanguage(group.key));
   /** The language of the text on show, if one is. */
   const shownLanguage = (): string | undefined => {
     const held = shown();

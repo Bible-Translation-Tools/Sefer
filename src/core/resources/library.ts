@@ -44,6 +44,8 @@ export interface Resource {
   /** The text's shorthand (`ULB`), for where a title is too long; never the id. */
   readonly abbreviation?: string;
   readonly language?: string;
+  /** The language's name as the text's own metadata gives it, for a tag the browser cannot name (`nxi`). */
+  readonly languageName?: string;
   readonly subject?: string;
   readonly identifier?: string;
   readonly version?: string;
@@ -107,6 +109,7 @@ const ResourceRecord = Schema.Struct({
   title: Schema.String,
   abbreviation: Schema.optionalKey(Schema.String),
   language: Schema.optionalKey(Schema.String),
+  languageName: Schema.optionalKey(Schema.String),
   subject: Schema.optionalKey(Schema.String),
   identifier: Schema.optionalKey(Schema.String),
   version: Schema.optionalKey(Schema.String),
@@ -159,7 +162,7 @@ const isUsfm = (path: string): boolean => path.toLowerCase().endsWith(".usfm");
 
 type Described = Pick<
   Resource,
-  "title" | "abbreviation" | "language" | "subject" | "identifier" | "version"
+  "title" | "abbreviation" | "language" | "languageName" | "subject" | "identifier" | "version"
 > & {
   readonly declared?: Declared;
 };
@@ -171,11 +174,15 @@ const describe = (fileSystem: FileSystem.FileSystem, root: string): Effect.Effec
       onSome: (metadata): Described => {
         const title = localized(metadata.name, [metadata.defaultLocale]);
         const abbreviation = localized(metadata.abbreviation, [metadata.defaultLocale]);
+        const languageName = localized(metadata.language.name, [metadata.defaultLocale]);
         return {
           declared: metadata.declared,
           title: title === "" ? lastSegment(root) : title,
           ...(abbreviation === "" ? {} : { abbreviation }),
           ...(metadata.language.tag === "" ? {} : { language: metadata.language.tag }),
+          ...(languageName === "" || languageName === metadata.language.tag
+            ? {}
+            : { languageName }),
           ...(metadata.subject === undefined ? {} : { subject: metadata.subject }),
           ...(metadata.id === undefined ? {} : { identifier: metadata.id.toLowerCase() }),
           ...(metadata.version === undefined ? {} : { version: metadata.version }),
