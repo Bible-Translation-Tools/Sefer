@@ -14,7 +14,7 @@
   "reference_showing": "Showing",
   "reference_downloading": "Downloading",
   "reference_choose_language": "Choose a language",
-  "reference_no_language": "No language set",
+  "reference_no_language": "Unknown language",
   "reference_list_loading": "Loading the list…",
   "reference_download_cancel": "Cancel downloading {name}",
   "reference_download_named": "Download {name}",
