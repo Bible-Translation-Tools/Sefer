@@ -1,5 +1,5 @@
 import SearchIcon from "lucide-solid/icons/search";
-import { For, Show, createMemo, createSignal, untrack } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
 
 import type { WriterLanguage } from "../../catalogue";
 import { describe } from "../../describe";
@@ -49,9 +49,8 @@ const sortValue = (column: Column, row: WriterLanguage): string | number => {
   }
 };
 
-const createLanguageSearch = (initial: string) => {
+const createLanguageSearch = (query: () => string) => {
   const { services } = useShell();
-  const [query, setQuery] = createSignal(initial, { name: "writerLanguagesQuery" });
   const [rows, setRows] = createSignal<readonly WriterLanguage[] | undefined>(undefined, {
     name: "writerLanguagesRows",
   });
@@ -86,13 +85,9 @@ const createLanguageSearch = (initial: string) => {
       })();
     }, SETTLE_MS);
   };
-  const search = (text: string): void => {
-    setQuery(text);
-    schedule(text);
-  };
-  schedule(initial);
+  createEffect(query, schedule);
 
-  return { query, rows, problem, loading, search };
+  return { rows, problem, loading };
 };
 
 const createSort = (rows: () => readonly WriterLanguage[] | undefined) => {
@@ -169,12 +164,13 @@ function LanguageRow(props: {
   );
 }
 
-export function WriterLanguages(props: {
-  readonly initial: string;
+/** The table alone, searching whatever `query` says: the Migrate screen's, or the WACS panel's. */
+export function WriterTable(props: {
+  readonly query: string;
   readonly onPick: (code: string) => void;
+  readonly class?: string;
 }) {
-  const initial = untrack(() => props.initial);
-  const { query, rows, problem, loading, search } = createLanguageSearch(initial);
+  const { rows, problem, loading } = createLanguageSearch(() => props.query);
   const { sorted, sortOf, sortBy } = createSort(rows);
   const virtualRows = createMemo(
     () => sorted().map((row) => ({ key: row.code, item: row, estimate: ROW_HEIGHT })),
@@ -182,29 +178,14 @@ export function WriterLanguages(props: {
   );
 
   const emptyNote = (): string => {
-    if (query().trim().length < 2)
+    if (props.query.trim().length < 2)
       return t("Type two letters or more of a language's name or code.");
     if (loading() || rows() === undefined) return t("Searching…");
-    return t("No language with Writer projects matches “{query}”.", { query: query().trim() });
+    return t("No language with Writer projects matches “{query}”.", { query: props.query.trim() });
   };
 
   return (
-    <section class="flex min-h-0 flex-col gap-3">
-      <div class="flex flex-wrap items-center gap-3">
-        <h2 class="me-auto text-h4 font-semibold">{t("Writer projects on WACS")}</h2>
-        <Input
-          type="search"
-          size="lg"
-          wrapperClass="w-full sm:w-[24rem]"
-          class="w-full"
-          icon={<SearchIcon size={20} aria-hidden="true" />}
-          aria-label={t("Search Writer projects by language")}
-          placeholder={t("Two letters or more: 'nindi' or 'nxi'…")}
-          data-testid="writer-languages-search"
-          value={query()}
-          onInput={(event) => search(event.currentTarget.value)}
-        />
-      </div>
+    <>
       <Show when={problem() !== ""}>
         <p class="rounded-md bg-surface-error px-3 py-2 text-small text-on-surface-error">
           {problem()}
@@ -215,7 +196,7 @@ export function WriterLanguages(props: {
         role="table"
         aria-label={t("Writer projects on WACS")}
         aria-rowcount={sorted().length + 1}
-        class="flex h-[60vh] min-h-0 flex-col overflow-hidden"
+        class={cx("flex min-h-0 flex-col overflow-hidden", props.class ?? "h-[60vh]")}
       >
         <div
           role="rowgroup"
@@ -246,6 +227,35 @@ export function WriterLanguages(props: {
           row={(item) => <LanguageRow item={item()} onPick={props.onPick} />}
         />
       </Card>
+    </>
+  );
+}
+
+export function WriterLanguages(props: {
+  readonly initial: string;
+  readonly onPick: (code: string) => void;
+}) {
+  const initial = untrack(() => props.initial);
+  const [query, setQuery] = createSignal(initial, { name: "writerLanguagesQuery" });
+
+  return (
+    <section class="flex min-h-0 flex-col gap-3">
+      <div class="flex flex-wrap items-center gap-3">
+        <h2 class="me-auto text-h4 font-semibold">{t("Writer projects on WACS")}</h2>
+        <Input
+          type="search"
+          size="lg"
+          wrapperClass="w-full sm:w-[24rem]"
+          class="w-full"
+          icon={<SearchIcon size={20} aria-hidden="true" />}
+          aria-label={t("Search Writer projects by language")}
+          placeholder={t("Two letters or more: 'nindi' or 'nxi'…")}
+          data-testid="writer-languages-search"
+          value={query()}
+          onInput={(event) => setQuery(event.currentTarget.value)}
+        />
+      </div>
+      <WriterTable query={query()} onPick={props.onPick} />
     </section>
   );
 }

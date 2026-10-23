@@ -48,7 +48,7 @@ The generated half looks after itself; the judgement half does not. When a gate 
 | oxlint warnings | 0 | `pnpm lint` fails on any, every commit |
 | fallow dead code (`pnpm deadcode`) | 0 issue(s) | every deploy; advisory on branches |
 | fallow duplication | 1.6% in 59 clone group(s) | none — advisory |
-| suppression comments | 63 | each listed below with its reason |
+| suppression comments | 75 | each listed below with its reason |
 
 ### Oxlint warnings, by rule and file
 
@@ -62,6 +62,18 @@ None.
 | `src/app/locale.ts` | `oxlint-disable-next-line` | solid/reactivity |
 | `src/app/paraglide/messages.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/_index.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/landing_clone_from_link.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/landing_clone_repository.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/landing_drop_hint.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/landing_drop_not_project.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/landing_drop_one.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/landing_import_folder_short.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/landing_import_writer_short.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/landing_import_zip_short.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/landing_repos_consolidated.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/landing_repos_label.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/landing_repos_writer.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/landing_search_or_link.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/reference_active.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/reference_bibles_offered.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/reference_cancel.js` | `eslint-disable` | — |

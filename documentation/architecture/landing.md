@@ -12,7 +12,9 @@ Where a project comes from, and what each host can actually do about it. Everyth
 
 `/` renders rather than redirecting, because the composition reads `?fixture=1` off `location` before the router exists and a redirect that dropped the search would compose over OPFS instead of the seeded fixture. For the same reason every crumb and every tab switch passes `search: true`.
 
-The projects page has no breadcrumb or tabs any more, and the add-a-project cards are gone. `ImportHub` is the one import pipeline, in two shapes: the projects page's "Import zip" / "Import folder" / "Migrate from Writer" buttons, and the app bar's Import menu (zip, folder, "Clone from cloud", disabled with the reason when the build has no WACS server, and "Migrate from Writer"), so a project can be brought in from any screen. `LandingHeader` survives only on `/start/create`.
+The projects page has no breadcrumb or tabs any more, and the add-a-project cards are gone. `ImportHub` is the one import pipeline, in two shapes: a drop zone under the "Projects Loaded into Sefer" header (drop one folder or one `.zip`, or choose "Zip", "Folder" or "From Writer"), which also registers `Mod-o` while the projects page is mounted, and the same three as buttons under the WACS table's "No Languages Match". The app bar has no Import button. There is no "Clone from cloud" entry: cloning is for technicians, so a repository link typed into the WACS search replaces the table with "Clone this repository" (`CloneFromUrl`), which runs the same clone and progress dialog. `LandingHeader` survives only on `/start/create`.
+
+The page is two columns from `lg` up: the loaded projects stack vertically on the left (`lg:w-96`, scrolling on their own), the WACS table fills the right. The table's segmented control picks ONE kind of repository at a time — "Consolidated" (the catalogue), "Writer repos" (`WriterTable`, the same search-driven table the Migrate screen uses, fed by the shared search box), and "Gateway languages" when Settings offers them. Picking a Writer language goes to `/migrate?language=<code>`, which lists that language's books on arrival. A drop works through `webkitGetAsEntry`, taken synchronously in the handler; on Tauri the window's own drag-drop handling may swallow the event before the page sees it (unverified).
 
 The only state on the landing page is `reload`: a counter the import hub raises and `YourProjects` reads. That is the whole subscription between them — an import that finished shows up in the list without either component knowing what the other is. `YourProjects` keeps a second counter of its own for the writes it makes itself (a rename, a delete), read in the same effect.
 
@@ -56,11 +58,11 @@ Every row carries a kebab of three `ProjectAdmin` calls. (The port also has `met
 
 The rule the import hub is built around: a source this host cannot serve is rendered DISABLED with the reason in place of its explainer — never hidden, never offered-then-failed. `HostInfo.capabilities()` and `env` are asked before the button exists.
 
-| source           | web | Tauri | needs                                                                                                                                        |
-| ---------------- | --- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Import zip       | yes | yes   | nothing: the archive is read in the page (`fflate`) and written into OPFS                                                                    |
-| Open folder      | yes | yes   | web copies the folder's files into its own storage; Tauri reads the real path                                                                |
-| Clone from cloud | yes | yes   | `VITE_SEFER_CONTENT_HOST`, the same on both hosts; the web reaches it through `VITE_SEFER_WEB_TRANSPORT`. Overridable in Settings (Advanced) |
+| source       | web | Tauri | needs                                                                                                                                        |
+| ------------ | --- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Import zip   | yes | yes   | nothing: the archive is read in the page (`fflate`) and written into OPFS                                                                    |
+| Open folder  | yes | yes   | web copies the folder's files into its own storage; Tauri reads the real path                                                                |
+| Clone a link | yes | yes   | `VITE_SEFER_CONTENT_HOST`, the same on both hosts; the web reaches it through `VITE_SEFER_WEB_TRANSPORT`. Overridable in Settings (Advanced) |
 
 Every source ends in the same pipeline — `stage → classify → commit` from `src/core/resources/import.ts` ([resources](resources.md) owns the steps), run one step at a time so the dialog can name the step it is on. Nothing touches the project root until `commit`, so cancelling or failing leaves a staging directory and nothing else.
 

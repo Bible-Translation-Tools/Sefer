@@ -1,31 +1,88 @@
 import type { JSX } from "@solidjs/web";
 import { useNavigate } from "@tanstack/solid-router";
 import BookCopy from "lucide-solid/icons/book-copy";
-import CloudDownload from "lucide-solid/icons/cloud-download";
 import FileArchive from "lucide-solid/icons/file-archive";
 import FolderOpen from "lucide-solid/icons/folder-open";
-import { For, Show, createSignal, onCleanup, untrack } from "solid-js";
-
-import type { RemoteRepo } from "#core/remote/gitea";
+import GitBranch from "lucide-solid/icons/git-branch";
+import Upload from "lucide-solid/icons/upload";
+import { For, Match, Show, Switch, createSignal, onCleanup, untrack } from "solid-js";
 
 import { registerCommand } from "../../commands";
-import { describe } from "../../describe";
-import { contentHostFor } from "../../endpoints";
 import { t } from "../../i18n";
+import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
-import { Button, Dialog, Input, Menu, MenuItem, cx } from "../primitives";
+import { Button, Dialog, Menu, MenuItem, cx, toasts } from "../primitives";
 import {
   STEPS,
   STEP_LABEL,
   cloneRepository,
   importFolder,
   importPicked,
-  listCloneRepos,
   type ImportContext,
   type Progress,
 } from "./importFlows";
 
 type Picker = (source: "zip" | "folder") => void;
+
+type Dropper = (transfer: DataTransfer) => void;
+
+const DropZone = (props: { readonly pick: Picker; readonly drop: Dropper }) => {
+  const navigate = useNavigate();
+  const [over, setOver] = createSignal(false, { name: "importDropOver" });
+  return (
+    <div
+      data-testid="import-drop"
+      data-over={over() ? "true" : undefined}
+      class={cx(
+        "flex flex-col items-center gap-3 rounded-md border-2 border-dashed p-6 text-center transition-colors",
+        over() ? "border-brand bg-surface-secondary" : "border-surface-border",
+      )}
+      onDragOver={(event) => {
+        event.preventDefault();
+        if (event.dataTransfer !== null) event.dataTransfer.dropEffect = "copy";
+        setOver(true);
+      }}
+      onDragLeave={(event) => {
+        const into = event.relatedTarget;
+        if (!(into instanceof Node && event.currentTarget.contains(into))) setOver(false);
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        setOver(false);
+        if (event.dataTransfer !== null) props.drop(event.dataTransfer);
+      }}
+    >
+      <Upload size={20} aria-hidden="true" class="text-on-surface-secondary" />
+      <p class="text-small text-on-surface-secondary">{m.landing_drop_hint()}</p>
+      <div class="flex flex-wrap justify-center gap-controls">
+        <Button
+          size="md"
+          data-testid="import-zip"
+          icon={<FileArchive size={20} aria-hidden="true" />}
+          onClick={() => props.pick("zip")}
+        >
+          {m.landing_import_zip_short()}
+        </Button>
+        <Button
+          size="md"
+          data-testid="import-folder"
+          icon={<FolderOpen size={20} aria-hidden="true" />}
+          onClick={() => props.pick("folder")}
+        >
+          {m.landing_import_folder_short()}
+        </Button>
+        <Button
+          size="md"
+          data-testid="import-writer"
+          icon={<BookCopy size={20} aria-hidden="true" />}
+          onClick={() => void navigate({ to: "/migrate" })}
+        >
+          {m.landing_import_writer_short()}
+        </Button>
+      </div>
+    </div>
+  );
+};
 
 const ImportButtons = (props: { readonly pick: Picker }) => {
   const navigate = useNavigate();
@@ -64,9 +121,7 @@ const ImportButtons = (props: { readonly pick: Picker }) => {
 
 const ImportMenu = (props: {
   readonly pick: Picker;
-  readonly endpoint: string | null;
   readonly trigger: JSX.Element | undefined;
-  readonly onClone: () => void;
 }) => {
   const navigate = useNavigate();
   return (
@@ -85,16 +140,6 @@ const ImportMenu = (props: {
       >
         {t("Import folder")}
       </MenuItem>
-
-      <MenuItem
-        data-testid="import-cloud"
-        icon={<CloudDownload aria-hidden="true" />}
-        disabled={props.endpoint === null}
-        title={props.endpoint === null ? t("No WACS server is set for this build.") : undefined}
-        onSelect={props.onClone}
-      >
-        {t("Clone from cloud")}
-      </MenuItem>
       <MenuItem
         data-testid="import-writer"
         icon={<BookCopy aria-hidden="true" />}
@@ -105,62 +150,6 @@ const ImportMenu = (props: {
     </Menu>
   );
 };
-
-const CloneDialog = (props: {
-  readonly open: boolean;
-  readonly onOpenChange: (open: boolean) => void;
-  readonly note: string;
-  readonly repos: readonly RemoteRepo[];
-  readonly url: string;
-  readonly onUrl: (url: string) => void;
-  readonly onClone: (url: string) => void;
-}) => (
-  <Dialog
-    open={props.open}
-    onOpenChange={props.onOpenChange}
-    title={t("Clone from cloud")}
-    description={t("Repositories this signed-in account can write.")}
-    footer={<Button onClick={() => props.onOpenChange(false)}>{t("Close")}</Button>}
-  >
-    <div class="space-y-3">
-      <Show when={props.note !== ""}>
-        <p class="text-small text-on-surface-tertiary">{props.note}</p>
-      </Show>
-      <Show when={props.repos.length > 0}>
-        <ul class="max-h-64 space-y-1 overflow-y-auto" data-clone-repos={props.repos.length}>
-          <For each={props.repos}>
-            {(repo) => (
-              <li class="flex items-center gap-3 rounded-md border border-surface-border px-3 py-2">
-                <strong class="truncate text-small">{repo.fullName}</strong>
-                <Button size="sm" class="ms-auto" onClick={() => props.onClone(repo.cloneUrl)}>
-                  {t("Clone")}
-                </Button>
-              </li>
-            )}
-          </For>
-        </ul>
-      </Show>
-      <form
-        class="flex items-center gap-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          props.onClone(props.url);
-        }}
-      >
-        <Input
-          type="url"
-          wrapperClass="min-w-0 flex-1"
-          placeholder={t("…or paste a repository URL")}
-          value={props.url}
-          onInput={(event) => props.onUrl(event.currentTarget.value)}
-        />
-        <Button type="submit" variant="primary">
-          {t("Clone")}
-        </Button>
-      </form>
-    </div>
-  </Dialog>
-);
 
 const StepList = (props: {
   readonly step: NonNullable<Progress["step"]>;
@@ -242,46 +231,16 @@ const createImportProgress = (services: HubServices, onImported: () => void) => 
   return { progress, context };
 };
 
-const createCloneState = (services: HubServices, endpoint: string | null) => {
-  const [cloneOpen, setCloneOpen] = createSignal(false, { name: "cloneOpen" });
-  const [repos, setRepos] = createSignal<readonly RemoteRepo[]>([], { name: "cloneRepos" });
-  const [cloneNote, setCloneNote] = createSignal("", { name: "cloneNote" });
-  const [cloneUrl, setCloneUrl] = createSignal("", { name: "cloneUrl" });
-
-  const openClone = (): void => {
-    setCloneOpen(true);
-    setCloneNote("");
-    if (endpoint === null) return;
-    void listCloneRepos(services, endpoint)
-      .then((found) => {
-        setRepos(found);
-        if (found.length === 0)
-          setCloneNote(t("Nothing to list yet — sign in under Settings → Cloud first."));
-      })
-      .catch((cause: unknown) => setCloneNote(describe(cause)));
-  };
-  return { cloneOpen, setCloneOpen, repos, cloneNote, cloneUrl, setCloneUrl, openClone };
-};
-
 export function ImportHub(props: {
   readonly onImported?: () => void;
-  readonly variant?: "buttons" | "menu";
+  readonly variant?: "buttons" | "menu" | "drop";
   readonly trigger?: JSX.Element;
 }) {
   const shell = useShell();
   const { services } = shell;
   const capabilities = services.hostInfo.capabilities();
-  const endpoint = contentHostFor(services.settings);
 
   const { progress, context } = createImportProgress(services, () => props.onImported?.());
-  const { cloneOpen, setCloneOpen, repos, cloneNote, cloneUrl, setCloneUrl, openClone } =
-    createCloneState(services, endpoint);
-
-  const clone = (url: string): void => {
-    if (url.trim() === "") return;
-    setCloneOpen(false);
-    cloneRepository(context, url);
-  };
 
   const nativeFolder = capabilities.nativeDisk && capabilities.dialogs;
 
@@ -291,7 +250,20 @@ export function ImportHub(props: {
     else importPicked(context, t("Import from a folder"), "folder");
   };
 
-  if (untrack(() => props.variant) === "menu")
+  const drop: Dropper = (transfer) => {
+    // Taken now, inside the drop event: the browser empties the transfer once the handler returns.
+    const dropped = {
+      entry: transfer.items[0]?.webkitGetAsEntry() ?? null,
+      file: transfer.files[0],
+    };
+    if (dropped.entry?.isDirectory === true)
+      importPicked(context, t("Import from a folder"), "folder", dropped);
+    else if (dropped.file !== undefined && /\.zip$/iu.test(dropped.file.name))
+      importPicked(context, t("Import from a zip"), "zip", dropped);
+    else toasts.error({ title: m.landing_drop_not_project(), message: m.landing_drop_one() });
+  };
+
+  if (untrack(() => props.variant) !== "buttons" && untrack(() => props.variant) !== undefined)
     onCleanup(
       registerCommand({
         id: "project.open",
@@ -303,20 +275,40 @@ export function ImportHub(props: {
 
   return (
     <>
-      <Show when={props.variant === "menu"} fallback={<ImportButtons pick={pick} />}>
-        <ImportMenu pick={pick} endpoint={endpoint} trigger={props.trigger} onClone={openClone} />
+      <Switch fallback={<ImportButtons pick={pick} />}>
+        <Match when={props.variant === "menu"}>
+          <ImportMenu pick={pick} trigger={props.trigger} />
+        </Match>
+        <Match when={props.variant === "drop"}>
+          <DropZone pick={pick} drop={drop} />
+        </Match>
+      </Switch>
+
+      <Show when={progress()}>
+        {(state) => <ProgressDialog state={state()} onClose={context.clear} />}
       </Show>
+    </>
+  );
+}
 
-      <CloneDialog
-        open={cloneOpen()}
-        onOpenChange={setCloneOpen}
-        note={cloneNote()}
-        repos={repos()}
-        url={cloneUrl()}
-        onUrl={setCloneUrl}
-        onClone={clone}
-      />
-
+/**
+ * A repository URL typed into the catalogue's search: one button that clones it through the same
+ * pipeline and progress dialog as every other import. For technicians; most people never see it.
+ */
+export function CloneFromUrl(props: { readonly url: string }) {
+  const { services } = useShell();
+  const { progress, context } = createImportProgress(services, () => undefined);
+  return (
+    <>
+      <Button
+        variant="primary"
+        size="md"
+        data-testid="clone-url"
+        icon={<GitBranch size={20} aria-hidden="true" />}
+        onClick={() => cloneRepository(context, props.url)}
+      >
+        {m.landing_clone_repository()}
+      </Button>
       <Show when={progress()}>
         {(state) => <ProgressDialog state={state()} onClose={context.clear} />}
       </Show>

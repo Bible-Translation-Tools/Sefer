@@ -44,5 +44,17 @@
   "refine_editor_label": "Refinement",
   "refine_hide_reference": "Hide reference",
   "refine_show_reference": "Show reference",
-  "refine_resize_reference": "Resize the reference panel"
+  "refine_resize_reference": "Resize the reference panel",
+  "landing_clone_from_link": "Clone from a link",
+  "landing_clone_repository": "Clone this repository",
+  "landing_drop_hint": "Drop a project folder or a zip here, or choose one.",
+  "landing_drop_not_project": "Not a project",
+  "landing_drop_one": "Drop one folder or one .zip.",
+  "landing_import_zip_short": "Zip",
+  "landing_import_folder_short": "Folder",
+  "landing_import_writer_short": "From Writer",
+  "landing_repos_label": "Which repositories",
+  "landing_repos_consolidated": "Consolidated",
+  "landing_repos_writer": "Writer repos",
+  "landing_search_or_link": "Search projects available on WACS, or paste a repository link"
 }
