@@ -75,54 +75,8 @@ function BookWorkspace(props: {
  */
 function EditorPanel(props: { readonly book: EditorBook; readonly split?: boolean }) {
   const shell = useShell();
-  /**
-   * The bar's edges, matched to the TEXT's: CodeMirror centres the scripture
-   * in a fixed measure beside its gutter, so the column moves with the
-   * panel's width, the gutter and the font. Measured rather than restated —
-   * the inset from each side of the panel to each side of `.cm-content`.
-   */
-  const [panel, setPanel] = createSignal<HTMLElement>();
-  const [inset, setInset] = createSignal({ start: 24, end: 24 }, { name: "refineBarInset" });
-  createEffect(
-    // Again for a new book: its view is a new element.
-    () => ({ section: panel(), book: props.book.id }),
-    ({ section }) => {
-      if (section === undefined) return;
-      let watched: Element | undefined;
-      const measure = (): void => {
-        const text = section.querySelector(".cm-content");
-        if (text === null) return;
-        // Found: the view is up, and nothing else needs watching for it —
-        // a subtree observer left on would measure on every keystroke.
-        mounted.disconnect();
-        if (text !== watched) {
-          if (watched !== undefined) observer.unobserve(watched);
-          watched = text;
-          observer.observe(text);
-        }
-        const outer = section.getBoundingClientRect();
-        const inner = text.getBoundingClientRect();
-        const border = section.clientLeft;
-        setInset({
-          start: Math.max(0, Math.round(inner.left - outer.left - border)),
-          end: Math.max(0, Math.round(outer.right - inner.right - border)),
-        });
-      };
-      const observer = new ResizeObserver(measure);
-      observer.observe(section);
-      // The view mounts after the panel; catch it when it lands.
-      const mounted = new MutationObserver(measure);
-      mounted.observe(section, { childList: true, subtree: true });
-      measure();
-      return () => {
-        observer.disconnect();
-        mounted.disconnect();
-      };
-    },
-  );
   return (
     <section
-      ref={setPanel}
       aria-label={t("Refinement")}
       data-testid="refine-editor"
       class={cx(
@@ -131,22 +85,23 @@ function EditorPanel(props: { readonly book: EditorBook; readonly split?: boolea
         "flex min-h-0 flex-1 flex-col rounded-[12px] border-2 border-surface-border bg-surface-primary transition-colors focus-within:border-brand",
       )}
     >
-      {/* 12px top and bottom; each side lines up with the text's own edge. */}
-      <div
-        class="flex shrink-0 items-center gap-controls py-3"
-        style={{ "padding-inline": `${inset().start}px ${inset().end}px` }}
-      >
-        <Button
-          variant="tertiary"
-          data-testid="refine-reference"
-          onClick={() => shell.setReferenceSplit(props.split !== true)}
-        >
-          <Show when={props.split === true} fallback={<PanelLeftOpen aria-hidden="true" />}>
-            <PanelLeftClose aria-hidden="true" />
-          </Show>
-          {props.split === true ? t("Hide reference") : t("Show reference")}
-        </Button>
-        <BookViewSwitch class="ms-auto" />
+      {/* 12px top and bottom; each side lines up with the text's own edge:
+          the same side padding as the editor below, and the same centred
+          measure as its text column (`--editor-measure`, editor.css). */}
+      <div class="shrink-0 px-6">
+        <div class="mx-auto flex max-w-(--editor-measure) items-center gap-controls py-3">
+          <Button
+            variant="tertiary"
+            data-testid="refine-reference"
+            onClick={() => shell.setReferenceSplit(props.split !== true)}
+          >
+            <Show when={props.split === true} fallback={<PanelLeftOpen aria-hidden="true" />}>
+              <PanelLeftClose aria-hidden="true" />
+            </Show>
+            {props.split === true ? t("Hide reference") : t("Show reference")}
+          </Button>
+          <BookViewSwitch class="ms-auto" />
+        </div>
       </div>
       <div class="flex min-h-0 flex-1 flex-col px-6">
         <Show when={props.book.id} keyed>

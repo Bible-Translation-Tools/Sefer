@@ -38,6 +38,10 @@
  * ------------------------------------------------------------------------- */
 
 :root {
+  /* The reading column's measure: the regular projection's text, its notes
+     and its front matter card, and anything outside the editor that lines up
+     with them (the panels layout's action bar, `EditorPanel`). */
+  --editor-measure: 40rem;
   --editor-paper: var(--surface-primary);
   --editor-ink: var(--on-surface-primary);
   /* Verse and chapter numbers, and the caret. The mockup's "verse numbers
@@ -149,7 +153,7 @@
    column must not run the text under them. Symmetric, so the column stays
    centred. */
 .cm-mode-regular .cm-content {
-  max-width: 40rem;
+  max-width: var(--editor-measure);
   margin: 0 auto;
   padding: 56px 1.5rem 30vh;
   font-family: var(--font-scripture);
@@ -384,7 +388,7 @@
   color: var(--editor-link-x);
 }
 .cm-mode-regular .usfm-notes {
-  max-width: 40rem;
+  max-width: var(--editor-measure);
   margin: 1.2em auto 2.2em;
   padding-top: 0.7em;
   border-top: 1px solid var(--editor-rule);
@@ -1365,7 +1369,7 @@
   grid-template-columns: max-content 1fr;
   gap: 4px 12px;
   align-items: baseline;
-  max-width: 40rem;
+  max-width: var(--editor-measure);
   margin: 0 auto 1.5rem;
   padding: 12px 14px;
   background: var(--surface-secondary);
