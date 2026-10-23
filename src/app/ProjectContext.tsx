@@ -90,8 +90,6 @@ export interface Shell {
   readonly noteChapterAtTop: (ordinal: number, place?: LastLocation["place"]) => void;
 
   readonly lastLocation: (root: string) => LastLocation | undefined;
-  /** Where the reader last was in this one book of this project; see `bookLocations`. */
-  readonly bookLocation: (root: string, bookId: string) => LastLocation | undefined;
 
   readonly finding: Accessor<Finding | undefined>;
 
@@ -345,7 +343,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     resources,
     noteChapterAtTop: reader.noteChapterAtTop,
     lastLocation: reader.lastLocation,
-    bookLocation: reader.bookLocation,
     finding,
     findings,
     findingsPending,

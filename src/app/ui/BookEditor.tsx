@@ -119,9 +119,8 @@ export function BookEditor(props: BookEditorProps) {
       const remembered = untrack(() => {
         if (shell.reveal()?.bookId === bookId) return undefined;
         const root = shell.project()?.root;
-        // This book's own last place: returning to Mark returns to Mark 3,
-        // and a book never opened before opens at its front matter.
-        return root === undefined ? undefined : shell.bookLocation(root, bookId)?.place;
+        const held = root === undefined ? undefined : shell.lastLocation(root);
+        return held?.bookId === bookId ? held.place : undefined;
       });
       // Untracked on purpose: a one-time read, not a dependency (Solid 2: STRICT_READ_UNTRACKED).
       const book = untrack(() => props.book);

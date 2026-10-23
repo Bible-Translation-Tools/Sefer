@@ -62,12 +62,6 @@ const createLocationMemory = ({
     services.settings.get(keys.lastLocation),
     { name: "lastLocations", equals: false },
   );
-  // And in each book, by `<root>\u0000<book>`.
-  const [bookLocations, setBookLocations] = createSignal<LastLocations>(
-    services.settings.get(keys.bookLocations),
-    { name: "bookLocations", equals: false },
-  );
-  const bookKey = (root: string, bookId: string): string => `${root}\u0000${bookId}`;
 
   let locationWrite: ReturnType<typeof setTimeout> | undefined;
   onCleanup(() => {
@@ -87,11 +81,7 @@ const createLocationMemory = ({
     if (root === undefined || bookId === undefined) return;
     // A writer, not a reader: a one-time read of the map it rewrites (Solid 2: STRICT_READ_UNTRACKED otherwise).
     const held = untrack(locations);
-    const perBook = untrack(bookLocations);
-    // This book's own last place, so a book returned to carries its own
-    // chapter forward rather than another book's.
-    const previous =
-      perBook[bookKey(root, bookId)] ?? (held[root]?.bookId === bookId ? held[root] : undefined);
+    const previous = held[root];
     const same = previous?.bookId === bookId;
     const carried = same ? previous.at : undefined;
     const where = at ?? carried;
@@ -106,15 +96,10 @@ const createLocationMemory = ({
       },
     };
     setLocations(next);
-    const entry = next[root];
-    const books: LastLocations =
-      entry === undefined ? perBook : { ...perBook, [bookKey(root, bookId)]: entry };
-    setBookLocations(books);
     if (locationWrite !== undefined) clearTimeout(locationWrite);
     locationWrite = setTimeout(() => {
       locationWrite = undefined;
       persist(keys.lastLocation, next);
-      persist(keys.bookLocations, books);
     }, 400);
   };
 
@@ -146,14 +131,8 @@ const createLocationMemory = ({
   };
 
   const lastLocation = (root: string): LastLocation | undefined => locations()[root];
-  const bookLocation = (root: string, bookId: string): LastLocation | undefined => {
-    const held = bookLocations()[bookKey(root, bookId)];
-    if (held !== undefined) return held;
-    const last = locations()[root];
-    return last?.bookId === bookId ? last : undefined;
-  };
 
-  return { remember, noteChapterAtTop, lastLocation, bookLocation };
+  return { remember, noteChapterAtTop, lastLocation };
 };
 
 const createPlace = ({
@@ -259,7 +238,7 @@ export const createReader = ({
   slug,
   slugFor,
 }: ReaderDeps) => {
-  const { remember, noteChapterAtTop, lastLocation, bookLocation } = createLocationMemory({
+  const { remember, noteChapterAtTop, lastLocation } = createLocationMemory({
     services,
     keys,
     focused,
@@ -307,8 +286,8 @@ export const createReader = ({
     if (!fresh) setReveal(undefined);
     else honoured = aimed;
 
-    const held = bookLocation(staticProject.root, bookId);
-    const resume = at === undefined ? held?.at : undefined;
+    const held = lastLocation(staticProject.root);
+    const resume = at === undefined && held?.bookId === bookId ? held.at : undefined;
 
     const opening = openingChapter(editing, at);
     if (preferChapterView() && resume !== undefined) {
@@ -386,7 +365,6 @@ export const createReader = ({
     place,
     noteChapterAtTop,
     lastLocation,
-    bookLocation,
     remember,
     aim,
     showChapter,

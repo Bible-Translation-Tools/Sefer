@@ -150,12 +150,6 @@ export interface ShellKeys {
   readonly projectSlugs: SettingKey<ProjectSlugs>;
   /** Project root → the book, the clip and the chapter the reader last had on screen. */
   readonly lastLocation: SettingKey<LastLocations>;
-  /**
-   * Where the reader last was in EACH book, keyed `<project root>\u0000<book id>`
-   * — the same entry as `lastLocation`, which only holds the last book. Going
-   * from Mark 3 to Luke and back to Mark returns to Mark 3.
-   */
-  readonly bookLocations: SettingKey<LastLocations>;
   readonly referenceWidth: SettingKey<number>;
 }
 
@@ -216,7 +210,6 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
     recentProjects: settings.register("shell.recentProjects", RecentProjects, {}),
     projectSlugs: settings.register("shell.projectSlugs", ProjectSlugs, {}),
     lastLocation: settings.register("workspace.lastLocation", LastLocations, {}),
-    bookLocations: settings.register("workspace.bookLocations", LastLocations, {}),
     referenceWidth: settings.register(
       "workspace.referenceWidth",
       Schema.Number,

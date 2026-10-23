@@ -241,17 +241,8 @@ export function ProjectSidebar() {
   };
 
   const toggle = (id: string): void => {
-    // The panels layout (a design tweak): a book's row OPENS it — at its front
-    // matter the first time, where the reader left it after that
-    // (`shell.bookLocation`). Its own row folds it again.
-    if (panels() && shell.focused()?.id !== id) {
-      setOpened(undefined);
-      void navigate({
-        to: "/project/$slug/book/$book",
-        params: { slug: shell.slug(), book: encodeURIComponent(id) },
-      });
-      return;
-    }
+    // A book's row only folds its chapter list open or shut; a chapter tile
+    // is what navigates.
     setOpened(isOpen(id) ? null : id);
   };
 
