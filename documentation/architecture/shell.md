@@ -97,7 +97,11 @@ chapter's `\c` anchor to the top, or clips to it when `editor.preferChapterView`
 
 An AIM still wins over a remembered place, because a finding or a search hit is a request and a
 remembered scroll position is only the absence of one — but an aim is answered ONCE, so re-opening the
-book an aim had named lands on the remembered place.
+book an aim had named lands on the remembered place. A place still on its way counts as a request too: the
+palette, a chapter tile and a link go through `showReference`, which leaves the place pending until the
+book is open, so `shell.resumePlace(book)` — what `BookEditor` asks on mount — answers nothing while an
+aim OR a pending place names the book. Without that, going from Settings to "Psalms 3" in the last book
+remounted the editor at the remembered Psalm 2, and its next-frame re-scroll landed after the jump.
 
 ## The way back: `editor.back`
 

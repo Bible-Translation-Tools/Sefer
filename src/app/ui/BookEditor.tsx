@@ -116,12 +116,7 @@ export function BookEditor(props: BookEditorProps) {
     () => host(),
     (parent) => {
       if (parent === undefined) return;
-      const remembered = untrack(() => {
-        if (shell.reveal()?.bookId === bookId) return undefined;
-        const root = shell.project()?.root;
-        const held = root === undefined ? undefined : shell.lastLocation(root);
-        return held?.bookId === bookId ? held.place : undefined;
-      });
+      const remembered = shell.resumePlace(bookId);
       // Untracked on purpose: a one-time read, not a dependency (Solid 2: STRICT_READ_UNTRACKED).
       const book = untrack(() => props.book);
 

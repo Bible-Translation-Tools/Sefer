@@ -259,6 +259,20 @@ export const createReader = ({
 
   let honoured: Reveal | undefined;
 
+  /**
+   * Where to reopen this book: the last place, when it is in this book and
+   * nothing asked for another. An aim (a finding, a search hit) and a place
+   * still on its way (the palette, a chapter tile, a link) are requests; a
+   * remembered place is only the absence of one.
+   */
+  const resumePlace = (bookId: BookId): LastLocation["place"] =>
+    untrack(() => {
+      if (pendingPlace()?.book === bookId || reveal()?.bookId === bookId) return undefined;
+      const root = project()?.root;
+      const held = root === undefined ? undefined : lastLocation(root);
+      return held?.bookId === bookId ? held.place : undefined;
+    });
+
   const focus = async (bookId: BookId | undefined): Promise<void> => {
     const staticProject = project();
     if (bookId === undefined || staticProject === undefined) {
@@ -365,6 +379,7 @@ export const createReader = ({
     place,
     noteChapterAtTop,
     lastLocation,
+    resumePlace,
     remember,
     aim,
     showChapter,
