@@ -12,11 +12,7 @@ import { AppBar } from "#app/ui/workspace/AppBar";
 import { BackToEditor } from "#app/ui/workspace/BackToEditor";
 import { VersionTabs } from "#app/ui/workspace/ChangesHistorySidebar";
 import { layout, useLayoutTweak } from "#app/ui/workspace/layoutTweak";
-import {
-  PanelGutter,
-  panelButtonOverlap,
-  usePanelToggleLeading,
-} from "#app/ui/workspace/PanelToggle";
+import { SidebarButton, usePanelToggleLeading } from "#app/ui/workspace/PanelToggle";
 import { ProjectSidebar } from "#app/ui/workspace/ProjectSidebar";
 import { useScreen } from "#app/ui/workspace/screen";
 import { sidebarClaim } from "#app/ui/workspace/sidebarSlot";
@@ -34,15 +30,6 @@ function WorkspacePage(props: {
             // …on the panels layout's one white surface.
             layout() === "panels" && "bg-surface-primary",
           )}
-          // The panels layout: a gutter as wide as the floating panel
-          // button reaches into the page — measured, since its label
-          // changes with the screen and the language — so nothing runs
-          // under it; with the page's own 24px, 24px clear of it.
-          style={
-            layout() === "panels" && panelButtonOverlap() > 0
-              ? { "padding-inline-start": `${panelButtonOverlap()}px` }
-              : undefined
-          }
         >
           <Show when={props.tabs}>
             {(active) => (
@@ -68,8 +55,12 @@ function Workspace() {
   // last project, or draws `EmptyWorkspace` — a skeleton that draws its own
   // sidebar. `/migrate` is building ANOTHER project and has its own book list;
   // the open project's sidebar there was only lost width (Will, 2026-10-07).
-  const showing = (): boolean =>
-    shell.sidebarShowing() && path() !== "/projects" && path() !== "/" && path() !== "/migrate";
+  const here = (): boolean => path() !== "/projects" && path() !== "/" && path() !== "/migrate";
+  const showing = (): boolean => shell.sidebarShowing() && here();
+  // The panels layout (a design tweak): the panel's show/hide is the top of
+  // the panel itself, and hidden, the panel folds to a rail that still holds
+  // it — no border, as wide as the button — rather than going.
+  const rail = (): boolean => layout() === "panels" && shell.project() !== undefined && here();
   // Plain values: Resizable.Panel reads its sizes once, at registration; the split owns the width after.
   const initialWidth = untrack(() => shell.sidebarWidth());
   const minWidth = SIDEBAR_WIDTH.min;
@@ -95,11 +86,25 @@ function Workspace() {
           title: t("Keep dragging to close the panel"),
           detail: t("Release to keep it open."),
         }}
-        class={showing() ? undefined : "hidden"}
+        class={showing() ? undefined : rail() ? "shrink-0 [flex-basis:auto]!" : "hidden"}
       >
-        <Show when={sidebarClaim()} fallback={<ProjectSidebar />} keyed>
-          {(render) => render()}
-        </Show>
+        <div class={cx("flex h-full flex-col", !showing() && "bg-surface-primary")}>
+          <Show when={rail()}>
+            <div
+              class={cx(
+                "shrink-0 px-4 pt-4",
+                showing() && "border-e border-sidebar-border bg-sidebar-surface",
+              )}
+            >
+              <SidebarButton showing={showing()} />
+            </div>
+          </Show>
+          <div class={showing() ? "min-h-0 flex-1" : "hidden"}>
+            <Show when={sidebarClaim()} fallback={<ProjectSidebar />} keyed>
+              {(render) => render()}
+            </Show>
+          </div>
+        </div>
       </Resizable.Panel>
       <Resizable.Handle
         edge
@@ -109,7 +114,6 @@ function Workspace() {
       <Resizable.Panel
         class={showing() ? "relative min-w-0" : "relative min-w-0 [flex-basis:100%]!"}
       >
-        <PanelGutter showing={showing()} />
         <WorkspacePage toggle={panelToggle} tabs={pageTabs()} />
       </Resizable.Panel>
     </Resizable.Root>

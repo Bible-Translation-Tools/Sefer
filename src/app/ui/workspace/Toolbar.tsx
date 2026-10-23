@@ -189,7 +189,7 @@ function FindingsBell() {
 export function Toolbar(props: {
   /**
    * `false`: no show/hide here — the panels layout (a design tweak) keeps it
-   * in the workspace's own gutter (`PanelGutter`).
+   * at the top of the panel itself (`SidebarButton`).
    */
   readonly panelToggle?: boolean;
 }) {

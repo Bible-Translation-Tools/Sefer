@@ -14,7 +14,7 @@ import { tocViewOf } from "#core/galley";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import { Badge, Button, IconButton, Input, SegmentedControl, cx } from "../primitives";
+import { Badge, Button, IconButton, Input, SegmentedControl } from "../primitives";
 import { bookName, testamentOf, type Testament } from "./books";
 import { layout } from "./layoutTweak";
 import { metadataOf, projectLanguage, projectName } from "./project";
@@ -463,14 +463,7 @@ export function ProjectControl() {
   const choosing = (): boolean => path() === "/" || path().startsWith("/start");
 
   return (
-    <div
-      class={cx(
-        "px-4 pt-4 pb-2",
-        // The panels layout: the panel's own show/hide sits fixed above the
-        // card (16px down, 48px tall), so the card starts a row lower.
-        layout() === "panels" && shell.project() !== undefined && "pt-[76px]",
-      )}
-    >
+    <div class="px-4 pt-4 pb-2">
       <Show
         when={shell.project()}
         fallback={
