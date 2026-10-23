@@ -2,7 +2,7 @@ import type { ComponentProps, JSX } from "@solidjs/web";
 import { merge, omit } from "solid-js";
 
 import { cx, type ClassValue } from "./cx";
-import { usePageDoor, usePageLeading } from "./pageLeading";
+import { usePageDoor } from "./pageLeading";
 
 export interface CardProps extends ComponentProps<"section"> {
   readonly padded?: boolean;
@@ -38,11 +38,9 @@ export interface PanelHeaderProps {
 }
 
 export function PanelHeader(props: PanelHeaderProps) {
-  const leading = usePageLeading();
   const door = usePageDoor();
   return (
     <div class={cx("flex min-h-12 flex-wrap items-center gap-3", props.class)}>
-      {props.level === 3 ? undefined : leading()}
       <div class="min-w-0">
         {props.level === 3 ? (
           <h3 class="truncate text-h4 font-semibold text-on-surface-primary">{props.title}</h3>

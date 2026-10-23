@@ -11,7 +11,7 @@ import { t } from "../../i18n";
 import { m } from "../../paraglide/messages";
 import { useShell, type Navigate, type Shell } from "../../ProjectContext";
 import type { Services } from "../../services";
-import { EmptyState, usePageLeading } from "../primitives";
+import { EmptyState } from "../primitives";
 import { bookName } from "../workspace/books";
 import { ChangesHistorySidebar } from "../workspace/ChangesHistorySidebar";
 import { metadataOf } from "../workspace/project";
@@ -32,7 +32,6 @@ import { SaveDialog } from "./panel/SaveDialog";
 interface PanelModel {
   readonly shell: Shell;
   readonly navigate: Navigate;
-  readonly pageLeading: ReturnType<typeof usePageLeading>;
   readonly route: ReviewRoute;
   readonly sides: Sides;
   readonly compare: Compare;
@@ -143,7 +142,6 @@ function createLastBackup(
 function ReviewHeaderView(props: { readonly panel: PanelModel }) {
   return (
     <ReviewHeader
-      pageLeading={props.panel.pageLeading}
       sides={props.panel.sides}
       compare={props.panel.compare}
       decisions={props.panel.decisions}
@@ -205,7 +203,6 @@ function SaveDialogView(props: { readonly panel: PanelModel }) {
 
 export function ReviewPanel() {
   const shell = useShell();
-  const pageLeading = usePageLeading();
   const navigate = useNavigate();
   const { services } = shell;
   const route = createReviewRoute(shell);
@@ -276,7 +273,6 @@ export function ReviewPanel() {
   const panel: PanelModel = {
     shell,
     navigate,
-    pageLeading,
     route,
     sides,
     decisions,

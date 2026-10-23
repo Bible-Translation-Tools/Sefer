@@ -1,7 +1,7 @@
 export { Badge, severityTone, type BadgeTone } from "./Badge";
 export { Button } from "./Button";
 export { Card, PanelHeader } from "./Card";
-export { PageDoor, PageLeading, usePageLeading } from "./pageLeading";
+export { PageDoor } from "./pageLeading";
 export { cx, type ClassValue } from "./cx";
 export { DelayedSpinner, PENDING_MS } from "./DelayedSpinner";
 export { Dialog } from "./Dialog";
