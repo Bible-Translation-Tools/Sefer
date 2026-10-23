@@ -993,7 +993,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
         trigger={
           <button type="button" data-testid="resource-picker" class={HALF}>
             <span class="min-w-0 flex-1 truncate" title={pickerProps.resource.title}>
-              {pickerProps.resource.identifier?.toUpperCase() ?? pickerProps.resource.title}
+              {pickerProps.resource.abbreviation?.toUpperCase() ?? pickerProps.resource.title}
             </span>
             <ChevronDown aria-hidden="true" class="size-5 shrink-0" />
           </button>

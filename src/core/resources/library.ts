@@ -41,6 +41,8 @@ export interface Resource {
   readonly format: Recognition["format"];
   readonly root: string;
   readonly title: string;
+  /** The text's shorthand (`ULB`), for where a title is too long; never the id. */
+  readonly abbreviation?: string;
   readonly language?: string;
   readonly subject?: string;
   readonly identifier?: string;
@@ -103,6 +105,7 @@ const ResourceRecord = Schema.Struct({
   format: Schema.optionalKey(Schema.Literals(["usfm", "rcHelpMarkdown"])),
   root: Schema.String,
   title: Schema.String,
+  abbreviation: Schema.optionalKey(Schema.String),
   language: Schema.optionalKey(Schema.String),
   subject: Schema.optionalKey(Schema.String),
   identifier: Schema.optionalKey(Schema.String),
@@ -154,7 +157,10 @@ const failure = (error: PlatformError.PlatformError): LibraryError => refuse("Io
 
 const isUsfm = (path: string): boolean => path.toLowerCase().endsWith(".usfm");
 
-type Described = Pick<Resource, "title" | "language" | "subject" | "identifier" | "version"> & {
+type Described = Pick<
+  Resource,
+  "title" | "abbreviation" | "language" | "subject" | "identifier" | "version"
+> & {
   readonly declared?: Declared;
 };
 
@@ -164,9 +170,11 @@ const describe = (fileSystem: FileSystem.FileSystem, root: string): Effect.Effec
       onNone: (): Described => ({ title: lastSegment(root) }),
       onSome: (metadata): Described => {
         const title = localized(metadata.name, [metadata.defaultLocale]);
+        const abbreviation = localized(metadata.abbreviation, [metadata.defaultLocale]);
         return {
           declared: metadata.declared,
           title: title === "" ? lastSegment(root) : title,
+          ...(abbreviation === "" ? {} : { abbreviation }),
           ...(metadata.language.tag === "" ? {} : { language: metadata.language.tag }),
           ...(metadata.subject === undefined ? {} : { subject: metadata.subject }),
           ...(metadata.id === undefined ? {} : { identifier: metadata.id.toLowerCase() }),

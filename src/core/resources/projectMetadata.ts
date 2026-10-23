@@ -25,6 +25,12 @@ export interface ProjectMetadata {
   readonly container: "burrito" | "resourceContainer";
   readonly id: string | undefined;
   readonly name: LocalizedText;
+  /**
+   * The text's shorthand (`ULB`, `REG`): a Burrito's `identification.abbreviation`,
+   * a Resource Container's `dublin_core` identifier. Not `id`, which for a
+   * Burrito is a GUID.
+   */
+  readonly abbreviation: LocalizedText;
   readonly language: ProjectLanguageMetadata;
   readonly defaultLocale: string | undefined;
   readonly bookNames: Readonly<Record<string, LocalizedText>>;
@@ -58,6 +64,7 @@ export const fromBurrito = (metadata: BurritoMetadata): ProjectMetadata => {
     container: "burrito",
     id: primaryIdOf(metadata),
     name: metadata.identification.name,
+    abbreviation: metadata.identification.abbreviation ?? {},
     language: {
       tag: language?.tag ?? "",
       name: language?.name ?? {},
@@ -83,6 +90,7 @@ const fromResourceContainer = (manifest: ResourceContainerManifest): ProjectMeta
     container: "resourceContainer",
     id: core.identifier === "" ? undefined : core.identifier,
     name: ONE(locale, core.title),
+    abbreviation: ONE(locale, core.identifier),
     language: {
       tag: locale,
       name: ONE(locale, core.language.title),
