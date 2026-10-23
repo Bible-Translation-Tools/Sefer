@@ -8,6 +8,7 @@ import type { BookComparison } from "#core/compare";
 import type { Restorable } from "#core/recovery/recovery";
 
 import { t } from "../../i18n";
+import { m } from "../../paraglide/messages";
 import { useShell, type Navigate, type Shell } from "../../ProjectContext";
 import type { Services } from "../../services";
 import { EmptyState, usePageLeading } from "../primitives";
@@ -209,11 +210,14 @@ export function ReviewPanel() {
   const { services } = shell;
   const route = createReviewRoute(shell);
   onCleanup(
-    claimSidebar(() => (
-      <ChangesHistorySidebar active="changes" changes={0}>
-        <p class="px-6 pt-3 text-small text-on-surface-tertiary">{t("Nothing differs.")}</p>
-      </ChangesHistorySidebar>
-    )),
+    claimSidebar(
+      () => (
+        <ChangesHistorySidebar active="changes" changes={0}>
+          <p class="px-6 pt-3 text-small text-on-surface-tertiary">{t("Nothing differs.")}</p>
+        </ChangesHistorySidebar>
+      ),
+      { show: m.sidebar_show_changes(), hide: m.sidebar_hide_changes() },
+    ),
   );
   const [note, setNote] = createSignal("", { name: "reviewNote" });
   const [busy, setBusy] = createSignal("", { name: "reviewBusy" });

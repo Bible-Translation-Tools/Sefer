@@ -7,11 +7,12 @@ import { readyShell, useShell, useShellState } from "#app/ProjectContext";
 import { SIDEBAR_WIDTH } from "#app/settings";
 import { TourOutlet } from "#app/tour/TourOutlet";
 import { CommandPalette } from "#app/ui/CommandPalette";
-import { PageDoor, PageLeading, Resizable, Toaster } from "#app/ui/primitives";
+import { PageDoor, PageLeading, Resizable, Toaster, cx } from "#app/ui/primitives";
 import { AppBar } from "#app/ui/workspace/AppBar";
 import { BackToEditor } from "#app/ui/workspace/BackToEditor";
 import { VersionTabs } from "#app/ui/workspace/ChangesHistorySidebar";
-import { usePanelToggleLeading } from "#app/ui/workspace/PanelToggle";
+import { layout, useLayoutTweak } from "#app/ui/workspace/layoutTweak";
+import { SidebarButton, usePanelToggleLeading } from "#app/ui/workspace/PanelToggle";
 import { ProjectSidebar } from "#app/ui/workspace/ProjectSidebar";
 import { useScreen } from "#app/ui/workspace/screen";
 import { sidebarClaim } from "#app/ui/workspace/sidebarSlot";
@@ -23,7 +24,13 @@ function WorkspacePage(props: {
   return (
     <PageLeading value={props.toggle}>
       <PageDoor value={() => <BackToEditor />}>
-        <div class="flex h-full min-w-0 flex-col">
+        <div
+          class={cx(
+            "flex h-full min-w-0 flex-col",
+            // …on the panels layout's one white surface.
+            layout() === "panels" && "bg-surface-primary",
+          )}
+        >
           <Show when={props.tabs}>
             {(active) => (
               <div class="shrink-0 border-b border-surface-border px-4">
@@ -42,13 +49,18 @@ function WorkspacePage(props: {
 
 function Workspace() {
   const shell = useShell();
+  useLayoutTweak();
   const path = useRouterState({ select: (state) => state.location.pathname });
   // Never on `/`, `/projects` or `/migrate`. `/` is home: it forwards to the
   // last project, or draws `EmptyWorkspace` — a skeleton that draws its own
   // sidebar. `/migrate` is building ANOTHER project and has its own book list;
   // the open project's sidebar there was only lost width (Will, 2026-10-07).
-  const showing = (): boolean =>
-    shell.sidebarShowing() && path() !== "/projects" && path() !== "/" && path() !== "/migrate";
+  const here = (): boolean => path() !== "/projects" && path() !== "/" && path() !== "/migrate";
+  const showing = (): boolean => shell.sidebarShowing() && here();
+  // The panels layout (a design tweak): the panel's show/hide is the top of
+  // the panel itself, and hidden, the panel folds to a rail that still holds
+  // it — no border, as wide as the button — rather than going.
+  const rail = (): boolean => layout() === "panels" && shell.project() !== undefined && here();
   // Plain values: Resizable.Panel reads its sizes once, at registration; the split owns the width after.
   const initialWidth = untrack(() => shell.sidebarWidth());
   const minWidth = SIDEBAR_WIDTH.min;
@@ -74,18 +86,34 @@ function Workspace() {
           title: t("Keep dragging to close the panel"),
           detail: t("Release to keep it open."),
         }}
-        class={showing() ? undefined : "hidden"}
+        class={showing() ? undefined : rail() ? "shrink-0 [flex-basis:auto]!" : "hidden"}
       >
-        <Show when={sidebarClaim()} fallback={<ProjectSidebar />} keyed>
-          {(render) => render()}
-        </Show>
+        <div class={cx("flex h-full flex-col", !showing() && "bg-surface-primary")}>
+          <Show when={rail()}>
+            <div
+              class={cx(
+                "shrink-0 px-4 pt-4",
+                showing() && "border-e border-sidebar-border bg-sidebar-surface",
+              )}
+            >
+              <SidebarButton showing={showing()} />
+            </div>
+          </Show>
+          <div class={showing() ? "min-h-0 flex-1" : "hidden"}>
+            <Show when={sidebarClaim()} fallback={<ProjectSidebar />} keyed>
+              {(render) => render()}
+            </Show>
+          </div>
+        </div>
       </Resizable.Panel>
       <Resizable.Handle
         edge
         label={t("Resize the project panel")}
         class={showing() ? undefined : "hidden"}
       />
-      <Resizable.Panel class={showing() ? "min-w-0" : "min-w-0 [flex-basis:100%]!"}>
+      <Resizable.Panel
+        class={showing() ? "relative min-w-0" : "relative min-w-0 [flex-basis:100%]!"}
+      >
         <WorkspacePage toggle={panelToggle} tabs={pageTabs()} />
       </Resizable.Panel>
     </Resizable.Root>

@@ -27,6 +27,7 @@ import { trackingRef } from "#core/sync";
 
 import { remoteReasonOf } from "../../describe";
 import { t } from "../../i18n";
+import { m } from "../../paraglide/messages";
 import { useShell, type Shell } from "../../ProjectContext";
 import { syncStatus } from "../../syncStatus";
 import type { DiffSides } from "../diff/DiffCard";
@@ -818,19 +819,22 @@ export function HistoryPanel() {
   const nameOf = (bookId: BookId): string => bookName(bookId, metadataOf(shell.project()));
 
   onCleanup(
-    claimSidebar(() => (
-      <HistorySidebar
-        changes={unsaved()}
-        log={log()}
-        problem={problem()}
-        selected={selected()}
-        older={older()}
-        onlyHere={onlyHere}
-        onChoose={choose}
-        onReload={() => load(true)}
-        onLoadOlder={loadOlder}
-      />
-    )),
+    claimSidebar(
+      () => (
+        <HistorySidebar
+          changes={unsaved()}
+          log={log()}
+          problem={problem()}
+          selected={selected()}
+          older={older()}
+          onlyHere={onlyHere}
+          onChoose={choose}
+          onReload={() => load(true)}
+          onLoadOlder={loadOlder}
+        />
+      ),
+      { show: m.sidebar_show_history(), hide: m.sidebar_hide_history() },
+    ),
   );
 
   return (

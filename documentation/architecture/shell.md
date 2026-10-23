@@ -72,6 +72,10 @@ as **Intro**, and only when the book actually has any.
 Findings and search navigate by URL, and the route that lands calls `focus(bookId)` with no offset. So
 the offset is left on the shell first: `shell.aim(bookId, from)` records it, `focus` reads it to
 choose the opening chapter, and `shell.reveal()` keeps it for the editor surface to scroll to.
+An aim moves the caret there, unless it says `caret: "keep"`: a click in a reference pane
+(`mountReference`'s `onPlace`) aims the book at the clicked verse's pair — the caret's pairing read
+the other way — and only brings it into view, so the caret, and the pair the pane marks for it, stay
+where the person is typing and nothing bounces back.
 
 ## Where you were: `workspace.lastLocation`
 
@@ -97,7 +101,11 @@ chapter's `\c` anchor to the top, or clips to it when `editor.preferChapterView`
 
 An AIM still wins over a remembered place, because a finding or a search hit is a request and a
 remembered scroll position is only the absence of one — but an aim is answered ONCE, so re-opening the
-book an aim had named lands on the remembered place.
+book an aim had named lands on the remembered place. A place still on its way counts as a request too: the
+palette, a chapter tile and a link go through `showReference`, which leaves the place pending until the
+book is open, so `shell.resumePlace(book)` — what `BookEditor` asks on mount — answers nothing while an
+aim OR a pending place names the book. Without that, going from Settings to "Psalms 3" in the last book
+remounted the editor at the remembered Psalm 2, and its next-frame re-scroll landed after the jump.
 
 ## The way back: `editor.back`
 

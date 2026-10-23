@@ -5,6 +5,7 @@ import { type Analyze, analyzer } from "../core/analyzer";
 import { anchorFrom } from "../core/clip";
 import { readingLayer, viewLayer } from "../core/compose";
 import { structureAt, type ChapterRow } from "../core/docStructure";
+import { hiddenFrontMatter } from "../core/frontmatter";
 import { span } from "../core/timing";
 import { handleFor, markMoved, type EditorHandle } from "../handle";
 import { modeView, pickChapter, type ProjectionName } from "../views";
@@ -22,6 +23,11 @@ export interface ReferenceOptions {
   readonly mode: ProjectionName;
   /** Draw the paired block? The reader's setting at mount; `pairBlocks` moves it. */
   readonly pairBlocks?: boolean;
+  /**
+   * The reader clicked or tapped the text at `offset` — for the host to show
+   * the same place in the book. A drag that selects text is not a place.
+   */
+  readonly onPlace?: (offset: number) => void;
 }
 
 export interface ReferenceMount extends EditorHandle {
@@ -73,6 +79,7 @@ export function mountReference(options: ReferenceOptions): ReferenceMount {
       readingLayer,
       viewLayer(),
       projection.of(modeView(options.mode)),
+      hiddenFrontMatter(),
       pairingThere(options.pairBlocks === true),
       EditorState.readOnly.of(true),
       EditorView.editable.of(false),
@@ -81,6 +88,14 @@ export function mountReference(options: ReferenceOptions): ReferenceMount {
 
   const view = new EditorView({ state, parent: options.parent });
   done();
+
+  const { onPlace } = options;
+  const clicked = (event: MouseEvent): void => {
+    if (onPlace === undefined || !view.state.selection.main.empty) return;
+    const at = view.posAtCoords({ x: event.clientX, y: event.clientY });
+    if (at !== null) onPlace(at);
+  };
+  view.contentDOM.addEventListener("click", clicked);
 
   const mount = handleFor(view, {
     setMode: (mode: ProjectionName) => {
@@ -116,6 +131,7 @@ export function mountReference(options: ReferenceOptions): ReferenceMount {
     },
 
     destroy: () => {
+      view.contentDOM.removeEventListener("click", clicked);
       view.destroy();
     },
   });

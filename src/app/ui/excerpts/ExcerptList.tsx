@@ -13,6 +13,7 @@ import {
 import type { Analysis } from "#core/galley";
 
 import { t } from "../../i18n";
+import { m } from "../../paraglide/messages";
 import { CardList, type CardListProps } from "../multibuffer/CardList";
 import type { CardViews } from "../multibuffer/cardViews";
 import type { VirtualSection } from "../primitives";
@@ -157,17 +158,20 @@ export function ExcerptList(props: ExcerptListProps) {
 
   if (untrack(() => props.claimsSidebar) !== false)
     onCleanup(
-      claimSidebar(() => (
-        <ResultsOutline
-          title={props.sections?.title ?? t("Results")}
-          groups={props.groups}
-          outline={props.outline}
-          active={current()}
-          label={(row) => props.sections?.label?.(row) ?? row.name}
-          keyOf={keyOf}
-          onGo={go}
-        />
-      )),
+      claimSidebar(
+        () => (
+          <ResultsOutline
+            title={props.sections?.title ?? t("Results")}
+            groups={props.groups}
+            outline={props.outline}
+            active={current()}
+            label={(row) => props.sections?.label?.(row) ?? row.name}
+            keyOf={keyOf}
+            onGo={go}
+          />
+        ),
+        { show: m.sidebar_show_results(), hide: m.sidebar_hide_results() },
+      ),
     );
 
   const card: CardListProps<Excerpt>["card"] = (excerpt, key, session) => (

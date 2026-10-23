@@ -7,6 +7,7 @@ import { Show, createMemo, createSignal, onCleanup, untrack, type Accessor } fro
 import type { Analysis, DecisionUnit, MergeSide } from "#core/galley";
 
 import { t } from "../../i18n";
+import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
 import type { Services } from "../../services";
 import { shellKeys } from "../../settings";
@@ -447,22 +448,25 @@ export function ReviewReader(props: ReviewReaderProps) {
 
   if (untrack(() => props.claimSidebar) !== false)
     onCleanup(
-      claimSidebar(() => (
-        <BooksSidebar
-          books={prepared()}
-          focused={
-            scope() === "book"
-              ? selectedBook()?.book.bookId
-              : (cursor.activeBook() ?? prepared()[0]?.book.bookId)
-          }
-          decidable={props.decidable}
-          decidedOf={decidedOf}
-          baselineShort={props.baselineShort}
-          currentShort={props.currentShort}
-          onPick={cursor.pickBook}
-          onDecide={(bookId, units, side) => props.decide(bookId, units, side)}
-        />
-      )),
+      claimSidebar(
+        () => (
+          <BooksSidebar
+            books={prepared()}
+            focused={
+              scope() === "book"
+                ? selectedBook()?.book.bookId
+                : (cursor.activeBook() ?? prepared()[0]?.book.bookId)
+            }
+            decidable={props.decidable}
+            decidedOf={decidedOf}
+            baselineShort={props.baselineShort}
+            currentShort={props.currentShort}
+            onPick={cursor.pickBook}
+            onDecide={(bookId, units, side) => props.decide(bookId, units, side)}
+          />
+        ),
+        { show: m.sidebar_show_changes(), hide: m.sidebar_hide_changes() },
+      ),
     );
 
   const editable = (): boolean => props.decidable;

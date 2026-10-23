@@ -34,7 +34,14 @@ import { createLifecycle } from "./shell/lifecycle";
 import { createLayoutPreferences, createPreferences } from "./shell/preferences";
 import { createReader } from "./shell/reader";
 import { createSlugs } from "./shell/slugs";
-import type { LiveProject, Navigate, RecentProject, Reveal, RevealAt } from "./shell/types";
+import type {
+  LiveProject,
+  Navigate,
+  RecentProject,
+  Reveal,
+  RevealAt,
+  RevealCaret,
+} from "./shell/types";
 import { createUpdateCheck } from "./shell/updateCheck";
 import type { ShellEvent } from "./shellEvent";
 import { makeShellStores, type SaveState } from "./shellStores";
@@ -68,7 +75,13 @@ export interface Shell {
   readonly lineByLine: Accessor<boolean>;
   readonly setLineByLine: (on: boolean) => void;
 
-  readonly aim: (bookId: BookId, from: number, to?: number, at?: RevealAt) => void;
+  readonly aim: (
+    bookId: BookId,
+    from: number,
+    to?: number,
+    at?: RevealAt,
+    caret?: RevealCaret,
+  ) => void;
   readonly reveal: Accessor<Reveal | undefined>;
 
   readonly showChapter: (ordinal: number) => void;
@@ -90,6 +103,12 @@ export interface Shell {
   readonly noteChapterAtTop: (ordinal: number, place?: LastLocation["place"]) => void;
 
   readonly lastLocation: (root: string) => LastLocation | undefined;
+  /**
+   * Where the editor reopens this book: the last place if it is in this book,
+   * or nothing while an aim or a place on its way names the book, because a
+   * request always wins over a remembered place.
+   */
+  readonly resumePlace: (bookId: BookId) => LastLocation["place"];
 
   readonly finding: Accessor<Finding | undefined>;
 
@@ -131,6 +150,9 @@ export interface Shell {
   readonly setReferenceWidth: (fraction: number) => void;
   readonly referenceOpen: Accessor<boolean>;
   readonly setReferenceOpen: (open: boolean) => void;
+  /** Refine's language panels split in two, or joined; see `referenceSplit` in settings. */
+  readonly referenceSplit: Accessor<boolean>;
+  readonly setReferenceSplit: (split: boolean) => void;
   readonly recentProjects: Accessor<readonly RecentProject[]>;
 
   readonly slugFor: (root: string) => string;
@@ -340,6 +362,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     resources,
     noteChapterAtTop: reader.noteChapterAtTop,
     lastLocation: reader.lastLocation,
+    resumePlace: reader.resumePlace,
     finding,
     findings,
     findingsPending,
@@ -368,6 +391,8 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     sidebarShowing: () => layout.sidebarOpen() && project() !== undefined,
     referenceOpen: layout.referenceOpen,
     setReferenceOpen: layout.setReferenceOpen,
+    referenceSplit: layout.referenceSplit,
+    setReferenceSplit: layout.setReferenceSplit,
     recentProjects,
     slugFor,
     slug,

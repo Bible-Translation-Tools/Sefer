@@ -53,6 +53,12 @@ export interface ReferencePaneProps {
    * Follow stays, as the one control in its place (Will, 2026-10-08).
    */
   readonly bare?: boolean;
+  /**
+   * `false`: no Follow button. Refine's language panels (a design tweak) have
+   * no scroll linkage to switch — scrolling either side moves only that side,
+   * and a click in the editor brings the pair here (the caret's reveal below).
+   */
+  readonly followControl?: boolean;
 }
 
 type Held =
@@ -233,6 +239,7 @@ export function ReferencePane(props: ReferencePaneProps) {
         analyze: services.galley.memoize(),
         mode: untrack(() => shell.mode()),
         pairBlocks: untrack(() => services.settings.get(shellKeys(services.settings).pairBlocks)),
+        onPlace: (offset) => showInBook(offset),
       });
       setMounted(view);
       // Returned, not onCleanup: a Solid 2 effect's callback has no owner (NO_OWNER_CLEANUP).
@@ -342,6 +349,19 @@ export function ReferencePane(props: ReferencePaneProps) {
     { name: "pairedRange" },
   );
 
+  /**
+   * A click in the reference shows its pair in the book: the same pairing the
+   * caret uses, read the other way. Into view only — the caret stays where
+   * the person is typing, so the pair this pane marks does not move either.
+   */
+  const showInBook = (offset: number): void => {
+    const source = untrack(sourceSkeleton);
+    const target = untrack(targetSkeleton);
+    if (source === undefined || target === undefined) return;
+    const range = pairedRangeAt(source, target, offset, () => {});
+    if (range !== undefined) shell.aim(bookId, range.from, range.to, "centre", "keep");
+  };
+
   createEffect(
     () => mounted(),
     (view) => {
@@ -398,15 +418,17 @@ export function ReferencePane(props: ReferencePaneProps) {
       <Show
         when={props.bare !== true}
         fallback={
-          <div class="flex justify-end">
-            <FollowToggle
-              testId={`follow-${props.resource.id}`}
-              following={following()}
-              stopLabel={t("Stop {title} following the book", { title: props.resource.title })}
-              startLabel={t("Let {title} follow the book", { title: props.resource.title })}
-              onToggle={() => setFollowing((on) => !on)}
-            />
-          </div>
+          <Show when={props.followControl !== false}>
+            <div class="flex justify-end">
+              <FollowToggle
+                testId={`follow-${props.resource.id}`}
+                following={following()}
+                stopLabel={t("Stop {title} following the book", { title: props.resource.title })}
+                startLabel={t("Let {title} follow the book", { title: props.resource.title })}
+                onToggle={() => setFollowing((on) => !on)}
+              />
+            </div>
+          </Show>
         }
       >
         <PaneHeader

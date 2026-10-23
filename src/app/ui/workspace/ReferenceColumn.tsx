@@ -48,7 +48,17 @@ import ChevronUp from "lucide-solid/icons/chevron-up";
 import Download from "lucide-solid/icons/download";
 import Search from "lucide-solid/icons/search";
 import Trash from "lucide-solid/icons/trash-2";
-import { For, Match, Show, Switch, createEffect, createMemo, createSignal } from "solid-js";
+import X from "lucide-solid/icons/x";
+import {
+  For,
+  Match,
+  Show,
+  Switch,
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+} from "solid-js";
 
 import { Observability } from "#core/observability";
 import { remoteVerdict } from "#core/remote/remote";
@@ -71,7 +81,16 @@ import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
 import { ResourcePane } from "../kinds/registry";
 import { listProjects, type ProjectSummary } from "../landing/summaries";
-import { Button, EmptyState, Input, Menu, MenuItem, SegmentedControl } from "../primitives";
+import {
+  Button,
+  EmptyState,
+  Input,
+  Menu,
+  MenuItem,
+  Popover,
+  SegmentedControl,
+  cx,
+} from "../primitives";
 
 const ROLES: readonly Role[] = KIND_ROLES;
 
@@ -490,6 +509,12 @@ const readLibraryState = (
 
 export interface ReferenceColumnProps {
   readonly onBound?: (count: number) => void;
+  /**
+   * `gateway`: the panels layout's reference panel — one split dropdown,
+   * language then text, over the text on show, no column padding. `column`
+   * otherwise.
+   */
+  readonly variant?: "column" | "gateway";
 }
 
 export function ReferenceColumn(props: ReferenceColumnProps) {
@@ -580,13 +605,20 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       );
   };
 
+  const readProjects = () =>
+    services.run(
+      listProjects(
+        services.projectsRoot,
+        services.fixtureProject,
+        services.settings.get(shellKeys(services.settings).recentProjects),
+      ),
+    );
+  // Read once up front as well as on opening a menu: a project's metadata is
+  // what names a language the browser cannot (`nxi`), on the closed button too.
+  void readProjects().then(setProjects);
+
   const offer = (): void => {
-    if (projects() === undefined) {
-      const recent = services.settings.get(shellKeys(services.settings).recentProjects);
-      void services
-        .run(listProjects(services.projectsRoot, services.fixtureProject, recent))
-        .then(setProjects);
-    }
+    if (projects() === undefined) void readProjects().then(setProjects);
     list(notes, setNotes, listTranslationNotes);
     list(bibles, setBibles, listSourceTexts);
   };
@@ -626,6 +658,66 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     ];
   };
 
+  /**
+   * A text's LANGUAGE, as the split dropdown groups by it: one row per
+   * language, however many texts it has (ULB, UDB, Notes…). Lower-cased tag;
+   * "" for every text that names no language, so they share one row.
+   */
+  const languageOf = (resource: Resource): string => (resource.language ?? "").toLowerCase();
+  const projectLanguageOf = (row: ProjectSummary): string => row.languageTag.toLowerCase();
+  /**
+   * Names for tags the browser cannot name (`nxi`), from what names them
+   * here: the reader's projects' and the library texts' own metadata, and
+   * the catalogue's rows.
+   */
+  const knownNames = createMemo(
+    (): ReadonlyMap<string, string> => {
+      const names = new Map<string, string>();
+      const note = (tag: string | undefined, name: string | undefined): void => {
+        const key = tag?.toLowerCase() ?? "";
+        if (key !== "" && name !== undefined && name !== "" && name.toLowerCase() !== key)
+          names.set(key, name);
+      };
+      for (const row of projects() ?? []) note(row.languageTag, row.language);
+      for (const resource of installed()) note(resource.language, resource.languageName);
+      for (const text of [...offeredBibles(), ...helps()]) note(text.language, text.languageName);
+      return names;
+    },
+    { name: "referenceLanguageNames" },
+  );
+  /** A language's name: the browser's when it knows the tag, else the one found here, else the tag. */
+  const nameOfLanguage = (key: string): string => {
+    const browser = languageName(key);
+    if (browser !== undefined && browser.toLowerCase() !== key.toLowerCase()) return browser;
+    return knownNames().get(key.toLowerCase()) ?? browser ?? key;
+  };
+  /** What the left half calls a language: its name and tag, or that it is unknown. */
+  const languageLabel = (key: string): string =>
+    key === "" ? m.reference_no_language() : `${nameOfLanguage(key)} (${key})`;
+  /** The text last on show in each language, so returning to it returns to that text. */
+  const [lastIn, setLastIn] = createSignal<Readonly<Record<string, string>>>(
+    {},
+    { name: "referenceLastIn" },
+  );
+  /** The bound texts grouped by language, in the order they are bound. */
+  const languageTabs = createMemo(
+    (): readonly { readonly key: string; readonly entries: readonly Entry[] }[] => {
+      const groups = new Map<string, Entry[]>();
+      for (const entry of entries()) {
+        const key = languageOf(entry.resource);
+        const held = groups.get(key);
+        if (held === undefined) groups.set(key, [entry]);
+        else held.push(entry);
+      }
+      return [...groups].map(([key, grouped]) => ({ key, entries: grouped }));
+    },
+    { name: "referenceLanguageTabs" },
+  );
+  /** The text a language opens on: the last one shown in it, else its scripture. */
+  const openingOf = (group: readonly Entry[], key: string): Entry | undefined =>
+    group.find((entry) => entry.resource.id === lastIn()[key]) ??
+    group.find((entry) => isBible(entry.resource)) ??
+    group[0];
   const [chosen, setChosen] = createSignal<string | undefined>(undefined, {
     name: "referenceShown",
   });
@@ -634,6 +726,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     const project = shell.project();
     if (project === undefined) return;
     setChosen(resource.id);
+    setLastIn((held) => ({ ...held, [languageOf(resource)]: resource.id }));
     if (entries().some((entry) => entry.resource.id === resource.id)) return;
     void services
       .run(services.library.pick(project.root, roleFor(resource), resource.id))
@@ -660,15 +753,32 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       });
   };
 
-  const fetchBible = (text: ListedText): void => {
+  /** Downloads in flight from the split dropdown's language list, by repository. */
+  const [pulling, setPulling] = createSignal<ReadonlySet<string>>(new Set(), {
+    name: "referencePulling",
+  });
+  const pull = (key: string, on: boolean): void => {
+    setPulling((held) => {
+      const next = new Set(held);
+      if (on) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  };
+
+  /** From the split dropdown's language list (`keep`), a download stays there rather than going on show. */
+  const fetchBible = (text: ListedText, keep = false): void => {
     const name = text.languageName || text.language;
     const operation = services.composition.observability.operation("import.remote", {
       "import.source": "reference",
       "import.host": services.hostInfo.kind(),
       "catalogue.type": "gateway",
     });
-    setBusy(true);
-    setFetching(name);
+    if (keep) pull(text.repository, true);
+    else {
+      setBusy(true);
+      setFetching(name);
+    }
     void services
       .run(
         Effect.provideService(
@@ -680,15 +790,18 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       // oxlint-disable-next-line solid/reactivity
       .then((resource) => {
         operation.end("passed", { "import.phase": "complete" });
-        show(resource);
+        if (!keep) show(resource);
       })
       .catch((cause: unknown) => {
         operation.end(remoteVerdict(remoteReasonOf(cause)));
         shell.report(t("could not add {name}: {reason}", { name, reason: describe(cause) }));
       })
       .finally(() => {
-        setBusy(false);
-        setFetching("");
+        if (keep) pull(text.repository, false);
+        else {
+          setBusy(false);
+          setFetching("");
+        }
       });
   };
 
@@ -768,8 +881,9 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
 
   const nameOf = (resource: Resource | undefined): string => {
     if (resource === undefined) return "";
-    const name = languageName(resource.language);
-    if (name === undefined) return resource.title;
+    const tag = resource.language ?? "";
+    if (tag === "") return resource.title;
+    const name = nameOfLanguage(tag);
     return isBible(resource)
       ? `${name} (${resource.language ?? ""})`
       : `${resource.title} · ${name} (${resource.language ?? ""})`;
@@ -803,13 +917,403 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     query,
     setQuery,
   };
+
+  /** The split dropdown's language list, open or shut. */
+  const [managing, setManaging] = createSignal(false, { name: "referenceManaging" });
+  const manage = (open: boolean): void => {
+    setManaging(open);
+    if (open) offer();
+  };
+  /** A listing still on its way: nothing read yet, or the read in flight. */
+  const listing = (read: Listing | undefined): boolean =>
+    read === undefined || read.state === "loading";
+  /** A row of the add list: what it is called, how to sort it, and what its button does. */
+  type Offer =
+    | {
+        readonly kind: "held";
+        readonly key: string;
+        readonly name: string;
+        readonly add: () => void;
+      }
+    | {
+        readonly kind: "download";
+        readonly key: string;
+        readonly name: string;
+        readonly download: () => void;
+        readonly pulling: () => boolean;
+      };
+  const byName = (a: Offer, b: Offer): number => a.name.localeCompare(b.name);
+
+  /**
+   * The left half: LANGUAGES only, one row each. Those on this device (its
+   * texts, and the reader's other projects) A–Z, then those to download A–Z.
+   * Choosing a held language opens its scripture; what else it holds is the
+   * right half's.
+   */
+  const offers = (): readonly Offer[] => {
+    const texts = new Map<string, Resource[]>();
+    for (const resource of installed()) {
+      const key = languageOf(resource);
+      texts.set(key, [...(texts.get(key) ?? []), resource]);
+    }
+    const projectsIn = new Map<string, ProjectSummary[]>();
+    for (const row of otherProjects()) {
+      const key = projectLanguageOf(row);
+      projectsIn.set(key, [...(projectsIn.get(key) ?? []), row]);
+    }
+    const heldKeys = new Set([...texts.keys(), ...projectsIn.keys()]);
+    const held: Offer[] = [...heldKeys].map((key): Offer => {
+      const here = texts.get(key) ?? [];
+      const projectsHere = projectsIn.get(key) ?? [];
+      return {
+        kind: "held",
+        key,
+        name: languageLabel(key),
+        add: () => {
+          const opening = here.find(isBible) ?? here[0];
+          if (opening !== undefined) show(opening);
+          else if (projectsHere[0] !== undefined) showProject(projectsHere[0]);
+        },
+      };
+    });
+    // To download: a language with a gateway Bible, or only Translation
+    // Notes, and nothing here yet. Its Bible first when it has one.
+    const toGet = new Map<string, Offer>();
+    for (const text of offeredBibles()) {
+      const key = text.language.toLowerCase();
+      if (heldKeys.has(key) || toGet.has(key)) continue;
+      toGet.set(key, {
+        kind: "download",
+        key: text.repository,
+        name: textName(text),
+        download: () => fetchBible(text, true),
+        pulling: () => pulling().has(text.repository),
+      });
+    }
+    for (const help of helps()) {
+      const key = help.language.toLowerCase();
+      if (heldKeys.has(key) || toGet.has(key)) continue;
+      toGet.set(key, {
+        kind: "download",
+        key: help.repository,
+        name: textName(help),
+        download: () => fetchHelp(help),
+        pulling: () => helpDownloads().has(help.repository),
+      });
+    }
+    return [...held.sort(byName), ...[...toGet.values()].sort(byName)];
+  };
+  /**
+   * The split dropdown's right half: everything in the language on show, of
+   * every kind. What is on this device (its scriptures, its Translation
+   * Notes…), the reader's other projects in it, then what there is to
+   * download: its gateway Bibles and its Translation Notes. Named by its
+   * shorthand (`ULB`, `REG`) where it has one, not its full title.
+   */
+  const ResourcePicker = (pickerProps: { readonly resource: Resource }) => {
+    const key = (): string => languageOf(pickerProps.resource);
+    const texts = (): readonly Resource[] =>
+      installed().filter((each) => languageOf(each) === key());
+    const projectsHere = (): readonly ProjectSummary[] =>
+      otherProjects().filter((row) => projectLanguageOf(row) === key());
+    const biblesHere = (): readonly ListedText[] =>
+      offeredBibles().filter((text) => text.language.toLowerCase() === key());
+    const notesHere = (): readonly ListedText[] =>
+      helps().filter((help) => help.language.toLowerCase() === key());
+    return (
+      <Menu
+        label={m.reference_resource()}
+        triggerClass="min-w-0"
+        onOpenChange={(open) => {
+          if (open) offer();
+        }}
+        side="bottom"
+        // Its menu ends where the control does, flush with the panel's
+        // right edge, not hanging past it.
+        align="end"
+        class="w-80"
+        fitViewport
+        trigger={
+          <button type="button" data-testid="resource-picker" class={HALF}>
+            <span class="min-w-0 flex-1 truncate" title={pickerProps.resource.title}>
+              {pickerProps.resource.abbreviation?.toUpperCase() ?? pickerProps.resource.title}
+            </span>
+            <ChevronDown aria-hidden="true" class="size-5 shrink-0" />
+          </button>
+        }
+      >
+        <For each={texts()}>
+          {(text) => (
+            <MenuItem class={ROW} onSelect={() => show(text)}>
+              <span class="min-w-0 flex-1 truncate">{text.title}</span>
+              <Show when={text.id === pickerProps.resource.id}>
+                <Check aria-label={m.reference_showing()} class="size-5 shrink-0 text-brand" />
+              </Show>
+            </MenuItem>
+          )}
+        </For>
+        <For each={projectsHere()}>
+          {(row) => (
+            <MenuItem class={ROW} onSelect={() => showProject(row)}>
+              <span class="min-w-0 flex-1 truncate">{row.name}</span>
+            </MenuItem>
+          )}
+        </For>
+        <For each={biblesHere()}>
+          {(text) => (
+            <MenuItem class={ROW} onSelect={() => fetchBible(text)}>
+              <span class="min-w-0 flex-1 truncate">{text.title}</span>
+              <Download aria-hidden="true" class="size-5 shrink-0" />
+            </MenuItem>
+          )}
+        </For>
+        <For each={notesHere()}>
+          {(help) => (
+            <MenuItem class={ROW} onSelect={() => fetchHelp(help)}>
+              <span class="min-w-0 flex-1 truncate">{m.reference_shelf_notes()}</span>
+              <Show
+                when={helpDownloads().has(help.repository)}
+                fallback={<Download aria-hidden="true" class="size-5 shrink-0" />}
+              >
+                <span
+                  role="status"
+                  aria-label={m.reference_downloading()}
+                  class="size-5 shrink-0 animate-spin rounded-full border-2 border-on-surface-tertiary border-t-transparent"
+                />
+              </Show>
+            </MenuItem>
+          )}
+        </For>
+      </Menu>
+    );
+  };
+
+  /** The language a group is called by, as the split dropdown names it. */
+  const groupName = (group: {
+    readonly key: string;
+    readonly entries: readonly Entry[];
+  }): string => (group.key === "" ? m.reference_no_language() : nameOfLanguage(group.key));
+  /** The language of the text on show, if one is. */
+  const shownLanguage = (): string | undefined => {
+    const held = shown();
+    return held === undefined ? undefined : languageOf(held.entry.resource);
+  };
+  /**
+   * One half of the split dropdown: md — 3rem (48px) with the 1px border
+   * above and below, 14px, a 20px chevron, 24px sides — level with the
+   * editor's action bar.
+   */
+  const HALF =
+    "flex h-11.5 min-w-0 cursor-pointer items-center gap-3 px-6 text-start text-small font-semibold text-on-surface-primary transition-colors hover:bg-surface-secondary";
+
+  /**
+   * The split view's one control: | English ⌄ | ULB ⌄ |. The left half picks
+   * the language — the ones already beside this project, then the add list —
+   * and the right half picks the text within it.
+   */
+  /**
+   * A grace period before a download starts: two seconds in which the row
+   * reads "Starting…" and pressing it again calls it off. Nothing has been
+   * fetched yet, so there is nothing to undo — a mis-tap costs nothing. Once
+   * the clone has begun it runs to the end: the git hosts cannot stop one
+   * part-way yet, and a half-stopped clone leaves a folder that blocks the
+   * next try.
+   */
+  const DOWNLOAD_GRACE_MS = 2000;
+  const [starting, setStarting] = createSignal<ReadonlySet<string>>(new Set(), {
+    name: "referenceStarting",
+  });
+  const graceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const settle = (key: string): void => {
+    graceTimers.delete(key);
+    setStarting((held) => {
+      const next = new Set(held);
+      next.delete(key);
+      return next;
+    });
+  };
+  const startSoon = (key: string, download: () => void): void => {
+    setStarting((held) => new Set(held).add(key));
+    graceTimers.set(
+      key,
+      setTimeout(() => {
+        settle(key);
+        download();
+      }, DOWNLOAD_GRACE_MS),
+    );
+  };
+  const callOff = (key: string): void => {
+    clearTimeout(graceTimers.get(key));
+    settle(key);
+  };
+  // Leaving the screen inside the grace period calls the download off too.
+  onCleanup(() => {
+    for (const timer of graceTimers.values()) clearTimeout(timer);
+  });
+
+  const GatewayPicker = () => (
+    // The panel's whole width. The language takes what is left over; the text,
+    // by its shorthand, only what it needs.
+    <div
+      data-testid="gateway-picker"
+      class="flex w-full shrink-0 overflow-hidden rounded-lg border border-surface-border"
+    >
+      <Popover
+        label={m.reference_language()}
+        side="bottom"
+        align="start"
+        variant="menu"
+        class="w-96 p-0"
+        fitViewport
+        open={managing()}
+        onOpenChange={manage}
+        triggerClass="min-w-0 flex-1"
+        trigger={
+          <button type="button" data-testid="gateway-language" class={cx(HALF, "w-full")}>
+            <span class="min-w-0 flex-1 truncate">
+              {(() => {
+                const key = shownLanguage();
+                const group = languageTabs().find((each) => each.key === key);
+                return group === undefined ? m.reference_choose_language() : groupName(group);
+              })()}
+            </span>
+            <ChevronDown aria-hidden="true" class="size-5 shrink-0" />
+          </button>
+        }
+      >
+        {/* One list, A–Z, no headings and no add or remove: every language
+            there is, on this device or to download. The one on show is
+            selected; choosing another shows it instead. One still to download
+            says so in its row. */}
+        <ul
+          data-testid="language-list"
+          class="scrollbar-padded flex max-h-[min(70vh,32rem)] flex-col overflow-y-auto py-2"
+        >
+          <Show when={listing(bibles())}>
+            <li class="px-4 py-2 text-small text-on-surface-tertiary">
+              {m.reference_list_loading()}
+            </li>
+          </Show>
+          <For each={[...offers()].sort(byName)}>
+            {(offer) => (
+              <li data-testid={`gateway-language-${offer.key}`}>
+                <Show
+                  when={offer.kind === "held" ? offer : undefined}
+                  fallback={
+                    // To download: the whole row is the action, blue like a
+                    // link. For two seconds it is "Starting…", and pressing
+                    // it again calls it off; then the bar, and nothing to press.
+                    offer.kind === "download" && (
+                      <button
+                        type="button"
+                        aria-label={
+                          starting().has(offer.key)
+                            ? m.reference_download_cancel({ name: offer.name })
+                            : m.reference_download_named({ name: offer.name })
+                        }
+                        disabled={offer.pulling()}
+                        class="flex min-h-12 w-full cursor-pointer items-center gap-3 px-4 text-start text-small text-on-surface-primary transition-colors hover:bg-surface-secondary disabled:cursor-default disabled:hover:bg-transparent"
+                        onClick={() => {
+                          if (starting().has(offer.key)) callOff(offer.key);
+                          else startSoon(offer.key, () => offer.download());
+                        }}
+                      >
+                        <span class="min-w-0 flex-1 truncate" title={offer.name}>
+                          {offer.name}
+                        </span>
+                        <Show
+                          when={offer.pulling()}
+                          fallback={
+                            <Show
+                              when={starting().has(offer.key)}
+                              fallback={
+                                <span class="flex shrink-0 items-center gap-1.5 font-medium text-brand">
+                                  <Download aria-hidden="true" class="size-5" />
+                                  {m.reference_download()}
+                                </span>
+                              }
+                            >
+                              <span class="flex shrink-0 items-center gap-3">
+                                <span class="text-on-surface-secondary">
+                                  {m.reference_download_starting()}
+                                </span>
+                                <span class="flex items-center gap-1.5 font-medium text-brand">
+                                  <X aria-hidden="true" class="size-5" />
+                                  {m.reference_cancel()}
+                                </span>
+                              </span>
+                            </Show>
+                          }
+                        >
+                          {/* No byte count to show, so the bar runs until the copy lands. */}
+                          <span
+                            role="progressbar"
+                            aria-label={m.reference_downloading_named({ name: offer.name })}
+                            class="relative h-2 w-24 shrink-0 overflow-hidden rounded-full bg-surface-secondary"
+                          >
+                            <span class="absolute inset-y-0 w-1/3 animate-pulse rounded-full bg-brand" />
+                          </span>
+                        </Show>
+                      </button>
+                    )
+                  }
+                >
+                  {(held) => (
+                    <button
+                      type="button"
+                      aria-current={shownLanguage() === held().key ? "true" : undefined}
+                      class="flex min-h-12 w-full cursor-pointer items-center gap-3 px-4 text-start text-small text-on-surface-primary transition-colors hover:bg-surface-secondary aria-[current]:bg-brand-light aria-[current]:font-semibold aria-[current]:text-brand"
+                      onClick={() => {
+                        const group = languageTabs().find((each) => each.key === held().key);
+                        const opening =
+                          group === undefined ? undefined : openingOf(group.entries, group.key);
+                        if (opening !== undefined) setChosen(opening.resource.id);
+                        else held().add();
+                        setManaging(false);
+                      }}
+                    >
+                      <span class="min-w-0 flex-1 truncate" title={held().name}>
+                        {held().name}
+                      </span>
+                      <Show when={shownLanguage() === held().key}>
+                        <Check aria-label={m.reference_active()} class="size-5 shrink-0" />
+                      </Show>
+                    </button>
+                  )}
+                </Show>
+              </li>
+            )}
+          </For>
+        </ul>
+      </Popover>
+      <Show when={shown()}>
+        {(held) => (
+          <div class="flex max-w-[50%] min-w-0 shrink-0 border-s border-surface-border">
+            <ResourcePicker resource={held().entry.resource} />
+          </div>
+        )}
+      </Show>
+    </div>
+  );
+
   return (
     <aside
       aria-label={t("Reference texts")}
-      class="flex h-full min-w-0 flex-col gap-3 py-4 pe-[7.5px]"
+      class={
+        props.variant === "gateway"
+          ? "flex h-full min-h-0 min-w-0 flex-1 flex-col gap-3"
+          : "flex h-full min-w-0 flex-col gap-3 py-4 pe-[7.5px]"
+      }
       data-references={entries().length}
     >
-      <LanguagePicker model={picker} />
+      <Show when={props.variant === "gateway"} fallback={<LanguagePicker model={picker} />}>
+        <GatewayPicker />
+        <Show when={fetching() !== ""}>
+          <p role="status" class="text-small text-on-surface-secondary">
+            {m.reference_getting({ language: fetching() })}
+          </p>
+        </Show>
+      </Show>
 
       <Show when={!loading() && missing().length > 0 && entries().every((entry) => entry.declared)}>
         <div
@@ -855,12 +1359,13 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
         }
       >
         {(held) => (
-          <div class="flex min-h-0 flex-1 flex-col">
+          <div class="flex min-h-0 flex-1 flex-col gap-3">
             <ResourcePane
               resource={held.entry.resource}
               role={held.entry.role}
               bookId={held.book}
               clip={clip}
+              followControl={props.variant === "column" || props.variant === undefined}
             />
           </div>
         )}

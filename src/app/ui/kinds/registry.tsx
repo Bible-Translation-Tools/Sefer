@@ -68,6 +68,8 @@ export interface ResourcePaneProps {
   readonly role: Role;
   readonly bookId: string;
   readonly clip: () => number | null;
+  /** `false`: no Follow button (Refine's language panels, a design tweak). */
+  readonly followControl?: boolean;
 }
 
 export function ResourcePane(props: ResourcePaneProps) {
@@ -92,6 +94,7 @@ export function ResourcePane(props: ResourcePaneProps) {
           role={props.role}
           bookId={props.bookId}
           clip={props.clip}
+          followControl={props.followControl}
         />
       ),
       tn: (handle) => <NotesPane resource={props.resource} handle={handle} />,

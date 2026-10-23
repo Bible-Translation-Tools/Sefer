@@ -16,6 +16,7 @@ import type { Guide, Term } from "#core/stet/stet";
 
 import type { ApprovalsHandle } from "../../approvals";
 import { t } from "../../i18n";
+import { m } from "../../paraglide/messages";
 import type { SourceReading } from "../../workflows/stet";
 import type { CardViews } from "../multibuffer/cardViews";
 import { cardPolicy } from "../multibuffer/policy";
@@ -478,16 +479,19 @@ export function StetView(props: StetViewProps) {
   }
 
   onCleanup(
-    claimSidebar(() => (
-      <div
-        class="flex h-full flex-col border-e border-sidebar-border bg-sidebar-surface"
-        data-testid="sidebar"
-        data-sidebar="terms"
-      >
-        <ProjectControl />
-        {terms()}
-      </div>
-    )),
+    claimSidebar(
+      () => (
+        <div
+          class="flex h-full flex-col border-e border-sidebar-border bg-sidebar-surface"
+          data-testid="sidebar"
+          data-sidebar="terms"
+        >
+          <ProjectControl />
+          {terms()}
+        </div>
+      ),
+      { show: m.sidebar_show_key_terms(), hide: m.sidebar_hide_key_terms() },
+    ),
   );
 
   return (

@@ -226,13 +226,20 @@ function Panel(props: ResizablePanelProps) {
 interface ResizableHandleProps {
   readonly label?: string;
   readonly edge?: boolean;
+  /**
+   * Nothing at rest: the hairline and a grip appear only on hover, focus or
+   * drag. For a split whose two sides sit on one surface with no border
+   * between them (Refine's language panels).
+   */
+  readonly quiet?: boolean;
   readonly class?: ClassValue;
 }
 
 const gutter = (vertical: boolean): string => (vertical ? "py-1" : "px-1");
 
-const handleLine = (edge: boolean, vertical: boolean): string => {
-  if (!edge) return cx("bg-surface-border", vertical ? "h-px w-full" : "w-px");
+const handleLine = (edge: boolean, quiet: boolean, vertical: boolean): string => {
+  if (!edge)
+    return cx(quiet ? "bg-transparent" : "bg-surface-border", vertical ? "h-px w-full" : "w-px");
   return cx(
     "absolute bg-transparent",
     vertical
@@ -309,10 +316,22 @@ function Handle(props: ResizableHandleProps) {
         aria-hidden="true"
         class={cx(
           "rounded-full transition-colors",
-          handleLine(props.edge === true, vertical),
+          handleLine(props.edge === true, props.quiet === true, vertical),
           "group-hover:bg-brand group-focus-visible:bg-brand group-data-dragging:bg-brand",
         )}
       />
+      {props.quiet === true && (
+        <span
+          aria-hidden="true"
+          class={cx(
+            "absolute rounded-full border border-brand bg-surface-primary opacity-0 transition-opacity",
+            "group-hover:opacity-100 group-focus-visible:opacity-100 group-data-dragging:opacity-100",
+            vertical
+              ? "start-1/2 top-1/2 h-2 w-8 -translate-1/2"
+              : "start-1/2 top-1/2 h-8 w-2 -translate-1/2",
+          )}
+        />
+      )}
     </div>
   );
 }

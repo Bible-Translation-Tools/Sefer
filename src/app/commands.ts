@@ -591,8 +591,8 @@ const syncCommands = (bridge: ShellBridge, h: Helpers) => {
   ];
 };
 
-const insertCommands = (bridge: ShellBridge, h: Helpers) => {
-  const { insertion, seated } = h;
+const insertCommands = (h: Helpers) => {
+  const { insertion } = h;
   return [
     insertion("editor.insert.verse", t("Insert verse"), "Mod-Shift-v", "insert.verse"),
     insertion("editor.insert.paragraph", t("Insert paragraph"), "Mod-Shift-p", "insert.paragraph"),
@@ -619,15 +619,6 @@ const insertCommands = (bridge: ShellBridge, h: Helpers) => {
       undefined,
       "table.deleteColumn",
     ),
-
-    registerCommand({
-      id: "editor.frontmatter.edit",
-      title: t("Edit front matter"),
-      when: () => seated() !== undefined && bridge.mode() !== "usfm",
-      run: () => {
-        seated()?.perform("frontmatter.edit");
-      },
-    }),
   ];
 };
 
@@ -890,7 +881,7 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
     ...findingCommands(bridge, h),
     ...remoteCommands(bridge),
     ...syncCommands(bridge, h),
-    ...insertCommands(bridge, h),
+    ...insertCommands(h),
     ...formatCommands(bridge, h),
     ...overlayCommands(bridge, h),
   ];

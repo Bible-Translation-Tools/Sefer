@@ -186,7 +186,13 @@ function FindingsBell() {
   );
 }
 
-export function Toolbar() {
+export function Toolbar(props: {
+  /**
+   * `false`: no show/hide here — the panels layout (a design tweak) keeps it
+   * at the top of the panel itself (`SidebarButton`).
+   */
+  readonly panelToggle?: boolean;
+}) {
   const [query, setQuery] = createSignal("", { name: "toolbarQuery" });
   const [menuOpen, setMenuOpen] = createSignal(false, { name: "toolbarMenu" });
   const shell = useShell();
@@ -212,7 +218,9 @@ export function Toolbar() {
   return (
     <div class="flex flex-wrap items-center gap-3" data-testid="toolbar">
       <div class="flex min-w-0 shrink items-center gap-2">
-        <PanelToggle />
+        <Show when={props.panelToggle !== false}>
+          <PanelToggle />
+        </Show>
         <strong
           class="min-w-0 truncate text-h4 font-semibold text-on-surface-primary"
           data-workspace-title

@@ -4,6 +4,7 @@ import {
   editorFeatures,
   editorPolicy,
   mountBookEditor,
+  revealEditorInBand,
   type BookEditorMount,
   type CorpusAction,
   type CorpusFinding,
@@ -11,7 +12,7 @@ import {
 } from "@sefer/editor";
 import type { SourceStamp } from "@sefer/text/source";
 import { Effect, Fiber, Stream } from "effect";
-import { createEffect, createRenderEffect, createSignal, untrack } from "solid-js";
+import { Show, createEffect, createRenderEffect, createSignal, untrack } from "solid-js";
 
 import { stale, type Finding } from "#core/findings/finding";
 
@@ -30,6 +31,11 @@ import "@sefer/editor/editor.css";
 
 export interface BookEditorProps {
   readonly book: EditorBook;
+  /**
+   * Straight on the page, with no card and no location bar: Refine's language
+   * panels (a design tweak), where the USFM switch is in the toolbar instead.
+   */
+  readonly bare?: boolean;
 }
 
 type Shell = ReturnType<typeof useShell>;
@@ -111,12 +117,7 @@ export function BookEditor(props: BookEditorProps) {
     () => host(),
     (parent) => {
       if (parent === undefined) return;
-      const remembered = untrack(() => {
-        if (shell.reveal()?.bookId === bookId) return undefined;
-        const root = shell.project()?.root;
-        const held = root === undefined ? undefined : shell.lastLocation(root);
-        return held?.bookId === bookId ? held.place : undefined;
-      });
+      const remembered = shell.resumePlace(bookId);
       // Untracked on purpose: a one-time read, not a dependency (Solid 2: STRICT_READ_UNTRACKED).
       const book = untrack(() => props.book);
 
@@ -205,6 +206,12 @@ export function BookEditor(props: BookEditorProps) {
     () => ({ editor: bound(), aimed: shell.reveal() }),
     ({ editor, aimed }) => {
       if (editor === undefined || aimed === undefined || aimed.bookId !== bookId) return;
+      if (aimed.caret === "keep") {
+        // Only into view, and only when it is not already in the middle band:
+        // the caret, and so the reference's pair, stay put.
+        revealEditorInBand(editor, aimed.from);
+        return;
+      }
       const cancel = editor.jump(
         { from: aimed.from, ...(aimed.to === undefined ? {} : { to: aimed.to }) },
         aimed.at === "top" ? "top" : "center",
@@ -216,12 +223,15 @@ export function BookEditor(props: BookEditorProps) {
 
   return (
     <div
-      class="editor-host shadow-small"
+      class={props.bare === true ? "editor-host" : "editor-host shadow-small"}
+      data-bare={props.bare === true ? "" : undefined}
       data-testid="editor-card"
       data-mode={shell.mode()}
       data-revision={(stamp() ?? props.book.source().stamp).revision}
     >
-      <LocationBar ordinal={atTop()} />
+      <Show when={props.bare !== true}>
+        <LocationBar ordinal={atTop()} />
+      </Show>
 
       <div class="cm-host" dir={direction()} data-testid="editor-host" ref={setHost} />
     </div>

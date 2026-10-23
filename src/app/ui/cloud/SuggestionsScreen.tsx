@@ -4,6 +4,7 @@ import { Show, createSignal, onCleanup, untrack } from "solid-js";
 
 import { collaboration } from "../../collaboration";
 import { t } from "../../i18n";
+import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
 import { ago } from "../panels/format";
 import { EmptyState, IconButton, PanelHeader, cx } from "../primitives";
@@ -50,13 +51,16 @@ export function SuggestionsScreen() {
   });
 
   onCleanup(
-    claimSidebar(() => (
-      <ChangesHistorySidebar active="suggestions">
-        <p class="px-6 pt-3 text-small text-on-surface-tertiary">
-          {t("Suggestions are offered from people's own copies.")}
-        </p>
-      </ChangesHistorySidebar>
-    )),
+    claimSidebar(
+      () => (
+        <ChangesHistorySidebar active="suggestions">
+          <p class="px-6 pt-3 text-small text-on-surface-tertiary">
+            {t("Suggestions are offered from people's own copies.")}
+          </p>
+        </ChangesHistorySidebar>
+      ),
+      { show: m.sidebar_show_suggestions(), hide: m.sidebar_hide_suggestions() },
+    ),
   );
 
   const nothing = (): boolean => facts()?.mode !== "copy" && facts()?.canWrite !== true;

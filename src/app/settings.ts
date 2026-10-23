@@ -134,6 +134,12 @@ export interface ShellKeys {
   readonly sidebarOpen: SettingKey<boolean>;
   /** Is the reference column beside the editor open (the crumb strip's split toggle). */
   readonly referenceOpen: SettingKey<boolean>;
+  /**
+   * Refine's language panels split in two — the gateways beside the heart
+   * language — or joined as one card of tabs. Read only by the `panels`
+   * layout, a design tweak on the book route.
+   */
+  readonly referenceSplit: SettingKey<boolean>;
   readonly sidebarWidth: SettingKey<number>;
   readonly fontSize: SettingKey<number>;
   readonly zoom: SettingKey<number>;
@@ -196,6 +202,7 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
     sousSettings: settings.register("sous.settings", SousOverrides, {}),
     sidebarOpen: settings.register("workspace.sidebarOpen", Schema.Boolean, true),
     referenceOpen: settings.register("workspace.referenceOpen", Schema.Boolean, true),
+    referenceSplit: settings.register("workspace.referenceSplit", Schema.Boolean, false),
     sidebarWidth: settings.register("workspace.sidebarWidth", Schema.Number, SIDEBAR_WIDTH.default),
     fontSize: settings.register("shell.fontSize", Schema.Number, 16),
     zoom: settings.register("shell.zoom", Schema.Number, 100),

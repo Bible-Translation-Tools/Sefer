@@ -26,7 +26,7 @@ export function Tooltip(props: TooltipProps) {
         {props.children}
       </CorvuTooltip.Trigger>
       <CorvuTooltip.Portal>
-        <CorvuTooltip.Content class="z-50 rounded-md border border-surface-border bg-surface-primary px-2 py-1 text-smallest text-on-surface-primary shadow-medium">
+        <CorvuTooltip.Content class="z-50 rounded-md bg-on-surface-primary px-2 py-1 text-smallest text-surface-primary shadow-medium">
           {props.label}
         </CorvuTooltip.Content>
       </CorvuTooltip.Portal>

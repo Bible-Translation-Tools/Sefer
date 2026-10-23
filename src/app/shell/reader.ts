@@ -23,7 +23,7 @@ import type { Location } from "../location";
 import type { Services } from "../services";
 import type { LastLocation, LastLocations, shellKeys } from "../settings";
 import type { ShellStores } from "../shellStores";
-import type { Navigate, LiveProject, Reveal, RevealAt } from "./types";
+import type { Navigate, LiveProject, Reveal, RevealAt, RevealCaret } from "./types";
 
 export interface ReaderDeps {
   readonly services: Services;
@@ -259,6 +259,20 @@ export const createReader = ({
 
   let honoured: Reveal | undefined;
 
+  /**
+   * Where to reopen this book: the last place, when it is in this book and
+   * nothing asked for another. An aim (a finding, a search hit) and a place
+   * still on its way (the palette, a chapter tile, a link) are requests; a
+   * remembered place is only the absence of one.
+   */
+  const resumePlace = (bookId: BookId): LastLocation["place"] =>
+    untrack(() => {
+      if (pendingPlace()?.book === bookId || reveal()?.bookId === bookId) return undefined;
+      const root = project()?.root;
+      const held = root === undefined ? undefined : lastLocation(root);
+      return held?.bookId === bookId ? held.place : undefined;
+    });
+
   const focus = async (bookId: BookId | undefined): Promise<void> => {
     const staticProject = project();
     if (bookId === undefined || staticProject === undefined) {
@@ -299,8 +313,14 @@ export const createReader = ({
     remember(bookId, opening, resume);
   };
 
-  const aim = (bookId: BookId, from: number, to?: number, at?: RevealAt): void => {
-    setReveal({ bookId, from, to, at });
+  const aim = (
+    bookId: BookId,
+    from: number,
+    to?: number,
+    at?: RevealAt,
+    caret?: RevealCaret,
+  ): void => {
+    setReveal({ bookId, from, to, at, caret });
   };
 
   const showChapter = (ordinal: number): void => {
@@ -365,6 +385,7 @@ export const createReader = ({
     place,
     noteChapterAtTop,
     lastLocation,
+    resumePlace,
     remember,
     aim,
     showChapter,

@@ -62,10 +62,13 @@ function ReferencesToggle() {
 
 type BookView = "reading" | "lines" | "usfm";
 
-export function LocationBar(props: LocationBarProps) {
+/**
+ * How the book is shown: Reading, Line by line or USFM where the design
+ * surface is on, the USFM switch otherwise. The location bar's end, and the
+ * panels layout's editor action bar (`EditorPanel`).
+ */
+export function BookViewSwitch(props: { readonly class?: string }) {
   const shell = useShell();
-  const navigate = useNavigate();
-
   const bookView = (): BookView => {
     if (shell.mode() === "usfm") return "usfm";
     return shell.lineByLine() ? "lines" : "reading";
@@ -74,6 +77,39 @@ export function LocationBar(props: LocationBarProps) {
     shell.setMode(view === "usfm" ? "usfm" : "default");
     if (view !== "usfm") shell.setLineByLine(view === "lines");
   };
+  // A build-time switch, not a reactive one: the fragment only keeps the
+  // component's single return.
+  return (
+    <>
+      {__SEFER_DESIGN__ ? (
+        <span id="editor-view-switch" class={props.class}>
+          <SegmentedControl
+            size="sm"
+            label={t("Show the book as")}
+            items={[
+              { value: "reading", label: t("Reading") },
+              { value: "lines", label: t("Line by line") },
+              { value: "usfm", label: t("USFM") },
+            ]}
+            value={bookView()}
+            onChange={chooseBookView}
+          />
+        </span>
+      ) : (
+        <Switch
+          class={props.class}
+          label={t("USFM")}
+          checked={shell.mode() === "usfm"}
+          onChange={(on) => shell.setMode(on ? "usfm" : "default")}
+        />
+      )}
+    </>
+  );
+}
+
+export function LocationBar(props: LocationBarProps) {
+  const shell = useShell();
+  const navigate = useNavigate();
 
   const table = () => shell.outline();
 
@@ -147,30 +183,7 @@ export function LocationBar(props: LocationBarProps) {
             return last();
           },
         }}
-        end={
-          __SEFER_DESIGN__ ? (
-            <span id="editor-view-switch" class="ms-2">
-              <SegmentedControl
-                size="sm"
-                label={t("Show the book as")}
-                items={[
-                  { value: "reading", label: t("Reading") },
-                  { value: "lines", label: t("Line by line") },
-                  { value: "usfm", label: t("USFM") },
-                ]}
-                value={bookView()}
-                onChange={chooseBookView}
-              />
-            </span>
-          ) : (
-            <Switch
-              class="ms-2"
-              label={t("USFM")}
-              checked={shell.mode() === "usfm"}
-              onChange={(on) => shell.setMode(on ? "usfm" : "default")}
-            />
-          )
-        }
+        end={<BookViewSwitch class="ms-2" />}
       />
     </LocationStrip>
   );
