@@ -93,6 +93,17 @@ export const sameSource = (left: Source, right: Source): boolean =>
 export const sourceUrl = (source: Source): string =>
   `${source.base}/${source.owner}/${source.repo}`;
 
+/**
+ * One string per repository, whatever URL names it: the base, owner and
+ * repository folded as `sourceOf` folds them. What the projects index keeps
+ * for each remote, so "is this on the device?" is a lookup, not a git open
+ * per project.
+ */
+export const sourceKey = (url: string): string | undefined => {
+  const source = sourceOf(url);
+  return source === undefined ? undefined : sourceUrl(source);
+};
+
 /** What a link's `host=` says: the bare host for the usual `https://<host>`, else the base. */
 const hostParam = (source: Source): string =>
   source.base === `https://${source.host}` ? source.host : source.base;

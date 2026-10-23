@@ -2,7 +2,7 @@ import { useNavigate } from "@tanstack/solid-router";
 import { Effect, Result } from "effect";
 import { Match, Switch, createEffect, createSignal, onCleanup, untrack } from "solid-js";
 
-import { announceSourceTexts, cloneArrival } from "#app/arrival";
+import { AlreadyHeld, announceSourceTexts, cloneArrival } from "#app/arrival";
 import { describe } from "#app/describe";
 import { contentHostFor } from "#app/endpoints";
 import { t } from "#app/i18n";
@@ -124,16 +124,14 @@ const downloadFrom = (context: LinkContext, named: Source, target: Place): void 
   const { shell, setPhase } = context;
   setPhase({ kind: "downloading" });
   void shell.services
-    .run(
-      Effect.result(
-        cloneArrival(shell.services, "project", sourceUrl(named), { freeFolder: true }),
-      ),
-    )
+    .run(Effect.result(cloneArrival(shell.services, "project", sourceUrl(named))))
     .then(async (arrived) => {
       if (Result.isSuccess(arrived)) {
         await announceSourceTexts(shell.services, arrived.success.root, named.base);
         return openAt(context, arrived.success.root, target);
       }
+      if (arrived.failure instanceof AlreadyHeld)
+        return openAt(context, arrived.failure.root, target);
       toasts.error({
         title: t("Could not download the project"),
         message: describe(arrived.failure),

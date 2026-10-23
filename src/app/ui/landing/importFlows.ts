@@ -7,7 +7,7 @@ import { Gitea } from "#core/remote/gitea";
 import { remoteVerdict } from "#core/remote/remote";
 import { classify, commit, stage } from "#core/resources/import";
 
-import { announceSourceTexts, arrivalRoot, cloneArrival } from "../../arrival";
+import { AlreadyHeld, announceSourceTexts, arrivalRoot, cloneArrival } from "../../arrival";
 import { APP_AUTHOR } from "../../author";
 import { describe, reasonOf, remoteReasonOf } from "../../describe";
 import { t } from "../../i18n";
@@ -40,6 +40,8 @@ export interface ImportContext {
   readonly finished: (title: string, message: string, failed: boolean) => void;
   readonly clear: () => void;
   readonly onImported: () => void;
+  /** Opens a project already on this device, when an import turns out to be one. */
+  readonly open: (root: string) => void;
 }
 
 type Operation = ReturnType<Services["composition"]["observability"]["operation"]>;
@@ -256,7 +258,7 @@ export const listCloneRepos = (services: Services, endpoint: string) =>
 export const cloneRepository = (context: ImportContext, url: string): void => {
   const { services } = context;
   const name = lastSegment(url.replace(/\.git$/u, ""));
-  const into = arrivalRoot(services, "project", url);
+  let into = arrivalRoot(services, "project", url);
   const toast = toasts.progress({ title: t("Cloning {name}", { name }) });
   context.running(t("Clone from cloud"), "commit");
   const operation = services.composition.observability.operation("import.remote", {
@@ -273,6 +275,7 @@ export const cloneRepository = (context: ImportContext, url: string): void => {
 
   void (async () => {
     const cloned = await run(cloneArrival(services, "project", url), "remote.clone");
+    into = cloned.root;
     operation.attr({
       "remote.progress.phase": cloned.progress.phase,
       "remote.progress.loaded": cloned.progress.loaded,
@@ -286,6 +289,18 @@ export const cloneRepository = (context: ImportContext, url: string): void => {
     toasts.update(toast, { title: t("Cloned {name}", { name }), tone: "success" });
     context.onImported();
   })().catch((cause: unknown) => {
+    if (cause instanceof AlreadyHeld) {
+      end("declined", { "import.phase": "clone", "import.reason": "AlreadyHeld" });
+      context.clear();
+      toasts.update(toast, {
+        title: t("Already on this device"),
+        message: cause.description,
+        tone: "info",
+        autoClose: false,
+        action: { label: t("Open"), onPress: () => context.open(cause.root) },
+      });
+      return;
+    }
     const message = describe(cause);
     end(remoteVerdict(remoteReasonOf(cause)), {
       "import.phase": "clone",

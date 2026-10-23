@@ -1,11 +1,13 @@
+import { useNavigate } from "@tanstack/solid-router";
 import ArrowDown from "lucide-solid/icons/arrow-down";
 import ArrowUp from "lucide-solid/icons/arrow-up";
 import Download from "lucide-solid/icons/download";
 import Filter from "lucide-solid/icons/filter";
 import SearchIcon from "lucide-solid/icons/search";
 import X from "lucide-solid/icons/x";
-import { For, Show, createSignal } from "solid-js";
+import { For, Show, createEffect, createSignal } from "solid-js";
 
+import { sourceKey } from "#core/project/shareLink";
 import { through } from "#core/remote/transport";
 
 import { catalogueFor, type CatalogueEntry } from "../../catalogue";
@@ -43,7 +45,7 @@ import {
 import type { PendingDownload } from "./downloads";
 import { ImportHub } from "./ImportHub";
 import { RegionIcon } from "./RegionIcon";
-import { formatDate } from "./summaries";
+import { formatDate, listProjects, projectIndexRevision } from "./summaries";
 
 const COLUMNS =
   "grid grid-cols-[var(--code-column)_minmax(0,1fr)_8rem_8rem_9rem] items-center gap-x-8 px-8 text-body";
@@ -236,11 +238,44 @@ const ColumnHeader = (props: {
   </div>
 );
 
-const DownloadCell = (props: {
+interface Held {
+  readonly root: string;
+  readonly name: string;
+}
+
+interface RowActions {
+  readonly onDownload: (entry: CatalogueEntry, from: DOMRect) => void;
+  readonly heldFor: (entry: CatalogueEntry) => Held | undefined;
+  readonly onOpen: (root: string) => void;
+}
+
+const DownloadCell = (props: { readonly item: CatalogueRow; readonly actions: RowActions }) => (
+  <div role="cell" class="text-end">
+    <Show
+      when={props.actions.heldFor(props.item.entry)}
+      fallback={<DownloadButton item={props.item} onDownload={props.actions.onDownload} />}
+    >
+      {(held) => (
+        <Tooltip label={t("On this device, as {name}", { name: held().name })}>
+          <Button
+            variant="link"
+            size="flush"
+            data-held={held().root}
+            onClick={() => props.actions.onOpen(held().root)}
+          >
+            {t("Open")}
+          </Button>
+        </Tooltip>
+      )}
+    </Show>
+  </div>
+);
+
+const DownloadButton = (props: {
   readonly item: CatalogueRow;
   readonly onDownload: (entry: CatalogueEntry, from: DOMRect) => void;
 }) => (
-  <div role="cell" class="text-end">
+  <>
     <Show
       when={props.item.refusal === ""}
       fallback={
@@ -274,13 +309,13 @@ const DownloadCell = (props: {
         {t("Download")}
       </Button>
     </Show>
-  </div>
+  </>
 );
 
 const CatalogueRowView = (props: {
   readonly item: CatalogueRow;
   readonly index: number;
-  readonly onDownload: (entry: CatalogueEntry, from: DOMRect) => void;
+  readonly actions: RowActions;
 }) => (
   <div
     role="row"
@@ -310,7 +345,7 @@ const CatalogueRowView = (props: {
     <div role="cell" class="text-on-surface-secondary">
       {formatDate(props.item.updated) || "—"}
     </div>
-    <DownloadCell item={props.item} onDownload={props.onDownload} />
+    <DownloadCell item={props.item} actions={props.actions} />
   </div>
 );
 
@@ -384,7 +419,7 @@ const TableBody = (props: {
   readonly entries: readonly CatalogueEntry[] | undefined;
   readonly virtualRows: readonly { key: string; item: CatalogueRow; estimate: number }[];
   readonly rowIndex: ReadonlyMap<string, number>;
-  readonly onDownload: (entry: CatalogueEntry, from: DOMRect) => void;
+  readonly actions: RowActions;
 }) => (
   <VirtualList<CatalogueRow>
     role="rowgroup"
@@ -410,11 +445,38 @@ const TableBody = (props: {
       <CatalogueRowView
         item={item()}
         index={props.rowIndex.get(item().entry.id) ?? 0}
-        onDownload={props.onDownload}
+        actions={props.actions}
       />
     )}
   />
 );
+
+/**
+ * Which repositories a project on this device already tracks, from the
+ * projects index's `remotes`: one read for the whole list, again whenever
+ * the index changes, never a git open per row.
+ */
+const createHeldProjects = (services: ReturnType<typeof useShell>["services"]) => {
+  const [held, setHeld] = createSignal<ReadonlyMap<string, Held>>(new Map(), {
+    name: "catalogueHeld",
+  });
+  createEffect(
+    () => projectIndexRevision(),
+    () => {
+      const recent = services.settings.get(shellKeys(services.settings).recentProjects);
+      void services.run(listProjects(services.projectsRoot, undefined, recent)).then((rows) => {
+        setHeld(
+          new Map(
+            rows.flatMap((row) =>
+              row.remotes.map((key) => [key, { root: row.root, name: row.name }] as const),
+            ),
+          ),
+        );
+      });
+    },
+  );
+  return held;
+};
 
 const downloadReasonFor = (services: ReturnType<typeof useShell>["services"]) => {
   const transport = transportFor(services.settings, services.hostInfo.kind());
@@ -435,6 +497,9 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
   const gatewaysOffered = services.settings.get(shellKeys(services.settings).showGatewayProjects);
 
   const downloadReason = downloadReasonFor(services);
+  const navigate = useNavigate();
+  const open = (root: string): void =>
+    void navigate({ to: "/project/$slug", params: { slug: shell.slugFor(root) } });
 
   const { entries, problem } = createCatalogueEntries(services, catalogue);
   const [busy, setBusy] = createSignal("", { name: "catalogueBusy" });
@@ -447,10 +512,17 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
     downloadReason,
   );
 
+  const held = createHeldProjects(services);
+  const heldFor = (entry: CatalogueEntry): Held | undefined => {
+    if (entry.type === "gateway") return undefined;
+    const key = sourceKey(entry.gitUrl);
+    return key === undefined ? undefined : held().get(key);
+  };
+
   const download = (entry: CatalogueEntry, from: DOMRect): void => {
     // Untracked on purpose: a one-time read, not a dependency (Solid 2: STRICT_READ_UNTRACKED).
     const { downloads } = props;
-    downloadEntry(services, downloads, setBusy, entry, from);
+    downloadEntry(services, downloads, setBusy, entry, from, open);
   };
 
   return (
@@ -478,7 +550,7 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
             entries={entries()}
             virtualRows={virtualRows()}
             rowIndex={rowIndex()}
-            onDownload={download}
+            actions={{ onDownload: download, heldFor, onOpen: open }}
           />
         </Card>
       </div>

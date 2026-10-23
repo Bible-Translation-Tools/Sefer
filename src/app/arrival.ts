@@ -16,14 +16,15 @@
  * was cloned from, and a held copy is used, not cloned again.
  */
 
-import { Effect, FileSystem, Option, Stream, type Scope } from "effect";
+import { Data, Effect, FileSystem, Option, Stream, type Scope } from "effect";
 import { createSignal } from "solid-js";
 
 import { lastSegment } from "#core/fileSystem/path";
 import { Git } from "#core/git/git";
 import { Observability } from "#core/observability";
 import { readProjectMetadata } from "#core/project/discovery";
-import { hostOfUrl } from "#core/project/shareLink";
+import { projectTracking } from "#core/project/projectIndex";
+import { hostOfUrl, sourceKey } from "#core/project/shareLink";
 import { cloneRepository } from "#core/remote/clone";
 import { Remote } from "#core/remote/remote";
 import type { CloneOptions, Progress } from "#core/remote/remote";
@@ -66,6 +67,18 @@ export const arrivalRoot = (services: Services, kind: ArrivalKind, url: string):
     : `${services.libraryRoot}/${owner}/${repo}`;
 };
 
+/**
+ * A project download of a repository a project on this device already
+ * tracks, as its shared project or as the person's own copy. Downloading it
+ * again would make a second, diverging copy of the same work, so the
+ * download stops and names the one already here (Will, 2026-10-23).
+ */
+export class AlreadyHeld extends Data.TaggedError("AlreadyHeld")<{
+  readonly root: string;
+  readonly name: string;
+  readonly description: string;
+}> {}
+
 export const cloneArrival = (
   services: Services,
   kind: ArrivalKind,
@@ -73,7 +86,6 @@ export const cloneArrival = (
   options?: {
     readonly catalogueId?: string;
     readonly clone?: CloneOptions;
-    readonly freeFolder?: true;
   },
 ): Effect.Effect<
   { readonly root: string; readonly progress: Progress; readonly resource?: Resource },
@@ -82,19 +94,36 @@ export const cloneArrival = (
 > =>
   Effect.gen(function* () {
     const named = arrivalRoot(services, kind, url);
-    const into =
-      kind === "project" && options?.freeFolder === true ? yield* freeRoot(services, named) : named;
-    const clone = cloneRepository(
-      url,
-      into,
-      options?.catalogueId,
-      kind === "sourceText" ? { history: "latest" } : options?.clone,
-    );
-    const cloned = yield* kind === "project"
-      ? clone
-      : Effect.tapError(clone, () =>
-          Effect.ignore(services.fileSystem.remove(into, { recursive: true })),
+    if (kind === "project") {
+      const key = sourceKey(url);
+      const held =
+        key === undefined
+          ? undefined
+          : yield* projectTracking(services.fileSystem, services.projectsRoot, key);
+      if (held !== undefined)
+        return yield* Effect.fail(
+          new AlreadyHeld({
+            root: held.root,
+            name: held.name,
+            description: t("This project is already on this device, as {name}.", {
+              name: held.name,
+            }),
+          }),
         );
+    }
+    // A project goes into a folder of its own even when another project has
+    // the name (two owners' en_ulb); a source text's folder is its owner's.
+    const into = kind === "project" ? yield* freeRoot(services, named) : named;
+    const cloned = yield* Effect.tapError(
+      cloneRepository(
+        url,
+        into,
+        options?.catalogueId,
+        kind === "sourceText" ? { history: "latest" } : options?.clone,
+      ),
+      // The folder is new, so a failed clone leaves nothing behind to make the retry fail too.
+      () => Effect.ignore(services.fileSystem.remove(into, { recursive: true })),
+    );
     if (kind === "project") {
       yield* rememberProject(services.projectsRoot, into, undefined);
       return { root: into, progress: cloned.progress };

@@ -227,7 +227,11 @@ const ProgressDialog = (props: { readonly state: Progress; readonly onClose: () 
 
 type HubServices = ImportContext["services"];
 
-const createImportProgress = (services: HubServices, onImported: () => void) => {
+const createImportProgress = (
+  services: HubServices,
+  onImported: () => void,
+  open: (root: string) => void,
+) => {
   const [progress, setProgress] = createSignal<Progress | undefined>(undefined, {
     name: "importProgress",
   });
@@ -238,6 +242,7 @@ const createImportProgress = (services: HubServices, onImported: () => void) => 
     finished: (title, message, failed) => setProgress({ title, step: undefined, message, failed }),
     clear: () => setProgress(undefined),
     onImported,
+    open,
   };
   return { progress, context };
 };
@@ -273,7 +278,12 @@ export function ImportHub(props: {
   const capabilities = services.hostInfo.capabilities();
   const endpoint = contentHostFor(services.settings);
 
-  const { progress, context } = createImportProgress(services, () => props.onImported?.());
+  const navigate = useNavigate();
+  const { progress, context } = createImportProgress(
+    services,
+    () => props.onImported?.(),
+    (root) => void navigate({ to: "/project/$slug", params: { slug: shell.slugFor(root) } }),
+  );
   const { cloneOpen, setCloneOpen, repos, cloneNote, cloneUrl, setCloneUrl, openClone } =
     createCloneState(services, endpoint);
 
