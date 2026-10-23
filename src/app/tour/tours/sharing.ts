@@ -1,27 +1,39 @@
-import type { Tour, TourContext } from "../machine";
+import { Effect, Option } from "effect";
+
+import { Git } from "#core/git/git";
+import { sourceOf } from "#core/project/shareLink";
+import { COPY_REMOTE, Remote } from "#core/remote/remote";
+
+import type { Step, Tour, TourContext } from "../machine";
 
 /**
- * Where your work lives, in two parts, for the PO and the testers: the
- * charter's online, offline, WACS and save requirements walked on a real
- * shared project, each stop saying why it is built the way it is. Part one is
- * one person on one device; part two is a second person (a private window, a
- * second browser, or the WACS web editor) changing the same project, and what
- * the first person sees arrive. Both start from a share link, so a tester
- * with nothing on their device downloads the same project everyone else has.
+ * Where your work lives, as two of you: the charter's online, offline, WACS
+ * and save requirements walked on a real project, each stop saying why it is
+ * built the way it is. The tester plays both people, in two browsers on the
+ * same account (two browsers keep separate storage, so Sefer sees two
+ * devices), and the cards hand over between them by hand.
  *
- * Design builds only (`audience: "internal"`). The project is Will's sandbox
- * on WACS; a tester who cannot write to it meets the own-copy-and-suggestions
- * path, which is half of what part two is about.
+ *   A  downloads Will's sandbox, which the tester may not write to, and
+ *      makes their own copy (a fork) of it.
+ *   B  downloads that copy. The tester owns it, so B works straight in it:
+ *      the "may write" mode, the way a team on a Tech_advance repository does.
+ *   A  edits, saves (to the copy), reads History.
+ *   B  receives A's version, changes a verse of its own, saves.
+ *   A  receives B's, offers both as a suggestion, and opens the pull request
+ *      it made on WACS.
+ *
+ * Design builds only (`audience: "internal"`). The editor's side of a
+ * suggestion needs write access to Will's sandbox, so it is described, not
+ * walked.
  */
 
 const OWNER = "will-kelly-test";
 const REPO = "x-en-ulb";
 const HOST = "content.bibletranslationtools.org";
 const SHARED_PAGE = `https://${HOST}/${OWNER}/${REPO}`;
-const linkTo = (rest: string): string => `/r/${OWNER}/${REPO}${rest}?host=${HOST}`;
 
-const PART_ONE = "where-work-lives";
-const PART_TWO = "someone-else";
+const WINDOW_A = "two-of-you-a";
+const WINDOW_B = "two-of-you-b";
 
 /** Long enough for a person to read, open a popover, or wait on the network. */
 const PATIENT = 600_000;
@@ -47,13 +59,13 @@ const signedIn = (): boolean => {
   return state !== undefined && state !== "unknown" && state !== "unauthorized";
 };
 
-const focusedUnsaved = (context: TourContext, bookId?: string): boolean => {
+const focusedUnsaved = (context: TourContext, bookId: string): boolean => {
   const book = context.shell.focused();
-  if (book === undefined || (bookId !== undefined && book.id !== bookId)) return false;
-  return context.shell.unsaved(book);
+  return book !== undefined && book.id === bookId && context.shell.unsaved(book);
 };
 
 const toBook = (context: TourContext, book: string): void => {
+  closePopover();
   if (onPath(`/book/${book}`)) return;
   void context.navigate({
     to: "/project/$slug/book/$book",
@@ -89,21 +101,182 @@ const copyText = (text: string): void => {
   void navigator.clipboard.writeText(text).catch(() => window.prompt("Copy this link", text));
 };
 
-export const whereWorkLivesTour: Tour = {
-  id: PART_ONE,
+/** Window A's own copy on WACS, once it has one: where window B downloads from. */
+const copyOwner = { value: "" };
+const copyRepo = { value: "" };
+const learnCopy = (context: TourContext): void => {
+  const project = context.shell.project();
+  if (project === undefined) return;
+  void context.shell.services
+    .run(
+      Effect.orElseSucceed(
+        Effect.gen(function* () {
+          const git = yield* Git;
+          const remote = yield* Remote;
+          return Option.getOrUndefined(
+            yield* remote.urlOf(yield* git.open(project.root), COPY_REMOTE),
+          );
+        }),
+        () => undefined,
+      ),
+    )
+    .then((url) => {
+      const source = url === undefined ? undefined : sourceOf(url);
+      copyOwner.value = source?.owner ?? "";
+      copyRepo.value = source?.repo ?? "";
+    });
+};
+const copyKnown = (): boolean => copyOwner.value !== "";
+const windowBLink = (): string =>
+  `${window.location.origin}/r/${copyOwner.value}/${copyRepo.value}/book/JHN?host=${HOST}&tour=${WINDOW_B}`;
+const copyPage = (): string => `https://${HOST}/${copyOwner.value}/${copyRepo.value}`;
+
+const handOver = (to: "A" | "B", body: string): Step => ({
+  go: closePopover,
+  panel: { title: `Over to window ${to}`, body },
+});
+
+// Stops both windows make, worded once.
+
+const signIn = (body: string): Step => ({
+  go: openPopover,
+  ready: popoverOpen,
+  timeoutMs: PATIENT,
+  spotlight: {
+    anchor: "[data-sync-account]",
+    title: "Sign in to WACS",
+    body,
+    try: "Sign in with your WACS username and password.",
+    notes: [
+      {
+        label: "What signing in is for",
+        text: "Sending your saved work to WACS, receiving other people's, and putting your name on your versions. Nothing about editing needs it.",
+      },
+      {
+        label: "Every worried state ends the same way",
+        text: "Signed out, offline, or refused, the words always end by saying the work is safe on this device. That is a translator's first worry, so it is answered first.",
+      },
+      { label: "Charter", text: "REQ-19, SC-06." },
+    ],
+  },
+  advance: signedIn,
+});
+
+const editIn = (book: string, title: string, body: string): Step => ({
+  go: (context) => toBook(context, book),
+  ready: () => onPath(`/book/${book}`) && present("[data-testid=editor-host]"),
+  spotlight: {
+    anchor: "[data-testid=editor-host]",
+    side: "right",
+    title,
+    body,
+    try: "Change a word in a verse.",
+  },
+  advance: (context) => focusedUnsaved(context, book),
+});
+
+const saveKey: Step = {
+  spotlight: {
+    anchor: "[data-testid=app-bar]",
+    title: "Save, with a look first",
+    body: "Press Ctrl+S (Cmd+S on a Mac). Save never writes straight away: it opens Review, showing every change you are about to keep.",
+    try: "Press Ctrl+S or Cmd+S.",
+    notes: [
+      {
+        label: "Why the wording is careful",
+        text: "Most saves are of everyday work, so it would be easy to make Save instant. But then a stray key in a verse you were not looking at would be kept and sent. The menu says “Save & Review…” for that reason.",
+      },
+      {
+        label: "A decision for Operations",
+        text: "Settings has “Skip review of my changes”, which makes Save instant. Design worries the look first is friction, and it may be for someone saving only to their own copy. On a project a team shares, an unseen change goes to everyone. Operations can choose to keep the switch, or to remove it so every save is seen first.",
+      },
+      { label: "Charter", text: "REQ-07, SC-05." },
+    ],
+  },
+  advance: () => onPath("/review") || onPath("/history"),
+};
+
+const saveButton = (title: string, body: string): Step => ({
+  ready: () => present("[data-review-record]"),
+  timeoutMs: PATIENT,
+  spotlight: {
+    anchor: "[data-review-record]",
+    title,
+    body,
+    try: "Press Save, fill in the two lines, and Save. Read the receipt, then press Done.",
+    notes: [
+      {
+        label: "Saved here, sent there",
+        text: "The receipt says both things separately: saved on this device, and sent (or not yet, and why). Signed out or offline, the save still happens and only the sending waits.",
+      },
+      { label: "Charter", text: "REQ-20, REQ-21, REQ-22." },
+    ],
+  },
+  advance: () => present("[data-review-record-done]"),
+});
+
+const incomingReview = (who: string): Step => ({
+  ready: () => present("[data-review-units]"),
+  timeoutMs: PATIENT,
+  spotlight: {
+    anchor: "[data-review-units]",
+    title: `${who}'s change, verse by verse`,
+    body: "Each card says where its change came from: changed there (in the other window), changed here (in this one), or changed in both places. The first two already have a side chosen, theirs and yours; changed in both places has none, and you choose.",
+    try: "Read the change. Keep or Take on any card changes its side.",
+    notes: [
+      {
+        label: "Never merged on its own",
+        text: "Sefer never mixes two people's wording automatically, and never brings someone else's Scripture changes in unseen. Incoming work goes through the same Review as your own saves.",
+      },
+      {
+        label: "The one that asks something",
+        text: "Only “changed in both places” is coloured, because it is the only kind that needs a person. Change the same verse in both windows to see one.",
+      },
+      { label: "Charter", text: "REQ-09, REQ-20, REQ-22." },
+    ],
+  },
+  advance: "user",
+});
+
+const history = (title: string, body: string): Step => ({
+  go: toHistory,
+  ready: () => present("[data-commits]"),
+  timeoutMs: PATIENT,
+  spotlight: {
+    anchor: "[data-testid=sidebar]",
+    side: "right",
+    title,
+    body,
+    try: "Choose a version to see what it changed, verse by verse, the same way Review shows it.",
+    notes: [
+      {
+        label: "Why History is in the product",
+        text: "So a team can answer “who changed this verse, and when” without going to WACS, and so nothing done in Sefer is ever beyond getting back: Adopt, on any change, brings that earlier wording back as a new change, to be reviewed and saved like any other.",
+      },
+      {
+        label: "Who a version is by",
+        text: "The WACS username when signed in, or the name given the first time someone saved on that device.",
+      },
+    ],
+  },
+  advance: "user",
+});
+
+export const windowATour: Tour = {
+  id: WINDOW_A,
   kind: "tutorial",
   audience: "internal",
-  title: "Where your work lives (1 of 2): one person",
+  title: "Two of you (window A): your own copy, and a suggestion",
   summary:
-    "A shared WACS project from a link, worked on through your own copy: what is on this device, what is backed up, what Save does, what is sent, a suggestion on WACS, and offline.",
+    "Start here. Two browsers, both you: a project you may not change, your own copy of it, a second device working in that copy, and the suggestion it all ends in on WACS.",
   needsProject: true,
-  start: linkTo("/book/JHN"),
+  start: `/r/${OWNER}/${REPO}/book/JHN?host=${HOST}`,
   steps: [
     {
       go: (context) => toBook(context, "JHN"),
       panel: {
-        title: "You opened a link, and now you have a copy",
-        body: "The link named a shared project on WACS (will-kelly-test/x-en-ulb), not a file. Sefer downloaded it into its own storage on this device, so everything from here on works with the network off. On the web that storage is the browser's; in the desktop app it is a folder on the disk. Either way nothing points back at where it came from: getting work out is sending it, or exporting a zip.",
+        title: "Two of you, in two browsers",
+        body: "You will play two people: window A (this browser) and window B (a second browser, say Firefox, with the same WACS account). Two browsers keep separate storage, so Sefer sees two devices. The cards say when to switch. This window has just downloaded Will's sandbox (will-kelly-test/x-en-ulb) into this browser's storage, so it works with the network off from here on.",
       },
     },
     {
@@ -118,8 +291,8 @@ export const whereWorkLivesTour: Tour = {
             text: "Because the network is not always there. At a workshop a colleague can hand over a project on a USB stick, as a zip or a plain folder, and it opens the same way a WACS download does.",
           },
           {
-            label: "Writer",
-            text: "BTT Writer projects convert on this device, with no network, and every Writer save comes across as a version in History.",
+            label: "Already here",
+            text: "Downloading a project this device already has opens the one here instead of making a second copy of the same work.",
           },
           { label: "Charter", text: "REQ-13 to REQ-18; SC-02, SC-03." },
         ],
@@ -130,7 +303,7 @@ export const whereWorkLivesTour: Tour = {
       spotlight: {
         anchor: "[data-testid=app-bar-sync]",
         title: "One button says where your work is",
-        body: "The cloud button reads the project and the shared project and shows one state: up to date, saved but not sent, updates waiting, offline, or signed out. Inside it there is one main action, the one that state needs.",
+        body: "The cloud button reads this project and the one on WACS and shows one state: up to date, saved but not sent, updates waiting, offline, or signed out. Inside it there is one main action, the one that state needs.",
         try: "Open the cloud button.",
         notes: [
           {
@@ -146,29 +319,9 @@ export const whereWorkLivesTour: Tour = {
       },
       advance: popoverOpen,
     },
-    {
-      go: openPopover,
-      ready: popoverOpen,
-      timeoutMs: PATIENT,
-      spotlight: {
-        anchor: "[data-sync-account]",
-        title: "Sign in to WACS",
-        body: "Signed out, you can read and change everything here; only sending and receiving wait. Sign in with your WACS account.",
-        try: "Sign in with your WACS username and password.",
-        notes: [
-          {
-            label: "What signing in is for",
-            text: "Sending your saved work to WACS, receiving other people's, and putting your name on your versions. Nothing about editing needs it.",
-          },
-          {
-            label: "Every worried state ends the same way",
-            text: "Signed out, offline, or refused, the words always end by saying the work is safe on this device. That is a translator's first worry, so it is answered first.",
-          },
-          { label: "Charter", text: "REQ-19, SC-06." },
-        ],
-      },
-      advance: signedIn,
-    },
+    signIn(
+      "Signed out, you can read and change everything here; only sending and receiving wait. Sign in with your WACS account.",
+    ),
     {
       go: openPopover,
       ready: popoverOpen,
@@ -176,7 +329,7 @@ export const whereWorkLivesTour: Tour = {
       spotlight: {
         anchor: "[data-sync-collab]",
         title: "Work in your own copy",
-        body: "Your account may not write to this project, so the popover says you can suggest changes. Work in my own copy makes a copy of the project under your own WACS account (a fork). From now on your saves are sent there, and nothing reaches the shared project until you offer it.",
+        body: "Your account may not write to Will's sandbox, so the popover says you can suggest changes. Work in my own copy makes a copy of it under your WACS account (a fork). From now on your saves are sent there, and nothing reaches Will's until you offer it.",
         try: "Press Work in my own copy.",
         notes: [
           {
@@ -184,12 +337,8 @@ export const whereWorkLivesTour: Tour = {
             text: "Operations decides who may write to a project. A team can be given write access to one, for example a project started from a Tech_advance repository, and then everyone works in it directly. Anyone else can still contribute, through their own copy, without Operations doing anything first.",
           },
           {
-            label: "If you can write here",
-            text: "Then this section is not shown, and your work goes straight to the shared project. Use an account without write access to walk this path.",
-          },
-          {
-            label: "Two ways to work",
-            text: "Each project is either shared (everyone sends to one place) or own copy and suggestions. A person can change between them in Settings, Cloud.",
+            label: "Not by default",
+            text: "Nothing is copied until you ask. And a second device asking again gets the same copy, never a second one.",
           },
         ],
       },
@@ -198,61 +347,34 @@ export const whereWorkLivesTour: Tour = {
     {
       go: (context) => {
         closePopover();
-        toBook(context, "JHN");
+        learnCopy(context);
       },
-      ready: () => present("[data-testid=editor-host]"),
-      spotlight: {
-        anchor: "[data-testid=editor-host]",
-        side: "right",
-        title: "Change a verse",
-        body: "Type anywhere in John. Half a second after you stop, Sefer backs the change up on this device, outside the project. The project file itself is not touched yet.",
-        try: "Change a word in a verse.",
-        notes: [
+      panel: {
+        title: "Open window B",
+        body: "Your copy is on WACS now. Copy window B's link, open it in your second browser, and follow the cards there until they send you back here. Window B downloads your copy, not Will's.",
+        actions: [
           {
-            label: "Backup is not saving",
-            text: "The backup is there so a crash, a closed tab or a flat battery loses nothing: open the project again and Sefer offers the work back. It is not a version, and nobody else sees it.",
+            label: () => (copyKnown() ? "Copy window B's link" : undefined),
+            run: () => copyText(windowBLink()),
           },
           {
-            label: "Why the file waits",
-            text: "Because a slip of the keyboard should never become the project's text without anyone seeing it. The file only changes when you Save, and Save shows you every change first.",
+            label: () => (copyKnown() ? "Open your copy on WACS" : undefined),
+            run: () => window.open(copyPage(), "_blank", "noopener"),
           },
-          { label: "Charter", text: "REQ-10, REQ-11, REQ-21." },
         ],
       },
-      advance: (context) => focusedUnsaved(context, "JHN"),
     },
-    {
-      go: (context) => toBook(context, "RUT"),
-      ready: () => onPath("/book/RUT") && present("[data-testid=editor-host]"),
-      spotlight: {
-        anchor: "[data-testid=editor-host]",
-        side: "right",
-        title: "And one in another book",
-        body: "Now Ruth. Changes can sit in as many books as you like before you save; the next step shows them all together.",
-        try: "Change a word in Ruth.",
-      },
-      advance: (context) => focusedUnsaved(context, "RUT"),
-    },
-    {
-      spotlight: {
-        anchor: "[data-testid=app-bar]",
-        title: "Save, with a look first",
-        body: "Press Ctrl+S (Cmd+S on a Mac). Save never writes straight away: it opens Review, showing every change you are about to keep.",
-        try: "Press Ctrl+S or Cmd+S.",
-        notes: [
-          {
-            label: "Why the wording is careful",
-            text: "Most saves are of everyday work, so it would be easy to make Save instant. But then a stray key in a verse you were not looking at would be kept and sent. The menu says “Save & Review…” for that reason.",
-          },
-          {
-            label: "A decision for Operations",
-            text: "Settings has “Skip review of my changes”, which makes Save instant. Design worries the look first is friction, and it may be for someone saving only to their own copy. On a project a team shares, an unseen change goes to everyone. Operations can choose to keep the switch, or to remove it so every save is seen first.",
-          },
-          { label: "Charter", text: "REQ-07, SC-05." },
-        ],
-      },
-      advance: () => onPath("/review") || onPath("/history"),
-    },
+    editIn(
+      "JHN",
+      "Change a verse",
+      "Back in window A. Type anywhere in John. Half a second after you stop, Sefer backs the change up on this device, outside the project. The project file itself is not touched yet.",
+    ),
+    editIn(
+      "RUT",
+      "And one in another book",
+      "Now Ruth. Changes can sit in as many books as you like before you save; the next step shows them all together.",
+    ),
+    saveKey,
     {
       ready: () => present("[data-review-units]"),
       timeoutMs: PATIENT,
@@ -263,62 +385,47 @@ export const whereWorkLivesTour: Tour = {
         try: "Look at your two changes. Take the file's undoes one; Keep the editor's keeps it.",
         notes: [
           {
-            label: "Cards or the whole chapter",
-            text: "Cards suit changes spread over many books: you read each one in its verse, with a Chapter button for more context. A handful of changes in one book can be easier to read as the whole book. Both views are the same changes.",
+            label: "Backup is not saving",
+            text: "Until now your changes were only backed up, so a crash or a closed tab loses nothing; the file waits because a slip of the keyboard should never become the project's text unseen.",
           },
           {
             label: "Nothing is hidden",
-            text: "Every change to the Scripture text is shown here, however small, including spaces and markers. That is the rule: no change reaches the file, or anyone else, without passing through a screen like this.",
+            text: "Every change to the Scripture text is shown here, however small, including spaces and markers. For the same reason there is no one-step replace across the project that you do not see verse by verse.",
           },
-          {
-            label: "No replace-all",
-            text: "For the same reason there is no one-step replace across the project that you do not see verse by verse.",
-          },
+          { label: "Charter", text: "REQ-10, REQ-11, REQ-21." },
         ],
       },
       advance: "user",
     },
+    saveButton(
+      "Save keeps a version",
+      "Save writes the books, keeps that moment as a version with your name and a line about it, and sends it to your copy on WACS.",
+    ),
+    history(
+      "History: every version, and where it is",
+      "Every version, newest first, with who made it and when. “Only on this device” have not reached WACS; the rest have. That divider is the answer to “has my work been uploaded?”.",
+    ),
+    handOver(
+      "B",
+      "In window B, press Next. It will receive what you just saved, change a verse of its own, and send you back here.",
+    ),
     {
-      ready: () => present("[data-review-record]"),
+      go: openPopover,
+      ready: popoverOpen,
       timeoutMs: PATIENT,
       spotlight: {
-        anchor: "[data-review-record]",
-        title: "Save keeps a version",
-        body: "Save writes the books and keeps that moment as a version, with your name and a line about what you changed. If you are signed in, it then sends it to WACS: to your own copy, which only you write to.",
-        try: "Press Save, fill in the two lines, and Save. Read the receipt, then press Done.",
-        notes: [
-          {
-            label: "Saved here, sent there",
-            text: "The receipt says both things separately: saved on this device, and sent (or not yet, and why). Signed out or offline, the save still happens and only the sending waits.",
-          },
-          { label: "Charter", text: "REQ-20, REQ-21, REQ-22." },
-        ],
+        anchor: "[data-sync-popover]",
+        title: "Your copy has changed",
+        body: "Window B sent a version to your copy. The popover says your copy has changes this device does not, from another device. Nothing here has changed yet.",
+        try: "Press See the changes. If it is not there yet, press the check button.",
       },
-      advance: () => present("[data-review-record-done]"),
+      advance: () => onPath("/review"),
     },
-    {
-      go: toHistory,
-      ready: () => present("[data-commits]"),
-      timeoutMs: PATIENT,
-      spotlight: {
-        anchor: "[data-testid=sidebar]",
-        side: "right",
-        title: "History: every version, and where it is",
-        body: "Every version of the project, newest first, with who made it and when. The ones under “Only on this device” have not reached WACS yet; the ones under “On the shared project” are what everyone has.",
-        try: "Choose a version to see what it changed, verse by verse, the same way Review shows it.",
-        notes: [
-          {
-            label: "Why History is in the product",
-            text: "So a team can answer “who changed this verse, and when” without going to WACS, and so nothing done in Sefer is ever beyond getting back: Adopt, on any change, brings that earlier wording back as a new change, to be reviewed and saved like any other.",
-          },
-          {
-            label: "The line between the two",
-            text: "That divider is the answer to “has my work been uploaded?”, version by version.",
-          },
-        ],
-      },
-      advance: "user",
-    },
+    incomingReview("Window B"),
+    saveButton(
+      "Save brings it in",
+      "Save takes the changes you kept into this project and records them as a version, so both windows now hold the same text.",
+    ),
     {
       go: openPopover,
       ready: popoverOpen,
@@ -326,16 +433,12 @@ export const whereWorkLivesTour: Tour = {
       spotlight: {
         anchor: "[data-sync-collab]",
         title: "Offer your changes",
-        body: "Your version is in your copy on WACS, and nobody else has to look at it. Offer my changes asks the project's editors to bring it in: a suggestion, which WACS calls a pull request.",
+        body: "Your work, from both windows, is in your copy on WACS. Offer my changes asks Will's project's editors to bring it in: a suggestion, which WACS calls a pull request.",
         try: "Press Offer my changes.",
         notes: [
           {
             label: "One suggestion, kept up to date",
             text: "Save again later and the new versions are added to the same suggestion, until an editor brings it in or closes it. The popover says which it is.",
-          },
-          {
-            label: "What the editors see",
-            text: "The same verse-by-verse Review, showing only what the suggestion offers, with your name and your notes. Part two walks that side.",
           },
         ],
       },
@@ -347,7 +450,7 @@ export const whereWorkLivesTour: Tour = {
       timeoutMs: PATIENT,
       panel: {
         title: "Your suggestion, on WACS",
-        body: "Suggestions lists what you have offered and what became of it. The suggestion is a real pull request on WACS, from your copy to the shared project, so the team can also see and discuss it there.",
+        body: "Suggestions lists what you have offered and what became of it. It is a real pull request on WACS, from your copy to Will's sandbox, so the team can see and discuss it there too.",
         actions: [
           {
             label: () => (waitingSuggestion() === undefined ? undefined : "Open it on WACS"),
@@ -384,53 +487,65 @@ export const whereWorkLivesTour: Tour = {
       spotlight: {
         anchor: "[data-testid=app-bar-sync]",
         title: "And back on",
-        body: "Turn the network back on. Open the cloud button: what waited goes with Send my changes, or with your next save.",
-        try: "Turn the network on and send what is waiting.",
+        body: "Turn the network back on. What waited goes with Send my changes, or with your next save.",
       },
-      advance: () => syncState() !== "offline" && syncState() !== "ahead" && signedIn(),
+      advance: () => syncState() !== "offline" && signedIn(),
     },
     {
       panel: {
-        title: "Next: someone else",
-        body: "Part two is about a second person changing this same project. You play both people: this window, and a private window or another browser. Start it from Settings, Tutorials, “Where your work lives (2 of 2)”.",
+        title: "The editor's side",
+        body: "Will's project's editors see “1 suggestion is waiting” in their cloud button and open it from the Suggestions tab, in the same Review: only what the suggestion offers, with who sent it and why. Keep what is right and Save, which brings it into the project and closes it; keeping none of it is Decline, with a note you read. That side needs write access to the project, so Will shows it.",
       },
     },
   ],
 };
 
-export const someoneElseTour: Tour = {
-  id: PART_TWO,
+export const windowBTour: Tour = {
+  id: WINDOW_B,
   kind: "tutorial",
   audience: "internal",
-  title: "Where your work lives (2 of 2): someone else",
-  summary:
-    "A second person changes the same project, from a private window, another browser or WACS itself. What arrives, how it is reviewed, and how a suggestion works.",
+  title: "Two of you (window B): working straight in your copy",
+  summary: "The second browser in “Two of you”. Start it from window A's link, not from here.",
   needsProject: true,
-  start: linkTo("/book/JHN"),
   steps: [
     {
       go: (context) => toBook(context, "JHN"),
       panel: {
-        title: "Be someone else",
-        body: "You need a second device, not a second account. Open part one's link in a private window or another browser such as Firefox, which Sefer sees as a different device, and sign in with the same WACS account. Change a verse in John and save. Or edit a file in WACS's own web editor. Then come back to this window.",
-        actions: [
+        title: "This is window B",
+        body: "This browser downloaded your own copy, the one window A just made. Sefer sees it as a second device of yours.",
+      },
+    },
+    signIn("Sign in with the same WACS account as window A."),
+    {
+      go: openPopover,
+      ready: popoverOpen,
+      timeoutMs: PATIENT,
+      spotlight: {
+        anchor: "[data-sync-popover]",
+        title: "Here, you may write",
+        body: "This project is yours, so there is nothing to suggest: this window sends straight to it. That is how a team works when Operations gives it write access to a project, for example one started from a Tech_advance repository.",
+        notes: [
           {
-            label: () => "Copy part one's link",
-            run: () => copyText(`${window.location.origin}${linkTo("/book/JHN")}&tour=${PART_ONE}`),
-          },
-          {
-            label: () => "Open the project on WACS",
-            run: () => window.open(SHARED_PAGE, "_blank", "noopener"),
+            label: "Two ways to work, one tutorial",
+            text: "Window A works in your copy and suggests to Will's project; this window works straight in your copy. The same project can be either, depending on who may write to it.",
           },
         ],
       },
+      advance: "user",
     },
+    handOver(
+      "A",
+      "In window A, press Next. Come back here when it says “Over to window B”, and press Next.",
+    ),
     {
+      go: openPopover,
+      ready: popoverOpen,
+      timeoutMs: PATIENT,
       spotlight: {
-        anchor: "[data-testid=app-bar-sync]",
+        anchor: "[data-sync-popover]",
         title: "Check for changes",
-        body: "Sefer checks on its own when the project opens, but not while you work. Open the cloud button and press the check button.",
-        try: "Open the cloud button and check. This card says so when the other person's change shows up.",
+        body: "Window A saved and sent a version. Sefer checks when a project opens and when you save, not constantly, so ask it now.",
+        try: "Press the check button, then See the changes.",
         notes: [
           {
             label: "Why not constantly",
@@ -438,88 +553,27 @@ export const someoneElseTour: Tour = {
           },
         ],
       },
-      advance: () => syncState() === "behind" || syncState() === "diverged",
-    },
-    {
-      go: openPopover,
-      ready: popoverOpen,
-      timeoutMs: PATIENT,
-      spotlight: {
-        anchor: "[data-sync-popover]",
-        title: "What is coming, before it comes",
-        body: "Incoming changes lists the books, and how many verses in each differ, before anything on this device changes.",
-        try: "Press See the changes.",
-        notes: [
-          {
-            label: "Never merged on its own",
-            text: "Sefer never mixes two people's wording automatically, and never brings someone else's Scripture changes in unseen. Incoming work goes through the same Review as your own saves.",
-          },
-          { label: "Charter", text: "REQ-09, REQ-20, REQ-22." },
-        ],
-      },
       advance: () => onPath("/review"),
     },
-    {
-      ready: () => present("[data-review-units]"),
-      timeoutMs: PATIENT,
-      spotlight: {
-        anchor: "[data-review-units]",
-        title: "Theirs and yours, verse by verse",
-        body: "Each card says where its change came from: changed there (by the other person), changed here (by you), or changed in both places. The first two already have a side chosen, theirs and yours; changed in both places has none, and you choose.",
-        try: "Read their change. Press Keep or Take on any card to change its side.",
-        notes: [
-          {
-            label: "The one that asks something",
-            text: "Only “changed in both places” is coloured, because it is the only kind that needs a person. Change the same verse in both windows to see one.",
-          },
-          {
-            label: "The same screen as Save",
-            text: "Your own changes, someone else's, a suggestion and an old version are all read on this one screen, so there is one thing to learn.",
-          },
-        ],
-      },
-      advance: "user",
-    },
-    {
-      ready: () => present("[data-review-record]"),
-      timeoutMs: PATIENT,
-      spotlight: {
-        anchor: "[data-review-record]",
-        title: "Save settles it",
-        body: "Save takes their changes you kept into the project, records the result as one version, and sends it. Until every “changed in both places” has a choice, Save waits.",
-        try: "Press Save, then Save, then Done.",
-      },
-      advance: () => present("[data-review-record-done]"),
-    },
-    {
-      go: toHistory,
-      ready: () => present("[data-commits]"),
-      timeoutMs: PATIENT,
-      spotlight: {
-        anchor: "[data-testid=sidebar]",
-        side: "right",
-        title: "Their version, in your History",
-        body: "The other person's version is now in History, under their name, and the one you just saved sits on top of it. Choose either to read what it changed, verse by verse.",
-        notes: [
-          {
-            label: "Who a version is by",
-            text: "The WACS username when they were signed in, or the name they gave the first time they saved on that device.",
-          },
-        ],
-      },
-      advance: "user",
-    },
-    {
-      panel: {
-        title: "When the other person cannot write",
-        body: "This half does need two people: an editor who may write to the project, and someone who may not. On this sandbox that is Will and you. The one who may not sees Work in my own copy in the popover: their saves go to their copy, and Offer my changes makes a suggestion. The project's editors see “1 suggestion is waiting” in the cloud button and open it from the Suggestions tab, beside Changes and History, in the same Review: it shows only what the suggestion offers, with who sent it and why. Keep what is right and Save, which brings it into the shared project and closes it; keeping none of it is Decline, with a note the author reads.",
-      },
-    },
-    {
-      panel: {
-        title: "What to try next",
-        body: "Change the same verse in both windows and save in both: that is the case that goes to Compare. Or go offline in one window, keep working, and come back. Tell us where the words did not match what you expected.",
-      },
-    },
+    incomingReview("Window A"),
+    saveButton(
+      "Save brings it in",
+      "Save takes window A's changes into this project and records them as a version.",
+    ),
+    history(
+      "Window A's version, in History",
+      "Window A's version is here now, under your name, with the one you just saved on top of it.",
+    ),
+    editIn(
+      "JHN",
+      "Now a change of your own",
+      "Change a different verse in John from the one window A changed. (The same verse would be “changed in both places”: try that another time.)",
+    ),
+    saveKey,
+    saveButton(
+      "Save and send",
+      "This window may write to your copy, so Save sends straight to it.",
+    ),
+    handOver("A", "Window B is done. In window A, press Next."),
   ],
 };
