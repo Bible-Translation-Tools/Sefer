@@ -3,32 +3,13 @@ import { createFileRoute } from "@tanstack/solid-router";
 import { ReviewPanel } from "#app/ui/review";
 import { ShellGate } from "#app/ui/ShellGate";
 
-/**
- * `/review` — the one review screen, gated on the shell.
- *
- * One screen for "which of these two texts do I keep", whichever two they are.
- * `/history?review=1` redirects here, and `/history` keeps the commit
- * timeline — the screen about what HAS happened rather than what is about to.
- *
- * Everything the screen does lives in `src/app/ui/review/`. The comparison is
- * not a search param: a picked zip has no address to put in one, and a frozen
- * comparison is session state, not a place. The one exception is `against=
- * shared`, which is an address — the shared project, or with `pull=<n>` a
- * suggestion to it, or with `copy=1` the person's own copy as another of
- * their devices left it — and is how the cloud popover and the Suggestions
- * tab open a review already set against what arrived. `against=writer` is
- * the same for new work in the Writer projects the books follow.
- */
 export const Route = createFileRoute("/_app/project/$slug/review")({
   validateSearch: (
     search: Record<string, unknown>,
   ): { readonly against?: "shared" | "writer"; readonly pull?: number; readonly copy?: 1 } => {
-    // New work in the Writer projects this project's books follow.
     if (search.against === "writer") return { against: "writer" };
     if (search.against !== "shared") return {};
     if (Number(search.copy) === 1) return { against: "shared", copy: 1 };
-    // `pull` names a suggestion whose head was fetched for review; the shared
-    // project's side then reads that instead of the tracking ref.
     const pull = Number(search.pull);
     return Number.isInteger(pull) && pull > 0 ? { against: "shared", pull } : { against: "shared" };
   },

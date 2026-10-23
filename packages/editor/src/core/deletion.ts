@@ -1,14 +1,3 @@
-/**
- * Protection: markers are deleted whole or not at all.
- *
- * The interesting part is the shape, not the policy — a deletion is planned over
- * a WIDENED range (what the keystroke actually addresses, including the markup
- * that owns the glyph next to it), a verdict is taken over the ORIGINAL range
- * (what the user consented to), and the result is one of pass, refuse,
- * write-around or rewrite. Backspace and Delete are two dispatchers over the
- * same target data and share one commit shell, so the two keys cannot disagree.
- */
-
 import {
   EditorState,
   findClusterBreak,
@@ -33,6 +22,7 @@ import {
 import { bindsToItsLine } from "./lineTable";
 import type { Addressed, OwnedIndex, ResolvedOwnedTarget } from "./owned";
 import type { PlanSpan } from "./plan";
+import { isContainerClass } from "./registry";
 import { note, noteTr, type TraceVerdict } from "./trace";
 
 function spaceBefore(state: EditorState, at: number): string {
@@ -40,47 +30,37 @@ function spaceBefore(state: EditorState, at: number): string {
   return next === "" || next === "\\" || /\s/.test(next) ? "" : " ";
 }
 
-function weld(s: DocStructure, state: EditorState, from: number, to: number): string {
-  return atContentHead(s, state, from) ? spaceBefore(state, to) : "";
+function weld(structure: DocStructure, state: EditorState, from: number, to: number): string {
+  return atContentHead(structure, state, from) ? spaceBefore(state, to) : "";
 }
 
-const startsALine = (s: DocStructure, pos: number): boolean => {
-  const i = lineIndexAt(s, pos);
-  return i >= 0 && s.lines.fromAt(i) === pos;
+const startsALine = (structure: DocStructure, pos: number): boolean => {
+  const i = lineIndexAt(structure, pos);
+  return i >= 0 && structure.lines.fromAt(i) === pos;
 };
 
-/**
- * A set's span with the newline before it, when that newline is the set's: a
- * marker that must start its line (`bindsToItsLine` — a paragraph or heading)
- * owns the break that puts it there. A `\v` that happens to open its line does
- * not: `for me.\v 7 You` is valid USFM, so the newline before a locked verse
- * is a join the press may take (`…for me.\v 7 You`), not part of the verse —
- * unless the lock is a STOP (`Cell.stop`, a card's verse numbers), where the
- * number is the boundary between the card's verse and its context and the
- * break that opens its line is part of that boundary.
- */
-const anchoredBack = (s: DocStructure, sp: PlanSpan, stop = false): PlanSpan => {
-  if (sp.from <= 0 || !startsALine(s, sp.from)) return sp;
-  if (stop) return { from: sp.from - 1, to: sp.to };
-  const line = s.lines.maybe(lineIndexAt(s, sp.from));
-  return line !== null && bindsToItsLine(line) ? { from: sp.from - 1, to: sp.to } : sp;
+const anchoredBack = (structure: DocStructure, span: PlanSpan, stop = false): PlanSpan => {
+  if (span.from <= 0 || !startsALine(structure, span.from)) return span;
+  if (stop) return { from: span.from - 1, to: span.to };
+  const line = structure.lines.maybe(lineIndexAt(structure, span.from));
+  return line !== null && bindsToItsLine(line) ? { from: span.from - 1, to: span.to } : span;
 };
 
-/** Whether a cut meets an immortal, and if so whether a press passes it or stops there. */
 function reachesImmortal(
-  ix: OwnedIndex,
-  s: DocStructure,
+  targets: OwnedIndex,
+  structure: DocStructure,
   from: number,
   to: number,
 ): "none" | "pass" | "stop" {
   const lo = Math.min(from, to);
   const hi = Math.max(from, to);
   let met: "none" | "pass" = "none";
-  for (const h of ix.targetsIn(lo, hi + 1).hits) {
+  for (const h of targets.targetsIn(lo, hi + 1).hits) {
     if (h.target.mutability !== "immortal") continue;
-    const a = anchoredBack(s, h.target.wholeSpan, h.target.stop);
+    const holds = h.target.stop || h.target.step;
+    const a = anchoredBack(structure, h.target.wholeSpan, holds);
     if (a.to <= lo || a.from >= hi) continue;
-    if (h.target.stop) return "stop";
+    if (holds) return "stop";
     met = "pass";
   }
   return met;
@@ -88,9 +68,9 @@ function reachesImmortal(
 
 function immortalGuard(
   state: EditorState,
-  s: DocStructure,
-  ix: OwnedIndex,
-  r: PaintPort,
+  structure: DocStructure,
+  targets: OwnedIndex,
+  paint: PaintPort,
   at: number,
   back: boolean,
   raw: (tr: Transaction) => void,
@@ -99,25 +79,24 @@ function immortalGuard(
     const met: ("pass" | "stop")[] = [];
     tr.changes.iterChanges((fromA, toA) => {
       if (toA <= fromA) return;
-      const here = reachesImmortal(ix, s, fromA, toA);
+      const here = reachesImmortal(targets, structure, fromA, toA);
       if (here !== "none") met.push(here);
     });
-    // A stop is a wall: the press neither cuts nor carries the caret past it.
     if (met.includes("stop")) return;
-    if (met.length > 0) consumePress(state, s, r, at, back, raw);
+    if (met.length > 0) consumePress(state, structure, paint, at, back, raw);
     else raw(tr);
   };
 }
 
 function consumePress(
   state: EditorState,
-  s: DocStructure,
-  r: PaintPort,
+  structure: DocStructure,
+  paint: PaintPort,
   at: number,
   back: boolean,
   dispatch: (tr: Transaction) => void,
 ): boolean {
-  const to = lawfulStop(state, s, r, at, back);
+  const to = lawfulStop(state, structure, paint, at, back);
   if (to !== null && to !== at)
     dispatch(
       state.update({
@@ -134,8 +113,8 @@ type Verdict =
   | {
       readonly act: "consume";
       readonly say: string;
-      /** The immortal set met, in USFM terms: where a press continues past it. */
       readonly span?: PlanSpan;
+      readonly stepOnly?: true;
     }
   | { readonly act: "default"; readonly say: string }
   | {
@@ -145,7 +124,6 @@ type Verdict =
       readonly event: string;
       readonly seal: string | null;
       readonly say: string;
-      /** Where the caret goes, when the cut knows better than "the same distance past it". */
       readonly caret?: number;
     };
 
@@ -173,7 +151,7 @@ const unowned = (a: Addressed, onePaint: (say: string) => Verdict, side: string)
           : "delete one character",
       );
 
-type CellSay = "immortal" | "empty" | "sealed" | "no-merge" | "ordinary";
+type CellSay = "immortal" | "empty" | "fenced" | "sealed" | "no-merge" | "ordinary";
 
 interface CellRule {
   readonly name: CellSay;
@@ -185,17 +163,25 @@ const CELL_RULES: readonly CellRule[] = [
   {
     name: "immortal",
     when: (t) => t.mutability === "immortal",
-    say: (t) =>
-      t.stop
-        ? {
-            act: "nothing",
-            say: `cell immortal — the ${t.set} cannot be taken; the press stops at it`,
-          }
-        : {
-            act: "consume",
-            say: `cell immortal — the ${t.set} cannot be taken; the press goes past it`,
-            span: t.wholeSpan,
-          },
+    say: (t) => {
+      if (t.stop)
+        return {
+          act: "nothing",
+          say: `cell immortal — the ${t.set} cannot be taken; the press stops at it`,
+        };
+      if (t.step)
+        return {
+          act: "consume",
+          say: `cell immortal — the ${t.set} cannot be taken; the caret steps over it`,
+          span: t.wholeSpan,
+          stepOnly: true,
+        };
+      return {
+        act: "consume",
+        say: `cell immortal — the ${t.set} cannot be taken; the press goes past it`,
+        span: t.wholeSpan,
+      };
+    },
   },
   {
     name: "empty",
@@ -208,6 +194,14 @@ const CELL_RULES: readonly CellRule[] = [
         "unmake-empty-paragraph",
         `cell empty — consume the empty ${t.set}, the inverse of the Enter that made it`,
       ),
+  },
+  {
+    name: "fenced",
+    when: (t) => t.fenced,
+    say: (t) => ({
+      act: "nothing",
+      say: `cell fenced — a ${t.set} edge; text does not cross into or out of a container`,
+    }),
   },
   {
     name: "sealed",
@@ -234,8 +228,8 @@ const cellSay = (t: ResolvedOwnedTarget): CellSay => cellRuleFor(t).name;
 
 const cellVerdict = (t: ResolvedOwnedTarget): Verdict | null => cellRuleFor(t).say(t);
 
-function backspaceAt(ix: OwnedIndex, pos: number): Verdict {
-  const a = ix.addressedBackward(pos);
+function backspaceAt(targets: OwnedIndex, pos: number): Verdict {
+  const a = targets.addressedBackward(pos);
   const t = a.target;
   const onePaint = (say: string): Verdict =>
     a.at < pos || a.kind !== "glyph"
@@ -254,11 +248,6 @@ function backspaceAt(ix: OwnedIndex, pos: number): Verdict {
       null,
       `shorten the ${t.set}'s number rather than take it whole`,
     );
-    // The last digit: the number is now EMPTY, and its delimiter becomes the
-    // text's leading space. The caret goes to the empty number's place, before
-    // that space — where a typed digit refills it (`\v 7 the`) and the next
-    // Backspace addresses the box and takes the marker — not the same distance
-    // past the cut, which is after the space, inside the verse's words.
     return cut.act === "cut" && t.typable.to - t.typable.from === 1
       ? { ...cut, caret: t.typable.from }
       : cut;
@@ -282,8 +271,26 @@ function backspaceAt(ix: OwnedIndex, pos: number): Verdict {
   return whole("delete.usfm.owned", "own-whole", `take own(${t.set}) whole`);
 }
 
-function deleteAt(ix: OwnedIndex, pos: number): Verdict {
-  const a = ix.addressedForward(pos);
+/** A step cell hidden between the caret and what a press would reach: step over it instead. */
+const stepBetween = (targets: OwnedIndex, from: number, to: number): Verdict | null => {
+  if (to <= from) return null;
+  for (const h of targets.targetsIn(from, to).hits) {
+    const t = h.target;
+    if (t.mutability !== "immortal" || !t.step) continue;
+    return {
+      act: "consume",
+      say: `cell immortal — the ${t.set} cannot be taken; the caret steps over it`,
+      span: { from: Math.max(from, t.wholeSpan.from), to: Math.min(to, t.wholeSpan.to) },
+      stepOnly: true,
+    };
+  }
+  return null;
+};
+
+function deleteAt(targets: OwnedIndex, pos: number): Verdict {
+  const a = targets.addressedForward(pos);
+  const stepped = stepBetween(targets, pos, a.at);
+  if (stepped) return stepped;
   const t = a.target;
   const onePaint = (say: string): Verdict =>
     a.at > pos || a.kind !== "glyph"
@@ -322,7 +329,6 @@ function deleteAt(ix: OwnedIndex, pos: number): Verdict {
   return whole("delete.usfm.owned", "own-whole", `take own(${t.set}) whole`);
 }
 
-/** The one grapheme before (`back`) or after `at`, within its line; none at a line's edge. */
 function oneCluster(
   state: EditorState,
   at: number,
@@ -335,17 +341,14 @@ function oneCluster(
   return back ? { from: other, to: at } : { from: at, to: other };
 }
 
-/** One Backspace or Delete, and everything its verdict is carried out against. */
 interface Press {
   readonly state: EditorState;
   readonly s: DocStructure;
   readonly ix: OwnedIndex;
   readonly r: PaintPort;
-  /** Where the press is addressed from: the caret, or the far side of an immortal. */
   readonly at: number;
   readonly back: boolean;
   readonly raw: (tr: Transaction) => void;
-  /** Already carried past one immortal: meeting a second only moves the caret. */
   readonly passed?: boolean;
 }
 
@@ -365,14 +368,23 @@ function commit(press: Press, v: Verdict): boolean {
     // at a locked `\v 3` opening its line is the newline that anchors the
     // paragraph (visible as its indent, so taken as the paragraph's). It only
     // moves the caret when that is immortal too, or nothing (Will, 2026-09-30).
-    const past =
-      v.span === undefined ? lawfulStop(state, s, r, at, back) : back ? v.span.from : v.span.to;
+    let past: number | null;
+    if (v.span === undefined) past = lawfulStop(state, s, r, at, back);
+    else past = back ? v.span.from : v.span.to;
+    if (v.stepOnly === true && past !== null && past !== at) {
+      dispatch(
+        state.update({
+          selection: { anchor: past },
+          userEvent: "select.usfm.stepImmortal",
+          scrollIntoView: true,
+        }),
+      );
+      return true;
+    }
     if (press.passed !== true && past !== null && past !== at) {
       const onward: Press = { ...press, at: past, passed: true };
       const next = back ? backspaceAt(ix, past) : deleteAt(ix, past);
       if (next.act === "cut") return commit(onward, next);
-      // "Default" there is one ordinary character: the press takes it, as it
-      // would have had the caret started there.
       const one = next.act === "default" ? oneCluster(state, past, back) : null;
       if (one !== null)
         return commit(
@@ -383,9 +395,6 @@ function commit(press: Press, v: Verdict): boolean {
     return consumePress(state, s, r, at, back, dispatch);
   }
   if (v.act === "default") return false;
-  // An empty number's marker goes with the one space that was its delimiter
-  // (the text's leading space once the digits went): otherwise `\v` left
-  // `Euphrates—\n the`, a double space where the verse used to be.
   const to =
     v.event === "delete.usfm.anchored" && state.doc.sliceString(v.to, v.to + 1) === " "
       ? v.to + 1
@@ -404,48 +413,60 @@ function commit(press: Press, v: Verdict): boolean {
   return true;
 }
 
-export function guardedBackspace(
+function guardedPress(
   structureAt: GetStructure,
   plansAt: GetPlan,
-  r: PaintPort = NO_PAINT,
+  paint: PaintPort,
+  back: boolean,
 ): StateCommand {
   return ({ state, dispatch: raw }) => {
     const sel = state.selection.main;
     if (!sel.empty || !isVisual(state)) return false;
-    const ix = plansAt(state).targets();
-    const press: Press = { state, s: structureAt(state), ix, r, at: sel.from, back: true, raw };
-    return commit(press, backspaceAt(ix, sel.from));
+    const targets = plansAt(state).targets();
+    const press: Press = {
+      state,
+      s: structureAt(state),
+      ix: targets,
+      r: paint,
+      at: sel.from,
+      back,
+      raw,
+    };
+    return commit(press, back ? backspaceAt(targets, sel.from) : deleteAt(targets, sel.from));
   };
+}
+
+export function guardedBackspace(
+  structureAt: GetStructure,
+  plansAt: GetPlan,
+  paint: PaintPort = NO_PAINT,
+): StateCommand {
+  return guardedPress(structureAt, plansAt, paint, true);
 }
 
 export function guardedDelete(
   structureAt: GetStructure,
   plansAt: GetPlan,
-  r: PaintPort = NO_PAINT,
+  paint: PaintPort = NO_PAINT,
 ): StateCommand {
-  return ({ state, dispatch: raw }) => {
-    const sel = state.selection.main;
-    if (!sel.empty || !isVisual(state)) return false;
-    const ix = plansAt(state).targets();
-    const press: Press = { state, s: structureAt(state), ix, r, at: sel.from, back: false, raw };
-    return commit(press, deleteAt(ix, sel.from));
-  };
+  return guardedPress(structureAt, plansAt, paint, false);
 }
 
 export function mergeParagraphBackwards(structureAt: GetStructure): StateCommand {
   return ({ state, dispatch }) => {
-    const s = structureAt(state);
+    const structure = structureAt(state);
     const sel = state.selection.main;
     if (!sel.empty) return false;
-    const l = lineAt(s, state, sel.from);
-    if (!l || !opensAParagraph(l) || sel.from !== l.contentFrom || l.n <= 1) return false;
-    let prev = l.n - 1;
-    while (prev >= 1 && isBlankLine(s.lines.at(prev - 1))) prev--;
+    const line = lineAt(structure, state, sel.from);
+    if (!line || !opensAParagraph(line) || sel.from !== line.contentFrom || line.n <= 1)
+      return false;
+    let prev = line.n - 1;
+    while (prev >= 1 && isBlankLine(structure.lines.at(prev - 1))) prev--;
     if (prev < 1) return false;
-    const from = s.lines.toAt(prev - 1);
+    const from = structure.lines.toAt(prev - 1);
     dispatch(
       state.update({
-        changes: { from, to: l.contentFrom },
+        changes: { from, to: line.contentFrom },
         selection: { anchor: from },
         userEvent: "delete.usfm.paragraph",
         scrollIntoView: true,
@@ -464,7 +485,12 @@ interface RangePlan {
   readonly around: number;
 }
 
-function rangePlan(ix: OwnedIndex, s: DocStructure, from: number, to: number): RangePlan {
+function rangePlan(
+  targets: OwnedIndex,
+  structure: DocStructure,
+  from: number,
+  to: number,
+): RangePlan {
   let lo = from;
   let hi = to;
   let refused = false;
@@ -472,10 +498,10 @@ function rangePlan(ix: OwnedIndex, s: DocStructure, from: number, to: number): R
   const forced = new Set<number>();
   const seenBreak = new Set<number>();
   const pending = new Map<number, ResolvedOwnedTarget>();
-  for (const h of ix.targetsIn(from, to).hits) pending.set(h.target.id, h.target);
+  for (const h of targets.targetsIn(from, to).hits) pending.set(h.target.id, h.target);
   const consented = (t: ResolvedOwnedTarget) => from <= t.wholeSpan.from && to >= t.wholeSpan.to;
-  const overlaps = (sp: PlanSpan) => sp.to > lo && sp.from < hi;
-  const straddled = (sp: PlanSpan) => overlaps(sp) && (sp.from < lo || sp.to > hi);
+  const overlaps = (span: PlanSpan) => span.to > lo && span.from < hi;
+  const straddled = (span: PlanSpan) => overlaps(span) && (span.from < lo || span.to > hi);
   const wholeOrNothing = (t: ResolvedOwnedTarget): boolean => {
     if (t.typable && t.typable.from <= lo && t.typable.to >= hi) return false;
     if (t.editable.some((span) => span.from <= lo && span.to >= hi)) return false;
@@ -487,13 +513,13 @@ function rangePlan(ix: OwnedIndex, s: DocStructure, from: number, to: number): R
     return !inside || (t.policy === "DISSOLVE" && lo <= t.scope.from && hi >= t.scope.to);
   };
   const ownersOfBreaks = (): void => {
-    const first = lineIndexAt(s, lo);
-    const last = lineIndexAt(s, Math.max(lo, hi - 1));
-    for (let i = Math.max(0, first); first >= 0 && i <= last && i < s.lines.length; i++) {
-      const k = s.lines.toAt(i);
+    const first = lineIndexAt(structure, lo);
+    const last = lineIndexAt(structure, Math.max(lo, hi - 1));
+    for (let i = Math.max(0, first); first >= 0 && i <= last && i < structure.lines.length; i++) {
+      const k = structure.lines.toAt(i);
       if (k < lo || k >= hi || seenBreak.has(k)) continue;
       seenBreak.add(k);
-      const t = ix.addressedForward(k).target;
+      const t = targets.addressedForward(k).target;
       if (!t || settled.has(t.id)) continue;
       pending.set(t.id, t);
       forced.add(t.id);
@@ -518,17 +544,23 @@ function rangePlan(ix: OwnedIndex, s: DocStructure, from: number, to: number): R
     }
     if (!grew) break;
   }
+  // A container's edges are fences: a range that takes one edge and not the other would
+  // leave an \esb or \esbe alone, so it is refused. A whole container, or a range inside
+  // one, is ordinary.
+  for (let c = 0; c < structure.blocks.length; c++) {
+    if (!isContainerClass(structure.blocks.clsAt(c))) continue;
+    const opener = { from: structure.blocks.fromAt(c), to: structure.blocks.contentFromAt(c) };
+    const end = structure.blocks.toAt(c);
+    const takesOpener = lo < opener.to && hi > opener.from;
+    const takesCloser = lo < end && hi >= end;
+    if (takesOpener !== takesCloser) refused = true;
+  }
   const keep: PlanSpan[] = [];
   let around = 0;
-  for (const h of ix.targetsIn(lo, hi + 1).hits) {
+  for (const h of targets.targetsIn(lo, hi + 1).hits) {
     const t = h.target;
-    // Immortal is immortal: a range writes around it even when it covers it
-    // whole. The one exception is a set the surface does not draw — a
-    // passthrough like `\s5` — which a covering delete still takes, because
-    // writing around an invisible marker loses its terminator (`\s5lways`) and
-    // keeps what the reader could not see (editor.md, "Passthrough markers").
     if (t.mutability !== "immortal" || (consented(t) && t.paint === "none")) continue;
-    const a = anchoredBack(s, t.wholeSpan, t.stop);
+    const a = anchoredBack(structure, t.wholeSpan, t.stop);
     const clipped = { from: Math.max(a.from, lo), to: Math.min(a.to, hi) };
     if (clipped.to <= clipped.from) continue;
     keep.push(clipped);
@@ -633,9 +665,9 @@ export function deleteMarkersWholeOrNotAtAll(
     const pasted = insTexts.length ? insTexts[insTexts.length - 1] : null;
     if (pasted !== null && ranges > 1) return tr;
     const rule = "deleteMarkersWholeOrNotAtAll";
-    const s = structureAt(tr.startState);
-    const plan = rangePlan(plansAt(tr.startState).targets(), s, from, to);
-    const welded = weld(s, tr.startState, plan.lo, plan.hi);
+    const structure = structureAt(tr.startState);
+    const plan = rangePlan(plansAt(tr.startState).targets(), structure, from, to);
+    const welded = weld(structure, tr.startState, plan.lo, plan.hi);
     const joinText = welded || (plan.delimiterGone ? spaceBefore(tr.startState, plan.hi) : "");
     const v = rangeVerdict(plan, { from, to }, pasted, joinText);
     noteTr(tr, { rule, verdict: RANGE_TRACED[v.act], detail: v.say });

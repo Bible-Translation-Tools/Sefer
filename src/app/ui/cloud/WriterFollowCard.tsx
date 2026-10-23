@@ -15,24 +15,53 @@ import { projectUpstreams } from "#core/migrate/writerWork";
 
 import { describe } from "../../describe";
 import { t } from "../../i18n";
-import { useShell } from "../../ProjectContext";
+import { useShell, type Shell } from "../../ProjectContext";
 import { stopFollowingWriter } from "../../writerWatch";
 import { Button, Card, PanelHeader, toasts } from "../primitives";
 
+const createFollowedCount = (services: Shell["services"], root: () => string) => {
+  const [followed, setFollowed] = createSignal(0, { name: "writerFollowed" });
+  createEffect(root, (at) => {
+    void services
+      .run(projectUpstreams(services.fileSystem, at))
+      .then((upstreams) => setFollowed(new Set(upstreams.flatMap((each) => each.books)).size));
+  });
+  return [followed, setFollowed] as const;
+};
+
+const StopConfirm = (props: {
+  readonly followed: number;
+  readonly busy: boolean;
+  readonly onStop: () => void;
+  readonly onCancel: () => void;
+}) => (
+  <div class="flex flex-wrap items-center gap-2">
+    <span class="text-small">
+      {t("Stop following all {count}? This is recorded as a version.", {
+        count: props.followed,
+      })}
+    </span>
+    <Button
+      variant="danger"
+      size="sm"
+      data-testid="writer-stop"
+      loading={props.busy}
+      disabled={props.busy}
+      onClick={props.onStop}
+    >
+      {t("Stop following")}
+    </Button>
+    <Button variant="tertiary" size="sm" onClick={props.onCancel}>
+      {t("Cancel")}
+    </Button>
+  </div>
+);
+
 export function WriterFollowCard(props: { readonly root: string }) {
   const { services } = useShell();
-  const [followed, setFollowed] = createSignal(0, { name: "writerFollowed" });
+  const [followed, setFollowed] = createFollowedCount(services, () => props.root);
   const [asking, setAsking] = createSignal(false, { name: "writerStopAsking" });
   const [busy, setBusy] = createSignal(false, { name: "writerStopBusy" });
-
-  createEffect(
-    () => props.root,
-    (root) => {
-      void services
-        .run(projectUpstreams(services.fileSystem, root))
-        .then((upstreams) => setFollowed(new Set(upstreams.flatMap((each) => each.books)).size));
-    },
-  );
 
   const stop = (): void => {
     const root = props.root;
@@ -69,26 +98,12 @@ export function WriterFollowCard(props: { readonly root: string }) {
             </Button>
           }
         >
-          <div class="flex flex-wrap items-center gap-2">
-            <span class="text-small">
-              {t("Stop following all {count}? This is recorded as a version.", {
-                count: followed(),
-              })}
-            </span>
-            <Button
-              variant="danger"
-              size="sm"
-              data-testid="writer-stop"
-              loading={busy()}
-              disabled={busy()}
-              onClick={stop}
-            >
-              {t("Stop following")}
-            </Button>
-            <Button variant="tertiary" size="sm" onClick={() => setAsking(false)}>
-              {t("Cancel")}
-            </Button>
-          </div>
+          <StopConfirm
+            followed={followed()}
+            busy={busy()}
+            onStop={stop}
+            onCancel={() => setAsking(false)}
+          />
         </Show>
       </Card>
     </Show>

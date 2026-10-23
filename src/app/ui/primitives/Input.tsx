@@ -1,14 +1,3 @@
-/**
- * The text field, with an optional leading icon.
- *
- * The icon is positioned rather than laid out beside the input, because the
- * input has to fill the wrapper for a click anywhere in the field to focus it.
- * That is the whole reason this is a component and not a class string.
- *
- * It takes every native input prop, so `type="search"`, `placeholder`,
- * `value`/`onInput` and `aria-label` are the caller's as usual.
- */
-
 import type { ComponentProps, JSX } from "@solidjs/web";
 import { merge, omit } from "solid-js";
 
@@ -25,32 +14,28 @@ const field = variants({
   variants: {
     size: {
       sm: "h-7 rounded-md text-smallest",
-      // The default: 48px, 12px sides and radius, 14px text.
       md: "h-12 rounded-lg text-small",
-      // The page-level search: 56px tall — the height of the large buttons
-      // (16px text with 16px padding) — a 16px radius, body text.
       lg: "h-14 rounded-xl text-body",
     },
   },
   defaults: { size: "md" },
 });
 
-/**
- * Side padding, and room for the icon: at `lg` the icon sits 32px in and the
- * text starts 16px after a 20px icon, so 32 + 20 + 16 = 68px.
- */
 const padding = (size: InputSize, icon: boolean): string => {
   if (size === "lg") return icon ? "ps-[4.25rem] pe-8" : "px-8";
-  // `md`: the 20px icon 12px in, the text 6px after it (12 + 20 + 6 = 38px).
   if (size === "md") return icon ? "ps-[2.375rem] pe-3" : "px-3";
   return icon ? "pe-2.5 ps-8" : "px-2.5";
 };
 
+const iconPosition = (size: InputSize): string => {
+  if (size === "lg") return "start-8";
+  if (size === "md") return "start-3 [&>svg]:size-5";
+  return "start-2.5 [&>svg]:size-4";
+};
+
 export interface InputProps extends Omit<ComponentProps<"input">, "size"> {
   readonly size?: InputSize;
-  /** Sits inside the field, at the start. Decorative: give the input a name. */
   readonly icon?: JSX.Element;
-  /** Classes for the wrapper, which is what carries the field's width. */
   readonly wrapperClass?: ClassValue;
 }
 
@@ -73,11 +58,7 @@ export function Input(props: InputProps) {
           aria-hidden="true"
           class={cx(
             "pointer-events-none absolute flex text-on-surface-tertiary",
-            props.size === "lg"
-              ? "start-8"
-              : (props.size ?? "md") === "md"
-                ? "start-3 [&>svg]:size-5"
-                : "start-2.5 [&>svg]:size-4",
+            iconPosition(props.size ?? "md"),
           )}
         >
           {props.icon}

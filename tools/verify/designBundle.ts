@@ -1,50 +1,14 @@
-/**
- * Proves, against real builds, that the design surface ships in exactly one of
- * the two production modes.
- *
- * The claim every gated route in this repository makes — "the page module is
- * imported only inside the branch, so a production build contains none of it"
- * — is a claim about what a bundler decides to do, and bundlers change their
- * minds. This one already caught a real leak: when the gate was an exported
- * `DESIGN_ENABLED` constant rather than a `define`, the gate itself folded
- * correctly and the route compiled down to `throw notFound()`, but rolldown
- * still emitted the design page as an orphaned chunk. Unreachable, and shipped
- * anyway. A comment would never have noticed.
- *
- * Two builds into throwaway directories, then one question of each: does any
- * emitted asset contain the sentinel?
- *
- *   pnpm verify:design
- *
- * Slow enough (two full builds) to stay out of `pnpm check` and fast enough to
- * run before touching the gate.
- */
-
 import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
-/**
- * Every surface behind `__SEFER_DESIGN__`, each by a string that exists in it
- * and nowhere else. Each sentinel lives in its page next to a note saying so,
- * because a sentinel somebody deletes while tidying is worse than no sentinel
- * at all. A new route behind the switch adds a row here and one to
- * `documentation/dev-only-routes.md`.
- */
 const SURFACES = [
   { name: "/design", sentinel: "__sefer_design_surface__" },
   { name: "/project/$slug/playground", sentinel: "__sefer_playground_surface__" },
   { name: "/playground/history-diff", sentinel: "__sefer_history_diff_surface__" },
 ] as const;
 
-/**
- * Always `dist`. The turnkey Solid Start plugin builds its own client and
- * server environments and ignores `--outDir`, so there is no way to put the
- * two builds side by side — they are run one after the other instead, and
- * `dist` is left holding whichever ran last. Say so rather than leaving
- * somebody to discover their `dist` is a design build.
- */
 const DIST = "dist";
 
 const build = (mode: string): void => {
@@ -64,8 +28,6 @@ const containsSentinel = (directory: string, sentinel: string): string | null =>
         if (found !== null) return found;
         continue;
       }
-      // The Vite manifest names chunks; it is build metadata rather than
-      // shipped code, and matching it would report a leak that is not one.
       if (entry.name === "manifest.json") continue;
       if (!entry.isFile() || statSync(full).size === 0) continue;
       if (readFileSync(full, "utf8").includes(sentinel)) return full;
@@ -95,7 +57,6 @@ const main = (): void => {
     }
   }
 
-  // Left as the design build, which is not what anybody wants to deploy.
   rmSync(DIST, { recursive: true, force: true });
 
   if (failures.length === 0) {

@@ -1,14 +1,3 @@
-/**
- * What a host holds for a mounted editor: methods, never the CodeMirror view.
- *
- * Every mount — the book editor, a satellite, a reader, a diff pane, the
- * reference pane — answers the same few questions the same way, so a host
- * learns them once. The view behind a handle is kept here, in a module-private
- * map, for the package's own recipes (an aligned group, a flash) that need it;
- * nothing outside the package reaches it (`pnpm boundaries`, and the planning
- * item "embeddable editor").
- */
-
 import { EditorSelection } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
@@ -56,10 +45,8 @@ export interface EditorHandle {
 
 const views = new WeakMap<EditorHandle, EditorView>();
 
-/** When the package last moved each view itself. */
 const movedAt = new WeakMap<EditorView, number>();
 
-/** A scroll this long after the package moved a view is that move, landing. */
 const LANDING_MS = 400;
 
 /**
@@ -119,11 +106,7 @@ export const handleFor = <Rest extends object>(
       );
     },
   };
-  // Descriptors, not a spread: a mount's own getters (a satellite's `range`)
-  // must stay getters.
-  // SAFETY: `defineProperties` copies every own property of `rest` onto
-  // `shared`, which already holds every `EditorHandle` member, so the result
-  // has both; TypeScript types it as `EditorHandle` alone.
+  // SAFETY: `defineProperties` copies every own property of `rest` onto `shared`, which already holds every `EditorHandle` member, so the result has both.
   const handle = Object.defineProperties(shared, Object.getOwnPropertyDescriptors(rest)) as Rest &
     EditorHandle;
   views.set(handle, view);

@@ -1,0 +1,158 @@
+---
+id: 95a689c4-db63-4a45-a1bd-895d5cca94ed
+title: "Localization: Paraglide, ICU through the plugin, Crowdin"
+kind: plan
+status: in-progress
+created: 2026-10-22
+updated: 2026-10-22
+sha: 97259f95
+priority: 2
+tags: [i18n]
+---
+
+
+Localization was deferred. The research (2026-10-22) showed how far the copy has spread, and
+the call is to put the module in place now without translating anything yet:
+
+> that reserach report showed me how much sprawl we have. Probably time to do that. It doesn't
+> mean we have to localize all the copy immediatley, but probs worth getting the actual module
+> in place (Will, 2026-10-22)
+
+## Rulings so far
+
+- **Paraglide JS** (`@inlang/paraglide-js` 2.29), not Lingui. Will: "typesafety (especially in
+  days of ai) is SUPER attractive". Every message is a typed function, `m.some_id({ … })`: a
+  missing message, a misspelt id or a wrong parameter fails `tsc`. Ids in code instead of
+  English, and naming every id, are both fine (Will).
+- **ICU is not required** ("I'm not 100% married to icu"), but keep it if the plugin holds:
+  kitchen's Sous catalog is ICU and should stay so (it serves hosts other than Sefer), so Sefer's
+  messages in ICU too, through `@inlang/plugin-icu1`, give translators one syntax. If the plugin
+  does not compile plurals and selects well, Sefer uses inlang's own message format and Sous
+  stays ICU in its own files.
+- **Crowdin OSS** is the translators' tool (WA has it). Fink (fink.inlang.com: free, hosted,
+  MIT, GitHub accounts only) is optional for quick fixes by the team; both edit the same files.
+- **Migration cost is not a concern** ("I'm not too worried about migration").
+
+## Where the copy is today (research, 2026-10-22)
+
+- `t()` (`src/app/i18n.ts`) is English-only: `{name}` substitution, no catalog, no plurals.
+  132 files, about 1,360 literal calls (about 1,120 distinct), 36 dynamic.
+- About 300 strings sit in tables and are `t()`-ed at render: tours (about 169 fields),
+  `findingLabels.ts` (86), settings (about 43).
+- About 25 English-only plurals (`count === 1 ? … : …`).
+- The editor package's words now come from the host (`EditorWords`, English by default; the
+  other session, 2026-10-22), which is the shape a localized host needs.
+- Sous: ICU through `intl-messageformat`, `LOCALE = "en"` hard-coded; 23 ids, 37 plurals,
+  deeply nested selects (flattened to whole sentences in kitchen 0.1.15, 41 ids).
+- `<html lang="en">` with no `dir`; two `Intl.DisplayNames(["en"])`.
+- RTL: about 147 logical Tailwind classes against 7 physical; 14 physical CSS properties and
+  45 left/right icons to check.
+
+## Phases
+
+1. **Spike** (half a day, one screen: the Reference language menu). Paraglide's Vite plugin on
+   our Vite 8 build; `plugin-icu1` compiling a plural and a select; one plural message through
+   Crowdin and back; an id naming convention read in real code. Decides ICU or inlang format.
+2. **The module.** A `uiLocale` setting (best match of `navigator.languages`, English fallback;
+   a change calls `setLocale(x, { reload: false })` and remounts the UI under a locale-keyed
+   root, with services outside it, so the open project and its undo history survive; no string
+   may be computed at module load), `<html lang dir>` set before mount, the locale handed to every
+   `Intl` formatter, per-locale messages loaded lazily, and Paraglide's `m` as the one way to
+   say a string. `t()` stays as the old door while screens move, with a gate that it only
+   shrinks.
+3. **Move the copy**, screen by screen: ids by a convention (`<screen>_<thing>`), table strings
+   moved into messages where they are defined, the 25 plurals made real.
+4. **Crowdin**, after the PO's copy pass: the project, the glossary, a pilot pair (one LTR, one
+   RTL).
+5. **RTL** walk through every screen with the RTL pilot.
+6. **Sous**: per-locale Sous catalogs, owned by kitchen. The flattening is done: kitchen
+   0.1.15 (on master, ec1189cc) puts every Sous message a translator sees in whole sentences,
+   41 ids (was 23), each tier plain text or one select/plural whose every branch is whole; a
+   plural meaning exactly one is `=1`, so a translator adds their own one/few/many beside it;
+   `galley/sous-messages.md` has a "For translators" section. Sefer formats through
+   `describe()` and the English catalog and names no id, so the bump was wording only. Left:
+   Sefer passing `uiLocale()` to the Sous formatter (its `LOCALE = "en"` today) once kitchen
+   ships a second catalog, and the Sous files in the Crowdin project.
+
+The full research report is in this session's scratchpad (localization-research.md); this item
+keeps what was decided from it.
+
+<Question id="ids">Id convention: `<screen>_<thing>` in snake_case (`reference_search_placeholder`)? Agents must search for an existing message before minting one.</Question>
+
+<Question id="reload" answer="No reload. setLocale(x, { reload: false }); a locale signal keys the UI root, so the screens remount and the services (open project, books, undo, recovery) stay as they are. Will: &quot;don't want to lose undo history cause someone decided to change a lang or accidentally did.&quot;">A language change reloads the app?</Question>
+
+<Question id="pilot">Which pilot pair, one LTR and one RTL (French with Arabic? Spanish with Persian?), and who reviews each?</Question>
+
+<Question id="english">What stays English: USFM marker names, finding codes shown as identifiers, tours?</Question>
+
+## Spike result (2026-10-22, branch `i18n-spike`, c0e15731)
+
+The Reference language menu runs on `m.*` in English and French. `@inlang/plugin-icu1` loads
+from `node_modules` (no CDN) and compiles plural (with `=0`) and select. `tsc` catches a
+misspelt id, a missing argument and a wrong parameter name; parameter VALUES are typed
+`unknown`. A message missing in a locale compiles to the English. `pnpm typecheck` runs the
+compile first. Left: one plural message through Crowdin and back.
+
+Bundles: Paraglide never lazy-loads (its reasoning: https://paraglidejs.com/blog/dont-lazy-load);
+each message's module carries every locale and only used messages are kept. Estimated 15–20 KB
+gzipped per locale at today's size, so eager is fine; measure again at about ten locales. Static
+per-locale builds are out: one build and route per language is cost we do not need.
+
+## Tours: field and internal
+
+> tours come in 2 shapes, and we might want to separate them from internal / field. Field would
+> be permanent and localized. internal is like that form mode one you built where what I'm
+> trying to do is tell my PO the tradeoffs I made along with design etc (Will, 2026-10-22)
+
+The split runs through tours, not only between them: `suppressions.ts` is a field tutorial whose
+26 notes are mostly the internal kind ("What we could do instead" ×4, "Could change" ×3, "Why
+plain buttons here"). So the audience goes on the tour AND on a note:
+
+- `Tour.audience: "field" | "internal"`. Internal tours are design builds only (as Line by line
+  is today) and stay English, never in the catalog.
+- `SpotlightNote.audience?: "internal"`. In a field tour such notes are dropped outside design
+  builds and stay English; the steps and the field notes are messages.
+
+## Copy audit (master, 2026-10-22)
+
+1,627 strings in use (every `t("…")` literal plus tour fields), 1,375 distinct:
+
+| area | uses | distinct |
+| --- | --- | --- |
+| screen copy | 812 | 697 |
+| labels, tooltips, aria | 439 | 348 |
+| tours | 211 | 194 (Line by line 48, internal; suppressions 88, mostly internal notes) |
+| errors and toasts | 122 | 107 |
+| settings | 40 | 28 |
+
+- **Drift, the copy pass's first list (41 groups):** the same words with different case or
+  punctuation: "Projects Available on WACS" / "Projects available on WACS", "No differences" /
+  "No differences.", "Checking" / "Checking…" / "checking" / "checking…", "Open Project" /
+  "Open project…", "Nothing has been recorded for / in this project yet", "{count} change(s)" /
+  "{total} changes", "Downloading {name}" / "{title}" / ": {transfer}" / "… {status}".
+- **Shared words (165 texts used more than once):** Cancel ×8, Intro ×7, Undo ×6, Settings,
+  Findings, Download, Done, Save ×5. One message each, where the meaning is the same.
+- **English-only plurals:** 19 `(s)` strings ("Restored {count} book(s)") plus about 25
+  `count === 1` ternaries; each becomes one ICU plural.
+- **Near-duplicates are mostly real pairs** (Assemble / Assembled, Show / Hide), not waste.
+- The heaviest files: `ui/cloud/copy.ts` (79), `GlyphDetail.tsx` (39), `MigrateScreen.tsx`
+  (31), `HistoryPanel.tsx` (29), `commands.ts` (44 across labels and errors).
+
+So the sprawl is less duplication than volume: about 1,100 distinct field strings after the
+internal tour text leaves, with about 50 drift groups to settle once.
+
+## Built (2026-10-22, on master at 98f64e79)
+
+Phase 2's module, per `documentation/architecture/i18n.md`: `src/app/locale.ts` (one signal that
+Paraglide's `getLocale` reads), `LocaleScope` in the root route (a language change remounts the
+screens; the open project and undo survive, checked), Settings → App appearance → Language as a
+dropdown (Will: "No segmented toggle for language"), `<html lang dir>`, every app formatter on
+`uiLocale()`, tours with `audience` (every tutorial internal, design builds only; Will: "fine as
+long they make the sefer-dev channel"). Pilots: Spanish for the converted menu, a few Persian
+lines; RTL mirrors the frame. No gate on `t()` (Will: "ceremony. We'll burn this down as
+needed").
+
+<Followup id="truncation">Spanish truncates the Reference material segmented labels ("Notas de traducc…"); wrap or shorten when that screen is translated.</Followup>
+
+<Followup id="crowdin">One plural message through Crowdin and back, once the Crowdin project exists.</Followup>
+

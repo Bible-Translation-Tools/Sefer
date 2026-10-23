@@ -1,13 +1,3 @@
-/**
- * Views: the two things a mode or a chapter choice actually is.
- *
- * A "view" in Sefer is not a component and not a second editor — it is a
- * projection (which classes paint, and how) plus a clip (which chapter is
- * editable). Both are already data: `PROJECTIONS` in `core/registry.ts` and
- * the pick effect in `core/clip.ts`. This file is the two named doors §3.6
- * asks for, and nothing else — no rule anywhere branches on a mode name.
- */
-
 import type { EditorState, Extension, TransactionSpec } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
@@ -19,15 +9,9 @@ import { PROJECTIONS, assignment, type AssignmentDelta } from "./core/registry";
 /** The projection names `PROJECTIONS` defines. */
 export type ProjectionName = keyof typeof PROJECTIONS | (string & {});
 
-/**
- * The assignment delta for a mode — presentation only. An unknown name reads
- * as `default` (every class as the registry has it) rather than throwing: a
- * mode is a UI choice, and a typo in one must not take the editor down.
- */
 const projectionFor = (mode: ProjectionName): AssignmentDelta =>
   PROJECTIONS[mode] ?? PROJECTIONS.default;
 
-/** The kernel mode a projection is read in: `usfm` shows markup, everything else is regular. */
 const modeOf = (name: ProjectionName): Mode => (name === "usfm" ? "usfm" : "regular");
 
 /**

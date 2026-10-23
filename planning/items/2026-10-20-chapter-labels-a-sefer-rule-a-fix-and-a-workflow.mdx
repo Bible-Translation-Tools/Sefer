@@ -1,0 +1,161 @@
+---
+id: 21bcb434-717e-4133-bb54-81724a40b3de
+title: "Chapter labels: a Sefer rule, a fix and a workflow"
+kind: idea
+status: planned
+created: 2026-10-20
+updated: 2026-10-22
+sha: 1584e9b
+tags: [findings]
+---
+
+Sefer's own, not kitchen's (Will, 2026-10-20; was kitchen ask 4):
+
+> I don't think it's terribly complex, but it will be a new module of like, local lint maybe?
+> cause want to draw diagnostics where it's not consistent in a book or across books. I would
+> say this is a rule is the thing.
+
+- **A rule:** find every `\cl` per book, reduce, and report where labels are inconsistent in a
+  book or across books. Drawn with the engine's findings through the host-diagnostics door
+  (`CorpusFinding`, `setHostDiagnostics`).
+- **A fix:** rewrite to one shape, e.g. per-chapter `\cl Psalm 1`, `\cl Psalm 2` to one
+  book-level `\cl Psalm` before `\c 1`, or back. An edit through the Book, offered by the
+  finding (the fix lives in the editor package's `core/fixes`).
+- **A workflow** visits each in order, or shows them grouped and replaces in one pass.
+
+## The plan (2026-10-22)
+
+Scripture Kitchen agrees it is Sefer's, and that it is its own small pass over the parse
+tree, not part of onion's lint or of Sous:
+
+> Lint checks one file against the USFM spec, and both \cl forms are valid USFM.
+> "Inconsistent" is a project convention, and it compares books, which lint never sees.
+> [...] Sous finds patterns statistically, from counts. This is a fixed rule over a handful
+> of facts per book, with an exact fix.
+
+What it needs from kitchen: nothing. onion's tables already tell the two meanings apart
+(`BookChapterLabel` before the first `\c`, `ChapterContent` after one), and every `\cl`
+paragraph is in the tree with its position.
+
+The USFM usage note, for the two meanings:
+
+> If cl is added to a text once before chapter 1 it represents the label text for "Chapter"
+> to be used throughout the current book. If cl is used after each individual chapter, it
+> represents the specific label text to be used for the display of the current chapter
+> (e.g. if numbers are being presented as words, not numerals).
+
+Will's concern was the lifecycle:
+
+> the MAIN thing about all this if we do it here is that we need to hook is that's not exactly
+> paint and parse, but we do need the cst (a pub sub? or not sure), and it's a new module/layer
+> of app level consistency type checks [...] But joins the lifecycle of diagnostics and the
+> diagnostic sinks.
+
+### The tree is already held: no new subscription
+
+ProjectAnalysis parses every book when a project opens and keeps each book's `Analysis`,
+whose `dish.tree` has every `\cl`. It already re-analyzes a changed book and publishes once,
+debounced (~150 ms quiet), and the open book's parse is handed in by the editor, never parsed
+twice. The rule is one more step in that pass ([findings](../../documentation/architecture/findings.md),
+"What ProjectAnalysis holds"). That also answers kitchen's one condition for building a
+`chapterLabels(id)` read on galley ("if parsing every book just to find a few \cl lines turns
+out too slow"): we parse every book anyway.
+
+```ts
+type Label = { scope: "book" | "chapter"; chapter: number | null; text: string; from: number; to: number };
+type Style = "book-word" | "per-chapter" | "mixed" | "none";
+
+labelsOf(analysis): Label[]                 // per book, cached by the book's sourceHash
+styleOf(labels): Style
+judge(byBook: Map<bookId, Label[]>): Finding[]   // the cross-book reduction, info severity
+```
+
+<Files id="files">
+```
++ src/core/rules/                      -- project-wide consistency rules: pure, framework-free
++ src/core/rules/chapterLabels.ts      -- labelsOf, styleOf, judge
+~ src/core/analysis/                   -- run the rules after each publish; memoise like crossBook
+~ src/core/findings/finding.ts         -- a third producer, "sefer", beside onion and sous
+~ src/core/fixes/                      -- a second fix kind: edits computed by a rule
++ src/app/ui/rules/ChapterLabels.tsx   -- the per-book dialog
+```
+</Files>
+
+### It joins the sinks the way Sous does
+
+A Sous finding is already a whole-project judgement delivered after a publish, so this rides
+the same path rather than a new one:
+
+- **The one shape.** `Finding` with producer `sefer` and codes `sefer.chapterLabel.mixed`,
+  `sefer.chapterLabel.wordDiffers`, `sefer.chapterLabel.bookDiffers`; each stamped with its
+  book's `SourceStamp` and `EngineStamp`, so `stale` and the fix's check work unchanged.
+- **Inline (sink 1b).** `crossBookOf(bookId)` already feeds the editor's
+  `setHostDiagnostics`; the rule's share joins that list, and any document change empties it
+  until the next publish, as Sous's does.
+- **Panel and badges (sinks 2, 3).** Through `findings()` and `findingTotals()`.
+- **Telemetry (sink 4).** Counts and codes only.
+- **Suppressions.** "This is fine" works on them as on any finding.
+
+The new thing is the folder: `src/core/rules/` is where later project-wide consistency checks
+go, each a pure function from the held analyses to findings.
+
+### What is flagged
+
+- **In a book:** per-chapter labels whose word differs ("Psalm 3" beside "Psalms 4"); a
+  book-level word with per-chapter labels that are "word + number" in a different word.
+- **Across books:** a book whose style differs from what most books use ("one book differs").
+- **Not flagged:** a book with no `\cl` (most projects have none, and flagging absence lights
+  up every project); a per-chapter label that is not "word + number" ("Chapter One",
+  "Psalm Twenty-Three"), which is the usage note's second meaning and a legitimate choice.
+
+Info severity: it is mostly a print concern, it only matters once someone typesets, and
+surfacing it early costs translators nothing.
+
+### The fix: a second kind
+
+`core/fixes` knows only engine fixes and refuses anything else (`NotEngineFix`). This adds a
+second kind: the rule computes its edits from the current analysis at the moment of the
+click, refuses if the engine stamp moved, and applies through the Book, so Undo, Save and
+Recovery hear it as they hear every other edit.
+
+Offered only when it is safe, as kitchen says:
+
+> Turning per-chapter labels into one book-level label is only safe when every label is
+> "the same word + the chapter number" (Psalm 1, Psalm 2). Labels written as words
+> (Chapter One) are the usage note's second meaning and can't collapse to a book-level word.
+
+Both directions: per-chapter to one `\cl Psalm` before `\c 1`, and back.
+
+### UI: marks to notice it, a dialog to fix it
+
+- **Inline:** an info squiggle on each `\cl` that differs. Its popover says why ("this book
+  labels each chapter; most books use one word for the whole book") and has one action,
+  **Review chapter labels…**.
+- **The dialog:** one row per book: its style, a sample ("Psalm", "Psalm 3", "Chapter One"),
+  whether it matches the majority, and **Fix** on each row where the fix is safe. At the top,
+  **Make all like the majority**, which fixes every safe book in one pass. A dialog because
+  this is a rare, whole-project chore; a visit-each-in-order workflow is not worth it for a
+  handful of lines per book.
+
+<Mock id="dialog" height={230}>
+<div style="font:13px system-ui;padding:12px;border:1px solid #888;border-radius:10px;max-width:520px">
+<b>Chapter labels</b><div style="opacity:.7;margin:4px 0 8px">Most books use one word for the whole book: <b>Psalm</b>-style.</div>
+<table style="width:100%;border-collapse:collapse">
+<tr style="opacity:.6"><td>Book</td><td>Style</td><td>Sample</td><td></td></tr>
+<tr><td>Genesis</td><td>one word</td><td>Chapter</td><td>✓</td></tr>
+<tr><td>Psalms</td><td>per chapter</td><td>Psalm 3</td><td><button>Fix</button></td></tr>
+<tr><td>Jonah</td><td>per chapter</td><td>Chapter One</td><td style="opacity:.6">words; kept</td></tr>
+<tr><td>Mark</td><td>mixed</td><td>Chapter · Chapter 4</td><td><button>Fix</button></td></tr>
+</table>
+<div style="margin-top:8px"><button>Make all like the majority</button></div>
+</div>
+</Mock>
+
+<Question id="none">A book with no `\cl` at all: never flagged? (Proposed: yes, never; most projects have none.)</Question>
+
+<Question id="mixed">A book-level `\cl Psalm` plus one chapter's `\cl Psalm Twenty-Three`: valid (the second meaning), so flag a mixed book only when its per-chapter labels are "word + number" in a different word?</Question>
+
+<Question id="default">On by default, or a toggle in Proofreading settings for teams that never typeset?</Question>
+
+<Followup id="build">Build after the tutorials and the localization research (Will, 2026-10-22: "I will hold off one second on getting it built").</Followup>
+

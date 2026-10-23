@@ -4,7 +4,7 @@ title: "Writer migration leftovers"
 kind: followup
 status: idea
 created: 2026-10-14
-updated: 2026-10-14
+updated: 2026-10-20
 sha: 50aa9cd
 tags: [migrate]
 related: [bb738860-9176-4836-8b23-2402471e521f]
@@ -22,3 +22,5 @@ What the Writer migration plan left unbuilt, found in the 2026-10-14 audit. The 
 <Followup id="tstudio">Check whether a `.tstudio` file is a zip that carries `.git`. Nothing in `src` handles `.tstudio`.</Followup>
 
 <Question id="active">What does a candidate's "Active" status mean, and who would know? The defaults treat it as second choice after Primary (`src/core/migrate/candidate.ts`).</Question>
+
+<Question id="upstreams-committed" answer="Committed, for now (Will, 2026-10-20), with a doubt: if one person deletes it while another edits it, the next pull is a delete/modify conflict, and Review only judges scripture. Not settled.">Should `.upstreams.json` be committed? The migration writes it at the project root and commits it with the assembly (`src/core/migrate/assemble.ts`), so a teammate knows 1 John follows a Writer project. Nothing reads it yet: the update check above is its first consumer. The alternative is `.sefer/`, per device, like suppressions; then a teammate who clones does not follow the Writer project. Will, 2026-10-20: "I didn't know we actually committed this file."</Question>

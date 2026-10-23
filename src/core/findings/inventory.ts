@@ -1,40 +1,3 @@
-// inventory.ts
-//
-// The character inventory: how this translation actually uses its punctuation,
-// its digits and its symbols, and what the engine flagged.
-//
-// Sous already measures every one of these things — it has to, because a
-// convention finding is a claim about a corpus and a claim needs a
-// denominator. What it publishes is a flat PATTERN TABLE: one row per
-// (glyph, channel, key) with a numerator, a denominator, a share in basis
-// points and a book count. `corpusReader` reads that table only to phrase a
-// finding's message. This file reads it as the thing it actually is — a
-// description of the corpus — and pivots it into one record per code point.
-//
-// Three decisions shape the file.
-//
-//  1. THE TABLE IS NOT A CENSUS. Sous emits a pattern row when a channel had
-//     something to say about a glyph, not for every character in the project.
-//     So "occurrences" here is a proxy (see `sites`), the inventory covers the
-//     glyphs the engine measured, and the page says so rather than implying it
-//     counted the text. Counting characters is a different pass and would need
-//     the text, which this module deliberately does not take.
-//
-//  2. WORD CHANNELS ARE NOT GLYPHS. `Casing`, `WordLength` and `Doubled` judge
-//     a word, carry a hash instead of a scalar, and read `glyph === 0` off the
-//     wire. Folding them into a "code point zero" row would invent a character.
-//     They are kept aside in `wordPatterns`, unaggregated, so nothing is lost
-//     and nothing is misfiled.
-//
-//  3. A PATTERN INDEX IS NOT DURABLE. Rows are numbered by the publication
-//     that produced them and the next publication renumbers everything, so a
-//     pattern index is only ever used against the snapshot it came from — the
-//     one `ProjectAnalysis` still holds. That is why `inventory()` is computed
-//     from a snapshot and memoised beside `findings()`, and never stored.
-//
-// Pure: no Effect, no Solid, no host. It takes the snapshot and a resolver and
-// returns plain values, exactly as `filter.ts` does for the panel.
-
 import type { BookId } from "@sefer/text/book";
 import type { SourceStamp } from "@sefer/text/source";
 
@@ -53,127 +16,64 @@ import {
   type Pool,
   type Usual,
 } from "../galley";
+import { compareCodeUnits } from "../ordering";
 
-/** The word channels: they judge a word, not a scalar, and carry a hash. */
 const WORD_CHANNELS: ReadonlySet<Channel> = new Set<Channel>(["Casing", "WordLength", "Doubled"]);
 
-/**
- * One row of the publication's pattern table, in the vocabulary a reader wants:
- * the numbers as they were published, plus a label for the key and a count of
- * the convention findings that point at this row.
- */
 export interface PatternRow {
-  /** Position in THIS snapshot's pattern table. Not durable — see the header. */
   readonly pattern: number;
   readonly channel: Channel;
   readonly key: PatternKey;
-  /** The key as a short phrase: `“`, `Quote`, `Letter`, `pure ×3`, `run of 4`. */
   readonly label: string;
   readonly numerator: number;
   readonly denominator: number;
-  /** Basis points: 2500 is 25.00%. */
   readonly shareBp: number;
-  /** Books holding part of the numerator, out of the snapshot's book count. */
   readonly books: number;
-  /** Staircase step, `null` on `Rarity` and `BookRate`. */
   readonly band: number | null;
-  /** What the corpus does instead, as a phrase: `usually after a letter (54,620)`. */
   readonly usual: string | undefined;
-  /** On a `RunShape` row: its exact clusters, most frequent first. */
   readonly clusters: readonly Cluster[];
-  /** Convention findings in this publication whose `pattern` is this row. */
   readonly flagged: number;
 }
 
-/** One outer class, with the row for each side that had one. */
 export interface PlacementCell {
   readonly class: OuterClass;
   readonly prev: PatternRow | undefined;
   readonly next: PatternRow | undefined;
 }
 
-/**
- * A site the engine convicted, with enough to navigate to it, to explain it,
- * and to know whether it is still true.
- *
- * It carries both stamps for the same reason a `Finding` does: `stamp` is the
- * Book's revision, which decides whether a "Go" would land where the engine
- * looked, and `engine` is the hash the table of contents must match before an
- * offset may be turned into a chapter and verse. A site without them could be
- * shown but never trusted.
- */
 export interface FlaggedSite {
   readonly bookId: BookId;
   readonly from: number;
   readonly to: number;
-  /** Every rung the site matched, not only the channel that owns the pattern. */
   readonly reasons: readonly ConventionReason[];
   readonly pattern: number;
   readonly stamp: SourceStamp;
   readonly engine: EngineStamp;
 }
 
-/** Everything the publication said about one code point. */
 export interface Glyph {
-  /** The scalar, or `PATTERN_DIGIT_GLYPH` for the pooled digit lane. */
   readonly codePoint: number;
-  /** The character itself; empty for the pooled digit lane. */
   readonly char: string;
-  /** A name for it: a small table, else `U+XXXX`. `digits` for the pool. */
   readonly name: string;
   readonly pool: Pool;
-  /**
-   * An occurrences PROXY, not a count of the character in the text.
-   *
-   * Every channel publishes a fraction, and which half of it counts THIS
-   * glyph depends on the channel. A neighbour, `Placement` or `RunShape` row
-   * is judged against the glyph's own sites, so its DENOMINATOR is the count.
-   * `Rarity` is judged against the whole corpus — its denominator is every
-   * scalar Sous measured — so its NUMERATOR is the count instead. The largest
-   * of those is the closest the table comes to "how often does this character
-   * occur".
-   *
-   * It stays a proxy for two reasons. A glyph the engine measured on only one
-   * narrow channel reports that channel's population and nothing wider. And
-   * nothing here re-reads the text to check, deliberately: this module is a
-   * reader of the publication, not a second measurement of the project.
-   */
-  readonly sites: number;
-  /** The widest book spread any of its channels reported. */
+  readonly population: number;
   readonly books: number;
-  /** `ExactNeighbor` and `PooledNeighbor` — what sits beside it. */
   readonly neighbours: readonly PatternRow[];
-  /** `Placement`, pivoted: one cell per outer class, both sides. */
   readonly placement: readonly PlacementCell[];
-  /** `RunShape` — how long a run of it gets, and whether the run is pure. */
   readonly runShape: readonly PatternRow[];
-  /** `Rarity`, `LetterRun`, `SentenceStart`, `BookRate`. */
   readonly other: readonly PatternRow[];
-  /** Every row above, flat, in table order — the id space for a filter. */
   readonly rows: readonly PatternRow[];
-  /** The convention findings that named one of those rows. */
   readonly flagged: readonly FlaggedSite[];
 }
 
 export interface Inventory {
-  /** One per code point the publication measured, most sites first. */
   readonly glyphs: readonly Glyph[];
-  /** `Casing`, `WordLength`, `Doubled` — kept, not shown as characters. */
   readonly wordPatterns: readonly PatternRow[];
-  /** Books in the publication, the denominator of `Glyph.books`. */
   readonly bookCount: number;
-  /** Rows in the pattern table, glyph and word alike. */
   readonly patternCount: number;
-  /** Convention sites joined to a glyph. */
   readonly flaggedSites: number;
 }
 
-/**
- * Names for the characters this inventory is actually about — the punctuation,
- * the spaces and the marks a translation's convention lives in. Deliberately
- * small: `Intl.DisplayNames` has no Unicode-name mode, the UCD is a megabyte,
- * and `U+2042` is a perfectly honest answer for the long tail.
- */
 const NAMES: ReadonlyMap<number, string> = new Map([
   [0x20, "space"],
   [0x21, "exclamation mark"],
@@ -248,17 +148,11 @@ const NAMES: ReadonlyMap<number, string> = new Map([
   [0x05c3, "hebrew punctuation sof pasuq"],
 ]);
 
-/** `U+0041`, with the width Unicode itself uses. */
 export const codePointLabel = (codePoint: number): string =>
   codePoint === PATTERN_DIGIT_GLYPH
     ? "digits"
     : `U+${codePoint.toString(16).toUpperCase().padStart(4, "0")}`;
 
-/**
- * A name for a code point, cheaply. The table above, else the general
- * category as a phrase, else the code point itself. Never a guess that reads
- * like a fact.
- */
 const glyphName = (codePoint: number): string => {
   if (codePoint === PATTERN_DIGIT_GLYPH) return "digits";
   const known = NAMES.get(codePoint);
@@ -272,14 +166,6 @@ const glyphName = (codePoint: number): string => {
   return codePointLabel(codePoint);
 };
 
-/**
- * Which pool a code point belongs to, over the engine's own eight names.
- *
- * A glyph's own `PooledNeighbor` rows classify its NEIGHBOURS, not itself, so
- * the filter needs a classifier rather than a lookup. It is a presentation
- * grouping — it never feeds a number — so a rough call on the long tail costs
- * nothing but a chip.
- */
 const QUOTES = "\"'«»‹›‘’‚‛“”„‟「」『』";
 const BRACKETS = "()[]{}⁅⁆〈〉〈〉《》【】（）";
 const DASHES = "-‐‑‒–—―−֊᐀゠";
@@ -299,7 +185,6 @@ const poolOf = (codePoint: number): Pool => {
   return "Other";
 };
 
-/** The key as a short phrase. `bookKey` names a book by its snapshot position. */
 const labelOf = (key: PatternKey, bookKey: (index: number) => string): string => {
   switch (key.kind) {
     case "ExactNeighbor":
@@ -343,15 +228,11 @@ const FORM_NAMES: Record<CasingForm, string> = {
   Uncased: "uncased",
 };
 
-const count = (n: number): string => n.toLocaleString("en");
+const count = (value: number): string => value.toLocaleString("en");
 
 const quoted = (glyph: number): string =>
   glyph === PATTERN_DIGIT_GLYPH ? "a digit" : `“${String.fromCodePoint(glyph)}”`;
 
-/**
- * What the corpus does instead of the row's claim, as a phrase beside it.
- * `key` says which side a placement's usual class is on.
- */
 const usualOf = (key: PatternKey, usual: Usual): string | undefined => {
   switch (usual.kind) {
     case "None":
@@ -397,7 +278,6 @@ const rowOf = (
   flagged,
 });
 
-/** Biggest share first, then biggest count: the row a reader wants at the top. */
 const byWeight = (a: PatternRow, b: PatternRow): number =>
   b.shareBp - a.shareBp || b.numerator - a.numerator || a.pattern - b.pattern;
 
@@ -406,22 +286,6 @@ interface Bucket {
   readonly flagged: FlaggedSite[];
 }
 
-/**
- * The pattern table, pivoted per code point, with the convention findings
- * joined on.
- *
- * `resolveBook` is the SAME resolver `corpusReader` takes — a published host
- * id back to the book and the two stamps of the text we published — so
- * `ProjectAnalysis` hands both readers one function and the sites here carry
- * the same freshness answer the findings do. A book the caller no longer holds
- * is skipped rather than guessed at: a site nobody can open is not a site.
- *
- * A publication in UTF-8 coordinates keeps its PATTERNS — a share and a
- * denominator are coordinate-free — but contributes no flagged sites, for the
- * same reason `corpusReader` drops one whole: an offset in the wrong space
- * points at the wrong bytes, and a "Go" that lands in the wrong verse is worse
- * than no "Go" at all.
- */
 export const inventory = (
   snapshot: FindingsSnapshot,
   resolveBook: (
@@ -434,9 +298,6 @@ export const inventory = (
   const wordPatterns: PatternRow[] = [];
   const bookKey = (index: number): string => snapshot.book(index)?.key ?? String(index + 1);
 
-  // Pass one: how many convention sites name each pattern row, and where they
-  // are. Counting first means a row knows its own flagged count when it is
-  // built, so nothing has to be patched afterwards.
   const hits = new Map<number, FlaggedSite[]>();
   if (snapshot.coordinateSpace === "utf16") {
     for (let index = 0; index < snapshot.length; index += 1) {
@@ -464,7 +325,6 @@ export const inventory = (
     }
   }
 
-  // Pass two: the pivot.
   const buckets = new Map<number, Bucket>();
   for (let index = 0; index < patterns.length; index += 1) {
     const pattern = patterns[index];
@@ -509,13 +369,11 @@ export const inventory = (
           row.channel === "BookRate",
       )
       .sort(byWeight);
-    let sites = 0;
+    let population = 0;
     let books = 0;
     for (const row of bucket.rows) {
-      // See `Glyph.sites`: Rarity counts this glyph in its numerator, every
-      // other channel counts it in its denominator.
       const counted = row.channel === "Rarity" ? row.numerator : row.denominator;
-      if (counted > sites) sites = counted;
+      if (counted > population) population = counted;
       if (row.books > books) books = row.books;
     }
     glyphs.push({
@@ -523,7 +381,7 @@ export const inventory = (
       char: codePoint === PATTERN_DIGIT_GLYPH ? "" : String.fromCodePoint(codePoint),
       name: glyphName(codePoint),
       pool: poolOf(codePoint),
-      sites,
+      population,
       books,
       neighbours,
       placement,
@@ -531,14 +389,15 @@ export const inventory = (
       other,
       rows: [...bucket.rows].sort((a, b) => a.pattern - b.pattern),
       flagged: bucket.flagged.sort(
-        (a, b) => (a.bookId < b.bookId ? -1 : a.bookId > b.bookId ? 1 : 0) || a.from - b.from,
+        (a, b) => compareCodeUnits(a.bookId, b.bookId) || a.from - b.from,
       ),
     });
   }
-  // Most-used first, and a flagged glyph ahead of a quiet one at the same size:
-  // the top of the table is where the reader starts.
   glyphs.sort(
-    (a, b) => b.sites - a.sites || b.flagged.length - a.flagged.length || a.codePoint - b.codePoint,
+    (a, b) =>
+      b.population - a.population ||
+      b.flagged.length - a.flagged.length ||
+      a.codePoint - b.codePoint,
   );
 
   let flaggedSites = 0;
@@ -553,7 +412,6 @@ export const inventory = (
   };
 };
 
-/** The empty inventory, for "no publication yet". One value, not a null check. */
 export const EMPTY: Inventory = {
   glyphs: [],
   wordPatterns: [],

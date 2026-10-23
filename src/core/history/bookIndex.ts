@@ -1,48 +1,19 @@
 /**
- * The book-change index: one walk of a repository's history, and for every
- * commit its parents, time, author and message, and — against EACH parent —
- * the top-level books whose blob differs.
- *
- * Kept per parent because git's default per-path simplification needs exactly
- * that: a merge "TREESAME to parent p" for a book is one where the book is not
- * in the list against p. From it, any book's history is an in-memory graph
- * walk (Genesis on en_ulb in ~3 ms, identical to native `git log --
- * 01-GEN.usfm`).
- *
- * Why it exists: on the Web, isomorphic-git's `log({ filepath })` parses every
- * tree it walks and throws `UnsafeFilepathError` on an entry name git itself
- * accepts (en_ulb's 2018 root tree has `00-About_the_ULB\ULB-Intro.md`), and
- * one throw discards the whole result; and it walks the whole log for every
- * book, with no bound. Here trees are read RAW, and only their top-level
- * `*.usfm` entries are looked at, so a name nobody asked about cannot refuse
- * the walk.
- *
- * The index is DERIVED: always rebuildable from Git, never the record. It
- * records the tip it was built from, so staleness is a comparison, and an
- * extension walks only what is new.
- *
- * Pure over an `ObjectReader`: the host supplies the four reads, so the walk,
- * the simplification and the format are one module on every host. Promises,
- * not Effects, because the Web builds it in a worker where the reader is
- * isomorphic-git and nothing else.
+ * On the Web, isomorphic-git's `log({ filepath })` throws `UnsafeFilepathError` on
+ * an entry name git itself accepts (en_ulb), so history is walked from raw
+ * trees. Genesis on en_ulb is ~3 ms from this index.
  */
 
-/** A book name and its blob id after the change; `null` when the commit removed it. */
 export type BookChange = readonly [book: string, blob: string | null];
 
 export interface IndexedCommit {
   readonly id: string;
-  /** Empty for a root commit — and for one at a shallow boundary (`shallow`). */
   readonly parents: readonly string[];
-  /** Author time, ms since the epoch. */
   readonly at: number;
-  /** As the commit records them — history metadata, never proof of who typed. */
   readonly author: string;
   readonly email: string;
   readonly message: string;
-  /** One list per parent, in parent order; one list against nothing for a root. */
   readonly changes: readonly (readonly BookChange[])[];
-  /** Read at a shallow boundary: its parents were not local, so it is re-read once they are. */
   readonly shallow?: true;
 }
 
@@ -50,21 +21,12 @@ const INDEX_VERSION = 3;
 
 export interface BookIndex {
   readonly version: typeof INDEX_VERSION;
-  /** The commit the index was built from. Stale when the ref no longer points here. */
   readonly tip: string;
-  /** Newest first, by author time with ties in walk order. */
   readonly commits: readonly IndexedCommit[];
-  /** Older history exists but is not in this repository yet. */
   readonly shallowBoundary: boolean;
-  /**
-   * The commits the walk stopped at because their parents were not local,
-   * ascending. The index is current while the repository's shallow set is
-   * exactly this; a deepen changes it, and the next read extends backwards.
-   */
   readonly boundary: readonly string[];
 }
 
-/** Is `index` the one for this tip and this shallow boundary? */
 export const isCurrent = (index: BookIndex, tip: string, shallow: ReadonlySet<string>): boolean =>
   index.tip === tip &&
   index.boundary.length === shallow.size &&
@@ -72,15 +34,11 @@ export const isCurrent = (index: BookIndex, tip: string, shallow: ReadonlySet<st
 
 export interface BuildReport {
   readonly commits: number;
-  /** Commits taken from `previous` without reading anything. */
   readonly reused: number;
-  /** Commits whose objects were read. */
   readonly read: number;
 }
 
-/** What the index needs of a repository, and nothing more. */
 export interface ObjectReader {
-  /** The commit a ref names. */
   readonly resolve: (ref: string) => Promise<string>;
   readonly commit: (id: string) => Promise<{
     readonly tree: string;
@@ -88,9 +46,7 @@ export interface ObjectReader {
     readonly author: { readonly name: string; readonly email: string; readonly timestamp: number };
     readonly message: string;
   }>;
-  /** A tree's RAW content: `<mode> <name>\0<20-byte id>` entries. */
   readonly tree: (id: string) => Promise<Uint8Array>;
-  /** The commits at a shallow boundary; empty for a full history. */
   readonly shallow: () => Promise<ReadonlySet<string>>;
 }
 
@@ -101,7 +57,6 @@ const hex = (bytes: Uint8Array): string => {
   return out;
 };
 
-/** Every entry of a raw tree, in order, read without judging any name. */
 export const entriesOf = function* (
   tree: Uint8Array,
 ): Generator<{ readonly mode: string; readonly name: string; readonly id: string }> {
@@ -119,7 +74,6 @@ export const entriesOf = function* (
   }
 };
 
-/** Top-level `*.usfm` blobs of a raw tree, by name. */
 const booksIn = (tree: Uint8Array): Map<string, string> => {
   const books = new Map<string, string>();
   for (const entry of entriesOf(tree))
@@ -128,7 +82,6 @@ const booksIn = (tree: Uint8Array): Map<string, string> => {
   return books;
 };
 
-/** The id a raw tree gives `name`, and whether it is a tree; `undefined` when absent. */
 export const entryIn = (
   tree: Uint8Array,
   name: string,
@@ -139,7 +92,6 @@ export const entryIn = (
   return undefined;
 };
 
-/** Is this repository path one the index covers: a top-level book? */
 export const isIndexedBook = (path: string): boolean =>
   !path.includes("/") && path.toLowerCase().endsWith(".usfm");
 
@@ -153,14 +105,12 @@ const differences = (
   return out;
 };
 
-/** The reader, with root trees' book lists cached across one build. */
 const cached = (reader: ObjectReader) => {
   const trees = new Map<string, Map<string, string>>();
   const books = async (tree: string): Promise<Map<string, string>> => {
     const held = trees.get(tree);
     if (held !== undefined) return held;
     const found = booksIn(await reader.tree(tree));
-    // Bounded: a walk revisits a tree only between a commit and its parents.
     if (trees.size > 512) trees.clear();
     trees.set(tree, found);
     return found;
@@ -168,18 +118,6 @@ const cached = (reader: ObjectReader) => {
   return { books, commit: reader.commit };
 };
 
-/**
- * The index for `ref`, reusing `previous` wherever it still describes the
- * repository.
- *
- * The walk goes newest first from the tip. A commit already in `previous` is
- * taken as it is — no object read — and its parents are followed from
- * `previous` too, so an extension after a fetch reads only the new commits,
- * and after a force-push or rebase the commits no longer reachable simply
- * never come up: the same walk covers "extend" and "rebuild" without deciding
- * which it is doing. A commit read at a shallow boundary is read again once
- * the repository has its parents.
- */
 export const buildBookIndex = async (
   reader: ObjectReader,
   options: {
@@ -197,8 +135,6 @@ export const buildBookIndex = async (
   const tip = await reader.resolve(options.ref ?? "HEAD");
   const out: IndexedCommit[] = [];
   const seen = new Set<string>([tip]);
-  // Each queued commit carries what ordering needs; the object is read only
-  // when it is taken, and only when `known` does not already have it.
   const queue: { id: string; at: number; order: number }[] = [];
   let order = 0;
   let reused = 0;
@@ -209,7 +145,6 @@ export const buildBookIndex = async (
   queue.push({ id: tip, at: await timeOf(tip), order: order++ });
 
   while (queue.length > 0) {
-    // Newest author time last, so pop() takes it; ties in the order queued.
     queue.sort((a, b) => a.at - b.at || b.order - a.order);
     const next = queue.pop();
     if (next === undefined) break;
@@ -261,7 +196,6 @@ export const buildBookIndex = async (
   };
 };
 
-/** The index's commits by id, built once per index. */
 const byIdOf = new WeakMap<BookIndex, ReadonlyMap<string, IndexedCommit>>();
 const commitsById = (index: BookIndex): ReadonlyMap<string, IndexedCommit> => {
   const held = byIdOf.get(index);
@@ -271,7 +205,6 @@ const commitsById = (index: BookIndex): ReadonlyMap<string, IndexedCommit> => {
   return made;
 };
 
-/** Each parent not yet seen, queued once: the step both history walks share. */
 const enqueue = (
   parents: readonly string[],
   seen: Set<string>,
@@ -286,18 +219,11 @@ const enqueue = (
   }
 };
 
-/** A commit's change to `book`, against the parent the walk followed. */
 export interface BookVersion {
   readonly commit: IndexedCommit;
-  /** The book's blob in this commit; `null` when the commit removed it. */
   readonly blob: string | null;
 }
 
-/**
- * One book's history, newest first, with git's default simplification: a
- * merge in which the book is unchanged against some parent follows only that
- * parent, and is not itself a change. Matches `git log -- <book>`.
- */
 export const bookHistoryFrom = (index: BookIndex, book: string): readonly BookVersion[] => {
   const byId = commitsById(index);
   const changeIn = (list: readonly BookChange[]) => list.find(([name]) => name === book);
@@ -326,11 +252,6 @@ export const bookHistoryFrom = (index: BookIndex, book: string): readonly BookVe
   return out;
 };
 
-/**
- * Every commit `tip` reaches inside the index, or `undefined` when the index
- * does not hold `tip` (a ref ahead of HEAD): then the walk would leave the
- * index on its first step, and the caller asks git instead.
- */
 export const reachableFrom = (index: BookIndex, tip: string): ReadonlySet<string> | undefined => {
   const byId = commitsById(index);
   const first = byId.get(tip);
@@ -358,8 +279,7 @@ export const decodeIndex = (text: string): BookIndex | undefined => {
     if (!("version" in value) || value.version !== INDEX_VERSION) return undefined;
     if (!("tip" in value) || typeof value.tip !== "string") return undefined;
     if (!("commits" in value) || !Array.isArray(value.commits)) return undefined;
-    // SAFETY: the version is this build's and the writer is `encodeIndex`; the
-    // index is derived and rebuildable, so a malformed one costs a rebuild.
+    // SAFETY: the version is this build's and the writer is `encodeIndex`; the index is derived and rebuildable, so a malformed one costs a rebuild.
     return value as BookIndex;
   } catch {
     return undefined;

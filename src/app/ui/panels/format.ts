@@ -1,12 +1,4 @@
-/**
- * The two formatters the history and save panels share.
- *
- * `Intl.RelativeTimeFormat` rather than a hand-rolled "3 minutes ago": the
- * strings it produces are already localised for the host's locale, which is
- * more than `t()` can do today, and a commit list is the one place in the
- * product where an approximate time reads better than an exact one. The exact
- * one is still available — every row carries `title={exact(at)}`.
- */
+import { uiLocale } from "../../locale";
 
 const UNITS: readonly (readonly [Intl.RelativeTimeFormatUnit, number])[] = [
   ["second", 1000],
@@ -18,35 +10,25 @@ const UNITS: readonly (readonly [Intl.RelativeTimeFormatUnit, number])[] = [
   ["year", 31_557_600_000],
 ];
 
-/** "3 minutes ago", in the host's locale. */
 export const ago = (at: number, now = Date.now()): string => {
   const elapsed = at - now;
   const magnitude = Math.abs(elapsed);
   let unit: Intl.RelativeTimeFormatUnit = "second";
   let size = 1000;
-  for (const [name, ms] of UNITS) {
-    if (magnitude < ms) break;
+  for (const [name, milliseconds] of UNITS) {
+    if (magnitude < milliseconds) break;
     unit = name;
-    size = ms;
+    size = milliseconds;
   }
-  const format = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+  const format = new Intl.RelativeTimeFormat(uiLocale(), { numeric: "auto" });
   return format.format(Math.round(elapsed / size), unit);
 };
 
-/** The full timestamp, for the `title` a relative one hides. */
-export const exact = (at: number): string => new Date(at).toLocaleString();
+export const exact = (at: number): string => new Date(at).toLocaleString(uiLocale());
 
-/** A date and time a caption can carry: "2 Oct 2026, 14:03" in the reader's locale. */
 export const dated = (at: number): string =>
-  new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(at);
+  new Intl.DateTimeFormat(uiLocale(), { dateStyle: "medium", timeStyle: "short" }).format(at);
 
-/**
- * The lines of a text slice, without the empty tail a trailing newline leaves.
- *
- * A diff hunk's text is a slice of whole lines, so it ends with `\n` whenever
- * it is not the last line of the file; splitting it naively would count one
- * phantom line per hunk.
- */
 export const lines = (text: string): readonly string[] => {
   if (text === "") return [];
   const split = text.split("\n");

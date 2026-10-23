@@ -1,24 +1,3 @@
-/**
- * The token and node planes: `scanCst` turns one `Analysis` into flat typed
- * arrays the rest of the editor indexes into.
- *
- * Why planes and not objects: the reader hands out cursors over wasm memory, and
- * a keystroke asks thousands of small questions (what kind is the token at this
- * offset, where does it end, what shape is its node). One pass into
- * `Int32Array`s answers all of them in constant time and allocates nothing per
- * question.
- *
- * These planes are a CACHE over the Galley reader, not a second reader. Every
- * value is read through `TokenRow`/`NodeRow`/`Tree`/`Toc`; nothing here knows a
- * byte offset or a stride, so a wire change lands in scripture-kitchen's
- * generated reader and reaches this file as a type error, not a misread. What
- * the planes add is Sefer's own: line openings, note/origin/wrapper scope,
- * block extents, designator roles and the `mapping.ts` rows.
- *
- * TODO: pin with a test once editor behaviour is locked. The planes must agree
- * with the reader they cache (spans, kinds, owners) on a real fixture.
- */
-
 import {
   type Analysis,
   type NodeView,
@@ -52,7 +31,15 @@ import {
   trimsRecoveryNewline,
 } from "./mapping";
 
-const SPANNING = kindsReaching(["optbreak", "milestone.token"]);
+const SPANNING = kindsReaching([
+  "optbreak",
+  "milestone.token",
+  "attrs.unruled",
+  "closer.orphan",
+  "table.cell.marker",
+  "periph.marker",
+  "char.unclosed",
+]);
 
 const IN_NOTE = 1;
 const IN_ORIGIN = 2;
@@ -61,8 +48,11 @@ const IN_WRAPPER = 4;
 const ROLE_VERSE = 1;
 const ROLE_CHAPTER = 2;
 
-const roleName = (r: number): "verse" | "chapter" | null =>
-  r === ROLE_VERSE ? "verse" : r === ROLE_CHAPTER ? "chapter" : null;
+function roleName(role: number): "verse" | "chapter" | null {
+  if (role === ROLE_VERSE) return "verse";
+  if (role === ROLE_CHAPTER) return "chapter";
+  return null;
+}
 
 export interface NodeFacts {
   id: number;
@@ -130,10 +120,6 @@ export function scanCst(doc: string, analysis: Analysis): CstScan {
       startAt[i] = from;
       endAt[i] = to;
       flagsAt[i] = flags;
-      // A passthrough marker — standalone, or one the engine does not know
-      // (row 0) — is a point inside its line, like a milestone; it is found by
-      // its row rather than its token kind, which it shares with every other
-      // marker. The mapping's row decides what it is; this only gathers.
       const passthrough =
         isMarkerKind(kind) &&
         (r.marker === 0 || (kind === TOKEN.MARKER && STANDALONE_ROWS[r.marker]));
@@ -154,11 +140,6 @@ export function scanCst(doc: string, analysis: Analysis): CstScan {
   const payloadEnd = (i: number): number =>
     (flagsAt[i] & TOKEN_DELIMITER_FOLDED) !== 0 ? endAt[i] - 1 : endAt[i];
 
-  /**
-   * Horizontal whitespace of either shape the engine names: a `Pad` token, or
-   * a `Text` token carrying `TOKEN_BLANK`. Wider than `TokenView.isBlank()`,
-   * which is the flag alone; Sefer's line walks treat both as nothing to open.
-   */
   const isHorizontalSpace = (i: number): boolean =>
     kindAt[i] === TOKEN.PAD || (flagsAt[i] & TOKEN_BLANK) !== 0;
 
@@ -171,11 +152,6 @@ export function scanCst(doc: string, analysis: Analysis): CstScan {
   }
   lineTo[lineCount - 1] = doc.length;
 
-  /**
-   * The first token that starts at or after `pos` (`count` when none does).
-   * Not `Tree.tokenAt`, which answers the token CONTAINING an offset and
-   * throws outside the document.
-   */
   const firstTokenFrom = (pos: number): number => {
     let lo = 0;
     let hi = count;
@@ -224,13 +200,13 @@ export function scanCst(doc: string, analysis: Analysis): CstScan {
   for (let id = 0; id < nodeCount; id++) {
     const r = rows.seek(id);
     const token = r.token;
-    const ctx = r.ctx;
+    const context = r.ctx;
     const close = r.reason;
     const childFrom = r.childFrom;
     const childTo = r.childTo;
     const parent = id === 0 ? NONE : tree.parent(id);
     const inherited = parent === NONE ? 0 : nodeFlags[parent];
-    nodeCtx[id] = ctx;
+    nodeCtx[id] = context;
     nodeFlags[id] = inherited & ~IN_WRAPPER;
     nodeBlockEnd[id] = parent === NONE ? 0 : nodeBlockEnd[parent];
 
@@ -249,7 +225,7 @@ export function scanCst(doc: string, analysis: Analysis): CstScan {
 
     shape.markerKind = marker?.kind ?? 0;
     shape.category = marker?.category ?? 0;
-    shape.ctx = ctx;
+    shape.ctx = context;
     shape.close = close;
     shape.ws = marker?.ws ?? 0;
     shape.unknown = markerIdx === 0;
@@ -384,8 +360,6 @@ export function notePartsOf(
   extentEnd: number,
   shapeAt: (i: number) => TokenShape,
 ): NotePart[] {
-  // A run is grown in place as adjacent spans of the same part are met, so
-  // the accumulator is mutable where the published `NotePart` is not.
   const out: NotePart[] = [];
   let run: { kind: number; from: number; to: number } | null = null;
   const flush = () => {
@@ -396,26 +370,23 @@ export function notePartsOf(
     for (let i = 0, n = node.childCount(); i < n; i++) {
       const child = node.child(i);
       if (child.isNode) {
-        // SAFETY: `isNode` is the reader's discriminator; true means NodeView.
-        walk(child as NodeView, false);
+        walk(child, false);
         continue;
       }
-      // SAFETY: the `isNode` branch above returned, so this child is a token.
-      const t = child as TokenView;
-      const s = t.span();
+      const span = child.span();
       if (isNote && i === 0) continue;
-      if (s.from >= extentEnd) continue;
-      const part = notePartOf(shapeAt(t.id));
+      if (span.from >= extentEnd) continue;
+      const part = notePartOf(shapeAt(child.id));
       if (part === NOTE_PART.ORIGIN || part === NOTE_PART.BODY) {
-        if (run && run.kind === part && run.to === s.from) run.to = s.to;
+        if (run && run.kind === part && run.to === span.from) run.to = span.to;
         else {
           flush();
-          run = { kind: part, from: s.from, to: s.to };
+          run = { kind: part, from: span.from, to: span.to };
         }
         continue;
       }
       flush();
-      if (s.to > s.from) out.push({ kind: part, from: s.from, to: s.to });
+      if (span.to > span.from) out.push({ kind: part, from: span.from, to: span.to });
     }
   };
   walk(note, true);

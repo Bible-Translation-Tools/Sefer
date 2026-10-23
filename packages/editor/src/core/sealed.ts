@@ -1,11 +1,3 @@
-/**
- * Admission rule: a keystroke may not land inside markup the reader cannot see.
- *
- * Hidden markup has no glyphs to aim at, so a keystroke there is always an
- * accident of mapping rather than an intention. The rule reads the paint index —
- * not the decoration set — and answers in change-filter ranges.
- */
-
 import { surfaceRangeAt } from "./clip";
 import { isUserReplacement } from "./deletion";
 import { lineIndexAt, type DocStructure } from "./docStructure";
@@ -21,9 +13,25 @@ import {
 import { keyboardMutable, rowAt } from "./registry";
 import { note } from "./trace";
 
-const endsALine = (s: DocStructure, pos: number): boolean => {
-  const i = lineIndexAt(s, pos);
-  return i >= 0 && s.lines.toAt(i) === pos;
+const endsALine = (structure: DocStructure, pos: number): boolean => {
+  const i = lineIndexAt(structure, pos);
+  return i >= 0 && structure.lines.toAt(i) === pos;
+};
+
+/**
+ * A paste of whole lines at a line's start: it puts lines BEFORE the markup
+ * that opens the line, not inside it, so the marker still opens its line
+ * after it. How a heading pasted at a verse's first word lands above the
+ * verse's `\v` (`core/clipboard.ts`).
+ */
+const pastesWholeLinesAt = (tr: Parameters<ChangeRule>[0], at: number): boolean => {
+  if (!tr.isUserEvent("input.paste")) return false;
+  if (at > 0 && tr.startState.doc.sliceString(at - 1, at) !== "\n") return false;
+  let whole = true;
+  tr.changes.iterChanges((_fA, _tA, _fB, _tB, ins) => {
+    whole &&= ins.length > 0 && ins.line(ins.lines).length === 0;
+  });
+  return whole;
 };
 
 const mergedPairs = (out: readonly number[]): number[] => {
@@ -56,13 +64,6 @@ export function refuseKeystrokesInsideHiddenMarkup(
     });
     if (hi < 0 || (deletes && isUserReplacement(tr))) return true;
     const state = tr.startState;
-    // A surface whose whole range is ONE position — the note editor over a
-    // note with nothing in it yet, whose body belongs between the `\ft ` and
-    // the `\f*` — shows exactly one caret, there, and exists to write at it.
-    // That position is inside hidden markup only because the body it marks is
-    // empty (the parse has no body part to paint), so an insertion exactly
-    // there is not a keystroke aimed at nothing. Any other change still meets
-    // the rule, and the surface's own range refuses everything else.
     const surface = surfaceRangeAt(state);
     if (
       !deletes &&
@@ -72,7 +73,8 @@ export function refuseKeystrokesInsideHiddenMarkup(
       hi === lo
     )
       return true;
-    const s = structureAt(state);
+    if (!deletes && lo === hi && pastesWholeLinesAt(tr, lo)) return true;
+    const structure = structureAt(state);
     const doc = state.doc;
     const out: number[] = [];
     const push = (from: number, to: number) => {
@@ -101,8 +103,8 @@ export function refuseKeystrokesInsideHiddenMarkup(
     const inMarkup = (p: number) =>
       hits.some((h) => h.target.hiddenSpans.some((sp) => sp.from <= p && sp.to > p));
     const ordinary = (p: number) => !isHidden(p) && !inMarkup(p);
-    const softLeft = (p: number) => p > 0 && ordinary(p - 1) && !endsALine(s, p - 1);
-    const softRight = (p: number) => p < doc.length && ordinary(p) && !endsALine(s, p);
+    const softLeft = (p: number) => p > 0 && ordinary(p - 1) && !endsALine(structure, p - 1);
+    const softRight = (p: number) => p < doc.length && ordinary(p) && !endsALine(structure, p);
     let breakFirst = true;
     let breakLast = true;
     tr.changes.iterChanges((_fA, _tA, _fB, _tB, ins) => {

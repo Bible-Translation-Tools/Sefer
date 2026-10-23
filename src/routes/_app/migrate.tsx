@@ -6,13 +6,7 @@ import { MigrateScreen } from "#app/ui/migrate/MigrateScreen";
 import { ShellGate } from "#app/ui/ShellGate";
 import "#app/ui/theme";
 
-/**
- * `/migrate` — assemble a project from BTT Writer's single-book projects.
- * Reached from the projects page's Import; see `MigrateScreen`.
- */
-
 interface MigrateSearch {
-  /** A project's root: Books → "Add a book…" brings books into it. */
   readonly into?: string;
 }
 

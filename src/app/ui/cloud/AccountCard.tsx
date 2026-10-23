@@ -1,25 +1,19 @@
-/**
- * Who am I, to the cloud: the first card of Settings' Cloud section.
- *
- * Signing in is an ACCOUNT action, not a project one, which is why it has its
- * own Card above the project's: the same session serves every project on the
- * device. A build with no Gitea host configured says which variable is
- * missing rather than offering a form that would fail on submit.
- *
- * `SignInForm` is the form alone, so the app bar's cloud popover — where
- * signing in and out usually happens — signs in with the same fields and the
- * same failure line.
- *
- * Sign-in failures render inline, under the form, and never as a toast. The
- * form is where the person is looking, and a toast about a password is gone
- * before they have finished reading it.
- */
-
 import { Show, createSignal } from "solid-js";
 
 import { t } from "../../i18n";
 import { Button, Card, Input, PanelHeader } from "../primitives";
 import type { Account } from "./account";
+
+const ProblemNote = (props: { readonly text: string }) => (
+  <Show when={props.text !== ""}>
+    <p
+      class="rounded-md bg-surface-error px-3 py-2 text-small break-words text-on-surface-error"
+      data-cloud="problem"
+    >
+      {props.text}
+    </p>
+  </Show>
+);
 
 export function SignInForm(props: { readonly account: Account; readonly host: string }) {
   const [username, setUsername] = createSignal("", { name: "cloudUser" });
@@ -29,7 +23,6 @@ export function SignInForm(props: { readonly account: Account; readonly host: st
   const submit = (event: SubmitEvent): void => {
     event.preventDefault();
     props.account.signIn({ username: username(), password: password(), otp: otp() });
-    // The password is not kept anywhere, including here.
     setPassword("");
     setOtp("");
   };
@@ -74,14 +67,7 @@ export function SignInForm(props: { readonly account: Account; readonly host: st
           {t("Sign in")}
         </Button>
       </div>
-      <Show when={props.account.problem() !== ""}>
-        <p
-          class="rounded-md bg-surface-error px-3 py-2 text-small break-words text-on-surface-error"
-          data-cloud="problem"
-        >
-          {props.account.problem()}
-        </p>
-      </Show>
+      <ProblemNote text={props.account.problem()} />
     </form>
   );
 }

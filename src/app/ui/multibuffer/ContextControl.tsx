@@ -1,11 +1,3 @@
-/**
- * The context control every card wears: the joined group — one TOC step up,
- * the whole chapter, one TOC step down — and beside it the fold toggle the
- * paired reference card has ("Show only the match"): folded, the card is its
- * own unit alone; unfolded, the reach it had comes back. A card starts from
- * the setting's steps (`excerpts.context`).
- */
-
 import type { JSX } from "@solidjs/web";
 import ChevronDownIcon from "lucide-solid/icons/chevron-down";
 import ChevronUpIcon from "lucide-solid/icons/chevron-up";
@@ -18,19 +10,18 @@ import { t } from "../../i18n";
 import { cx, IconButton } from "../primitives";
 import { widened, type ContextStep } from "./cardState";
 
+const part =
+  "inline-flex h-6 cursor-pointer items-center gap-1 px-2 text-smallest font-medium text-on-surface-secondary transition-colors hover:not-disabled:bg-surface-secondary hover:not-disabled:text-on-surface-primary disabled:cursor-not-allowed disabled:opacity-40";
+
 export function ContextControl(props: {
-  /** The card's reach: what the steps and the fold read. */
   readonly extent: Extent;
   readonly canUp: boolean;
   readonly canDown: boolean;
   readonly onStep: (step: ContextStep) => void;
-  /** What folding shows, for its label: "Show only the match", "Show only the change". */
   readonly only?: string;
 }) {
   const chapter = (): boolean => props.extent.chapter === true;
   const folded = (): boolean => props.extent.folded !== undefined;
-  const part =
-    "inline-flex h-6 cursor-pointer items-center gap-1 px-2 text-smallest font-medium text-on-surface-secondary transition-colors hover:not-disabled:bg-surface-secondary hover:not-disabled:text-on-surface-primary disabled:cursor-not-allowed disabled:opacity-40";
   const fold = (): JSX.Element => (
     <IconButton
       size="sm"

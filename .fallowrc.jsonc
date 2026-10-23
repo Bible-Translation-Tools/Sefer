@@ -12,11 +12,16 @@
     // WebdriverIO loads the specs it names by glob.
     "e2e-desktop/wdio.conf.ts",
     "e2e-desktop/**/*.desktop.ts",
+    // `pnpm editor:bench` serves this page by config path; nothing imports it.
+    "packages/editor/bench/vite.config.ts",
+    "packages/editor/bench/main.ts",
   ],
   // The planning site (planning/) is its own workspace with its own checks
   // (astro check, pnpm plans check), as it is for oxlint and oxfmt.
   "ignorePatterns": ["src/routeTree.gen.ts", "planning/**"],
   "ignoreDependencies": [
+    // Loaded by Paraglide's compiler from project.inlang/settings.json `modules`.
+    "@inlang/plugin-icu1",
     // Spawned as a binary by tools/tauri/run.ts (`pnpm exec tauri`).
     "@tauri-apps/cli",
     // Loaded by @solidjs/vite-plugin when `diagnostics: true`.

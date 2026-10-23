@@ -1,16 +1,5 @@
 import type { Book, BookId } from "@sefer/text/book";
 import type { SourceStamp } from "@sefer/text/source";
-/**
- * Record a version: write the books' files, then keep them as one commit —
- * the one way the project file is written.
- *
- * Shared by the Review screen, where a person reads the changes first, and by
- * the save key when "Skip review of my changes" is on. The screen owns the
- * words and the toasts; this owns the order: save first, then commit exactly
- * what the saves wrote (their receipts, and what they kept current beside the
- * book — a burrito's metadata.json), so no file Sefer wrote is left
- * unrecorded and no file it did not write rides along.
- */
 import { Effect, Option, Result } from "effect";
 
 import type { Author, CommitId } from "#core/git/git";
@@ -19,11 +8,8 @@ import type { Project } from "#core/project/project";
 import type { Services } from "./services";
 
 export type RecordOutcome =
-  /** Nothing differed from the files. */
   | { readonly kind: "nothing" }
-  /** The files could not be written; nothing changed. */
   | { readonly kind: "not-written"; readonly error: unknown }
-  /** The files hold the text and no commit holds the files: "on disk, not recorded". */
   | { readonly kind: "not-recorded"; readonly error: unknown; readonly books: readonly BookId[] }
   | {
       readonly kind: "recorded";
@@ -38,11 +24,6 @@ export const recordVersion = async (
   books: readonly Book[],
   message: string,
   author: Author,
-  /**
-   * Files Sefer wrote beside the books that belong in the same version: the
-   * `.upstreams.json` a review against Writer marks taken. Recorded even
-   * when no book changed, so "I looked and kept mine" is kept too.
-   */
   also: readonly string[] = [],
 ): Promise<RecordOutcome> => {
   if (books.length === 0 && also.length === 0) return { kind: "nothing" };

@@ -21,8 +21,6 @@ describe("application composition", () => {
     const composition = await compose();
     const events = composition.observability.recent();
 
-    // Booting is one end-to-end piece of work, so it is ONE wide record and
-    // not a span beside a note.
     const booted = events.find((event) => event.kind === "operation" && event.name === "boot");
     expect(booted?.ms).toBeGreaterThanOrEqual(0);
     expect(booted?.verdict).toBe("ready");

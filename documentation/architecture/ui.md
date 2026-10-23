@@ -316,6 +316,25 @@ replaces all of them, and then there is no place left to hold.
   rect to build the pointer's safe area, so a contents-display wrapper measures
   zero and the tooltip never opens. `Tooltip` wraps in `inline-flex` instead.
 
+## Icons: one glyph, one command
+
+Every icon Sefer ships is generated from `public/sefer.svg`, the bare samekh
+(the app bar also paints it, as a CSS mask, so it stays transparent and
+untiled). `pnpm icons` (`tools/icons/generate.ts`) puts it on tiles and has
+`tauri icon` rasterise them:
+
+| Output                           | Tile                                                                            |
+| -------------------------------- | ------------------------------------------------------------------------------- |
+| `public/favicon.svg`             | blue tile in every theme (an SVG theme switch follows the OS, not Chrome)       |
+| `public/favicon.ico`             | blue tile — the fallback Safari uses, since it ignores SVG favicons             |
+| `public/apple-touch-icon.png`    | blue, full bleed (iOS rounds it)                                                |
+| `src-tauri/icons/*` (desktop)    | blue, rounded, on the macOS grid (100 px inset of 1024)                         |
+| `src-tauri/icons/ios`, `android` | blue, full bleed; Android gets a smaller glyph on its adaptive foreground layer |
+
+To change an icon, edit the glyph or a tile in the script and rerun it; never
+edit a generated file by hand. Not yet done: a simplified glyph for 16 and
+32 px, where the folded corner smudges.
+
 ## `data-testid`: how a driver finds a control
 
 A screen is driven by an agent or a Playwright script long before it is driven
@@ -359,7 +378,7 @@ migrated routes use:
 
 The ground is `surface-secondary`, cards are `surface-primary` with
 `rounded-lg`, `border-surface-border` and `shadow-small`. Every user-visible
-string still goes through `t()` (`src/app/i18n.ts`).
+string is a message or, on a screen not yet converted, `t()` ([interface language](i18n.md)).
 
 There are no behavioural UI tests yet — behaviour is not locked; the three Playwright smoke checks in `e2e/` only prove the built app mounts and routes. Verify a screen by running
 it: `pnpm verify:launch`, then drive `<url>/projects?fixture=1` with Playwright

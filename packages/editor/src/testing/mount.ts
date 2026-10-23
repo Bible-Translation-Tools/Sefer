@@ -1,10 +1,4 @@
-// fallow-ignore-file unused-file -- kept for the browser-mode editor tests that will want it.
-/**
- * The mounted test surface: a real `EditorView` in a real DOM, for the questions
- * only layout can answer (bidi, measurement, atomic ranges under a caret).
- *
- * Everything that can be asserted headlessly should be; this is for the rest.
- */
+// fallow-ignore-file unused-file
 
 import { EditorView } from "@codemirror/view";
 

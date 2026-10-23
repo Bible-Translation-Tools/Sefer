@@ -1,20 +1,3 @@
-/**
- * The whole book with the diff drawn on it: the book reads as it does in the
- * editor (regular mode or USFM), and the engine's units are decoration on it —
- * split, each side its own whole text, or unified, the current text with the
- * baseline's words struck through where they were and a baseline-only unit
- * drawn as a block where it stood.
- *
- * In a split the two panes are an aligned group (`createAlignedGroup`): they
- * follow each other by VERSE, and only when the verse scrolled to is not
- * already on screen in the other. They once followed by place, and that was
- * too eager: once the texts' heights differ (a reviewer deleted a run of `\p`
- * and `\q` lines, say), a small scroll in one moved the other by a screen.
- * Next / previous change (`showUnit`) still brings the unit to each pane's
- * MIDDLE — where it stands, or where it would stand in a text that lacks it. `onPlace` reports
- * the unit at the top of the current pane, so a counter can say where you are.
- */
-
 import {
   createAlignedGroup,
   editorPolicy,
@@ -39,11 +22,12 @@ import { hunkPaint, sidePaint, type Controls, type Side } from "./paint";
 
 export interface BookDiffApi {
   readonly showUnit: (unit: DecisionUnit) => void;
-  /** The offset at the middle of your pane: where a step counts from. */
   readonly middle: () => number | undefined;
 }
 
-/** The unit whose span on `side` holds `at`, or the last one before it. */
+const spanOn = (side: Side, unit: DecisionUnit) =>
+  side === "baseline" ? unit.baseline : unit.current;
+
 const unitAt = (
   units: readonly DecisionUnit[],
   side: Side,
@@ -59,9 +43,8 @@ const unitAt = (
   return found;
 };
 
-export function BookDiff(props: {
+export interface BookDiffProps {
   readonly sides: DiffSides;
-  /** The whole book in reading order (`ordered`), unchanged units included. */
   readonly units: readonly DecisionUnit[];
   readonly split: boolean;
   readonly usfm: boolean;
@@ -69,62 +52,170 @@ export function BookDiff(props: {
   readonly currentLabel: string;
   readonly baselineLabel: string;
   readonly currentFirst?: boolean;
-  /** Whether the split's two panes follow each other by verse; read at each scroll. */
   readonly linked?: () => boolean;
   readonly observability: ObservabilityService;
-  /** Shown at the top once the views are mounted: where "open in the book" lands. */
   readonly initial?: DecisionUnit | undefined;
   readonly ref?: (api: BookDiffApi) => void;
   readonly onPlace?: (unit: DecisionUnit | undefined) => void;
   readonly class?: string;
-  /**
-   * The current side, EDITABLE: the Book itself, as a satellite with the diff
-   * as a plugin on it (an editable Review). An edit goes through the Book's
-   * funnel like any other; the review compares again and repaints. Absent,
-   * the current side is a read-only view of the text in `sides`.
-   */
   readonly live?:
     | { readonly book: EditorBook; readonly analyze: (text: string) => Analysis }
     | undefined;
-  /**
-   * The current side WILL be live, once the book is seated: build nothing
-   * until then. Built read-only first, every view was built twice — a whole
-   * book's two editors torn down and made again a moment later.
-   */
   readonly awaitLive?: boolean;
-}) {
+}
+
+interface Pane {
+  readonly editor: EditorHandle;
+  repaint(paint: DiffPaint): void;
+  showAt(at: number, align?: "start" | "center"): void;
+  destroy(): void;
+}
+
+interface Mounted {
+  side: Side | "unified";
+  mount: Pane;
+  paint: () => DiffPaint;
+  live: boolean;
+}
+
+interface MountArgs {
+  readonly split: boolean;
+  readonly markup: boolean;
+  readonly live: BookDiffProps["live"];
+  readonly leftHost: HTMLDivElement | undefined;
+  readonly rightHost: HTMLDivElement;
+  readonly now: () => { sides: DiffSides; units: readonly DecisionUnit[] };
+  readonly operation: ReturnType<ObservabilityService["operation"]>;
+  readonly controls: () => Controls | undefined;
+  readonly report: (unit: DecisionUnit | undefined) => void;
+  readonly linked: () => boolean;
+}
+
+const mountPanes = (args: MountArgs): { held: Mounted[]; release: () => void } => {
+  const { split, markup, live, leftHost, rightHost, now, operation, controls, report, linked } =
+    args;
+  const { sides } = now();
+  const mode = markup ? "usfm" : "default";
+  const held: Mounted[] = [];
+  const releases: (() => void)[] = [];
+
+  const follow = (side: Side, mount: Pane): void => {
+    if (split && side !== "current") return;
+    releases.push(
+      mount.editor.onViewport((where) => {
+        if (where === null) return;
+        const probe = Math.max(where.top, where.topLineEnd - 1);
+        report(unitAt(now().units, side, probe));
+      }),
+    );
+  };
+
+  const add = (
+    side: Side | "unified",
+    parent: HTMLElement,
+    text: string,
+    paint: () => DiffPaint,
+  ): Pane => {
+    if (side !== "baseline" && live !== undefined) {
+      const card = mountCard({
+        parent,
+        book: live.book,
+        range: { from: 0, to: live.book.source().text.length },
+        clip: false,
+        policy: editorPolicy(mode === "usfm" ? "usfm" : "regular"),
+        surface: "cm-diff",
+        analyze: live.analyze,
+        diff: paint(),
+        label: `review:${sides.bookId}`,
+      });
+      const mount: Pane = {
+        editor: card,
+        repaint: (next) => card.setDiff(next),
+        showAt: (at, align = "start") => card.reveal({ from: at }, { scroll: align }),
+        destroy: () => card.destroy(),
+      };
+      held.push({ side, mount, paint, live: true });
+      return mount;
+    }
+    const analysis = side === "baseline" ? sides.baseline : sides.current;
+    const view = mountDiffView({
+      parent,
+      text,
+      analyze: () => analysis,
+      mode,
+      paint: paint(),
+    });
+    const mount: Pane = {
+      editor: view,
+      repaint: (next) => view.repaint(next),
+      showAt: (at, align) => view.showAt(at, align),
+      destroy: () => view.destroy(),
+    };
+    held.push({ side, mount, paint, live: false });
+    return mount;
+  };
+
+  const painted = operation.span("review.diff.mount");
+  if (split && leftHost !== undefined) {
+    const was = add("baseline", leftHost, sides.baselineText, () =>
+      sidePaint(now().units, "baseline", markup, undefined, now().sides.baseline),
+    );
+    const current = add("current", rightHost, sides.currentText, () =>
+      sidePaint(now().units, "current", markup, controls(), now().sides.current),
+    );
+    follow("baseline", was);
+    follow("current", current);
+    const group = createAlignedGroup("reveal");
+    releases.push(
+      group.join({ editor: was.editor, book: sides.bookId, leads: linked, follows: linked }),
+      group.join({
+        editor: current.editor,
+        book: sides.bookId,
+        leads: linked,
+        follows: linked,
+      }),
+    );
+  } else {
+    const current = add("unified", rightHost, sides.currentText, () =>
+      hunkPaint(
+        now().units,
+        markup,
+        controls(),
+        wasBlock(now().sides.baseline, mode),
+        now().sides.current,
+      ),
+    );
+    follow("current", current);
+  }
+  painted();
+  operation.end("passed", {
+    "diff.units": now().units.length,
+    "diff.live": live !== undefined,
+  });
+  return {
+    held,
+    release: () => {
+      for (const release of releases) release();
+      for (const entry of held) entry.mount.destroy();
+    },
+  };
+};
+
+export function BookDiff(props: BookDiffProps) {
   const [left, setLeft] = createSignal<HTMLDivElement | undefined>(undefined, { name: "bookLeft" });
   const [right, setRight] = createSignal<HTMLDivElement | undefined>(undefined, {
     name: "bookRight",
   });
 
-  /** One pane, read-only or live, as this view drives it. */
-  interface Pane {
-    readonly editor: EditorHandle;
-    repaint(paint: DiffPaint): void;
-    showAt(at: number, y?: "start" | "center"): void;
-    destroy(): void;
-  }
+  let mounts: Mounted[] = [];
 
-  let mounts: {
-    side: Side | "unified";
-    mount: Pane;
-    paint: () => DiffPaint;
-    live: boolean;
-  }[] = [];
-
-  /**
-   * Where `unit` is in one side's text: its start, or, in a text that lacks
-   * it, the end of the nearest unit before it that the text has.
-   */
   const placeIn = (side: Side, unit: DecisionUnit): number | undefined => {
-    const own = side === "baseline" ? unit.baseline : unit.current;
+    const own = spanOn(side, unit);
     if (own !== undefined) return own.from;
     const units = untrack(() => props.units);
     for (let index = units.indexOf(unit) - 1; index >= 0; index--) {
       const before = units[index];
-      const span =
-        before === undefined ? undefined : side === "baseline" ? before.baseline : before.current;
+      const span = before === undefined ? undefined : spanOn(side, before);
       if (span !== undefined) return span.to;
     }
     return 0;
@@ -135,7 +226,6 @@ export function BookDiff(props: {
       if (at !== undefined) entry.mount.showAt(at, "center");
     }
   };
-  /** The offset at the middle of your pane, where the reader is. */
   const middle = (): number | undefined => {
     const entry = mounts.find((held) => held.side !== "baseline");
     return entry?.mount.editor.centerOffset();
@@ -147,163 +237,61 @@ export function BookDiff(props: {
     },
   );
 
-  /**
-   * What the views are built from, compared FIELD BY FIELD. A new comparison
-   * hands over a new `sides` object every time; without this the effect below
-   * would see a new dependency object and rebuild every view — including a
-   * live pane, under the caret of the person typing in it.
-   */
   const built = createMemo(
     () => ({
       bookId: props.sides.bookId,
       baselineText: props.sides.baselineText,
-      // A live pane follows the Book itself: a new comparison of the same book
-      // REPAINTS it (below) rather than rebuilding the view under the caret.
       currentText: props.live === undefined ? props.sides.currentText : undefined,
       live: props.live,
       split: props.split,
       markup: props.usfm,
       decidable: props.controls !== undefined,
       waiting: props.awaitLive === true && props.live === undefined,
-      l: left(),
-      r: right(),
+      leftHost: left(),
+      rightHost: right(),
     }),
     { name: "bookDiffBuilt", equals: sameFields },
   );
 
   createEffect(
     () => built(),
-    ({ split, markup, live, waiting, l, r }) => {
-      if (waiting || r === undefined || (split && l === undefined)) return;
-      // The latest comparison, read when painting: in a live pane it moves on
-      // every accepted edit while the view stays.
+    ({ split, markup, live, waiting, leftHost, rightHost }) => {
+      if (waiting || rightHost === undefined || (split && leftHost === undefined)) return;
       const now = () => untrack(() => ({ sides: props.sides, units: props.units }));
       const { sides } = now();
       const observability = untrack(() => props.observability);
-      const op = observability.operation("review.diff.book", {
+      const operation = observability.operation("review.diff.book", {
         "diff.book": sides.bookId,
         "diff.layout": split ? "split" : "unified",
         "diff.mode": markup ? "usfm" : "regular",
       });
-      const mode = markup ? "usfm" : "default";
       const controls = (): Controls | undefined => untrack(() => props.controls);
       const onPlace = untrack(() => props.onPlace);
       const report = (unit: DecisionUnit | undefined): void => onPlace?.(unit);
-      const held: typeof mounts = [];
-      const releases: (() => void)[] = [];
-
-      // Each pane only REPORTS its place: the counter follows the current
-      // pane. Neither pane moves the other.
-      const follow = (side: Side, mount: Pane): void => {
-        if (split && side !== "current") return;
-        releases.push(
-          mount.editor.onViewport((where) => {
-            if (where === null) return;
-            // The END of the line at the top, not its start: a visual line in
-            // regular mode opens with the bare `\q1` that belongs to the unit
-            // BEFORE, and reporting that would name the verse above.
-            const probe = Math.max(where.top, where.topLineEnd - 1);
-            report(unitAt(now().units, side, probe));
-          }),
-        );
-      };
-
-      const add = (
-        side: Side | "unified",
-        parent: HTMLElement,
-        text: string,
-        paint: () => DiffPaint,
-      ): Pane => {
-        if (side !== "baseline" && live !== undefined) {
-          const card = mountCard({
-            parent,
-            book: live.book,
-            range: { from: 0, to: live.book.source().text.length },
-            clip: false,
-            policy: editorPolicy(mode === "usfm" ? "usfm" : "regular"),
-            surface: "cm-diff",
-            analyze: live.analyze,
-            diff: paint(),
-            label: `review:${sides.bookId}`,
-          });
-          const mount: Pane = {
-            editor: card,
-            repaint: (next) => card.setDiff(next),
-            showAt: (at, y = "start") => card.reveal({ from: at }, { scroll: y }),
-            destroy: () => card.destroy(),
-          };
-          held.push({ side, mount, paint, live: true });
-          return mount;
-        }
-        const analysis = side === "baseline" ? sides.baseline : sides.current;
-        const view = mountDiffView({
-          parent,
-          text,
-          analyze: () => analysis,
-          mode,
-          paint: paint(),
-        });
-        const mount: Pane = {
-          editor: view,
-          repaint: (next) => view.repaint(next),
-          showAt: (at, y) => view.showAt(at, y),
-          destroy: () => view.destroy(),
-        };
-        held.push({ side, mount, paint, live: false });
-        return mount;
-      };
-
-      const painted = op.span("review.diff.mount");
-      if (split && l !== undefined) {
-        const was = add("baseline", l, sides.baselineText, () =>
-          sidePaint(now().units, "baseline", markup, undefined, now().sides.baseline),
-        );
-        const current = add("current", r, sides.currentText, () =>
-          sidePaint(now().units, "current", markup, controls(), now().sides.current),
-        );
-        follow("baseline", was);
-        follow("current", current);
-        // The two panes, aligned by verse: either leads, the other follows.
-        const group = createAlignedGroup("reveal");
-        const linked = (): boolean => untrack(() => props.linked?.() ?? true);
-        releases.push(
-          group.join({ editor: was.editor, book: sides.bookId, leads: linked, follows: linked }),
-          group.join({
-            editor: current.editor,
-            book: sides.bookId,
-            leads: linked,
-            follows: linked,
-          }),
-        );
-      } else {
-        const current = add("unified", r, sides.currentText, () =>
-          hunkPaint(
-            now().units,
-            markup,
-            controls(),
-            wasBlock(now().sides.baseline, mode),
-            now().sides.current,
-          ),
-        );
-        follow("current", current);
-      }
-      painted();
-      op.end("passed", { "diff.units": now().units.length, "diff.live": live !== undefined });
+      const linked = (): boolean => untrack(() => props.linked?.() ?? true);
+      const { held, release } = mountPanes({
+        split,
+        markup,
+        live,
+        leftHost,
+        rightHost,
+        now,
+        operation,
+        controls,
+        report,
+        linked,
+      });
       mounts = held;
       const first = untrack(() => props.initial);
       if (first !== undefined) requestAnimationFrame(() => showUnit(first));
 
       return () => {
         mounts = [];
-        for (const release of releases) release();
-        for (const entry of held) entry.mount.destroy();
+        release();
       };
     },
   );
 
-  // A decision, or a new comparison of a live pane, repaints in place. A live
-  // pane whose text has moved past the comparison (the next keystroke landed
-  // first) keeps its mapped decorations until the comparison catches up.
   createEffect(
     () => ({
       units: props.units,
@@ -313,11 +301,9 @@ export function BookDiff(props: {
     ({ text }) => {
       for (const entry of mounts) {
         if (entry.live) {
-          // Painted only over EXACTLY the text compared, as a card is.
           const editor = entry.mount.editor;
           if (editor.length() !== text.length || editor.text() !== text) continue;
         }
-        // A snapshot of the decisions: the compute above is what tracks them.
         entry.mount.repaint(untrack(entry.paint));
       }
     },

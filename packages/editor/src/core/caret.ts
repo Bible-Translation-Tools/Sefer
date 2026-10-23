@@ -1,12 +1,3 @@
-/**
- * Caret motion and the settlement phase: every arrow, Home/End and word jump
- * consumes `stops.ts`, and every transaction ends with the caret on a legal
- * position.
- *
- * Motion is a command (the user asked) and settlement is a rule (the editor
- * insists); both are here so the definition of "legal" is read from one place.
- */
-
 import {
   EditorSelection,
   EditorState,
@@ -28,24 +19,30 @@ import { note, noteTr } from "./trace";
 
 export function lawfulStop(
   state: EditorState,
-  s: DocStructure,
-  r: PaintPort,
+  structure: DocStructure,
+  paint: PaintPort,
   from: number,
   back: boolean,
 ): number | null {
-  return stopsIn(state, s, r).next(from, back);
+  return stopsIn(state, structure, paint).next(from, back);
 }
 
 export function canonicalCaret(
   state: EditorState,
-  s: DocStructure,
+  structure: DocStructure,
   pos: number,
-  r: PaintPort = NO_PAINT,
+  paint: PaintPort = NO_PAINT,
 ): number {
-  return stopsIn(state, s, r).settle(pos, "forward");
+  return stopsIn(state, structure, paint).settle(pos, "forward");
 }
 
 type Step = (view: EditorView, at: number, forward: boolean) => number;
+
+function settleDirection(docChanged: boolean, head: number, came: number): SettleDirection {
+  if (docChanged || head > came) return "forward";
+  if (head < came) return "backward";
+  return "nearest";
+}
 
 const byChar: Step = (view, at, fwd) => {
   const doc = view.state.doc;
@@ -67,11 +64,11 @@ const byGroup: Step = (view, at, fwd) => {
   for (let i = 0; i < 1024; i++) {
     const next = byChar(view, p, fwd);
     if (next === p) return p;
-    const ch = doc.sliceString(Math.min(p, next), Math.max(p, next));
-    const cat = categorize(ch);
+    const slice = doc.sliceString(Math.min(p, next), Math.max(p, next));
+    const cat = categorize(slice);
     if (group === null) group = cat;
     else if (cat !== group) return p;
-    if (/^\s*$/.test(ch)) group = null;
+    if (/^\s*$/.test(slice)) group = null;
     p = next;
   }
   return p;
@@ -79,15 +76,15 @@ const byGroup: Step = (view, at, fwd) => {
 
 function moveTheCaretOneStopInDocumentOrder(
   view: EditorView,
-  s: DocStructure,
+  structure: DocStructure,
   startSel: SelectionRange,
   visualRight: boolean,
   step: Step,
-  r: PaintPort,
+  paint: PaintPort,
 ): SelectionRange | null {
   const from = startSel.head;
   const docForward = visualRight;
-  const stops = stopsIn(view.state, s, r);
+  const stops = stopsIn(view.state, structure, paint);
 
   let p = from;
   for (let guard = 0; guard < 256; guard++) {
@@ -124,7 +121,7 @@ export function moveCaret(
   structureAt: GetStructure,
   visualRight: boolean,
   step: Step = byChar,
-  r: PaintPort = NO_PAINT,
+  paint: PaintPort = NO_PAINT,
 ): Command {
   return (view) => {
     const sel = view.state.selection.main;
@@ -135,7 +132,7 @@ export function moveCaret(
       sel,
       visualRight,
       step,
-      r,
+      paint,
     );
     if (to === null) return false;
     if (to.head === sel.head && to.assoc === sel.assoc) return true;
@@ -150,28 +147,27 @@ export function moveCaret(
 export function moveCaretByWord(
   structureAt: GetStructure,
   visualRight: boolean,
-  r: PaintPort = NO_PAINT,
+  paint: PaintPort = NO_PAINT,
 ): Command {
-  return moveCaret(structureAt, visualRight, byGroup, r);
+  return moveCaret(structureAt, visualRight, byGroup, paint);
 }
 
 export function caretLineBoundary(
   structureAt: GetStructure,
   end: boolean,
-  r: PaintPort = NO_PAINT,
+  paint: PaintPort = NO_PAINT,
 ): Command {
   return (view) => {
     const sel = view.state.selection.main;
     if (view.textDirectionAt(sel.head) !== Direction.LTR) return false;
     const at = view.moveToLineBoundary(EditorSelection.cursor(sel.head), end, true).head;
-    const to = stopsIn(view.state, structureAt(view.state), r).settle(
-      at,
-      end ? "forward" : "backward",
-    );
+    // Both settle forward: a row's start can sit before hidden markup that opens it
+    // (`\s5`, `\q`, `\v 3`), and settling back from there lands in the verse before.
+    const to = stopsIn(view.state, structureAt(view.state), paint).settle(at, "forward");
     note(view.state, {
       rule: "caretLineBoundary",
       verdict: to === sel.head ? "passed" : "moved",
-      detail: `${end ? "End" : "Home"} ${sel.head} → ${to} (line boundary ${at}, settled ${end ? "forward" : "backward"})`,
+      detail: `${end ? "End" : "Home"} ${sel.head} → ${to} (line boundary ${at}, settled forward)`,
     });
     view.dispatch({ selection: EditorSelection.cursor(to), scrollIntoView: true });
     return true;
@@ -182,7 +178,7 @@ export function extendCaret(
   structureAt: GetStructure,
   visualRight: boolean,
   step: Step = byChar,
-  r: PaintPort = NO_PAINT,
+  paint: PaintPort = NO_PAINT,
 ): Command {
   return (view) => {
     const sel = view.state.selection.main;
@@ -192,7 +188,7 @@ export function extendCaret(
       sel,
       visualRight,
       step,
-      r,
+      paint,
     );
     if (to === null) return false;
     if (to.head === sel.head && to.assoc === sel.assoc) return true;
@@ -211,14 +207,14 @@ export function extendCaret(
 
 export function settleTheCaretOnALegalPosition(
   structureAt: GetStructure,
-  r: PaintPort = NO_PAINT,
+  paint: PaintPort = NO_PAINT,
 ): TransactionRule {
   return (tr) => {
     if (!tr.selection && !tr.docChanged) return tr;
     if (!isVisual(tr.state)) return tr;
     const sel = tr.state.selection.main;
     if (!sel.empty) return tr;
-    const stops = stopsIn(tr.state, structureAt(tr.state), r);
+    const stops = stopsIn(tr.state, structureAt(tr.state), paint);
 
     const resolve = (toward: SettleDirection): number => {
       let c = sel.head;
@@ -231,13 +227,7 @@ export function settleTheCaretOnALegalPosition(
     };
 
     const came = tr.startState.selection.main.head;
-    const toward: SettleDirection = tr.docChanged
-      ? "forward"
-      : sel.head > came
-        ? "forward"
-        : sel.head < came
-          ? "backward"
-          : "nearest";
+    const toward = settleDirection(tr.docChanged, sel.head, came);
     const c = resolve(toward);
     if (c === sel.head) return tr;
     noteTr(tr, {

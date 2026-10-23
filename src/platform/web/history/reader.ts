@@ -1,9 +1,3 @@
-/**
- * The history index's object reader, over isomorphic-git.
- *
- * Objects are read by id and trees as RAW content, so no entry name can
- * refuse a read: isomorphic-git's own tree parse throws on names git accepts.
- */
 import { Buffer } from "buffer";
 
 import git from "isomorphic-git";
@@ -11,7 +5,6 @@ import git from "isomorphic-git";
 import type { IsomorphicFs } from "#core/fileSystem/nodeView";
 import type { ObjectReader } from "#core/history/bookIndex";
 
-// isomorphic-git expects Node's `Buffer`; a worker has no polyfill of its own.
 Object.assign(globalThis, { Buffer });
 
 export const objectReader = (fs: IsomorphicFs, dir: string): ObjectReader => {

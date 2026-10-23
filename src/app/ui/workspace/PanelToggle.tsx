@@ -1,14 +1,3 @@
-/**
- * The project panel's show/hide: one button that stays where it is and flips.
- *
- * It sits left of the book's title in the editor toolbar, nearest the panel,
- * and on a project
- * screen with no such title (terms, findings, history…) at the start of that
- * screen's page header, inline with its title (`usePanelToggleLeading`). Because the button is outside the panel it survives the panel
- * being hidden, and is the way back. `Mod-b` does the same, and dragging the
- * panel's edge closed hides it too (`onCollapse` in _app.tsx).
- */
-
 import type { JSX } from "@solidjs/web";
 import BookIcon from "lucide-solid/icons/book";
 import PanelLeftClose from "lucide-solid/icons/panel-left-close";
@@ -38,12 +27,6 @@ export function PanelToggle(props: { readonly class?: string }) {
   );
 }
 
-/**
- * The toggle for a project screen that has no editor toolbar to carry it:
- * handed to that screen's page header (`PageLeading`), so it sits inline
- * with the title. Provided ONCE by the workspace, so a screen added later
- * gets it without knowing it exists; the book route's toolbar has its own.
- */
 export function usePanelToggleLeading(): () => JSX.Element | undefined {
   const shell = useShell();
   const screen = useScreen();

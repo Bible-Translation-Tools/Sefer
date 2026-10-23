@@ -1,0 +1,13 @@
+{
+  "reference_language": "Idioma de referencia",
+  "reference_none_yet": "Ninguno todavía",
+  "reference_material": "Material de referencia",
+  "reference_search_placeholder": "Buscar por idioma",
+  "reference_shelf_notes": "Notas de traducción",
+  "reference_shelf_bibles": "Biblias",
+  "reference_shelf_projects": "Tus proyectos",
+  "reference_download_title": "Descargar {title} para leerlo junto a este proyecto",
+  "reference_bibles_offered": "{count, plural, =0 {No hay Biblias para descargar} one {# Biblia para descargar} other {# Biblias para descargar}}",
+  "reference_held_by": "{kind, select, notes {Notas en este dispositivo} bible {Biblia en este dispositivo} other {En este dispositivo}}",
+  "settings_language_automatic": "Automático ({language})"
+}

@@ -1,13 +1,21 @@
 import type { Tour } from "../machine";
 import { expectTour } from "./expect";
 import { findingsTour } from "./findings";
+import { lineByLineTour } from "./lineByLine";
 import { notesTour } from "./notes";
+import { suppressionsTour } from "./suppressions";
 import { verseNumbersWorkflow } from "./verseNumbers";
 
 /**
- * Every tutorial and workflow, in the order Settings lists them (each kind on
- * its own tab). Each is its own file.
+ * Field tours ship everywhere; internal ones (notes to the PO about a design,
+ * `audience: "internal"`) only in design builds, so production bundles none of
+ * their code or copy. No field tutorial has shipped yet (Will, 2026-10-22).
  */
-export const TOURS: readonly Tour[] = [findingsTour, expectTour, notesTour, verseNumbersWorkflow];
+export const TOURS: readonly Tour[] = [
+  verseNumbersWorkflow,
+  ...(__SEFER_DESIGN__
+    ? [findingsTour, suppressionsTour, expectTour, notesTour, lineByLineTour]
+    : []),
+];
 
 export const tourById = (id: string): Tour | undefined => TOURS.find((tour) => tour.id === id);

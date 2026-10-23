@@ -1,28 +1,3 @@
-/**
- * The desktop answer to the `Remote` port, over the git2 commands in
- * `src-tauri/src/git.rs`.
- *
- * The desktop half is the simple one: git2 speaks smart-HTTP directly and is
- * not a browser origin, so it reaches the content host
- * (`VITE_SEFER_CONTENT_HOST`) itself and no proxy is in the picture. What
- * it shares with the Web half is the rules, and those are deliberately the
- * same on both hosts:
- *
- *  1. Nothing transfers as a side effect of editing. Every method here is a
- *     job someone asked for.
- *  2. The credential comes from the host `Credentials` service, keyed by the
- *     origin of the remote's URL — a token belongs to a Gitea instance, not to
- *     one repository. Tokens never reach a project file. Nobody signed in is
- *     an ANSWER, not a failure: WACS content is public, so fetch and probe run
- *     anonymously and only push insists on a credential.
- *  3. A receive only fast-forwards (`fastForward`), or reports `Rejected`.
- *     Sefer does not merge USFM behind a translator's back; conflict markers
- *     inside scripture are worse than a question.
- *
- * `publish` needs the Gitea API to create the repository, which is the one
- * thing git2 cannot do, so it goes through the same `Gitea` service the Web
- * host uses.
- */
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Effect, Layer, Option, PubSub, Stream } from "effect";
@@ -40,22 +15,16 @@ import {
   type RemoteService,
 } from "#core/remote/remote";
 
-/** The remote Sefer attaches and transfers; one per project, always. */
 const ORIGIN = "origin";
 
-/** How many progress events a slow reader may fall behind before losing some. */
 const PROGRESS_DEPTH = 64;
 
-/** The event `src-tauri/src/git.rs` emits a clone's live progress on. */
 const PROGRESS_EVENT = "sefer://git-progress";
 
 export interface TauriRemoteOptions {
-  /** The content host (`VITE_SEFER_CONTENT_HOST`); `null` disables publishing by name. */
   readonly endpoint: string | null;
 }
 
-/** The wire shape of `git.rs`'s `GitProgress`. */
-/** The wire shape of `git.rs`'s `GitProbe`. */
 interface WireProbe {
   readonly default_branch: string | null;
   readonly head: string | null;
@@ -71,13 +40,6 @@ interface WireProgress {
 const fail = (reason: RemoteFailureReason, description: string): RemoteError =>
   new RemoteError({ reason, description });
 
-/**
- * The Rust prefix vocabulary (`src-tauri/src/errors.rs`) as the four reasons a
- * sync surface can act on. `Conflict` — a diverged branch — is `Rejected`
- * because it has a specific remedy the person can carry out, and an
- * unrecognised prefix is `Rejected` too: the request did not happen, and we
- * will not claim a network cause we did not observe.
- */
 const REASONS: Readonly<Record<string, RemoteFailureReason>> = {
   AuthFailed: "Unauthorized",
   Offline: "Network",
@@ -113,15 +75,7 @@ const makeTauriRemote = (
   gitea: GiteaService,
 ): Effect.Effect<RemoteService> =>
   Effect.gen(function* () {
-    // Sliding, not unbounded: progress is a live readout. If nothing is
-    // watching, the events are worthless, and they must never make a transfer
-    // wait or let a long fetch grow the heap.
     const events = yield* PubSub.sliding<Progress>({ capacity: PROGRESS_DEPTH });
-    // A clone's live readout: the Rust side emits git's own phases ("Receiving
-    // objects", then "Resolving deltas") a few times a second while the
-    // blocking command runs, and they join the final tally below on one
-    // stream. Before, a 30 s download said "Starting…" until it was over.
-    // Listened to for the Remote's life, which is the app's.
     yield* Effect.promise(() =>
       listen<WireProgress>(PROGRESS_EVENT, (event) => {
         Effect.runFork(PubSub.publish(events, progressOf(event.payload)));
@@ -135,14 +89,6 @@ const makeTauriRemote = (
           : Effect.succeed(url),
       );
 
-    /**
-     * The credential for a URL's origin, or `None` when nobody has signed in.
-     *
-     * `None` is deliberately not an error. Browsing the catalogue and cloning
-     * a public translation is how somebody gets started, and the Rust side
-     * installs no credentials callback at all when this is absent — which is
-     * what makes an anonymous fetch succeed rather than report a 401.
-     */
     const credentialFor = (
       url: string,
     ): Effect.Effect<Option.Option<{ readonly username: string; readonly token: string }>> =>
@@ -151,15 +97,6 @@ const makeTauriRemote = (
         Option.map((credential) => ({ username: credential.username, token: credential.token })),
       );
 
-    /**
-     * The one shape all three transfers share: find the origin, look for a
-     * credential, run the command, publish what it reported. git2 reports
-     * progress through callbacks inside one blocking command, so what reaches
-     * the stream is the transfer's final tally rather than a live trickle —
-     * enough to show "done, N objects", not enough for a progress bar. A
-     * live readout needs the Rust side to emit Tauri events; that is a
-     * TODO(seam), not a reason to fake intermediate numbers here.
-     */
     const transfer = (
       command: string,
       repo: Repo,
@@ -169,9 +106,6 @@ const makeTauriRemote = (
       Effect.gen(function* () {
         const url = yield* originUrl(repo, name);
         const held = yield* credentialFor(url);
-        // Push is the only transfer nobody can do anonymously, and refusing it
-        // here rather than letting the server answer 401 is what turns "sign
-        // in first" into advice instead of a status code.
         if (auth === "required" && Option.isNone(held)) {
           return yield* Effect.fail(
             fail("Unauthorized", `no credential for ${hostOf(url)}; sign in first`),
@@ -193,12 +127,6 @@ const makeTauriRemote = (
       call<void>("git_ensure_remote", { root: repo.root, name: ORIGIN, url });
 
     return {
-      // git2's clone builder: it checks out the branch the server's HEAD
-      // names and records `origin` itself. Desktop reaches any host, so the
-      // URL goes through as given, exactly as `attach` takes it.
-      //
-      // The newest version only unless told otherwise, as on the Web: a slow
-      // or metered connection costs a laptop the same.
       clone: (url, into, cloning) =>
         Effect.gen(function* () {
           const credential = Option.getOrNull(yield* credentialFor(url));
@@ -235,8 +163,6 @@ const makeTauriRemote = (
             token: credential?.token ?? null,
           });
         }),
-      // `git_remote_url` already answers `string | null`, so the read half of
-      // attach costs desktop no new Rust.
       origin: (repo) =>
         Effect.map(
           call<string | null>("git_remote_url", { root: repo.root, name: ORIGIN }),
@@ -274,8 +200,6 @@ const makeTauriRemote = (
           yield* PubSub.publish(events, progress);
           return progress;
         }),
-      // Local: no origin, no credential. The forward-only and safe-checkout
-      // refusals are git2's, in Rust.
       fastForward: (repo, to) => call<void>("git_fast_forward", { root: repo.root, to }),
       push: (repo, to) => transfer("git_push", repo, "required", to ?? ORIGIN),
       publish: (repo, target) =>
@@ -291,8 +215,6 @@ const makeTauriRemote = (
           yield* attach(repo, url);
           yield* transfer("git_push", repo, "required");
         }),
-      // Local: no origin, no credential, no transport. The refusal (a
-      // repository with no merge in progress) is enforced in Rust.
       abortMerge: (repo) => call<void>("git_abort_merge", { root: repo.root }),
 
       progress: () => Stream.fromPubSub(events),

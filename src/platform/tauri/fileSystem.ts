@@ -1,25 +1,3 @@
-/**
- * The desktop host's `FileSystem`: `@tauri-apps/plugin-fs` behind the Effect
- * port, so every module above it — Save, Recovery, Library, Project — reads
- * and writes real files without naming Tauri.
- *
- * Two things make this layer different from the OPFS one it sits beside:
- *
- *   1. Paths are real absolute OS paths, so a project can live in
- *      `~/Documents` rather than only in a sandbox Sefer owns. What Sefer may
- *      touch is decided once, declaratively, in
- *      `src-tauri/capabilities/default.json` — a path outside that scope comes
- *      back as `PermissionDenied` rather than as a silent empty read.
- *   2. `rename` genuinely replaces the destination, which is what makes
- *      `writeFileAtomic` atomic on desktop (see documentation/architecture/storage.md).
- *
- * `watch` is real here too, so `HostInfo.capabilities().fsWatch` is true and
- * the project module can notice a book edited by another program.
- *
- * Methods no Sefer flow uses fail with a `PlatformError` naming the method,
- * the same convention `memory.ts` and the OPFS layer follow: an unimplemented
- * corner of the port must be loud, never a quiet success.
- */
 import { tempDir } from "@tauri-apps/api/path";
 import {
   copyFile,
@@ -71,12 +49,6 @@ const unimplementedEffect = (method: string): Effect.Effect<never, PlatformError
 const messageOf = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause);
 
-/**
- * The plugin rejects with the Rust error's `Display` text, so the only signal
- * available is the message. `os error <n>` is the reliable part of it on every
- * platform Tauri supports; the word-matching below is the fallback for the
- * plugin's own errors (scope refusals) which carry no errno.
- */
 const classify = (message: string): PlatformError.SystemErrorTag => {
   const text = message.toLowerCase();
   if (text.includes("os error 2") || text.includes("os error 3") || text.includes("not found")) {
@@ -97,7 +69,6 @@ const classify = (message: string): PlatformError.SystemErrorTag => {
   return "Unknown";
 };
 
-/** Every call into the plugin funnels through here, so no rejection escapes. */
 const attempt = <A>(
   method: string,
   path: string,
@@ -111,15 +82,19 @@ const attempt = <A>(
     },
   });
 
+const infoTypeOf = (entry: FileInfo): FileSystem.File.Type => {
+  if (entry.isSymlink) return "SymbolicLink";
+  if (entry.isDirectory) return "Directory";
+  return "File";
+};
+
 const infoOf = (entry: FileInfo): FileSystem.File.Info => ({
-  type: entry.isSymlink ? "SymbolicLink" : entry.isDirectory ? "Directory" : "File",
+  type: infoTypeOf(entry),
   mtime: Option.fromNullOr(entry.mtime),
   atime: Option.fromNullOr(entry.atime),
   birthtime: Option.fromNullOr(entry.birthtime),
   dev: 0,
   ino: Option.none(),
-  // The plugin reports a readonly flag, not a mode. Reporting the two modes
-  // Sefer can actually distinguish is more useful than reporting zero.
   mode: entry.readonly ? 0o444 : 0o644,
   nlink: Option.none(),
   uid: Option.none(),
@@ -130,24 +105,22 @@ const infoOf = (entry: FileInfo): FileSystem.File.Info => ({
   blocks: Option.none(),
 });
 
-/**
- * The plugin's event kind is a tagged union of notify's kinds; the port names
- * three. `access` events are dropped (a read is not a change) and anything
- * unrecognised is reported as an update, because a watcher that stays silent
- * about a change it did not understand is the failure mode that costs data.
- */
+const watchTagOf = (kind: object): FileSystem.WatchEvent["_tag"] => {
+  if ("create" in kind) return "Create";
+  if ("remove" in kind) return "Remove";
+  return "Update";
+};
+
 const watchEventsOf = (event: TauriWatchEvent): FileSystem.WatchEvent[] => {
   const kind = event.type;
   if (kind === "any" || kind === "other") {
     return event.paths.map((path): FileSystem.WatchEvent => ({ _tag: "Update", path }));
   }
   if ("access" in kind) return [];
-  const tag: FileSystem.WatchEvent["_tag"] =
-    "create" in kind ? "Create" : "remove" in kind ? "Remove" : "Update";
+  const tag = watchTagOf(kind);
   return event.paths.map((path) => ({ _tag: tag, path }));
 };
 
-/** The flags that mean "create, but refuse if it is already there". */
 const CREATE_EXCLUSIVE = new Set(["wx", "wx+", "ax", "ax+"]);
 
 const makeTauriFileSystem = (): FileSystem.FileSystem => {
@@ -174,8 +147,6 @@ const makeTauriFileSystem = (): FileSystem.FileSystem => {
           (entries) => entries.map((entry) => entry.name).sort(),
         );
       }
-      // The plugin's readDir is one level deep; the port's recursive form
-      // yields every descendant, relative to the directory asked for.
       const walk = (
         directory: string,
         prefix: string,
@@ -199,12 +170,6 @@ const makeTauriFileSystem = (): FileSystem.FileSystem => {
       return Effect.map(walk(resolved, ""), (found) => [...found].sort());
     });
 
-  /**
-   * The plugin has `append` and `create` but no exclusive-create, so the `wx`
-   * family is honoured with a check first. Racy in principle; the port's only
-   * user of it is a "do not clobber" guard where losing the race means two
-   * writers were fighting over one path, which is a bug upstream either way.
-   */
   const writeFileAt: FileSystem.FileSystem["writeFile"] = (path, data, options) =>
     Effect.suspend(() => {
       const resolved = normalisePath(path);
@@ -224,12 +189,6 @@ const makeTauriFileSystem = (): FileSystem.FileSystem => {
       );
     });
 
-  /**
-   * Temporary files live under the OS temp directory, which is why `$TEMP` is
-   * in the fs capability scope. A unique name rather than a mkstemp: the
-   * plugin exposes no atomic create, and this is the same bargain the OPFS and
-   * in-memory layers make.
-   */
   const temporaryName = (prefix: string | undefined): string => {
     unique += 1;
     return `${prefix ?? ""}${unique.toString(36)}${Math.random().toString(36).slice(2, 10)}`;
@@ -264,18 +223,6 @@ const makeTauriFileSystem = (): FileSystem.FileSystem => {
       copyFile(normalisePath(fromPath), normalisePath(toPath)),
     );
 
-  /**
-   * Copy, recursively, because the plugin's only copy is one file and the
-   * import pipeline copies whole project trees (`stage`, then `commit`). A file
-   * is `copyFile`; a directory is its entries, one at a time, into a directory
-   * made on demand — the OPFS layer's shape. Left unimplemented this refused
-   * every folder import on desktop ("copy is not implemented by the Tauri
-   * FileSystem", found driving the app on 2026-10-12). `overwrite` is not
-   * honoured: the OS copy replaces a file, which every caller asks for.
-   * Symlinks are skipped, never followed, so a link loop cannot recurse; below
-   * the top, each entry's kind comes from `readDir` rather than one `stat` per
-   * entry over IPC.
-   */
   const copyDirectory = (
     from: string,
     to: string,
@@ -331,17 +278,12 @@ const makeTauriFileSystem = (): FileSystem.FileSystem => {
         const removal = attempt("remove", resolved, () =>
           remove(resolved, { recursive: options?.recursive ?? false }),
         );
-        // `force` means "absent is fine", and only that: every other failure
-        // still surfaces. Asking first is clearer than classifying the
-        // plugin's rejection text a second time.
         if (options?.force !== true) return removal;
         return Effect.flatMap(
           attempt("remove", resolved, () => exists(resolved)),
           (present) => (present ? removal : Effect.void),
         );
       }),
-    // Replaces the destination, which is the property `writeFileAtomic`
-    // depends on. The fs plugin's rename is the OS rename.
     rename: (oldPath, newPath) =>
       attempt("rename", normalisePath(oldPath), () =>
         rename(normalisePath(oldPath), normalisePath(newPath)),
@@ -354,12 +296,6 @@ const makeTauriFileSystem = (): FileSystem.FileSystem => {
     symlink: () => unimplementedEffect("symlink"),
     truncate: () => unimplementedEffect("truncate"),
     utimes: () => unimplementedEffect("utimes"),
-    /**
-     * A real watcher. `watch` is scoped: the stream's scope owns the plugin's
-     * unwatch function, so a project that closes stops listening — a leaked
-     * watcher on a directory the user deleted is a real source of phantom
-     * "external change" notices.
-     */
     watch: (path, options) =>
       Stream.callback<FileSystem.WatchEvent, PlatformError.PlatformError>((queue) =>
         Effect.acquireRelease(

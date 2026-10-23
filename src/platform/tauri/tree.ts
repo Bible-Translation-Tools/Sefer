@@ -1,9 +1,3 @@
-/**
- * The desktop host's `FolderTree`: a folder's listing, and many files' bytes,
- * in one IPC call each (`src-tauri/src/tree.rs`), where the `FileSystem` port
- * would cross IPC once per file. What makes Translation Notes' freshness check
- * and first read proportionate on desktop; see `src/core/resources/kinds/tree.ts`.
- */
 import { invoke } from "@tauri-apps/api/core";
 import { Effect, Layer } from "effect";
 
@@ -16,10 +10,6 @@ const unreadable = (cause: unknown): Unavailable =>
     description: cause instanceof Error ? cause.message : String(cause),
   });
 
-/**
- * `tree_read`'s answer: for each asked path, in order, a little-endian `u32`
- * length and that many bytes.
- */
 const unpack = (
   buffer: ArrayBuffer,
   paths: readonly string[],

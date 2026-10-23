@@ -1,12 +1,3 @@
-/**
- * "Migrate from Writer", as the screen runs it: where candidates come from,
- * opening them, the health line, and the assembly.
- *
- * The policy is core's (`src/core/migrate`); this is the app's half, because
- * it knows the catalogue (a `fetch`), the pickers, the staging folder and the
- * Library — things core may not name.
- */
-
 import { Effect, FileSystem, Option, Result } from "effect";
 
 import { makeMemoryFileSystem } from "#core/fileSystem/memory";
@@ -31,38 +22,28 @@ import { t } from "./i18n";
 import type { Domain, Services } from "./services";
 import { rememberProject } from "./ui/landing/summaries";
 
-/** Where opened candidates are staged. Temporary: nothing here is a project. */
 const stagingRootOf = (services: Services): string => `${services.hostInfo.paths().temp}/migrate`;
 
-/** A candidate as the screen holds it, from listed to opened or refused. */
 export type Opened =
   | { readonly state: "waiting" }
   | { readonly state: "opening" }
   | { readonly state: "ready"; readonly staged: StagedBook; readonly health: Health }
   | { readonly state: "refused"; readonly reason: string };
 
-/** The languages with Writer projects matching a search of two letters or more. */
 export const writerLanguages = (
   services: Services,
   search: string,
 ): Promise<readonly WriterLanguage[]> => catalogueFor(services.settings).writerLanguages(search);
 
-/** The catalogue's Writer projects for one language. */
 export const remoteCandidates = (
   services: Services,
   language: string,
 ): Promise<readonly BookCandidate[]> => catalogueFor(services.settings).writerBooks(language);
 
-/**
- * Picked zips and folders unpacked in memory, by the root their candidates
- * name: where `openOne` reads them back. Held for the run; `forgetPicked`
- * lets them go when the screen closes.
- */
 const picked = new Map<string, FileSystem.FileSystem>();
 
 export const forgetPicked = (): void => picked.clear();
 
-/** The in-memory FileSystem a picked candidate lives in, if it does. */
 const pickedFor = (candidate: BookCandidate): FileSystem.FileSystem | undefined => {
   if (candidate.origin.kind === "remote") return undefined;
   const { root } = candidate.origin;
@@ -71,13 +52,6 @@ const pickedFor = (candidate: BookCandidate): FileSystem.FileSystem | undefined 
   return undefined;
 };
 
-/**
- * A picked folder or zip, as candidates. A native host reads the folder
- * where it is. A browser unpacks what was picked into MEMORY, never OPFS: a
- * Writer project is hundreds of chunk files, and OPFS pays per file (see
- * `documentation/architecture/storage.md`, "The OPFS tax"); the candidates are
- * read once and only the rendered books are kept.
- */
 export const pickLocal = async (
   services: Services,
   kind: "folder" | "zip",
@@ -101,21 +75,10 @@ export const pickLocal = async (
   return services.run(localCandidates(memory, staged.root, kind, files.name));
 };
 
-/** Why a pasted URL is not a Writer candidate, said to the person. */
 class NotWriterUrl extends Error {
   override readonly name = "NotWriterUrl";
 }
 
-/**
- * A Writer project straight from its URL, for when the catalogue lags behind
- * the server (it reads a public data API that is sometimes behind WACS).
- *
- * Checked the way the catalogue's own candidates are opened: the remote is
- * probed (it answers, it is not empty), then cloned — newest version, into
- * memory on the Web — and must recognise as a Writer project, its
- * `manifest.json` naming a book and a language. The clone is dropped; the
- * candidate goes through the run's ordinary open like any other.
- */
 export const urlCandidate = async (services: Services, typed: string): Promise<BookCandidate> => {
   const url = typed
     .trim()
@@ -143,7 +106,6 @@ export const urlCandidate = async (services: Services, typed: string): Promise<B
   if (probe.value.empty) throw new NotWriterUrl(t("{url} has nothing in it yet.", { url }));
 
   const inMemory = services.inMemoryTransfer?.();
-  // In memory on the Web; a native host checks in its temporary folder.
   const root = `${inMemory === undefined ? stagingRootOf(services) : "/url-check"}/${owner}_${repo}`;
   const look = Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
@@ -176,27 +138,14 @@ export const urlCandidate = async (services: Services, typed: string): Promise<B
   };
 };
 
-/**
- * How long one candidate may take to open: a whole-history clone, then its
- * saves read. Longer than an upstream probe's, which only asks for a head —
- * a long book's thousands of autosaves on a slow field link must not read as
- * "it did not answer in time" when it was only slow.
- */
 const CANDIDATE_TIMEOUT = "60 seconds";
 
-/** Opens, renders, validates and measures one candidate. Never rejects. */
 export const openOne = async (services: Services, candidate: BookCandidate): Promise<Opened> => {
   const operation = services.composition.observability.operation("migrate.open", {
     "migrate.book": candidate.book,
     "migrate.origin": candidate.origin.kind,
   });
   try {
-    // A clone that does not finish in time is refused like an unreachable
-    // one, so one slow repository never holds the run's Next behind it.
-    // A remote candidate is cloned, read once and dropped, so on the Web it is
-    // cloned into memory: OPFS writes were most of its cost. A picked zip or
-    // folder is read from the memory it was unpacked into; a native folder,
-    // where it is.
     const held = pickedFor(candidate);
     const inMemory =
       candidate.origin.kind === "remote" || held !== undefined
@@ -231,12 +180,6 @@ export const openOne = async (services: Services, candidate: BookCandidate): Pro
   }
 };
 
-/**
- * The census of `book` in a source text on this device, for the health line
- * to read against ("English ULB has 5 ch · 105 v"). The manifest's `ufw`
- * versification says nothing, so the source text is the only honest
- * expectation; with none here, there is none.
- */
 export const sourceCensus = (
   services: Services,
   sources: readonly RelatedResource[],
@@ -257,10 +200,6 @@ export const sourceCensus = (
     return undefined;
   });
 
-/**
- * How many passages of `other` differ from `picked`: Review's own decision
- * units, counted. `undefined` when the engine's diff door is missing.
- */
 export const passagesDiffering = (
   services: Services,
   picked: string,
@@ -273,7 +212,6 @@ export const passagesDiffering = (
     : undefined;
 };
 
-/** A folder name for the new project that is not taken yet. */
 const freeFolder = (services: Services, name: string): Effect.Effect<string, never, Domain> =>
   Effect.gen(function* () {
     for (let attempt = 1; ; attempt += 1) {
@@ -286,11 +224,6 @@ const freeFolder = (services: Services, name: string): Effect.Effect<string, nev
     }
   });
 
-/**
- * Assembles the chosen books into a new project, with their replayed Writer
- * history, and lists it. One `migrate.assemble` operation, so the replay's
- * span and a failure's reason are read in one place.
- */
 export const assembleProject = (
   services: Services,
   folder: string,
@@ -327,7 +260,6 @@ export const assembleProject = (
     return assembled.success;
   });
 
-/** Adds the chosen books to a project that exists: one commit, joining their replayed Writer history. */
 export const addToProject = (
   services: Services,
   root: string,

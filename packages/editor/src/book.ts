@@ -1,26 +1,3 @@
-/**
- * The editor-backed Book: a `Book` (packages/text/src/book.ts) whose canonical
- * text is a CodeMirror `EditorState` (`documentation/architecture/editor.md`).
- *
- * This is the Plain → Instantiated transition made real. A plain Book holds a
- * `Source` and applies changes with Source's own range checks; this one holds
- * a state, and `apply` runs the editing phases — admission, normalization,
- * protection, settlement — before anything is accepted. Readers cannot tell
- * the two apart: same `source()`, same `apply`, same `changes(fn)`.
- *
- * The invariant this file exists to protect: **one canonical text**. From the
- * moment the state is created FROM the plain Book's text, the state IS the
- * text; `source()` derives a string from it (cached per state, so a reader may
- * ask on every publish). Nothing else holds an editable copy — a bound view
- * shares this state, and a satellite borrows and forwards.
- *
- * Why a class-free closure: everything mutable here (the held state, the bound
- * view, the revision counter, the subscriber sets) is one book's identity, and
- * a closure states that without a `this`. Why the seat is not a proxy: a hop
- * between the canonical state and its readers would land on the keystroke
- * path, which §1.2 rules out.
- */
-
 import {
   isolateHistory,
   redo as cmRedo,
@@ -56,6 +33,7 @@ import { Result } from "effect";
 import { actionCommand, type EditorAction } from "./core/actions";
 import type { Analyze } from "./core/analyzer";
 import { surfaceRange } from "./core/clip";
+import { clipboardOrigin } from "./core/clipboard";
 import { historyLayer, judgeLayer, usfmEditorHeadless } from "./core/compose";
 import { docText, structureAt, type DocStructure } from "./core/docStructure";
 import { traceOf } from "./core/instrument";
@@ -155,7 +133,6 @@ export interface SeatedBook extends EditorBook {
   funnel(): Funnel;
 }
 
-/** The books `editorBook` made, so an `EditorBook` handed back can be trusted. */
 const seatedBooks = new WeakSet<EditorBook>();
 
 /** The whole seated book behind an `EditorBook` a host handed back. */
@@ -174,25 +151,8 @@ export interface EditorBookOptions {
   readonly observability?: EditorObservability;
 }
 
-/**
- * The origin an edit was committed under, in its OWN annotation.
- *
- * It used to ride in `userEvent` as `input.<origin>`, and that cost a
- * satellite its undo granularity: CodeMirror's history joins only
- * `input.type`/`delete` events made within half a second of each other, so
- * every character typed in an excerpt, committed as `input.find-excerpt`, was
- * an undo step of its own. A surface's edit is now committed with the
- * gesture's own `userEvent` and the origin beside it, and typing in an excerpt
- * undoes a word at a time, as it does in the book.
- */
 const originAnnotation = Annotation.define<Origin>();
 
-/**
- * The origin a view-driven transaction claims: the annotation when `apply` or
- * `applyFrom` wrote one; otherwise CodeMirror's own `userEvent` ("input.type",
- * "delete.backward", "undo") with any `input.` prefix stripped, which is what
- * a receipt should say about a keystroke.
- */
 const originOf = (tr: Transaction): Origin => {
   const named = tr.annotation(originAnnotation);
   if (named !== undefined) return named;
@@ -204,16 +164,6 @@ const originOf = (tr: Transaction): Origin => {
 const isHighSurrogate = (code: number): boolean => code >= 0xd800 && code <= 0xdbff;
 const isLowSurrogate = (code: number): boolean => code >= 0xdc00 && code <= 0xdfff;
 
-/**
- * Each change at its smallest: text a surface deleted and inserted straight
- * back is trimmed off both ends, so the phases judge what actually changes.
- *
- * A satellite's own filters keep a protected verse number by REPLACING it
- * with itself (`5 be` → `5 X`). Judged as sent, the Book's write-around saw
- * the number deleted, protected it a second time, and kept the insert that
- * already held it: `\v 5 5 X`. Trimmed, the Book sees `be` → `X`, which is
- * what the surface meant. A trim never ends inside a surrogate pair.
- */
 const minimalChanges = (changes: readonly Change[], doc: Text): readonly Change[] =>
   changes.map((change) => {
     const removed = doc.sliceString(change.from, change.to);
@@ -243,26 +193,16 @@ export const editorBook = (plain: Book, options: EditorBookOptions): SeatedBook 
   const listeners = makeListeners();
   const receivers = new Set<Receive>();
 
-  // The revision the plain Book arrived with, continued rather than restarted:
-  // a Save baseline or a Recovery journal taken while the book was plain must
-  // still compare against what the seat reports.
   let revision = plain.source().stamp.revision;
-  // The disk form the file arrived in. CodeMirror holds canonical text only,
-  // so the form travels beside the state rather than in it, and Save writes
-  // the seat's bytes back the way it read them.
   const form = plain.source().form;
   let holds = 0;
   let closed = false;
 
-  // The instrument (`core/instrument.ts`) is installed at LOWEST precedence so
-  // a caller who wants the trace for itself keeps it; when they do, this book
-  // still reads refusals, because the refusal slot belongs to the instrument
-  // rather than to any one tracer. With no Observability the trace is still
-  // assembled — `Refusal.rule` needs it — it just does not leave the process.
   let own = EditorState.create({
     doc: plain.source().text,
     extensions: [
       usfmEditorHeadless({ analyze: options.analyze }),
+      clipboardOrigin.of(id),
       historyLayer,
       Prec.lowest(
         tracer.of(
@@ -273,8 +213,6 @@ export const editorBook = (plain: Book, options: EditorBookOptions): SeatedBook 
     ],
   });
   let view: EditorView | null = null;
-  // The state a surface's edit was judged in, while that edit is being
-  // committed — so the receipt lands on the trace its stages are on.
   let judging: EditorState | null = null;
 
   const state = (): EditorState => (view === null ? own : view.state);
@@ -283,26 +221,15 @@ export const editorBook = (plain: Book, options: EditorBookOptions): SeatedBook 
 
   const round = (ms: number): number => Math.round(ms * 1000) / 1000;
 
-  /**
-   * One accepted edit: bump the revision, then publish — borrowing surfaces
-   * first (they must map their caret through this exact `ChangeSet` before
-   * anyone reads them), then the Book port's own listeners.
-   */
   const accept = (tr: Transaction, before: SourceStamp, origin: Origin): Receipt => {
     revision += 1;
     const receipt: Receipt = { before, after: stamp(), origin };
     const now = state();
-    // The satellites first — they must map their caret through this exact
-    // `ChangeSet` before anyone reads them — then the Book port's listeners.
-    // Both run INSIDE the gesture, so their cost is the gesture's cost.
     const broadcast = performance.now();
     for (const receive of Array.from(receivers)) receive(tr.changes, now);
     const satellites = performance.now();
     listeners.publish(receipt, changesOf(tr.changes));
     const published = performance.now();
-    // On the gesture's own record when there is one. `book.apply` as a
-    // separate note was a root of its own: a fact about a keystroke, filed
-    // where nothing could see which keystroke.
     const fields = {
       "book.id": id,
       "book.origin": origin,
@@ -318,14 +245,6 @@ export const editorBook = (plain: Book, options: EditorBookOptions): SeatedBook 
     return receipt;
   };
 
-  /**
-   * The refusal a rejected `apply` reports.
-   *
-   * The FIRST stage that refused, not the last: a change filter that vetoes a
-   * range runs before the transaction rules that would have rewritten it, so
-   * the first door to close is the one that decided. `reason` is that stage's
-   * own words when it had any — the same detail the trace shows.
-   */
   const refuse = (origin: Origin, count: number, judged?: EditorState): Refusal => {
     const first = lastRefusal();
     const rule = first?.rule ?? "editor.phases";
@@ -345,18 +264,10 @@ export const editorBook = (plain: Book, options: EditorBookOptions): SeatedBook 
     });
   };
 
-  /**
-   * `event` is the gesture's own `userEvent` when a surface reported one
-   * (`SurfaceTerms.event`); without it the edit is `input.<origin>`, which no
-   * history event joins — right for a fix, a format or a project operation.
-   */
   const specFor = (changes: readonly Change[], origin: Origin, trust: Trust, event?: string) => {
     const annotations = [
       originAnnotation.of(origin),
       ...(trust.trusted ? [trusted.of(trust.by)] : []),
-      // A project-wide operation is ONE undo step per book, whatever it did to
-      // this book's text: `isolateHistory` stops CodeMirror from folding it
-      // into the keystroke before or after it.
       ...(origin.startsWith("project.") ? [isolateHistory.of("full" as const)] : []),
     ];
     return {
@@ -370,24 +281,14 @@ export const editorBook = (plain: Book, options: EditorBookOptions): SeatedBook 
     };
   };
 
-  /** Runs a command (undo/redo) against whichever seat is canonical. */
   const command = (
     run: (target: { state: EditorState; dispatch: (tr: Transaction) => void }) => boolean,
   ): boolean => {
     const bound = view;
     if (bound !== null) {
-      // The book's history is the book's, so undo and redo run HERE whichever
-      // surface asked — the toolbar's buttons, the palette, `Mod-z` inside an
-      // open note editor. When the reader is not in this view, its own
-      // restored selection is not a place they are looking at, and scrolling
-      // to it threw them somewhere else and destroyed the satellite they were
-      // typing in (see core/scroll.ts). The edit lands either way; only the
-      // page is kept still.
       if (bound.hasFocus) return run(bound);
       return withoutScrolling(() => run(bound));
     }
-    // A one-slot box rather than a `let`: the command dispatches from inside a
-    // callback, and an array reads back without an assertion.
     const landed: Transaction[] = [];
     const before = stamp();
     const ok = run({
@@ -403,13 +304,6 @@ export const editorBook = (plain: Book, options: EditorBookOptions): SeatedBook 
     return true;
   };
 
-  /**
-   * One transaction onto the canonical seat, and its receipt or refusal.
-   *
-   * Same phases, same publication, whichever door it came through: on a
-   * mounted book dispatching is how the view's own keystrokes arrive, so an
-   * edit takes that path rather than a second one.
-   */
   const commit = (
     spec: TransactionSpec,
     origin: Origin,
@@ -435,17 +329,6 @@ export const editorBook = (plain: Book, options: EditorBookOptions): SeatedBook 
     return Result.succeed(accept(tr, before, origin));
   };
 
-  /**
-   * The state a surface's edit is judged in: the canonical text and parse,
-   * with the SURFACE's projection, mode and range in place of the canonical
-   * editor's — and the Book's own phases, installed as they are on the seat.
-   *
-   * A reconfigure of the canonical state rather than a fresh one, so the
-   * parse carries over (the structure is the same field over the same text)
-   * and nothing is analyzed again. It is thrown away after the one edit; its
-   * cost is the plan and paint index under the surface's projection, which
-   * the phases read.
-   */
   const judgeFor = (terms: SurfaceTerms): EditorState => {
     const canonical = state();
     return canonical.update({
@@ -454,8 +337,6 @@ export const editorBook = (plain: Book, options: EditorBookOptions): SeatedBook 
         terms.projection.map((delta) => assignment.of(delta)),
         modeFacet.of(terms.mode),
         surfaceRange.of({ from: terms.range.from, to: terms.range.to }),
-        // The seat's own tracer, so the stages land on the ring the book
-        // already writes to and `Refusal.rule` can name the rule.
         tracer.of(canonical.facet(tracer) ?? localTracer),
       ]),
       filter: false,
@@ -491,21 +372,11 @@ export const editorBook = (plain: Book, options: EditorBookOptions): SeatedBook 
       const list = minimalChanges(asChangeList(changes), state().doc);
       clearRefusal();
       const judge = judgeFor(terms);
-      // Judged as the gesture it was in the surface — a typed key, a paste —
-      // so the rules that act on the kind of gesture see it; committed below
-      // under the surface's origin, which is what the receipt names.
       const judged = judge.update(specFor(list, origin, UNTRUSTED, terms.event));
       if (!judged.docChanged) return Result.fail(refuse(origin, list.length, judge));
-      // The phases have run, once, under the surface's terms; what they let
-      // through is the edit. It lands on the canonical state unfiltered —
-      // judging it a second time under the CANONICAL projection is exactly
-      // the mistake this door exists to avoid: that projection hides a
-      // footnote's body, and would refuse every key typed into it.
       judging = judge;
       try {
         return commit(
-          // The gesture's own event on the commit as well as the judgement, so
-          // the book's history joins a satellite's typing like the book's own.
           {
             ...specFor([], origin, UNTRUSTED, terms.event),
             changes: judged.changes,
@@ -540,8 +411,6 @@ export const editorBook = (plain: Book, options: EditorBookOptions): SeatedBook 
       view = bound;
       return () => {
         if (view !== bound) return;
-        // Keep what the view had: unbinding is Mounted → Instantiated, and
-        // closing a tab must not cost the translator an edit or the history.
         own = bound.state;
         view = null;
       };

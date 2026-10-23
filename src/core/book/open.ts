@@ -1,10 +1,3 @@
-/**
- * Opening a book from disk: read the file through the `effect/FileSystem` port,
- * decode it to canonical text, and hold it as a plain Book
- * (`@sefer/text/book`). The Book port itself is host-free and lives in the
- * text package; reading bytes is a host concern and stays here.
- */
-
 import { makeBook, type Book } from "@sefer/text/book";
 import { decode, type SourceDecodeError } from "@sefer/text/source";
 import { Effect, FileSystem, Option, type PlatformError } from "effect";

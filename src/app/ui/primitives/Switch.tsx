@@ -1,26 +1,13 @@
-/**
- * The on/off switch — a real `<button role="switch">`, with an optional label
- * that is part of the hit area.
- *
- * A switch, not a checkbox: it takes effect the moment it moves, and there is
- * no form to submit. Where a preference IS a form field (`/settings` writes
- * through `Settings.set` on change), the switch is still the honest control,
- * because the write happens on the click.
- */
-
 import { cx, type ClassValue } from "./cx";
 
 export interface SwitchProps {
   readonly checked: boolean;
   readonly onChange: (checked: boolean) => void;
-  /** Shown beside the track and included in the accessible name. */
   readonly label?: string;
-  /** Use when the label is rendered elsewhere (a table row, a list item). */
   readonly "aria-label"?: string;
   readonly id?: string;
   readonly disabled?: boolean;
   readonly class?: ClassValue;
-  /** The label before the track rather than after it: a row that ends in its switch. */
   readonly labelFirst?: boolean;
 }
 

@@ -1,9 +1,3 @@
-/**
- * Choosing how to work, from either surface that offers it — the cloud
- * popover and Settings' Cloud section — so the two say the same thing about
- * what happened.
- */
-
 import type { Project } from "#core/project/project";
 
 import { collaboration } from "../../collaboration";
@@ -14,10 +8,8 @@ import { workInOwnCopy, workInShared } from "../../suggestions";
 import { syncWatch } from "../../syncWatch";
 import { toasts } from "../primitives";
 
-/** What a surface shows when the copy mode could not be chosen: the shared project is the person's own. */
 export type Chose = "done" | "standalone" | "failed";
 
-/** Work in the person's own copy: make it or find it, say which, re-read. */
 export const chooseOwnCopy = async (services: Services, project: Project): Promise<Chose> => {
   try {
     const outcome = await workInOwnCopy(services, project);
@@ -57,7 +49,6 @@ export const chooseOwnCopy = async (services: Services, project: Project): Promi
   }
 };
 
-/** Work in the shared project again; the next send goes there. */
 export const chooseShared = async (services: Services, project: Project): Promise<void> => {
   await workInShared(services, project).catch(() => undefined);
   await Promise.all([

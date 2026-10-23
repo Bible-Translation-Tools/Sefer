@@ -1,19 +1,3 @@
-/**
- * The multibuffer's feed: occurrences in, groups out, plus the four actions
- * every screen that shows excerpts needs.
- *
- * Find and Key terms are separate panes with separate URLs, and they agree on
- * everything below the hits: which books to analyse, how a card expands, what
- * Edit seats, where Open in editor goes, and what happens after an accepted
- * edit. That agreement is this one file rather than a copy per route, so a
- * fix to the staleness rule or the analysis cache lands on both panes at once.
- *
- * What it deliberately does NOT own is the hits. Find's are search results and
- * Key terms' are a guide's references mapped onto the project — two very
- * different productions, and the only thing they have in common is the shape
- * they arrive in (`core/excerpts`' `Occurrence`).
- */
-
 import type { EditorBook, Following } from "@sefer/editor";
 import type { BookId } from "@sefer/text/book";
 import { useNavigate } from "@tanstack/solid-router";
@@ -40,73 +24,32 @@ import type { ContextStep } from "../multibuffer/cardState";
 import { createCardViews, type CardViews } from "../multibuffer/cardViews";
 
 export interface ExcerptFeed {
-  /** Every card's view on this screen — its reach, its USFM, its open lines. */
   readonly views: CardViews<Excerpt>;
-  /** Where every card starts: the reader's context setting, read when the screen opened. */
   readonly initial: Extent;
   readonly groups: Accessor<readonly BookExcerpts[]>;
   readonly outline: Accessor<readonly OutlineRow[]>;
-  /** One memoized parse for the whole screen; handed to every open satellite. */
   readonly analyze: (text: string) => Analysis;
-  /** What a card shows: the excerpt as grouped, widened by the reader's steps. */
   readonly shownOf: (excerpt: Excerpt) => Excerpt;
-  /** One context step for one card: a TOC unit up or down, or the whole chapter. */
   readonly expand: (sid: string, step: ContextStep) => void;
   readonly seat: (bookId: BookId) => Promise<EditorBook | undefined>;
-  /**
-   * A book's seat, while one is open — the book in the editor, or the one a
-   * card is editing — for every card of that book to follow as it changes.
-   */
   readonly seatedOf: (bookId: BookId) => Following | undefined;
-  /**
-   * `into` is the operation the jump belongs to, when the caller opened one
-   * (the Findings panel's `findings.navigate`); without it the span is a root
-   * of its own, as it always was.
-   */
   readonly openInEditor: (
     bookId: BookId,
     from: number,
     to?: number,
     into?: ObservabilityService,
   ) => void;
-  /** An edit in a card, at a pause or when it ends: rebuild, then tell the caller. */
   readonly edited: (bookId: BookId) => void;
 }
 
 export interface ExcerptFeedOptions {
   readonly hits: Accessor<readonly Occurrence[]>;
-  /**
-   * Called once the project has re-published after an accepted edit. Find
-   * re-runs its search here; a feed whose hits are not derived from the text
-   * needs nothing, because the model already re-read the books.
-   */
   readonly onEdited?: () => void;
-  /**
-   * Re-takes ONE book's results against its text as it stands now, when the
-   * screen can (Find: a fresh reading of that book). Called at once — there is
-   * nothing to wait for — in place of `onEdited`'s wait for the corpus.
-   */
   readonly retake?: (bookId: BookId) => void;
-  /** Names this screen's `openInEditor` span — "find", "terms". */
   readonly name: string;
-  /**
-   * The parse cache to use. A screen that has to analyse books BEFORE it has
-   * hits — Key terms resolves a guide's references against each book's table
-   * of contents — passes its own, so the project is parsed once for the screen
-   * rather than once for the mapping and once again for the cards.
-   */
   readonly analyze?: (text: string) => Analysis;
 }
 
-/**
- * The named books as the excerpt model reads them: canonical text plus the
- * parse that describes it, in project order. Call it inside a memo — it is
- * what makes that memo depend on the books it reads.
- *
- * ProjectAnalysis already holds a parse per book, and it is used when it
- * still fits the text; otherwise `analyze` answers. Find, Key terms and the
- * feed share this one loop.
- */
 export const readBooks = (
   shell: Shell,
   wanted: ReadonlySet<BookId>,
@@ -117,12 +60,6 @@ export const readBooks = (
   const books: BookText[] = [];
   for (const book of project.books) {
     if (!wanted.has(book.id)) continue;
-    // The stamp of the book whose text is about to be read, so this depends
-    // on the books it USES and not on every edit anywhere. The stamp is the
-    // signal and the Book is still the source: a revision moves on every
-    // accepted edit, which can only over-fire (an undo back to identical
-    // text is a new revision) and never under-fire. A content hash would be
-    // the other trade — exact, and a whole engine parse to compute.
     shell.stampOf(book.id);
     const source = book.source();
     const held = Option.getOrUndefined(shell.services.projectAnalysis.analysis(book.id));
@@ -130,8 +67,6 @@ export const readBooks = (
       held !== undefined && describesExactly(held.analysis, source.text)
         ? held.analysis
         : analyze(source.text);
-    // Labelled by the one display rule (`shell.location.label`), with the
-    // book's own heading as its second choice, read once off this parse.
     const heading = bookHeading(analysis);
     books.push({
       bookId: book.id,
@@ -143,159 +78,85 @@ export const readBooks = (
   return books;
 };
 
-export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
-  const shell = useShell();
-  const navigate = useNavigate();
+interface HeldBook {
+  readonly revision: number;
+  readonly length: number;
+  readonly analysis: Analysis;
+  readonly hits: readonly Occurrence[];
+  readonly book: BookText;
+  readonly groups: readonly BookExcerpts[];
+  readonly outline: readonly OutlineRow[];
+}
 
-  /**
-   * Every card's view, by sid — the reach it has been widened to among it.
-   *
-   * Here rather than in the card: a card scrolls out of the list's window and
-   * its row is unmounted, and "show me one more" must survive that — as
-   * it must survive the re-read an accepted edit provokes. A sid that is no
-   * longer in the results is simply never asked for.
-   */
-  const views = createCardViews<Excerpt>("excerpt");
+const sameHits = (a: readonly Occurrence[], b: readonly Occurrence[]): boolean =>
+  a.length === b.length && a.every((hit, at) => hit === b[at]);
 
-  /** What every card starts from: the reader's setting, read when the screen opens. */
-  const context = Math.max(
-    0,
-    shell.services.settings.get(shellKeys(shell.services.settings).excerptContext),
-  );
-  const initial: Extent = { up: context, down: context };
+interface Model {
+  readonly groups: readonly BookExcerpts[];
+  readonly outline: readonly OutlineRow[];
+  readonly books: ReadonlyMap<BookId, BookText>;
+}
 
-  const expand = (sid: string, step: ContextStep): void => {
-    views.send(sid, { kind: "step", step, from: initial });
-  };
-
-  // One memo for the whole screen, not one per excerpt: every book that holds
-  // a hit is analysed through it, and a fresh memo per render would re-parse
-  // the project on every keystroke.
-  const analyze = options.analyze ?? shell.services.galley.memoize();
-
-  /**
-   * The hits grouped over the books that hold them, as `readBooks` reads them.
-   *
-   * NOT a function of the extents. Widening one card used to rebuild this for
-   * every hit — on "the" over en_ulb that is 86,556 cards regrouped, and the
-   * list's 86,556 rows re-estimated, for one click on one card. A card's own
-   * extent is applied where the card is drawn (`shownOf`), to the twenty the
-   * list is showing.
-   */
-  /**
-   * The last grouping of each book, and what it was built from.
-   *
-   * Reused whenever the book's text, its parse and its hits are the same
-   * values: a seat swap (Edit on a card, the editor opening the book) rewrites
-   * the book's row in the shell store, and the stamp that comes back is a new
-   * object with the same revision. Rebuilt from scratch, that regrouped every
-   * hit of every book — 86,556 on "the" over en_ulb — for a click on one card,
-   * and every card downstream saw a new excerpt. Now it regroups the books
-   * that changed and hands every other book's groups back as they were.
-   */
-  const held = new Map<
-    BookId,
-    {
-      readonly revision: number;
-      readonly length: number;
-      readonly analysis: Analysis;
-      readonly hits: readonly Occurrence[];
-      readonly book: BookText;
-      readonly groups: readonly BookExcerpts[];
-      readonly outline: readonly OutlineRow[];
+const buildModel = (
+  shell: Shell,
+  options: ExcerptFeedOptions,
+  analyze: (text: string) => Analysis,
+  held: Map<BookId, HeldBook>,
+  initial: Extent,
+): Model => {
+  const project = shell.project();
+  if (project === undefined) return { groups: [], outline: [], books: new Map<BookId, BookText>() };
+  const hits = options.hits();
+  const done = shell.services.composition.observability.span(`${options.name}.group`);
+  let reused = 0;
+  let rebuilt = 0;
+  const byBook = new Map<BookId, Occurrence[]>();
+  for (const hit of hits) {
+    const list = byBook.get(hit.bookId);
+    if (list === undefined) byBook.set(hit.bookId, [hit]);
+    else list.push(hit);
+  }
+  const books = readBooks(shell, new Set(byBook.keys()), analyze);
+  const groups: BookExcerpts[] = [];
+  const outline: OutlineRow[] = [];
+  const texts = new Map<BookId, BookText>();
+  for (const book of books) {
+    const own = byBook.get(book.bookId) ?? [];
+    const stamp = shell.stampOf(book.bookId);
+    const before = held.get(book.bookId);
+    const reuse = before !== undefined && sameHits(before.hits, own);
+    if (reuse) {
+      reused += 1;
+      groups.push(...before.groups);
+      outline.push(...before.outline);
+      texts.set(book.bookId, before.book);
+      continue;
     }
-  >();
+    rebuilt += 1;
+    const built = group([book], own, initial);
+    groups.push(...built.groups);
+    outline.push(...built.outline);
+    texts.set(book.bookId, book);
+    held.set(book.bookId, {
+      revision: stamp?.revision ?? -1,
+      length: stamp?.length ?? -1,
+      analysis: book.analysis,
+      hits: own,
+      book,
+      groups: built.groups,
+      outline: built.outline,
+    });
+  }
+  for (const id of held.keys()) if (!byBook.has(id)) held.delete(id);
+  done({
+    "excerpts.hits": hits.length,
+    "excerpts.books_reused": reused,
+    "excerpts.books_rebuilt": rebuilt,
+  });
+  return { groups, outline, books: texts };
+};
 
-  /** Two hit lists that are the same hits, by identity: a search that did not re-run. */
-  const sameHits = (a: readonly Occurrence[], b: readonly Occurrence[]): boolean =>
-    a.length === b.length && a.every((hit, at) => hit === b[at]);
-
-  const model = createMemo(
-    () => {
-      const project = shell.project();
-      if (project === undefined)
-        return { groups: [], outline: [], books: new Map<BookId, BookText>() };
-      const hits = options.hits();
-      // A span, so a seat swap or an edit shows in the ring how much it
-      // regrouped: `excerpts.group` with the books reused and rebuilt.
-      const done = shell.services.composition.observability.span(`${options.name}.group`);
-      let reused = 0;
-      let rebuilt = 0;
-      const byBook = new Map<BookId, Occurrence[]>();
-      for (const hit of hits) {
-        const list = byBook.get(hit.bookId);
-        if (list === undefined) byBook.set(hit.bookId, [hit]);
-        else list.push(hit);
-      }
-      const books = readBooks(shell, new Set(byBook.keys()), analyze);
-      const groups: BookExcerpts[] = [];
-      const outline: OutlineRow[] = [];
-      const texts = new Map<BookId, BookText>();
-      for (const book of books) {
-        const own = byBook.get(book.bookId) ?? [];
-        const stamp = shell.stampOf(book.bookId);
-        const before = held.get(book.bookId);
-        // Reused whenever the HITS are the same. When the book's text moved
-        // and its hits did not — an edit, before the screen re-takes them —
-        // those hits are at offsets the edit has moved, and regrouping from
-        // them would paint every card of the book in the wrong place. The
-        // cards already on screen follow the book live and map their marks
-        // through the edit; new hits (a re-take, a new search, a new pass)
-        // are what regroup the book, over its text as it then stands.
-        const reuse = before !== undefined && sameHits(before.hits, own);
-        if (reuse) {
-          reused += 1;
-          groups.push(...before.groups);
-          outline.push(...before.outline);
-          texts.set(book.bookId, before.book);
-          continue;
-        }
-        rebuilt += 1;
-        const built = group([book], own, initial);
-        groups.push(...built.groups);
-        outline.push(...built.outline);
-        texts.set(book.bookId, book);
-        held.set(book.bookId, {
-          revision: stamp?.revision ?? -1,
-          length: stamp?.length ?? -1,
-          analysis: book.analysis,
-          hits: own,
-          book,
-          groups: built.groups,
-          outline: built.outline,
-        });
-      }
-      for (const id of held.keys()) if (!byBook.has(id)) held.delete(id);
-      done({
-        "excerpts.hits": hits.length,
-        "excerpts.books_reused": reused,
-        "excerpts.books_rebuilt": rebuilt,
-      });
-      return { groups, outline, books: texts };
-    },
-    { name: "excerptModel" },
-  );
-
-  /** The last widening computed per card, so a redraw of an unchanged card costs a lookup. */
-  const widened = new WeakMap<Excerpt, { readonly extent: Extent; readonly shown: Excerpt }>();
-
-  const shownOf = (excerpt: Excerpt): Excerpt => {
-    const want = views.extents().get(excerpt.sid);
-    if (want === undefined) return excerpt;
-    const held = widened.get(excerpt);
-    if (held?.extent === want) return held.shown;
-    const book = model().books.get(excerpt.bookId);
-    if (book === undefined) return excerpt;
-    const shown = extend(book, excerpt, want);
-    widened.set(excerpt, { extent: want, shown });
-    return shown;
-  };
-
-  /**
-   * Moves whenever this screen seats a book. `services.seated` is a plain map,
-   * so without this a card mounted before the seat would never learn of it —
-   * and the one card that asked to edit would be the only one to change.
-   */
+const createSeats = (shell: Shell): Pick<ExcerptFeed, "seatedOf" | "seat"> => {
   const [seats, setSeats] = createSignal(0, { name: "excerptSeats" });
   const funnels = new WeakMap<EditorBook, Following>();
   const seatedOf = (bookId: BookId): Following | undefined => {
@@ -320,17 +181,16 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
     setSeats((held) => held + 1);
     return shell.services.seated(bookId);
   };
+  return { seatedOf, seat };
+};
 
-  /**
-   * Open the main editor on a hit.
-   *
-   * Synchronous, deliberately: `aim` then `navigate`, with nothing awaited
-   * between the click and the route change, because every await here is time
-   * the reader spends looking at a card that did not visibly react. The span
-   * is what says where the remaining time goes — the route's own `focus`
-   * instantiates the book, and on a big one that is the part worth measuring.
-   */
-  const openInEditor = (
+const openerOf =
+  (
+    shell: Shell,
+    navigate: ReturnType<typeof useNavigate>,
+    name: string,
+  ): ExcerptFeed["openInEditor"] =>
+  (
     bookId: BookId,
     from: number,
     to?: number,
@@ -338,7 +198,7 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
   ): void => {
     const project = shell.project();
     if (project === undefined) return;
-    const done = into.span(`${options.name}.openInEditor`, `${bookId} ${from}`);
+    const done = into.span(`${name}.openInEditor`, `${bookId} ${from}`);
     shell.aim(bookId, from, to);
     void navigate({
       to: "/project/$slug/book/$book",
@@ -347,17 +207,8 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
     done();
   };
 
-  /**
-   * An accepted edit, and whatever the screen does about it.
-   *
-   * The wait is not a fudge. `findInReading` reads its mask map from the
-   * CORPUS, and a book's corpus registration is refreshed one scheduler pass after its text moved
-   * (`ProjectAnalysis.supply`) — so searching the instant an edit lands would
-   * answer from the text before it, and the result count would be a revision
-   * behind. The next republish is the honest cue; the timeout is there because
-   * an edit that was REFUSED republishes nothing at all.
-   */
-  const edited = (bookId: BookId): void => {
+const editedOf = (shell: Shell, options: ExcerptFeedOptions): ExcerptFeed["edited"] => {
+  return (bookId) => {
     shell.changed({ kind: "book.apply", books: [bookId] });
     const now = options.retake;
     if (now !== undefined) {
@@ -375,6 +226,49 @@ export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
       )
       .then(after);
   };
+};
+
+export const createExcerptFeed = (options: ExcerptFeedOptions): ExcerptFeed => {
+  const shell = useShell();
+  const navigate = useNavigate();
+
+  const views = createCardViews<Excerpt>("excerpt");
+
+  const context = Math.max(
+    0,
+    shell.services.settings.get(shellKeys(shell.services.settings).excerptContext),
+  );
+  const initial: Extent = { up: context, down: context };
+
+  const expand = (sid: string, step: ContextStep): void => {
+    views.send(sid, { kind: "step", step, from: initial });
+  };
+
+  const analyze = options.analyze ?? shell.services.galley.memoize();
+
+  const held = new Map<BookId, HeldBook>();
+
+  const model = createMemo(() => buildModel(shell, options, analyze, held, initial), {
+    name: "excerptModel",
+  });
+
+  const widened = new WeakMap<Excerpt, { readonly extent: Extent; readonly shown: Excerpt }>();
+
+  const shownOf = (excerpt: Excerpt): Excerpt => {
+    const want = views.extents().get(excerpt.sid);
+    if (want === undefined) return excerpt;
+    const held = widened.get(excerpt);
+    if (held?.extent === want) return held.shown;
+    const book = model().books.get(excerpt.bookId);
+    if (book === undefined) return excerpt;
+    const shown = extend(book, excerpt, want);
+    widened.set(excerpt, { extent: want, shown });
+    return shown;
+  };
+
+  const { seatedOf, seat } = createSeats(shell);
+  const openInEditor = openerOf(shell, navigate, options.name);
+  const edited = editedOf(shell, options);
 
   return {
     views,

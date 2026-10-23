@@ -1,54 +1,3 @@
-/**
- * One bound reference, as a read-only editor over the SAME book the reader
- * has open.
- *
- * This is the second place in the shell that touches CodeMirror, and it is
- * allowed to be for the reason the first one is not: there is no Book here.
- * `BookEditor` owns the one Solid/Book subscription because its text is
- * canonical and every keystroke has to become a receipt. A reference is a
- * string read off another resource's disk — nothing writes it, nothing
- * publishes it, and no Book in this process describes it — so the rule it has
- * to keep is simply that it can never be edited, which
- * `packages/editor/src/recipes/reference.ts` says twice.
- *
- * What the pane adds over the recipe is the shell's half of the wiring:
- *
- *  - the TEXT, from `Library.readBook` — the whole book, because the engine
- *    parses a book and not a passage;
- *  - the MODE, from `shell.mode()`, so Regular/USFM switches both panes at
- *    once and a translator comparing markup sees markup on both sides;
- *  - the PLACE, through the book page's aligned group (`@sefer/editor`
- *    `createAlignedGroup`): scroll the book and the verse you scrolled to is
- *    brought into this pane when it is not already showing, and scrolling
- *    this pane leads the book the same way.
- *
- * Sync is by VERSE ADDRESS — Location's `addressAt` in one table of contents,
- * `resolve` in the other — never by offset or ordinal: the two texts are
- * different files of the same book, and the reference a translator reads is
- * the only thing they are guaranteed to agree about.
- *
- * ## The paired block
- *
- * Below the chapter, the pane answers a finer question: **"what is that `\q2`
- * in the source text"**. The caret is in a block of the reader's own book; the
- * block at the same ADDRESS in this text is marked.
- *
- * The address is `(sid, where, ordinal)` — which verse, whether the block
- * leads the verse or sits inside it, which one of those — and it is the only
- * thing two texts of different lengths and different words can share. The
- * MARKER is deliberately not part of it: a `\q1` here against a `\q2` there
- * is precisely the correspondence worth seeing, and matching on the name would
- * hide it by never pairing them (`core/galley/overlay.ts`).
- *
- * Both skeletons are fetched ONCE — the source's at mount, the target's per
- * edit — and matched in TypeScript as the caret moves, which is the shape
- * `overlay.md` asks for by name: `targetNodeFor`/`sourceNodeFor` are ~1.4 ms
- * and are for one-off questions, not for a per-keystroke loop.
- *
- * A reference that simply has no file for this book is the ordinary case and
- * gets one line, not an empty editor.
- */
-
 import { mountReference, type PairedRange, type ReferenceMount } from "@sefer/editor";
 import type { JSX } from "@solidjs/web";
 import { Effect, Fiber, Option, Result, Stream } from "effect";
@@ -85,19 +34,13 @@ import { bookName } from "./books";
 import { FollowToggle } from "./FollowToggle";
 import { metadataOf } from "./project";
 
-// The editor's own stylesheet, for the same reason `BookEditor` imports it:
-// the pane paints with `usfm-*` classes and a route that never opens a book
-// never loads them.
 import "@sefer/editor/editor.css";
 
 export interface ReferencePaneProps {
   readonly resource: Resource;
   readonly role: Role;
-  /** The book the reader has open; the reference is asked for the same one. */
   readonly bookId: string;
-  /** The chapter NUMBER the main editor is clipped to, or `null` for whole-book. */
   readonly clip: () => number | null;
-  /** Absent for a text the project declares: nothing was picked to remove. */
   readonly onUnbind?: () => void;
   /**
    * In place of the title, when the column holds more than one text: the
@@ -118,29 +61,18 @@ export interface ReferencePaneProps {
   readonly followControl?: boolean;
 }
 
-/** What the pane is showing, once the read has answered. */
 type Held =
   | { readonly kind: "loading" }
   | { readonly kind: "missing" }
   | { readonly kind: "failed"; readonly reason: string }
   | { readonly kind: "text"; readonly text: string };
 
-/** A block's address, as one comparable key: `(sid, where, ordinal)`, never the marker. */
 const addressOf = (row: {
   readonly sid: string;
   readonly where: string;
   readonly ordinal: number;
 }) => `${row.sid}\u0000${row.where}\u0000${row.ordinal}`;
 
-/**
- * What pairing will be able to answer, counted once at load.
- *
- * The open book's blocks and verses that have NO twin here, by the same rules
- * `paired` matches with — block by address, verse by sid. `unpaired_empty` is
- * the strict-block path on its own: an empty block is matched by address or
- * not at all, so each one counted there is a caret position that will mark
- * nothing. Omitted when the open book has no skeleton yet.
- */
 const pairingFacts = (source: Skeleton | undefined, target: Skeleton | undefined): Attrs => {
   if (source === undefined) return { "reference.skeleton": false };
   const facts = {
@@ -168,12 +100,77 @@ const pairingFacts = (source: Skeleton | undefined, target: Skeleton | undefined
   };
 };
 
+function pairedRangeAt(
+  target: Skeleton,
+  source: Skeleton,
+  at: number,
+  unpairedAt: (block: SkeletonRow) => void,
+): PairedRange | undefined {
+  const here = blockAtOffset(target.blocks, at);
+  if (here?.empty === true) {
+    const row = equivalentBlock(source.blocks, here);
+    if (row === undefined) unpairedAt(here);
+    return row === undefined ? undefined : { from: row.from, to: row.end };
+  }
+
+  const verse = verseAtOffset(target, at);
+  if (verse !== undefined) {
+    const twin = equivalentVerse(source, verse.sid);
+    return twin === undefined ? undefined : { from: twin.textFrom, to: twin.textTo };
+  }
+
+  if (here === undefined) return undefined;
+  const row = equivalentBlock(source.blocks, here);
+  return row === undefined ? undefined : { from: row.from, to: row.end };
+}
+
+function PaneHeader(props: {
+  readonly resource: Resource;
+  readonly role: Role;
+  readonly title: JSX.Element | undefined;
+  readonly following: boolean;
+  readonly onToggleFollow: () => void;
+  readonly onUnbind: (() => void) | undefined;
+}) {
+  return (
+    <div class="flex items-center gap-2 border-b border-surface-border px-3 py-1.5">
+      <p class="min-w-0 flex-1 truncate text-smallest text-on-surface-secondary">
+        <Show
+          when={props.title}
+          fallback={<span class="font-bold text-on-surface-primary">{props.resource.title}</span>}
+        >
+          {props.title}
+        </Show>
+        <Show when={props.resource.language}>{(language) => <span> · {language()}</span>}</Show>
+        <span> · {props.role === "source" ? t("Source") : t("Reference")}</span>
+      </p>
+
+      <FollowToggle
+        testId={`follow-${props.resource.id}`}
+        following={props.following}
+        stopLabel={t("Stop {title} following the book", { title: props.resource.title })}
+        startLabel={t("Let {title} follow the book", { title: props.resource.title })}
+        onToggle={() => props.onToggleFollow()}
+      />
+      <Show when={props.onUnbind}>
+        {(unbind) => (
+          <IconButton
+            size="sm"
+            data-testid={`unbind-${props.resource.id}`}
+            label={t("Remove {title}", { title: props.resource.title })}
+            tooltipSide="left"
+            icon={<X />}
+            onClick={() => unbind()()}
+          />
+        )}
+      </Show>
+    </div>
+  );
+}
+
 export function ReferencePane(props: ReferencePaneProps) {
   const shell = useShell();
   const { services } = shell;
-  // Read once, and said so: this component is remounted whenever the binding
-  // set or the open book changes (see `ReferenceColumn`), so neither of these
-  // can move under a mounted view.
   const resourceId = untrack(() => props.resource.id);
   const bookId = untrack(() => props.bookId);
 
@@ -185,39 +182,16 @@ export function ReferencePane(props: ReferencePaneProps) {
     name: "referenceView",
   });
 
-  /**
-   * Does THIS pane follow the editor's place?
-   *
-   * Per pane, and local to it. The setting is only what a newly opened pane
-   * starts as — pinning one reference while another follows is the ordinary
-   * case (hold a verse in the Greek, read the English along), and a preference
-   * shared by every pane could not express it.
-   *
-   * Local state and not a setting per resource: a pane is remounted whenever
-   * the binding set or the open book changes, so "which pane was unpinned"
-   * has no life beyond the thing it is about.
-   */
   const [following, setFollowing] = createSignal(
     untrack(() => services.settings.get(shellKeys(services.settings).syncReferences)),
     { name: "referenceFollows" },
   );
 
-  // The read. One per pane, started at setup rather than from an effect: its
-  // two inputs are constants for this instance's whole life, so an effect
-  // would be a dependency list with nothing in it. `onCleanup` here is at the
-  // COMPONENT's own owner — which is a real owner, unlike one inside an
-  // effect callback — so a pane unbound mid-read writes no signal after it is
-  // gone.
+  // onCleanup in the component body: one inside an effect callback never runs (NO_OWNER_CLEANUP).
   let gone = false;
   onCleanup(() => {
     gone = true;
   });
-  //
-  // The read and the measuring of it are one `reference.load`: the outcome,
-  // and — for a text — how many blocks and verses it has and how many of the
-  // open book's would find no twin here, which is what pairing will be able
-  // to answer before anybody moves the caret. Counts only; the resource's
-  // title and its words stay out.
   const loading = services.composition.observability.operation("reference.load", {
     "book.id": bookId,
     "reference.role": untrack(() => props.role),
@@ -239,7 +213,6 @@ export function ReferencePane(props: ReferencePaneProps) {
       }
       const text = Option.getOrUndefined(outcome.success);
       if (text === undefined) {
-        // The ordinary case, not a fault: this resource has no file for the book.
         loading.end("passed", { "reference.outcome": "missing" });
         setHeld({ kind: "missing" });
         return;
@@ -256,8 +229,6 @@ export function ReferencePane(props: ReferencePaneProps) {
       setHeld({ kind: "text", text });
     });
 
-  // An effect and not a render effect: CodeMirror measures itself, so the view
-  // is built after its parent is in the document.
   createEffect(
     () => ({ parent: host(), text: held() }),
     ({ parent, text }) => {
@@ -265,17 +236,12 @@ export function ReferencePane(props: ReferencePaneProps) {
       const view = mountReference({
         parent,
         text: text.text,
-        // This pane's own memo. One per view, for the reason composition gives
-        // each Book one: a shared memo between two documents is a memo that
-        // never hits.
         analyze: services.galley.memoize(),
         mode: untrack(() => shell.mode()),
         pairBlocks: untrack(() => services.settings.get(shellKeys(services.settings).pairBlocks)),
       });
       setMounted(view);
-      // RETURNED, not `onCleanup`: a Solid 2 effect's cleanup is its return
-      // value, and `onCleanup` inside an effect callback runs outside any
-      // owner and never fires (see `BookEditor` for the same note).
+      // Returned, not onCleanup: a Solid 2 effect's callback has no owner (NO_OWNER_CLEANUP).
       return () => {
         setMounted(undefined);
         view.destroy();
@@ -283,9 +249,6 @@ export function ReferencePane(props: ReferencePaneProps) {
     },
   );
 
-  // The mode follows the main editor through the recipe's compartment. A
-  // render effect, like the editor's own: it is a reconfigure and not a
-  // measurement.
   createRenderEffect(
     () => ({ view: mounted(), mode: shell.mode() }),
     ({ view, mode }) => {
@@ -293,9 +256,6 @@ export function ReferencePane(props: ReferencePaneProps) {
     },
   );
 
-  // The clip is applied either way — it is what is in the document, not
-  // where the reader is in it, and a pinned pane showing a chapter the editor
-  // has hidden would be showing a different book.
   createEffect(
     () => ({ view: mounted(), clip: props.clip() }),
     ({ view, clip }) => {
@@ -303,11 +263,6 @@ export function ReferencePane(props: ReferencePaneProps) {
     },
   );
 
-  // And the place follows the reader, BY VERSE: the pane joins the page's
-  // aligned group, which brings the verse scrolled to in the editor into this
-  // pane when it is not already showing — and this pane's scroll leads the
-  // editor the same way. Following is read at each scroll, so the pin takes
-  // effect at once; turning it back on catches the pane up.
   const aligned = useAlignedGroup();
   createEffect(
     () => mounted(),
@@ -328,42 +283,13 @@ export function ReferencePane(props: ReferencePaneProps) {
     },
   );
 
-  // --- the paired block ------------------------------------------------------
-
-  /**
-   * This text, registered with the engine so its skeleton can be asked for.
-   *
-   * Under a PANE-SCOPED id, and as a REFERENCE with `keepText`. Three reasons
-   * it is not the registration `bindReferences` already made:
-   *
-   *  - that one is keyed by FILE PATH, which this pane does not have — it
-   *    reads through `Library.readBook(resourceId, bookId)` and never learns
-   *    where the bytes came from;
-   *  - it may not exist. References are registered when a screen that needs
-   *    the corpus opens, and a pane must not silently stop pairing because
-   *    nobody happened to have done that yet;
-   *  - and it might describe different bytes. The skeleton has to be cut from
-   *    the exact text this view is showing, or the offsets it answers with
-   *    point into a document nobody is looking at.
-   *
-   * `updateReference` and not `update`: a reference publishes no findings, and
-   * registering another project's book as a proofreading TARGET would put its
-   * diagnostics in this project's list.
-   */
   const paneId = `sefer.pane.${resourceId}\u0000${bookId}`;
 
-  //
-  // Cut once, when the read lands, inside `reference.load` — so the record
-  // carries the cost and the counts — and held here for the pairing below.
-  // The text never changes under a mounted pane, so this is the memo it was,
-  // taken eagerly.
   const skeletonOf = (text: string): Skeleton | undefined => {
     try {
       services.galley.updateReference(paneId, text, true);
       return services.galley.skeleton(paneId);
     } catch {
-      // A text the engine will not parse still renders — it is just a
-      // reference with no pairing, which is a smaller loss than a blank pane.
       return undefined;
     }
   };
@@ -396,34 +322,6 @@ export function ReferencePane(props: ReferencePaneProps) {
     { name: "targetSkeleton" },
   );
 
-  /**
-   * The row of THIS text that answers where the caret is standing.
-   *
-   * A memo, so the effect below fires when the BLOCK changes rather than when
-   * the caret does — most keystrokes stay inside one block, and a dispatch per
-   * arrow key would be a transaction per arrow key in every open pane.
-   */
-  /**
-   * What to mark here, in the order the reader is asking.
-   *
-   *  1. The EMPTY BLOCK, when that is where the caret is. This is the overlay
-   *     case the feature was built for: the block holds no words, so there is
-   *     no verse text to point at, and the block IS the answer. Matched on
-   *     `(sid, where, ordinal)`, never on the marker — a `\q1` here against a
-   *     `\q2` there is the correspondence worth seeing.
-   *  2. The VERSE otherwise, matched on its sid alone. A `\p` can run fifteen
-   *     verses, and washing all of them is a page of highlight for a question
-   *     about one line.
-   *  3. The block, when the caret is in one but in no verse — a heading,
-   *     front matter.
-   */
-  /**
-   * The strict-block path saying it found nothing: an empty block is matched
-   * by address or not at all, so there is no verse to fall back to and the
-   * pane marks nothing. One note per block rather than per caret move — the
-   * memo re-runs on every arrow key inside the block. `refused` because the
-   * rule held; the verse reference is an address, not the text.
-   */
   let unpairedLast = "";
   const unpairedAt = (block: SkeletonRow): void => {
     const key = addressOf(block);
@@ -445,29 +343,11 @@ export function ReferencePane(props: ReferencePaneProps) {
       const source = sourceSkeleton();
       if (at === undefined || target === undefined || source === undefined) return undefined;
 
-      const here = blockAtOffset(target.blocks, at);
-      if (here?.empty === true) {
-        const row = equivalentBlock(source.blocks, here);
-        if (row === undefined) unpairedAt(here);
-        return row === undefined ? undefined : { from: row.from, to: row.end };
-      }
-
-      const verse = verseAtOffset(target, at);
-      if (verse !== undefined) {
-        const twin = equivalentVerse(source, verse.sid);
-        return twin === undefined ? undefined : { from: twin.textFrom, to: twin.textTo };
-      }
-
-      if (here === undefined) return undefined;
-      const row = equivalentBlock(source.blocks, here);
-      return row === undefined ? undefined : { from: row.from, to: row.end };
+      return pairedRangeAt(target, source, at, unpairedAt);
     },
     { name: "pairedRange" },
   );
 
-  // `editor.pairBlocks`, live. Its own subscription rather than a prop from
-  // the column: every surface that draws the pair follows the one setting
-  // directly, so none of them can be showing it while another is not.
   createEffect(
     () => mounted(),
     (view) => {
@@ -486,7 +366,6 @@ export function ReferencePane(props: ReferencePaneProps) {
     },
   );
 
-  /** Why there is or is not a mark — see the attribute on the root. */
   const pairState = (): string => {
     if (shell.caret() === undefined) return "no-caret";
     const target = targetSkeleton();
@@ -502,9 +381,6 @@ export function ReferencePane(props: ReferencePaneProps) {
   createEffect(
     () => ({ view: mounted(), row: paired() }),
     ({ view, row }) => {
-      // A pinned pane still MARKS the pair — the answer is worth having even
-      // when you have asked the page to hold still. It just does not scroll to
-      // it, which is what pinning means.
       view?.showPair(row ?? null, following());
     },
   );
@@ -523,14 +399,8 @@ export function ReferencePane(props: ReferencePaneProps) {
       data-role={props.role}
       data-mode={shell.mode()}
       data-state={held().kind}
-      // What this pane thinks the caret's block is here. A test hook, and the
-      // one thing that cannot be read off the DOM: a pane with no mark may
-      // have found no pair, or have had no skeleton to look in.
       data-pair={pairState()}
     >
-      {/* The header line: whose text this is, and the one way out of it. The
-          × unbinds and does not delete — the resource stays registered, and
-          every other project's binding to it is untouched. */}
       <Show
         when={props.bare !== true}
         fallback={
@@ -547,42 +417,14 @@ export function ReferencePane(props: ReferencePaneProps) {
           </Show>
         }
       >
-        <div class="flex items-center gap-2 border-b border-surface-border px-3 py-1.5">
-          <p class="min-w-0 flex-1 truncate text-smallest text-on-surface-secondary">
-            <Show
-              when={props.title}
-              fallback={
-                <span class="font-bold text-on-surface-primary">{props.resource.title}</span>
-              }
-            >
-              {props.title}
-            </Show>
-            <Show when={props.resource.language}>{(language) => <span> · {language()}</span>}</Show>
-            <span> · {props.role === "source" ? t("Source") : t("Reference")}</span>
-          </p>
-          {/* Follow, or hold still. In the header rather than only in settings
-            because it is a per-pane decision made while reading — you pin the
-            one you are cross-checking and let the others follow. */}
-          <FollowToggle
-            testId={`follow-${props.resource.id}`}
-            following={following()}
-            stopLabel={t("Stop {title} following the book", { title: props.resource.title })}
-            startLabel={t("Let {title} follow the book", { title: props.resource.title })}
-            onToggle={() => setFollowing((on) => !on)}
-          />
-          <Show when={props.onUnbind}>
-            {(unbind) => (
-              <IconButton
-                size="sm"
-                data-testid={`unbind-${props.resource.id}`}
-                label={t("Remove {title}", { title: props.resource.title })}
-                tooltipSide="left"
-                icon={<X />}
-                onClick={() => unbind()()}
-              />
-            )}
-          </Show>
-        </div>
+        <PaneHeader
+          resource={props.resource}
+          role={props.role}
+          title={props.title}
+          following={following()}
+          onToggleFollow={() => setFollowing((on) => !on)}
+          onUnbind={props.onUnbind}
+        />
       </Show>
 
       <Switch>

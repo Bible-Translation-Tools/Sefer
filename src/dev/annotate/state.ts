@@ -1,30 +1,8 @@
-/**
- * Which key a tweak's value is under, and how a value gets written.
- *
- * Three levels, all readable in a URL bar because a designer edits these by
- * hand and pastes them into chat:
- *
- *   * `<namespace>.v`                     which variant is showing
- *   * `<namespace>.<tweak>`               a tweak that applies to every variant
- *   * `<namespace>.<variant>.<tweak>`     a tweak belonging to one variant
- *
- * A value sitting at its declared default is REMOVED rather than written. A
- * link carrying every default is one nobody can see the interesting part of,
- * and the interesting part is the entire reason the link is being sent.
- */
-
 import type { Tweak, Variant } from "./types.ts";
 
 const VARIANT_KEY = "v";
 
-/**
- * A toggle reads "on"/"off" rather than "true"/"false", and that is not taste.
- * A router that serialises search params as JSON — TanStack's does — sees the
- * string "false" as a JSON literal and writes it quoted, so the URL comes out
- * as `?x.y=%22false%22`: correct on the round trip, unreadable in a link, and
- * un-editable by the designer who is supposed to be able to hand-edit these.
- * "on" and "off" are not JSON literals, so they travel bare.
- */
+/** A toggle reads "on"/"off" rather than "true"/"false", and that is not taste. */
 export const ON = "on";
 export const OFF = "off";
 
@@ -51,8 +29,6 @@ export const currentVariant = (
   state: Readonly<Record<string, string>>,
 ): Variant | undefined => {
   const asked = state[variantKey(namespace)];
-  // An unknown id falls back rather than blanking the page: the commonest way
-  // to get one is a link written against a build where that variant existed.
   return variants.find((variant) => variant.id === asked) ?? variants[0];
 };
 
@@ -77,12 +53,7 @@ export const withTweak = (
   return next;
 };
 
-/**
- * Switching variant drops the outgoing variant's own tweaks and keeps the
- * shared ones. They are namespaced, so leaving them would put keys in the URL
- * that nothing on screen can explain — and the shared tweaks are shared
- * precisely because they should survive the switch.
- */
+/** Switching variant drops the outgoing variant's own tweaks and keeps the shared ones. */
 export const withVariant = (
   state: Readonly<Record<string, string>>,
   namespace: string,

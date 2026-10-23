@@ -73,11 +73,6 @@ const LocalizedName = Schema.Struct({
   abbr: Schema.optionalKey(LocalizedText),
 });
 
-/**
- * A related burrito (Burrito 1.0.0 `Relationship`). `flavor` and the rest are
- * carried by the file and not read here; `relationships.ts` reads `id` and
- * `revision`.
- */
 const Relationship = Schema.Struct({
   relationType: Schema.String,
   flavor: Schema.optionalKey(Schema.String),

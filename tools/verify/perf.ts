@@ -1,41 +1,4 @@
-/**
- * What recording costs: the same typing, measured at each recording level.
- *
- *   pnpm verify:perf                       # 200 chars, 3 runs, levels off and all
- *   pnpm verify:perf --chars 400 --runs 5
- *   pnpm verify:perf --headed              # watch it type
- *
- * One dev server on a free port, one Chromium driven by Playwright. Each run
- * opens a FRESH page per level (fresh composition, empty ring, cold heap),
- * seeds the `small-nt` fixture through `/projects?fixture=1`, and then only
- * clicks: Open Project (which lands on Psalms), USFM, a line. It types a warm-up, then the measured
- * characters at a fixed cadence, then opens Compare against the files. The
- * level is set through `__sefer.observability.setLevel` before any of that.
- *
- * TWO INSTRUMENTS, because the app's own one says nothing at `off`:
- *
- *  - `meter` — the keystroke meter's numbers as the ring records them on each
- *    `editor.mutation` (`editor.gesture_ms` = the meter's `gesture`,
- *    `editor.to_paint_ms` = its `render`/`input`). Absent at `off`, where the
- *    ring records nothing — including the operation the meter writes onto.
- *  - `probe` — this script's own, installed before the app and the same at
- *    every level. From the browser's Event Timing entries of each key press:
- *    `handlers`, the summed processing time of its events (the JS work, the
- *    meter's `gesture` plus the browser's input handling), and `input`, the
- *    browser's input-to-paint. Plus `paint`, the frame trick the meter falls
- *    back to, for every key. The all-vs-off delta is taken on these, since
- *    they are the only numbers both levels have. Event Timing reports nothing
- *    under 16ms, so `presses` says how many keys it answered; the headless
- *    shell answers nearly all of them, new-headless Chrome about half.
- *
- * Deliberately NOT a setTimeout-after-keydown probe: Chrome runs the frame
- * after a discrete input before other tasks, so that measures "until the next
- * frame", not the work.
- *
- * Writes `<runDir>/<level>-<run>.jsonl` (every event of the typing window,
- * drained from the ring as it goes so a wrap loses nothing) and
- * `<runDir>/summary.json`, and prints one JSON line: medians across runs.
- */
+// pnpm verify:perf [--chars N] [--runs K] [--headed]: types at each recording level, prints one JSON line of costs.
 
 import { createWriteStream, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -48,7 +11,6 @@ import { freePort, newRun, sleep, spawnVite, waitForReady } from "./devServer.ts
 const LEVELS = ["off", "verdicts", "spans", "all"] as const;
 type Level = (typeof LEVELS)[number];
 
-/** `core/observability.ts`'s `DEFAULT_CAPACITY`: what `ringMinutes` divides. */
 const RING_CAPACITY = 2000;
 
 const TEXT = "the quick brown fox jumps over the lazy dog and then rests a while ";
@@ -93,11 +55,12 @@ const parseOptions = (argv: readonly string[]): Options => {
   return { chars, runs, warmup, cadence, levels, headed };
 };
 
-/** Nearest-rank percentile; `null` for no samples, never a made-up zero. */
-const percentile = (values: readonly number[], p: number): number | null => {
+const percentile = (values: readonly number[], percent: number): number | null => {
   if (values.length === 0) return null;
   const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1)] ?? null;
+  return (
+    sorted[Math.min(sorted.length - 1, Math.ceil((percent / 100) * sorted.length) - 1)] ?? null
+  );
 };
 
 const median = (values: readonly (number | null)[]): number | null => {
@@ -108,7 +71,6 @@ const median = (values: readonly (number | null)[]): number | null => {
 const round = (value: number | null, places = 1): number | null =>
   value === null ? null : Number(value.toFixed(places));
 
-/** One Event Timing entry, as the probe keeps it. */
 interface Timed {
   readonly name: string;
   readonly start: number;
@@ -125,18 +87,9 @@ declare global {
   var __perfProbe: Probe | undefined;
 }
 
-/**
- * Installed before any app script, so it sees every key the app does.
- *
- * Event Timing for the browser's own numbers, and a `keydown` capture
- * listener for the frame trick, which also answers the keys Event Timing
- * leaves out (anything under its 16ms floor).
- */
 const installProbe = (): void => {
   const probe: Probe = { entries: [], paints: [] };
   globalThis.__perfProbe = probe;
-  // `durationThreshold` is Event Timing's own option, absent from the DOM
-  // lib's `PerformanceObserverInit`; widened, never narrowed.
   const init: PerformanceObserverInit & { durationThreshold: number } = {
     type: "event",
     durationThreshold: 16,
@@ -166,13 +119,6 @@ const installProbe = (): void => {
   );
 };
 
-/**
- * One key press is several events (`keydown`, `keypress`, `beforeinput`,
- * `input`, `keyup`) sharing one hardware timestamp. Grouped on it: `handlers`
- * is the summed processing time of the press's events — the JS work, at
- * every level — and `input` the longest duration, the browser's
- * input-to-paint. `keyup` is its own interaction and is left out.
- */
 const presses = (entries: readonly Timed[]): { handlers: number[]; input: number[] } => {
   const byStart = new Map<number, Timed[]>();
   for (const entry of entries) {
@@ -188,11 +134,6 @@ const presses = (entries: readonly Timed[]): { handlers: number[]; input: number
   };
 };
 
-/**
- * Ring lines newer than `after`, in export format. Cheap: the seq is the
- * line's first field. (Page functions are serialised, so each one reaches for
- * the surface itself rather than sharing a helper.)
- */
 const drain = (page: Page, after: number): Promise<string[]> =>
   page.evaluate(
     (last) =>
@@ -230,9 +171,7 @@ interface Measurement {
   readonly meter: {
     readonly samples: number;
     readonly gesture: Tails;
-    /** The browser and CodeMirror taking the input, before the first transaction. */
     readonly browserInput: Tails;
-    /** What no span and no bucket accounted for. */
     readonly unaccounted: Tails;
     readonly render: Tails;
     readonly renderSource: Record<string, number>;
@@ -299,9 +238,6 @@ const measure = async (
     }, level);
     if (set !== level) throw new Error(`could not set level ${level}: is this the dev server?`);
 
-    // One project open, timed from the click to the editor. A fresh context
-    // has no remembered book, so the open lands on the fixture's first book,
-    // which is Psalms.
     const openStarted = performance.now();
     await open.click();
     await page.waitForURL("**/project/small-nt/book/PSA");
@@ -349,8 +285,6 @@ const measure = async (
     const metrics = await cdp.send("Performance.getMetrics");
     const heap = metrics.metrics.find((metric) => metric.name === "JSHeapUsedSize")?.value ?? 0;
 
-    // One comparison: the editor against the files, which the typing made
-    // differ. Compare is the Review screen, under the app bar's More menu.
     const compareStarted = performance.now();
     await page.getByTestId("app-bar-more").click();
     await page.getByRole("menuitem", { name: "Compare" }).click();
@@ -416,7 +350,6 @@ const measure = async (
   }
 };
 
-/** Medians across runs, per level, in the shape the one printed line carries. */
 const summarise = (measurements: readonly Measurement[], level: Level) => {
   const mine = measurements.filter((one) => one.level === level);
   const pick = (read: (one: Measurement) => number | null) => round(median(mine.map(read)), 2);
@@ -461,8 +394,6 @@ const main = async (): Promise<void> => {
   const port = await freePort();
   const base = `http://localhost:${String(port)}`;
 
-  // No sinks and no stream: the numbers are the ring's own cost, not a
-  // console's or a collector's.
   const env = { ...process.env };
   for (const key of ["SEFER_LOG", "VITE_SEFER_LOG", "VITE_SEFER_STREAM", "VITE_SEFER_OTLP_URL"])
     delete env[key];
@@ -475,8 +406,6 @@ const main = async (): Promise<void> => {
   try {
     await waitForReady(`${base}/projects`, child);
     browser = await chromium.launch({ headless: !options.headed });
-    // Warm Vite's transform cache so the first measured page is not also
-    // the one that compiled the app.
     const warm = await browser.newPage();
     await warm.goto(`${base}/projects?fixture=1`);
     await warm.getByRole("button", { name: "Open Project", exact: true }).waitFor();
@@ -484,7 +413,6 @@ const main = async (): Promise<void> => {
 
     const measurements: Measurement[] = [];
     for (let run = 0; run < options.runs; run += 1) {
-      // Alternate the order, so drift over the session lands on both levels.
       const order = run % 2 === 0 ? options.levels : [...options.levels].reverse();
       for (const level of order) {
         const measured = await measure(browser, base, level, run, options, runDir);

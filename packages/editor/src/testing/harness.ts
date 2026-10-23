@@ -1,12 +1,4 @@
-// fallow-ignore-file unused-export unused-type -- the editor tests that use these come back once behaviour locks.
-/**
- * The headless test surface: build a state, press a key, read what is on screen.
- *
- * Not tests — the tools tests are written with. `surface` composes the reading
- * and rules layers with no DOM, `pressKey` runs one binding against a bare
- * state, and `rendered`/`renderedText` say what the decorations would show, so a
- * rule can be asserted in Node without a browser.
- */
+// fallow-ignore-file unused-export unused-type
 
 import { defaultKeymap } from "@codemirror/commands";
 import {
@@ -29,8 +21,6 @@ import { type TraceSink, traceSink } from "../core/trace";
 
 export const DEFAULT_OPTS = DEFAULT_BUILD_OPTS;
 
-// Recipes a host's own tests drive with the real engine, which this package
-// does not bring (the empty-block ghost over real Psalms, in Sefer's app).
 export { annotateEmptyBlocks, blockNamer, emptyBlocks } from "../recipes/emptyBlocks";
 
 export interface SurfaceOptions {
@@ -99,9 +89,7 @@ export function pressKey(state: EditorState, key: string): Press {
       out = "state" in tr ? tr.state : state.update(tr).state;
     },
   };
-  // SAFETY: the bindings below are `usfmKeys()` and the default keymap, whose
-  // commands touch only `state` and `dispatch` — both present above. A
-  // command that reached for the DOM would throw here rather than mislead.
+  // SAFETY: the bindings below are `usfmKeys()` and the default keymap, whose commands touch only `state` and `dispatch` — both present above. A command that reached for the DOM would throw here rather than mislead.
   const view = target as unknown as EditorView;
   for (const b of KEYMAP) {
     if (b.key !== key || !b.run) continue;

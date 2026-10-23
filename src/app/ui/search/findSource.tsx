@@ -1,19 +1,3 @@
-/**
- * Find's source text: the project's ONE source, read beside each result.
- *
- * Two axes, kept apart. WHICH text is shown beside your verse (this picker,
- * or none) and WHICH text is searched (Find's "Search the source text"
- * switch) are separate questions: you can read the source while searching
- * your own text, or search the source and hide it.
- *
- * The picker is the same binding Refine's reference column makes — every
- * other project on this device, registered with the Library and bound under
- * `source` — so choosing one here is choosing it there. "No source text"
- * unbinds it: the project then has no source, so nothing is drawn beside the
- * results and the checks against a source text stop running. Either way the
- * references are re-registered with the corpus and the project re-judged.
- */
-
 import type { BookId } from "@sefer/text/book";
 import { Effect, Option, Result } from "effect";
 import { Show, createEffect, createSignal } from "solid-js";
@@ -30,12 +14,89 @@ import type { Paired } from "../excerpts";
 import { listProjects, type ProjectSummary } from "../landing/summaries";
 import { MultiSelect } from "../primitives";
 
-/** One source book: still being read, absent from the source, or read. */
 type Held = { readonly kind: "loading" } | { readonly kind: "missing" } | BookText;
 
 const NONE = "";
 
-/** `onBound` is told after a new source is bound, so the caller can re-register it. */
+function createBookCache(shell: ReturnType<typeof useShell>) {
+  const { services } = shell;
+  const [read, setRead] = createSignal(0, { name: "findSourceRead" });
+  const books = new Map<BookId, Held>();
+  let generation = 0;
+
+  const reset = (): void => {
+    books.clear();
+    generation += 1;
+  };
+
+  const bookOf = (source: Resource, bookId: BookId): Held => {
+    const held = books.get(bookId);
+    if (held !== undefined) return held;
+    books.set(bookId, { kind: "loading" });
+    const asked = generation;
+    void services
+      .run(Effect.result(services.library.readBook(source.id, bookId)))
+      .then((outcome) => {
+        if (asked !== generation) return;
+        const text = Result.isFailure(outcome) ? undefined : Option.getOrUndefined(outcome.success);
+        if (text === undefined) books.set(bookId, { kind: "missing" });
+        else {
+          const analysis = services.galley.analyzeText(text, "find.source");
+          const heading = bookHeading(analysis);
+          books.set(bookId, {
+            bookId,
+            text: analysis.text,
+            analysis,
+            label: (address) => shell.location.label(address, heading),
+          });
+        }
+        setRead((held) => held + 1);
+      });
+    return { kind: "loading" };
+  };
+
+  return { read, reset, bookOf };
+}
+
+type SourceRow = { readonly root: string; readonly name: string; readonly language: string };
+
+interface SourcePickerProps {
+  readonly summary: string;
+  readonly narrowed: boolean;
+  readonly rows: readonly SourceRow[];
+  readonly chosen: string;
+  readonly onChoose: (root: string) => void;
+}
+
+function SourcePicker(props: SourcePickerProps) {
+  return (
+    <MultiSelect
+      single
+      id="find-source"
+      label={t("Source text")}
+      summary={props.summary}
+      narrowed={props.narrowed}
+      items={props.rows}
+      key={(row: SourceRow) => row.root}
+      match={(row, query) =>
+        `${row.name} ${row.language}`.toLowerCase().includes(query.toLowerCase())
+      }
+      placeholder={t("Search texts…")}
+      selected={(row) => row.root === props.chosen}
+      onToggle={(row) => props.onChoose(row.root)}
+    >
+      {(row) => (
+        <span class="flex min-w-0 flex-1 flex-col">
+          <span class="truncate">{row.name}</span>
+          <Show when={row.language !== ""}>
+            <span class="text-smallest text-on-surface-tertiary">{row.language}</span>
+          </Show>
+        </span>
+      )}
+    </MultiSelect>
+  );
+}
+
 export function createFindSource(onBound: () => void) {
   const shell = useShell();
   const { services } = shell;
@@ -46,19 +107,13 @@ export function createFindSource(onBound: () => void) {
   const [choices, setChoices] = createSignal<readonly ProjectSummary[]>([], {
     name: "findSourceChoices",
   });
-  /** Raised by a bind, so the source re-resolves. */
   const [tick, setTick] = createSignal(0, { name: "findSourceTick" });
-  /** Raised whenever a source book finishes reading, so the cards ask again. */
-  const [read, setRead] = createSignal(0, { name: "findSourceRead" });
-  const books = new Map<BookId, Held>();
-  /** Bumped whenever the source may have changed, so a late read is dropped. */
-  let generation = 0;
+  const cache = createBookCache(shell);
 
   createEffect(
     () => ({ project: shell.project()?.root, tick: tick() }),
     ({ project }) => {
-      books.clear();
-      generation += 1;
+      cache.reset();
       if (project === undefined) {
         setResource(undefined);
         return;
@@ -69,8 +124,6 @@ export function createFindSource(onBound: () => void) {
     },
   );
 
-  // Every other project on this device, once per screen: a directory listing
-  // and a JSON parse, and it only changes when somebody imports elsewhere.
   createEffect(
     () => shell.project()?.root,
     (open) => {
@@ -81,7 +134,6 @@ export function createFindSource(onBound: () => void) {
     },
   );
 
-  /** Bind the project at `root` as this project's source, replacing whatever source it had. */
   const choose = (root: string): void => {
     const project = shell.project();
     if (project === undefined) return;
@@ -108,7 +160,6 @@ export function createFindSource(onBound: () => void) {
           return;
         }
         setTick((held) => held + 1);
-        // The corpus follows the binding, and the source-text checks with it.
         void services
           .run(Workflows.bindReferences(project.root))
           .then(() => services.projectAnalysis.rejudge());
@@ -116,38 +167,11 @@ export function createFindSource(onBound: () => void) {
       });
   };
 
-  const bookOf = (source: Resource, bookId: BookId): Held => {
-    const held = books.get(bookId);
-    if (held !== undefined) return held;
-    books.set(bookId, { kind: "loading" });
-    const asked = generation;
-    void services
-      .run(Effect.result(services.library.readBook(source.id, bookId)))
-      .then((outcome) => {
-        if (asked !== generation) return;
-        const text = Result.isFailure(outcome) ? undefined : Option.getOrUndefined(outcome.success);
-        if (text === undefined) books.set(bookId, { kind: "missing" });
-        else {
-          const analysis = services.galley.analyze(text, "find.source");
-          const heading = bookHeading(analysis);
-          books.set(bookId, {
-            bookId,
-            text: analysis.text,
-            analysis,
-            label: (address) => shell.location.label(address, heading),
-          });
-        }
-        setRead((held) => held + 1);
-      });
-    return { kind: "loading" };
-  };
-
-  /** The source's verse beside `excerpt`, or nothing when no source is shown. */
   const pairedOf = (excerpt: Excerpt): Paired | undefined => {
-    read();
+    cache.read();
     const source = resource();
     if (source === undefined) return undefined;
-    const held = bookOf(source, excerpt.bookId);
+    const held = cache.bookOf(source, excerpt.bookId);
     if ("analysis" in held) return { kind: "text", name: source.title, book: held, hits: [] };
     return {
       kind: "none",
@@ -159,42 +183,22 @@ export function createFindSource(onBound: () => void) {
     };
   };
 
-  /** Is a source shown beside the results? */
   const shown = (): boolean => resource() !== undefined;
 
-  /** The picker's rows: "no source text", then every other project here. */
-  type Row = { readonly root: string; readonly name: string; readonly language: string };
-  const rows = (): readonly Row[] => [
+  const rows = (): readonly SourceRow[] => [
     { root: NONE, name: t("No source text"), language: "" },
     ...choices().map((row) => ({ root: row.root, name: row.name, language: row.language })),
   ];
   const chosen = (): string => (shown() ? (resource()?.id ?? NONE) : NONE);
 
   const Picker = () => (
-    <MultiSelect
-      single
-      id="find-source"
-      label={t("Source text")}
+    <SourcePicker
       summary={shown() ? (resource()?.title ?? "") : t("none")}
       narrowed={shown()}
-      items={rows()}
-      key={(row: Row) => row.root}
-      match={(row, query) =>
-        `${row.name} ${row.language}`.toLowerCase().includes(query.toLowerCase())
-      }
-      placeholder={t("Search texts…")}
-      selected={(row) => row.root === chosen()}
-      onToggle={(row) => choose(row.root)}
-    >
-      {(row) => (
-        <span class="flex min-w-0 flex-1 flex-col">
-          <span class="truncate">{row.name}</span>
-          <Show when={row.language !== ""}>
-            <span class="text-smallest text-on-surface-tertiary">{row.language}</span>
-          </Show>
-        </span>
-      )}
-    </MultiSelect>
+      rows={rows()}
+      chosen={chosen()}
+      onChoose={choose}
+    />
   );
 
   return { resource, shown, pairedOf, Picker };

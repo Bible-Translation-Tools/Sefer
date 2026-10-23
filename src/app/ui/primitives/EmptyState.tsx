@@ -1,20 +1,8 @@
-/**
- * What a screen shows when it has nothing to show.
- *
- * Deliberately a primitive rather than a `<p class="muted">` per route: an
- * empty list and a filtered-to-empty list are different sentences, and having
- * one shape for both makes the difference the words rather than the layout.
- *
- * `action` is for the one thing the reader can do about it — never more than
- * one, because a screen with nothing on it is not the place to offer a choice.
- */
-
 import type { JSX } from "@solidjs/web";
 
 import { cx, type ClassValue } from "./cx";
 
 export interface EmptyStateProps {
-  /** A lucide icon, sized by the caller. Decorative. */
   readonly icon?: JSX.Element;
   readonly title: string;
   readonly description?: JSX.Element;

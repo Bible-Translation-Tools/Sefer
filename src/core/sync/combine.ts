@@ -1,33 +1,3 @@
-/**
- * Combine: join the shared project's work and this device's, as one decision
- * commit, and send it.
- *
- * This is the diverged move. Both sides have commits the other lacks, and
- * neither side's history is rewritten: the commit Combine records has TWO
- * parents — this device's tip and the shared project's — and its files are
- * the final text. Nothing is replayed, nothing is rebased, git's merge never
- * runs, and sending the result is a fast-forward on every remote that holds
- * either tip. Only the final text matters.
- *
- * What the final text is, per file:
- *
- * - changed only on this device — this device's, as HEAD already holds it;
- * - changed only on the other side — theirs, written into the work tree and
- *   into the Book;
- * - changed on both — never here. The policy sends that book to a person
- *   (Review), and the whole combine refuses before anything is written —
- *   unless Review already settled it (`settled`), when the project's text is
- *   the decision.
- *
- * The file is in two halves, and the split is what makes the policy testable:
- *
- * 1. `planCombine` is PURE. One survey in, one decision out: which paths
- *    arrive, or which rule said no.
- * 2. `combine` is the Effect program over the ports: fetch, gather, ask the
- *    pure half, and — only if it says yes — write, record and send, in the
- *    repository's exclusive lane.
- */
-
 import type { BookId } from "@sefer/text/book";
 import type { SourceStamp } from "@sefer/text/source";
 import { Data, Effect, FileSystem, Option, type PlatformError, Result } from "effect";
@@ -62,24 +32,6 @@ import {
 import { DEFAULT_OVERLAP, judge, type Overlap } from "./policy";
 import { notIn, trackingRef } from "./state";
 
-/**
- * Why a combine did not run. Every one of these is decided BEFORE anything is
- * written, and each is a different sentence where it is reported (Review's
- * receipt, `combineRefusal` in the shell).
- *
- * - `no-branch` — HEAD is detached or unborn; there is no branch to join onto.
- * - `no-work-here` — this repository has no commits.
- * - `no-cloud-copy` — the shared project has no copy of this branch.
- * - `no-shared-version` — the two histories have no commit in common, so
- *   there is no base to measure "what I changed" against.
- * - `not-diverged` — one of the two sides has nothing the other lacks, so the
- *   right move is an ordinary send or receive rather than a combine.
- * - `contested` — both sides changed the same file. Never merged; compared.
- * - `deletion` — the other side deleted a file. `Git.commit` stages receipts,
- *   and a receipt cannot say "this file is gone".
- * - `moved` — a book the other side changed was typed into, or opened, while
- *   the combine read it. Nothing was written; pressing again reads it afresh.
- */
 export type CombineRefusal =
   | "no-branch"
   | "no-work-here"
@@ -90,61 +42,32 @@ export type CombineRefusal =
   | "deletion"
   | "moved";
 
-/**
- * What state the repository is in when a combine fails.
- *
- * - `untouched` — nothing was written. Every refusal, and every failure up to
- *   the first write.
- * - `restored` — the other side's files were written, the commit failed, and
- *   those files were put back as they were. Nothing was recorded or sent.
- * - `recorded` — the combination is recorded on this device, and sending it
- *   failed. Nothing is lost; the next send carries it.
- * - `stranded` — the commit failed AND putting the files back failed too. The
- *   only state that needs a person, which is why it has a word of its own.
- */
 export type CombineState = "untouched" | "restored" | "recorded" | "stranded";
 
 class CombineError extends Data.TaggedError("CombineError")<{
-  /** Which rule said no, or `undefined` when a port failed instead. */
   readonly refusal: CombineRefusal | undefined;
   readonly state: CombineState;
   readonly description: string;
 }> {}
 
-/** Everything `planCombine` needs, as facts rather than as ports. */
 interface CombineSurvey {
-  /** The branch HEAD is on; `undefined` on a detached or unborn HEAD. */
   readonly branch: string | undefined;
-  /** This device's newest commit. */
   readonly localHead: CommitId | undefined;
-  /** The shared project's newest commit, off the remote-tracking ref. */
   readonly cloudHead: CommitId | undefined;
-  /** The best common ancestor of the two. */
   readonly base: CommitId | undefined;
-  /** Commits this device has that the cloud does not. */
   readonly ahead: number;
-  /** Commits the cloud has that this device does not. */
   readonly behind: number;
-  /** Paths this device changed since the base, committed. */
   readonly changed: readonly ChangedPath[];
-  /** Paths the cloud changed since the base. */
   readonly cloudChanged: readonly ChangedPath[];
-  /** Paths with changes no commit holds yet. */
   readonly unrecorded: readonly string[];
-  /** Scripture books the policy sends to a person. */
   readonly review: readonly string[];
 }
 
-/** The combination, once it is allowed: exactly what arrives and what is recorded. */
 interface CombineReplay {
   readonly branch: string;
-  /** This device's tip: the decision commit's first parent. */
   readonly from: CommitId;
-  /** The shared project's tip: its second. */
   readonly onto: CommitId;
-  /** Repository-relative, ascending — what this device changed, which stays. */
   readonly paths: readonly string[];
-  /** Repository-relative, ascending — what the other side changed, which arrives. */
   readonly taking: readonly string[];
   readonly message: string;
 }
@@ -153,7 +76,6 @@ type CombineDecision =
   | { readonly ok: true; readonly replay: CombineReplay }
   | { readonly ok: false; readonly refusal: CombineRefusal; readonly detail: string };
 
-/** The decision commit's message. Git-facing, so it may say what it means. */
 const combineMessage = (books: number): string =>
   books === 1
     ? "Combined with the shared project: 1 book"
@@ -165,14 +87,6 @@ const no = (refusal: CombineRefusal, detail: string): CombineDecision => ({
   detail,
 });
 
-/**
- * The decision, as a ladder — and the order is the policy.
- *
- * It reads top to bottom as "is there a combine to do at all", then "is it
- * safe", then "can the ports express it". Contested outranks every mechanical
- * objection below it on purpose: when two people wrote the same book, that is
- * the thing to say.
- */
 const planCombine = (survey: CombineSurvey): CombineDecision => {
   if (survey.branch === undefined) {
     return no("no-branch", "HEAD is detached or unborn; there is no branch to join onto");
@@ -192,13 +106,7 @@ const planCombine = (survey: CombineSurvey): CombineDecision => {
   if (survey.review.length > 0) {
     return no("contested", `both sides changed ${survey.review.join(", ")}`);
   }
-  // Scripture is settled by the policy above; this catches every other file
-  // two people can both have touched — a manifest, a versification file, or
-  // one with changes here no commit holds — where taking theirs would be a
-  // silent decision rather than a stated one.
   const mine = new Set([...survey.changed.map((entry) => entry.path), ...survey.unrecorded]);
-  // `metadata.json` is not a decision: its checksums describe the files, and
-  // are worked out again from the combined ones.
   const both = survey.cloudChanged
     .filter(
       (entry) => !isScripture(entry.path) && entry.path !== METADATA_FILE && mine.has(entry.path),
@@ -229,19 +137,15 @@ const planCombine = (survey: CombineSurvey): CombineDecision => {
   };
 };
 
-/** What a combine leaves behind when it works. */
 export interface CombineResult {
-  /** The decision commit. */
   readonly commit: CommitId;
   readonly onto: CommitId;
   readonly from: CommitId;
   readonly paths: readonly string[];
   readonly taking: readonly string[];
-  /** Books handed the other side's text. */
   readonly reloaded: readonly BookId[];
 }
 
-/** One receipt per path; the first one names it. */
 const dedupe = (repo: Repo, receipts: readonly SaveReceiptLike[]): readonly SaveReceiptLike[] => {
   const seen = new Set<string>();
   return receipts.filter((receipt) => {
@@ -252,7 +156,6 @@ const dedupe = (repo: Repo, receipts: readonly SaveReceiptLike[]): readonly Save
   });
 };
 
-/** A port failure, carrying its reason forward so the shell can classify it. */
 const fromPort =
   (state: CombineState) =>
   (error: GitError | RemoteError): CombineError =>
@@ -268,40 +171,21 @@ const fromDisk =
     new CombineError({ refusal: undefined, state, description: String(error) });
 
 export interface CombineOptions {
-  /** The open project: its Books are "mine", and the ones a combine reloads. */
   readonly project: Project;
-  /** Who the decision commit is by. */
   readonly author: Author;
   readonly overlap?: Overlap;
-  /**
-   * Books a person has just settled in Review against the other side: each
-   * one's text in the project IS the decision — saved and recorded as it is,
-   * whatever either side changed, and never overwritten by the other side's
-   * file.
-   */
   readonly settled?: ReadonlySet<BookId>;
-  /** The ref "theirs" is read from — the shared project's tracking ref unless named. */
   readonly theirs?: string;
-  /** Where the decision commit is sent — `origin` unless named. */
   readonly sendTo?: string;
-  /** The decision commit's message, when the caller has a better one than the count. */
   readonly message?: string;
 }
 
 interface Gathered {
   readonly decision: CombineDecision;
-  /** Books a person decided in Review, by path: kept as the editor holds them. */
   readonly decided: readonly string[];
   readonly classified: Classified;
 }
 
-/**
- * Everything `planCombine` needs, read out of one repository and the Books.
- *
- * One read of the repository, the Books and the review's settled books, so
- * the decision is taken over exactly what the combine then writes — fetched
- * first, so it is the shared project as it is this second.
- */
 const gather = (
   repo: Repo,
   project: Project,
@@ -315,8 +199,6 @@ const gather = (
 
     const branch = Option.getOrUndefined(yield* Effect.mapError(git.branch(repo), untouched));
     const tracking = branch === undefined ? undefined : (theirs ?? trackingRef(branch));
-    // The cloud's head. `None` is an answer — "nothing has been sent yet" —
-    // so it becomes a refusal rather than a fault.
     const cloudHead =
       tracking === undefined
         ? undefined
@@ -354,8 +236,6 @@ const gather = (
         ? { facts: [], stamps: new Map<string, SourceStamp>(), theirs: new Map<string, string>() }
         : yield* classify(repo, books, base, cloudHead, cloudChanged);
     const verdicts = judge(classified.facts, overlap);
-    // `combine` would need a unit-level merge, which Sefer does not do by
-    // itself: below the book scope it still goes to a person here.
     const needsPerson = classified.facts.filter(
       (_, index) => verdicts[index] === "review" || verdicts[index] === "combine",
     );
@@ -374,8 +254,6 @@ const gather = (
         ahead: notIn(localLog, remoteLog).length,
         behind: notIn(remoteLog, localLog).length,
         changed,
-        // A decided book is this side's: it is not taken from the other side,
-        // and its saved-but-unrecorded file is the decision, not a conflict.
         cloudChanged: cloudChanged.filter((entry) => !decided.includes(entry.path)),
         unrecorded: status.changed
           .map((entry) => entry.path)
@@ -386,15 +264,6 @@ const gather = (
     };
   });
 
-/**
- * The whole move, in the repository's exclusive lane.
- *
- * Everything before the first write is a read, so a refusal or a failed fetch
- * leaves the repository exactly as it was. The other side's files are then
- * written and recorded; if recording fails they are put back. Once recorded,
- * the Books take the new text, and a failed send leaves a combination that
- * the next send carries.
- */
 export const combine = (
   options: CombineOptions,
 ): Effect.Effect<
@@ -406,11 +275,6 @@ export const combine = (
     const repositories = yield* Repositories;
     const git = yield* Git;
     const remote = yield* Remote;
-    // Ask the shared project what it has NOW — before the exclusive lane, so a
-    // slow network holds the lane only for its own transfer. The surfaces'
-    // reading may be minutes old; this is seconds, and the send is
-    // fast-forward only, so a head that moves in between is refused, never
-    // overwritten.
     const repo = yield* Effect.mapError(git.open(options.project.root), fromPort("untouched"));
     yield* Effect.mapError(remote.fetch(repo), fromPort("untouched"));
     return yield* Effect.catchTag(
@@ -457,10 +321,6 @@ const program = (options: CombineOptions) =>
     }
     const replay = decision.replay;
 
-    // The Books take the other side's text first, all or none, in one step
-    // no keystroke can interrupt — so typing never lands between "this book
-    // may be replaced" and the replacing. Nothing on disk has moved yet, so
-    // a Book that moved is a refusal with nothing to undo.
     const handed = yield* handOver(
       repo,
       project,
@@ -483,10 +343,6 @@ const program = (options: CombineOptions) =>
     const untouchedAfterHandOver = (error: CombineError) =>
       Effect.flatMap(giveBack(applied), () => Effect.fail(error));
 
-    // What each file the combine writes holds now (HEAD's bytes, or nothing),
-    // so a failed commit can put the work tree back exactly. `metadata.json`
-    // is among them whenever the project has one: its checksums are worked
-    // out again below.
     const metadataHere = yield* Effect.orElseSucceed(
       fileSystem.exists(`${repo.root}/${METADATA_FILE}`),
       () => false,
@@ -518,9 +374,6 @@ const program = (options: CombineOptions) =>
         yield* fileSystem.writeFile(full, bytes);
       });
 
-    // The decided books' text goes to their files first, through Save, so
-    // the decision commit records exactly what the person chose — and what
-    // each save kept current beside its book.
     const books = booksByPath(repo, project);
     const decidedBooks = gathered.decided.flatMap((path) => {
       const book = books.get(path);
@@ -541,8 +394,6 @@ const program = (options: CombineOptions) =>
       Effect.gen(function* () {
         for (const file of arriving)
           yield* Effect.mapError(write(file.path, file.bytes), fromDisk("restored"));
-        // The checksums describe the files, so they are worked out again over
-        // the combined ones rather than taken from either side.
         if (metadataHere && admin !== undefined)
           yield* Effect.mapError(
             admin.refreshChecksums(repo.root),
@@ -553,13 +404,9 @@ const program = (options: CombineOptions) =>
                 description: error.description ?? error.reason,
               }),
           );
-        // The receipts are the paths just written: nothing rides along. With
-        // none, the commit is the join alone, which is what it records.
         const receipts: readonly SaveReceiptLike[] = [
           ...arriving.map((file) => ({
             path: file.path,
-            // The port carries a stamp only to keep a receipt recognisable at
-            // a glance; the length is the one field true of these bytes.
             stamp: { revision: 0, length: file.bytes.length },
           })),
           ...saved.success.flatMap((receipt) => [
@@ -607,8 +454,6 @@ const program = (options: CombineOptions) =>
       );
     }
 
-    // The baselines follow the files. A Book typed into since the hand-over
-    // keeps its typing, on top of the other side's text, as unsaved work.
     const reloaded: BookId[] = applied.map((entry) => entry.book.id);
     const now = booksByPath(repo, project);
     for (const path of replay.taking) {
@@ -617,7 +462,6 @@ const program = (options: CombineOptions) =>
       yield* Effect.ignore(save.takeDisk(book, "incoming", "keep"));
     }
 
-    // Nothing on the cloud changed until this line.
     yield* Effect.mapError(remote.push(repo, options.sendTo), fromPort("recorded"));
     return {
       commit: recorded.success,

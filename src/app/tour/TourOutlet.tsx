@@ -1,31 +1,25 @@
 import { useNavigate, useRouterState } from "@tanstack/solid-router";
+import Ellipsis from "lucide-solid/icons/ellipsis";
+import Minimize2 from "lucide-solid/icons/minimize-2";
 import { For, Show, createEffect, createSignal, onCleanup, untrack } from "solid-js";
 
 import { registerCommand, runCommand } from "../commands";
 import { t } from "../i18n";
 import { useShell } from "../ProjectContext";
-import { Button, toasts } from "../ui/primitives";
+import { Button, IconButton, Menu, MenuItem, toasts } from "../ui/primitives";
 import {
   anchored,
   beginTour,
+  jumpTour,
   runningTour,
   startTour,
   stepTour,
   stopTour,
   type PanelAction,
+  type Spotlight,
   type TourContext,
 } from "./machine";
 import { TOURS, tourById } from "./tours";
-
-/**
- * The one place a tutorial is drawn, mounted once in the app chrome so a tour
- * can cross routes: a ring around the step's anchor and a card beside it.
- *
- * It also starts one from the URL. `?tour=<id>` on any screen starts that
- * tutorial and is then taken off the address, so a share link can carry it
- * (`/r/owner/repo/book/JUD?tour=findings`) and a reload does not start it
- * again.
- */
 
 interface Box {
   readonly top: number;
@@ -34,30 +28,22 @@ interface Box {
   readonly height: number;
 }
 
-/** Space between the anchor and its ring, and between the ring and the card. */
 const RING_PAD = 6;
 const CARD_GAP = 12;
-const CARD_WIDTH = 320;
-/** Where a workflow's panel sits: the corner, out of the text's way. */
+const CARD_WIDTH = 400;
+const MIN_ROOM = 200;
 const DOCKED = { bottom: "24px", right: "24px" };
-/** Where a card goes with nothing to anchor it to. */
 const CENTRED = { top: "20vh", left: `calc(50vw - ${CARD_WIDTH / 2}px)` };
 
-/** The context a step reaches the app through. */
 export const useTourContext = (): TourContext => {
   const shell = useShell();
   const navigate = useNavigate();
   return { shell, navigate, run: runCommand };
 };
 
-export function TourOutlet() {
-  const shell = useShell();
-  const navigate = useNavigate();
-  const context = useTourContext();
-  // One palette command per tutorial and per workflow, registered for as
-  // long as the outlet is mounted, which is the life of the app. A workflow
-  // is a thing to do, so it is listed by its own name ("Triage verse
-  // numbers"); a tutorial says it is one.
+type Shell = ReturnType<typeof useShell>;
+
+const registerTourCommands = (shell: Shell, context: TourContext): void => {
   for (const tour of TOURS) {
     onCleanup(
       registerCommand({
@@ -71,15 +57,13 @@ export function TourOutlet() {
       }),
     );
   }
+};
 
+function useTourLink(shell: Shell, context: TourContext): void {
+  const navigate = useNavigate();
   const searchStr = useRouterState({ select: (state) => state.location.searchStr });
   const path = useRouterState({ select: (state) => state.location.pathname });
 
-  // Started from the URL, then the parameter is taken off so a reload or a
-  // copied address does not start it again.
-  // Not on `/r/…`, which hands its query on to the project it opens, and not
-  // while a project route is still opening its project: the tutorial waits
-  // for the project it needs rather than refusing because it came too early.
   createEffect(
     () => {
       const query = new URLSearchParams(searchStr());
@@ -87,21 +71,21 @@ export function TourOutlet() {
       const where = path();
       if (id === null || where.startsWith("/r/")) return null;
       const tour = tourById(id);
-      // Opening until the open project is the one the URL names: arriving
-      // from another project, the old one is still open for a moment, and a
-      // step's `go` would navigate inside it.
       const named = /^\/project\/([^/]+)/u.exec(where)?.[1];
       const opening =
         named !== undefined && (shell.project() === undefined || shell.slug() !== named);
-      return tour?.needsProject === true && opening ? null : id;
+      if (tour?.needsProject === true && opening) return null;
+      const step = Number(query.get("step") ?? "1");
+      return { id, at: Number.isInteger(step) && step > 0 ? step - 1 : 0 };
     },
-    (id) => {
-      if (id === null) return;
-      const rest = new URLSearchParams(untrack(searchStr));
-      rest.delete("tour");
-      rest.delete("workflow");
-      const query = rest.size === 0 ? "" : `?${rest.toString()}`;
-      void navigate({ href: `${untrack(path)}${query}`, replace: true });
+    (wanted) => {
+      if (wanted === null) return;
+      const { id, at } = wanted;
+      const now = untrack(runningTour);
+      if (now !== undefined && now.tour.id === id) {
+        if (now.index !== at) jumpTour(context, at);
+        return;
+      }
       const tour = tourById(id);
       if (tour === undefined) {
         toasts.error({ title: t("There is no tutorial called {id}", { id }) });
@@ -111,19 +95,59 @@ export function TourOutlet() {
         toasts.info({ title: t("Open a project to start “{title}”", { title: t(tour.title) }) });
         return;
       }
-      startTour(context, tour);
+      startTour(context, tour, at);
     },
   );
 
-  const step = () => {
-    const now = runningTour();
-    return now === undefined ? undefined : now.steps[now.index];
+  let wrote: string | undefined;
+  let writing: ReturnType<typeof setTimeout> | undefined;
+  const writeStep = (): void => {
+    writing = undefined;
+    const where = untrack(path);
+    if (where.startsWith("/r/")) return;
+    const now = untrack(runningTour);
+    const query = new URLSearchParams(untrack(searchStr));
+    if (now === undefined) {
+      if (wrote === undefined || query.get(wrote) === null) return;
+      query.delete(wrote);
+      query.delete("step");
+      wrote = undefined;
+    } else {
+      const key = now.tour.kind === "workflow" ? "workflow" : "tour";
+      const step = String(now.index + 1);
+      wrote = key;
+      if (query.get(key) === now.tour.id && query.get("step") === step) return;
+      query.set(key, now.tour.id);
+      query.set("step", step);
+    }
+    const tail = query.size === 0 ? "" : `?${query.toString()}`;
+    void navigate({ href: `${where}${tail}`, replace: true });
   };
+  createEffect(
+    () => ({
+      now: runningTour()?.index,
+      tour: runningTour()?.tour,
+      search: searchStr(),
+      where: path(),
+    }),
+    () => {
+      if (writing !== undefined) clearTimeout(writing);
+      writing = setTimeout(writeStep, 300);
+    },
+  );
+  onCleanup(() => {
+    if (writing !== undefined) clearTimeout(writing);
+  });
+}
 
-  // Where the anchor is, measured every frame while a spotlight step shows,
-  // and not at all otherwise: the page under a tutorial scrolls, resizes and
-  // re-renders, and the ring follows.
+const step = () => {
+  const now = runningTour();
+  return now === undefined ? undefined : now.steps[now.index];
+};
+
+function createSpotlightBox() {
   const [box, setBox] = createSignal<Box | undefined>(undefined);
+  const [lost, setLost] = createSignal(false, { name: "tourAnchorLost" });
   let frame = 0;
   let scrolledFor: unknown;
   const spotlit = () => {
@@ -138,9 +162,9 @@ export function TourOutlet() {
       return;
     }
     const element = anchored(anchor);
-    if (element === null) setBox(undefined);
+    if (element === null) setLost(true);
     else {
-      // Brought into view once per step, not every frame.
+      setLost(false);
       if (scrolledFor !== now) {
         scrolledFor = now;
         element.scrollIntoView({ block: "center", inline: "nearest" });
@@ -160,15 +184,16 @@ export function TourOutlet() {
   };
   createEffect(spotlit, (anchor) => {
     cancelAnimationFrame(frame);
+    setBox(undefined);
+    setLost(false);
     if (anchor === undefined) setBox(undefined);
     else frame = requestAnimationFrame(measure);
   });
   onCleanup(() => cancelAnimationFrame(frame));
+  return { box, lost };
+}
 
-  // Escape stops a tutorial: one the person is only reading. Not a workflow,
-  // which they work underneath, where Escape closes the editor's palettes and
-  // popovers all the time; it stops by its Stop button. And not when
-  // something else already took the key, unless it came from the card.
+function useEscapeStops(): void {
   const onKeyDown = (event: KeyboardEvent): void => {
     if (event.key !== "Escape") return;
     const now = runningTour();
@@ -180,130 +205,249 @@ export function TourOutlet() {
   };
   document.addEventListener("keydown", onKeyDown);
   onCleanup(() => document.removeEventListener("keydown", onKeyDown));
+}
 
-  /**
-   * The card below the anchor when there is room, else above it; beside it,
-   * on the right, when the step asks (`Spotlight.side`), clamped to the
-   * window.
-   */
-  const cardStyle = (held: Box, side?: "right"): Record<string, string> => {
-    if (side === "right")
-      return {
-        top: `${Math.max(CARD_GAP, held.top)}px`,
-        left: `${Math.min(
-          held.left + held.width + RING_PAD + CARD_GAP,
-          window.innerWidth - CARD_WIDTH - CARD_GAP,
-        )}px`,
+const cardStyle = (held: Box, side?: "right"): Record<string, string> => {
+  const height = window.innerHeight;
+  if (side === "right") {
+    const top = CARD_GAP;
+    const right = held.left + held.width + RING_PAD + CARD_GAP;
+    const left =
+      right + CARD_WIDTH + CARD_GAP <= window.innerWidth
+        ? right
+        : Math.max(CARD_GAP, held.left - RING_PAD - CARD_GAP - CARD_WIDTH);
+    return { top: `${top}px`, left: `${left}px`, "max-height": `${height - top - CARD_GAP}px` };
+  }
+  const left = Math.min(
+    Math.max(CARD_GAP, held.left + held.width / 2 - CARD_WIDTH / 2),
+    window.innerWidth - CARD_WIDTH - CARD_GAP,
+  );
+  const below = height - (held.top + held.height + RING_PAD + CARD_GAP) - CARD_GAP;
+  const above = held.top - RING_PAD - CARD_GAP - CARD_GAP;
+  if (Math.max(below, above) < MIN_ROOM) {
+    const top = Math.max(CARD_GAP, held.top) + CARD_GAP;
+    return { top: `${top}px`, left: `${left}px`, "max-height": `${height - top - CARD_GAP}px` };
+  }
+  return below >= above
+    ? {
+        top: `${held.top + held.height + RING_PAD + CARD_GAP}px`,
+        left: `${left}px`,
+        "max-height": `${below}px`,
+      }
+    : {
+        bottom: `${height - held.top + RING_PAD + CARD_GAP}px`,
+        left: `${left}px`,
+        "max-height": `${above}px`,
       };
-    const left = Math.min(
-      Math.max(CARD_GAP, held.left + held.width / 2 - CARD_WIDTH / 2),
-      window.innerWidth - CARD_WIDTH - CARD_GAP,
-    );
-    const below = held.top + held.height < window.innerHeight * 0.6;
-    return below
-      ? { top: `${held.top + held.height + RING_PAD + CARD_GAP}px`, left: `${left}px` }
-      : {
-          bottom: `${window.innerHeight - held.top + RING_PAD + CARD_GAP}px`,
-          left: `${left}px`,
-        };
-  };
+};
 
-  const progress = () => {
-    const now = runningTour();
-    return now === undefined
-      ? ""
-      : t("{at} of {count}", { at: now.index + 1, count: now.steps.length });
-  };
-  const last = () => {
-    const now = runningTour();
-    return now !== undefined && now.index === now.steps.length - 1;
-  };
-  /** A workflow skips a step and stops; a tutorial moves on and is skipped. */
-  const workflow = () => runningTour()?.tour.kind === "workflow";
+const progress = () => {
+  const now = runningTour();
+  return now === undefined
+    ? ""
+    : t("{at} of {count}", { at: now.index + 1, count: now.steps.length });
+};
+const last = () => {
+  const now = runningTour();
+  return now !== undefined && now.index === now.steps.length - 1;
+};
+const workflow = () => runningTour()?.tour.kind === "workflow";
 
-  /** The step's work looks done: the card says so, and Next replaces Skip. */
-  const fixed = () => runningTour()?.fixed === true;
+const fixed = () => runningTour()?.fixed === true;
 
+const stopLabel = () => {
+  if (last()) return t("Close");
+  return workflow() ? t("Stop") : t("Skip tutorial");
+};
+const nextLabel = () => {
+  if (last()) return t("Done");
+  return workflow() && !fixed() ? t("Skip") : t("Next");
+};
+
+const cardHeader = (context: TourContext, onPause: () => void, title: string) => (
+  <div class="flex items-baseline justify-between gap-3">
+    <h2 class="text-base font-semibold text-on-surface-primary">{title}</h2>
+    <span class="flex shrink-0 items-center gap-1 text-smallest text-on-surface-tertiary tabular-nums">
+      {progress()}
+      <Menu
+        label={t("Go to a step")}
+        side="bottom"
+        align="end"
+        class="z-60! w-72"
+        fitViewport
+        trigger={
+          <IconButton
+            size="sm"
+            variant="quiet"
+            label={t("Go to a step")}
+            icon={<Ellipsis />}
+            data-tour-steps
+          />
+        }
+      >
+        <For each={runningTour()?.steps ?? []}>
+          {(each, at) => (
+            <MenuItem onSelect={() => jumpTour(context, at())}>
+              <span
+                class={at() === runningTour()?.index ? "font-semibold text-brand" : "font-normal"}
+              >
+                {`${at() + 1}. ${t(each.spotlight?.title ?? each.panel?.title ?? "")}`}
+              </span>
+            </MenuItem>
+          )}
+        </For>
+      </Menu>
+      <IconButton
+        size="sm"
+        variant="quiet"
+        label={t("Pause the tutorial")}
+        icon={<Minimize2 />}
+        data-tour-pause
+        onClick={onPause}
+      />
+    </span>
+  </div>
+);
+
+const tourCard = (
+  context: TourContext,
+  onPause: () => void,
+  title: string,
+  body: string,
+  style: Record<string, string>,
+  actions?: readonly PanelAction[],
+  more?: Pick<Spotlight, "try" | "notes">,
+) => (
+  <div
+    role="dialog"
+    aria-label={title}
+    data-tour-card
+    class="pointer-events-auto fixed z-50 flex flex-col gap-3 overflow-y-auto overscroll-contain rounded-lg border border-surface-border bg-surface-primary p-4 shadow-large"
+    style={{ width: `${CARD_WIDTH}px`, ...style }}
+  >
+    {cardHeader(context, onPause, title)}
+    <p class="text-small text-on-surface-secondary">{body}</p>
+    <Show when={more?.try}>
+      {(what) => (
+        <p
+          class="rounded-md border-s-4 border-brand bg-surface-secondary px-3 py-2 text-small font-medium text-on-surface-primary"
+          data-tour-try
+        >
+          {t(what())}
+        </p>
+      )}
+    </Show>
+    <For each={more?.notes ?? []}>
+      {(note) => (
+        <div class="flex flex-col gap-0.5" data-tour-note>
+          <span class="text-smallest font-semibold tracking-wide text-on-surface-tertiary uppercase">
+            {t(note.label)}
+          </span>
+          <p class="text-small text-on-surface-secondary">{t(note.text)}</p>
+        </div>
+      )}
+    </For>
+    <Show when={fixed()}>
+      <p class="text-small font-medium text-on-surface-success" data-tour-fixed>
+        {t("Looks fixed. Press Next when you are done here.")}
+      </p>
+    </Show>
+    <Show when={actions !== undefined && actions.length > 0 && !fixed()}>
+      <div class="flex flex-wrap gap-2" data-tour-actions>
+        <For each={actions ?? []}>
+          {(action) => (
+            <Show when={action.label()}>
+              {(label) => (
+                <Button size="sm" variant="secondary" onClick={() => action.run()}>
+                  {label()}
+                </Button>
+              )}
+            </Show>
+          )}
+        </For>
+      </div>
+    </Show>
+    <div class="flex items-center justify-between gap-2">
+      <Button size="sm" variant="secondary" onClick={stopTour}>
+        {stopLabel()}
+      </Button>
+      <div class="flex gap-2">
+        <Show when={(runningTour()?.index ?? 0) > 0}>
+          <Button size="sm" variant="secondary" onClick={() => stepTour(context, -1)}>
+            {t("Back")}
+          </Button>
+        </Show>
+        <Button
+          size="sm"
+          variant="primary"
+          onClick={() => (last() ? stopTour() : stepTour(context, 1))}
+        >
+          {nextLabel()}
+        </Button>
+      </div>
+    </div>
+  </div>
+);
+
+export function TourOutlet() {
+  const shell = useShell();
+  const context = useTourContext();
+  registerTourCommands(shell, context);
+  useTourLink(shell, context);
+  const { box, lost } = createSpotlightBox();
+  useEscapeStops();
+
+  const [paused, setPaused] = createSignal(false, { name: "tourPaused" });
+  createEffect(
+    () => runningTour()?.tour,
+    () => {
+      setPaused(false);
+    },
+  );
+
+  const pause = () => setPaused(true);
   const card = (
     title: string,
     body: string,
     style: Record<string, string>,
     actions?: readonly PanelAction[],
-  ) => (
-    <div
-      role="dialog"
-      aria-label={title}
-      data-tour-card
-      class="pointer-events-auto fixed z-50 flex flex-col gap-3 rounded-lg border border-surface-border bg-surface-primary p-4 shadow-large"
-      style={{ width: `${CARD_WIDTH}px`, ...style }}
-    >
-      <div class="flex items-baseline justify-between gap-3">
-        <h2 class="text-base font-semibold text-on-surface-primary">{title}</h2>
-        <span class="shrink-0 text-smallest text-on-surface-tertiary tabular-nums">
-          {progress()}
-        </span>
-      </div>
-      <p class="text-small text-on-surface-secondary">{body}</p>
-      <Show when={fixed()}>
-        <p class="text-small font-medium text-on-surface-success" data-tour-fixed>
-          {t("Looks fixed. Press Next when you are done here.")}
-        </p>
-      </Show>
-      <Show when={actions !== undefined && actions.length > 0 && !fixed()}>
-        <div class="flex flex-wrap gap-2" data-tour-actions>
-          <For each={actions ?? []}>
-            {(action) => (
-              <Show when={action.label()}>
-                {(label) => (
-                  <Button size="sm" variant="secondary" onClick={() => action.run()}>
-                    {label()}
-                  </Button>
-                )}
-              </Show>
-            )}
-          </For>
-        </div>
-      </Show>
-      <div class="flex items-center justify-between gap-2">
-        <Button size="sm" variant="secondary" onClick={stopTour}>
-          {last() ? t("Close") : workflow() ? t("Stop") : t("Skip tutorial")}
-        </Button>
-        <div class="flex gap-2">
-          <Show when={(runningTour()?.index ?? 0) > 0}>
-            <Button size="sm" variant="secondary" onClick={() => stepTour(context, -1)}>
-              {t("Back")}
-            </Button>
-          </Show>
-          <Button
-            size="sm"
-            variant="primary"
-            onClick={() => (last() ? stopTour() : stepTour(context, 1))}
-          >
-            {last() ? t("Done") : workflow() && !fixed() ? t("Skip") : t("Next")}
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
+    more?: Pick<Spotlight, "try" | "notes">,
+  ) => tourCard(context, pause, title, body, style, actions, more);
 
   return (
     <Show when={runningTour()}>
       {(now) => (
         <div class="pointer-events-none fixed inset-0 z-50" data-tour-outlet={now().tour.id}>
-          <Show when={now().phase === "showing" && step()?.spotlight}>
+          <Show when={paused()}>
+            <div
+              class="pointer-events-auto fixed bottom-4 left-4 z-50 flex items-center gap-3 rounded-full border border-surface-border bg-surface-primary py-1.5 ps-4 pe-1.5 shadow-large"
+              data-tour-paused
+            >
+              <span class="text-small text-on-surface-secondary">
+                {t("Tutorial paused · {progress}", { progress: progress() })}
+              </span>
+              <Button size="sm" variant="primary" onClick={() => setPaused(false)}>
+                {t("Resume")}
+              </Button>
+            </div>
+          </Show>
+          <Show when={!paused() && now().phase === "showing" && step()?.spotlight}>
             {(spotlight) => (
-              // Fail open: an anchor that vanishes after the step showed (a
-              // re-render, a screen that moved on) leaves the card in the
-              // middle of the screen, still readable and still dismissable,
-              // rather than taking every control away with the ring.
               <Show
                 when={box()}
-                fallback={card(t(spotlight().title), t(spotlight().body), CENTRED)}
+                fallback={card(
+                  t(spotlight().title),
+                  t(spotlight().body),
+                  CENTRED,
+                  undefined,
+                  spotlight(),
+                )}
               >
                 {(held) => (
                   <>
                     <div
                       aria-hidden="true"
+                      hidden={lost()}
                       data-tour-ring
                       class="fixed rounded-lg outline-2 outline-brand shadow-[0_0_0_9999px_rgba(0,0,0,0.25)] transition-all duration-150"
                       style={{
@@ -317,18 +461,18 @@ export function TourOutlet() {
                       t(spotlight().title),
                       t(spotlight().body),
                       cardStyle(held(), spotlight().side),
+                      undefined,
+                      spotlight(),
                     )}
                   </>
                 )}
               </Show>
             )}
           </Show>
-          {/* A workflow's panel: docked, no ring, no dimming, because the
-              person is working in the screen underneath it. */}
-          <Show when={now().phase === "showing" && step()?.panel}>
+          <Show when={!paused() && now().phase === "showing" && step()?.panel}>
             {(panel) => card(panel().title, panel().body, DOCKED, panel().actions)}
           </Show>
-          <Show when={now().phase === "timedOut"}>
+          <Show when={!paused() && now().phase === "timedOut"}>
             {card(
               t("This step could not be shown"),
               t(

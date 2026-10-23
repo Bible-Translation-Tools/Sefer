@@ -1,11 +1,3 @@
-/**
- * The block table: paragraph-level spans, one lazy `Block` per row.
- *
- * A block is what a `\p`, `\q1` or `\s1` opens and the next block-opener
- * closes — the unit reflow, folding and Enter all reason about. Same shape as
- * the line table and for the same reason: typed-array columns, lazy rows.
- */
-
 import { MARKERS } from "@sefer/text/engine/analysis";
 
 import { spellingAt } from "./cst";
@@ -51,10 +43,10 @@ class BlockSpan implements Block {
   #lines: DocLine[] | null = null;
 
   constructor(
-    f: Fold,
+    fold: Fold,
     markerIdx: number,
     opener: number,
-    cls: ClassKey,
+    classKey: ClassKey,
     poetry: boolean,
     from: number,
     contentFrom: number,
@@ -62,10 +54,10 @@ class BlockSpan implements Block {
     headLine: number,
     lastLine: number,
   ) {
-    this.#f = f;
+    this.#f = fold;
     this.#markerIdx = markerIdx;
     this.#opener = opener;
-    this.cls = cls;
+    this.cls = classKey;
     this.poetry = poetry;
     this.from = from;
     this.contentFrom = contentFrom;
@@ -100,9 +92,9 @@ export class Blocks implements BlockTable {
   readonly #c: BlockColumns;
   #memo: (BlockSpan | undefined)[] | null = null;
 
-  constructor(f: Fold, c: BlockColumns, count: number) {
-    this.#f = f;
-    this.#c = c;
+  constructor(fold: Fold, columns: BlockColumns, count: number) {
+    this.#f = fold;
+    this.#c = columns;
     this.length = count;
   }
 

@@ -1,14 +1,14 @@
 ---
 id: 40d3076e-25ac-47fa-91fd-8482173a4162
-title: "Form mode"
+title: "Form mode, verse per line, and the editor's sharp edges"
 kind: idea
 status: discussing
 created: 2026-10-14
-updated: 2026-10-14
+updated: 2026-10-22
 sha: 50aa9cd
-priority: 2
+priority: 1
 tags: [editor]
-related: [858618e5-da52-4556-8734-d055729b7b8b, 9cdeee6c-1747-4922-b2b8-84748a95839a]
+related: [858618e5-da52-4556-8734-d055729b7b8b, 9cdeee6c-1747-4922-b2b8-84748a95839a, c8b63600-40a8-4937-bc03-e0264e9a13f0]
 source: sefer-next-features doc, 2026-10-07 to 13
 ---
 
@@ -21,7 +21,7 @@ Why keep CodeMirror at all: the document is a string, not an object tree (as in 
 Parsing and proofreading point at offsets and don't clone strings or objects, which keeps memory
 low on field devices.
 
-## Option 1: a projection in the editor
+## Option 1: verse per line, a projection in the editor
 
 One CodeMirror compartment, turned on and off:
 
@@ -38,8 +38,204 @@ No new mode, only drivers: tab through empty verses, or step through every dupli
 out-of-order verse ([workflows](/items/2026-10-14-workflows-routes-and-state-in-the-url)). Falls
 out of the step machine, which is now built.
 
-<Question id="which">Option 1, option 2, or both? The roadmap's lean: option 2 first, option 1 only if that isn't enough.</Question>
+<Question id="which" answer="Option 1, spiked on its own branch (form-mode). Option 2's workflows can come alongside later (Will, 2026-10-21).">Option 1, option 2, or both? The roadmap's lean: option 2 first, option 1 only if that isn't enough.</Question>
+
+> I thought 2, but I'm changing my mind cause I do think 1 is cheaper than sounds.
+> — Will, 2026-10-21
+
+## The spike (branch `form-mode`)
+
+**One verse, one line, whatever the file's layout.** Both shapes occur:
+
+```usfm
+\v 1 In the beginning \v 2 And the earth \v 3 And God said
+```
+
+```usfm
+\v 1 In the beginning
+\v 2 And the earth
+\v 3 And God said
+```
+
+The second already is one verse per line. For the first, the mode draws a break before each `\v`
+that does not start a line: the editor's existing `BreakWidget`
+(`packages/editor/src/core/decorations.ts`), which already draws paragraph breaks that are not in
+the text. No newline is written; the text and its offsets stay as they are.
+
+**What shows:** the verse number (locked, as today) and the verse text. Everything else between
+verses is hidden but not lost: it stays in the string, untouched, and the cursor cannot enter it.
+
+<Question id="structure" answer="Start with this proposal and get a feel for which policies are available; hiding them entirely (an immortal policy) is the other candidate (Will, 2026-10-21).">How do `\p`, `\q1`, `\s` and friends show in line-by-line mode? Proposal:
+a section heading (`\s`) is a quiet, read-only label row between verses, because people copying
+from paper use it to keep their place; a paragraph or poetry marker BETWEEN verses is a small
+mark in the gutter of the verse it opens (¶, q1), read-only; a poetry break INSIDE a verse
+(`\v 3 … \q2 …`) shows inline as a thin `/`, so the verse stays one line. Changing structure is
+the normal editor's job.</Question>
+
+<Question id="verse-actions" answer="Change number, Remove, and Add verse (split is just adding a verse) (Will, 2026-10-21).">Structured actions on the verse number? Proposal for the spike:
+the number's popup offers **Change number** and **Remove** (the verse's text joins the one before),
+nothing else. Split and join wait to see if people ask.</Question>
+
+> on the \p and q bits, yeah it's hard, cause like p's job is text indentaiton. Q is block and
+> poetry. But if it all becomes a block or each verse does then... You could argue pip it
+> out/immortal policy, but idk. I think let's start with your suggestion and then just get a feel
+> for which policies are avaialble to us?
+> — Will, 2026-10-21
+
+**First attempt, agreed 2026-10-21:**
+
+- **The verse number's popup:** Change number; Remove (the verse's text joins the one before);
+  Add verse (a new `\v` after this one, the next number, empty; at the caret, it is a split).
+- **Section heading (`\s`):** a quiet, read-only label row between verses.
+- **`\p` or `\q` between verses:** a small read-only mark in the gutter of the verse it opens (¶, q1).
+- **`\q` inside a verse:** a thin `/` in the line, so the verse stays one line.
+- **Changing structure** is the normal editor's job.
+- **Keys:** the table below, as defaults.
+
+Then try the other policies for paragraph and poetry markers (hidden entirely; each verse its own
+block) and keep the one that reads best.
+
+**Keys, the defaults** (mode × key → policy):
+
+| Key | Normal editor | Line-by-line |
+|---|---|---|
+| Enter | new paragraph | move to the start of the next verse; at the last verse, nothing |
+| Shift+Enter | — | the previous verse |
+| Tab / Shift+Tab | indent (today) | next / previous empty verse |
+| Backspace at a verse's start | joins across the marker (sealed rules) | nothing: a verse never merges by accident |
+| Delete at a verse's end | same | nothing |
+| Paste | as today | newlines in the paste become spaces; never creates a marker |
+| Selection | free | clamped to the verse it starts in |
+| `\` | blocked | blocked |
+
+<Question id="enter-next" answer="Yes: Enter takes over; in line-by-line it moves to the start of the next verse (Will, 2026-10-21).">Enter in line-by-line: move to the next verse?</Question>
+
+**Defaults for the spike:** a view switch beside chapter view, remembered per device; a `\c` is a
+read-only label row; notes work as in the normal editor; findings stay on; no tests until the
+behaviour settles (the key table then becomes the test list).
+
+**Order:** (1) refuse edits touching hidden text or a verse marker; (2) one line per verse, with
+the drawn breaks; (3) the keys; (4) the verse popup; (5) the structure marks. Will tries each on
+the branch's dev server.
+
+**Built on `form-mode` (2026-10-21):** (1) the locks; (2) one verse per line, with space
+between verses; (3) the keys (Enter, Shift+Enter, Tab, Shift+Tab, Home, End); the view is one
+three-way control, Reading · Line by line · USFM, in design builds (Will: "it's tripartite toggle
+no?"); and a seven-step tutorial (`src/app/tour/tours/lineByLine.ts`, design builds only).
+Then (2026-10-22): (4) the verse number's menu (Change number, Remove verse marker, Add verse after;
+Cmd+Shift+V at the caret still splits); (5) headings as read-only labels and a ¶ / q1 mark in
+the margin of the verse a paragraph or poetry line opens; paste as one line; a selection kept
+inside its verse; typing into an empty verse (`\v 4` gains its space). Synthetic cases are in
+`fixtures/small-nt/99-BAD.usfm` chapter 2. Dropped: a hanging indent for a wrapped verse, since
+a verse that starts mid-line shares its line and would be indented too.
+
+**After Will's scrawl (2026-10-22):** the ¶ / q1 / m margin marks are gone ("they're gonna be
+like, what's this for"); a verse number's finding no longer fills it yellow (the number stays
+blue, the margin mark says it), and an empty number's box loses CodeMirror's red point arrow,
+in every mode; in line by line a number's findings move from the hover popover into the click
+menu, so there is one popover per number, drawn like the lint popover, finding and fix first.
+
+**Second scrawl (2026-10-22):** the flagged number takes the severity's colour (amber for a
+warning, red for an error) instead of staying blue; the menu is one list, left-aligned, with
+the finding as one coloured line and its fix as the first row (no separate fix button or
+source line); a pointer cursor on verse numbers in line by line; the tutorial says the grey
+headings are `\s1`, standing in for everything that is not verse text.
+
+**Third scrawl (2026-10-22):** the verse menu is the one way to act on a number in Reading as
+well as line by line (USFM edits the marker as text), and its findings leave the hover popover
+in both. Renumber folds into Change number: when the engine's fix is exactly a new number for
+these digits, the box opens holding it (Enter accepts); when the engine is not sure (a duplicate
+with no fix), it holds the current number; a numberless marker is offered the number after the
+verse before. A fix that only deletes the marker is Remove verse marker, so it is not listed twice.
+
+**Fourth scrawl (2026-10-22):** the lint gutter is Sefer's own (`recipes/lintGutter.ts`): a
+marker sits on the row as drawn, at its worst finding. CodeMirror's pinned a marker to the
+start of the file's line, so a line joined into the one before it (`\p` then `\v 1`, in
+Reading and line by line alike) never showed one; the unclosed footnote had no marker at all.
+A marker is a bigger target than a verse number: a click opens the verse menu when every
+finding on the row is on one number, otherwise the row's findings with their fixes. A
+footnote's caller takes the colour of a finding that starts at its note. Change number
+marks a value that is not a verse number (3, 3a, 3-4) instead of closing silently.
+
+**Fifth scrawl (2026-10-22):** "Remove verse marker", so nobody reads it as taking the text. A
+gutter click shows one finding at a time, anchored at it, with "Next on this line (1 of 3)" when
+the row holds more; in Reading a row is a whole paragraph, and every finding at once was "a lot". **Then reversed the same day:** the gutter is colour only, for scanning; a finding is acted on
+where it is drawn (its word's hover, its verse number's menu, its caller). The marks are a
+CodeMirror layer (`recipes/findingMarks.ts`), level with each finding's own row through wraps,
+scrolling and resizing, one per row at its worst severity, keeping the circle / triangle / square
+shapes; the gutter click menu and Next on this line are gone.
+
+**Step, a third press policy (2026-10-22):** a locked cell either stopped a press (nothing
+happens) or let it pass (the press acts on the next thing beyond). Line by line's markup inside
+a verse (`\p`, a poetry break, its newline, its chrome) now steps: Backspace or Delete moves
+the caret over it and takes nothing, so a verse can be walked through; verse and chapter
+numbers keep stop, so a run of Backspaces never reaches the verse before. Forward Delete
+addresses the next visible glyph past hidden markup, so it checks for a step cell in between.
+
+**Indents on one unit, hung numbers (2026-10-22):** poetry is never italic (in scripture italics
+mean `\add` or emphasis); `\p` indents its first line one unit; `\q1` sits at the edge, each
+level one unit in, a wrap under its own words (the printed turnover, two units in, read as a
+`\q3` on screen, so it went the same day: an indent only ever means a marker); a verse number
+opening a poetry line hangs in the margin (ecthesis), so a level's words start in one place with
+or without a number; line by line hangs every number. The unit and the hang are
+`--usfm-indent` and `--usfm-hang` on the editor; no Indent size setting for now.
+
+<Followup id="poetry-spacing" done>
+
+If a wrapped `\q1` still reads as a new `\q1` line, give each real poetry line a little space above it (a wrap gets none).
+
+Tried at once instead (Will, 2026-10-22): `--usfm-poetry-gap` (0.25em) above each poetry line.
+
+</Followup>
+
+<Followup id="ship">To `dev` behind `__SEFER_DESIGN__` once it holds up, and finish with a
+tutorial for the PO and designer, as for suppressions (Will, 2026-10-21).</Followup>
+
+**Risk:** `plan.ts` (the edit plan) must refuse any edit that touches a hidden range or a verse
+marker in this mode; that is what the spike proves first, with Will at the keyboard.
 
 <Question id="keys">How is key handling organised by mode: branch on mode inside each key, or one handler per key that checks the mode? Ideally a matrix, mode × behaviour = policy.</Question>
 
 <Followup id="spike">A spike with Will at the keyboard. `plan.ts` is the risk.</Followup>
+
+## The editor's sharp edges, done in the same pass
+
+Folded in from [editor sharp edges](/items/2026-10-14-editor-sharp-edges) (2026-10-20): key
+handling by mode is the same work as the Enter question, and the tests belong on the
+[package's](/items/2026-10-14-embeddable-editor) harness.
+
+<Question id="enter" answer="Keep taking over Enter (Will, 2026-10-21).">Keep taking over Enter (a line break means nothing, so Enter makes a paragraph), at the cost of no pressing Enter for blank space?</Question>
+
+<Followup id="tests">Tests around copy, paste and Enter, on the package's harness (`@sefer/editor/testing`).</Followup>
+
+<Followup id="cursor">Cursor mechanics with the arrow keys, on the playground. The cursor code is a first target for the [fallow pass](/items/2026-10-14-fallow-readability-pass).</Followup>
+
+<Followup id="formatter">Revisit the USFM formatter, written before the editor drew newlines by context. Consider format-on-save.</Followup>
+
+<Followup id="usfm-light">USFM mode has no light theme.</Followup>
+
+<Followup id="extensions-global">The engine's marker registry is process-wide (`onion/src/extensions.rs`, `static REGISTRY`), so two editors on one page with different marker configs interfere. The package documents one config per page; a per-call or per-handle registry would be a kitchen ask.</Followup>
+
+<Followup id="empty-note-body">
+
+**An empty note gets a body part, on Sefer's side** (was kitchen ask 6; kitchen pushed it back
+2026-10-20, Will agreed). Onion does not build note parts: Sefer does, in `notePartsOf`
+(`packages/editor/src/core/cst.ts:382`), walking the CST and tagging tokens. An empty
+`\ft \f*` has no text token, so no BODY part comes out. A zero-width token in onion would break
+the rule that tokens tile the source, and every consumer would pay for it.
+
+The fact is already in the tree: a body marker followed directly by the closer. `notePartsOf`
+emits a zero-width BODY part at the end of that marker (`\fr` and `\xt` the same way), and the
+carve-out in `packages/editor/src/core/sealed.ts` (an insertion at a one-position surface) goes.
+
+Check while there: everything that reads `NotePart` copes with a zero-width part. Painting
+skips it (CodeMirror cannot mark an empty range); `owned.ts`'s editable spans and the note
+editor's surface range use it. Then type into a fresh footnote by hand.
+
+Or (Will, 2026-10-20): insert a new note with a known placeholder body, so it is never empty. To circle back to.
+
+</Followup>
+
+<Followup id="markdown">Markdown mode: CodeMirror's own Markdown support, for glossaries and notes.</Followup>
+
+<Tradeoff id="gutter" chose="a line-based gutter" cost="a project with no paragraphs has no real lines to number">Accepted as a known limit.</Tradeoff>

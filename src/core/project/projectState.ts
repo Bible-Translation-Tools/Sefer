@@ -1,21 +1,4 @@
-/**
- * `.sefer/project.json`: what THIS DEVICE remembers about one project.
- *
- * Read whenever the project is reopened, never committed (intake excludes
- * `.sefer/`), and never another tool's business. Today it holds:
- *
- *   name             a rename made here (`ProjectAdmin.rename`)
- *   referencePicks   which Library text the reference column shows, per
- *                    role — "on this project I usually read that source
- *                    text", a pick and not a manifest fact (Will, 2026-10-06)
- *
- * One reader and one merging writer, so a rename never erases the picks and
- * a pick never erases the name. Keys this build does not know are kept as
- * they were: a newer build may have written them.
- *
- * A team fact (an approval, a suppression) does NOT belong here: this file
- * never reaches a teammate (`planning/items/2026-10-06-project-state-and-suppressions.mdx`).
- */
+// referencePicks is a pick and not a manifest fact (Will, 2026-10-06).
 
 import { Effect, FileSystem, type PlatformError } from "effect";
 
@@ -24,7 +7,6 @@ import { joinPath } from "../fileSystem/path";
 
 export const PROJECT_STATE_FILE = ".sefer/project.json";
 
-/** The file as an open record; an absent or unreadable file is an empty one. */
 export const readProjectState = (
   fileSystem: FileSystem.FileSystem,
   root: string,
@@ -43,7 +25,6 @@ export const readProjectState = (
     },
   );
 
-/** Merges `patch` over what the file holds and writes it atomically. */
 export const updateProjectState = (
   fileSystem: FileSystem.FileSystem,
   root: string,

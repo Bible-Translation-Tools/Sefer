@@ -1,46 +1,14 @@
-/**
- * Projects Available on WACS: the remote catalogue, as the second section of
- * the projects page. A header with the search field inline, then a windowed
- * five-column table — Code, Language, Region, Date, Download.
- *
- * The rows come from `src/app/catalogue.ts`: the Language API's consolidated
- * repos, joined with langnames for region, alternate names and the gateway
- * flag. Translations show by default — this table is mostly a translation
- * team finding its own work — and a toggle swaps in the gateway languages.
- * Which of the two a download is FOR (edit vs read) is not modelled yet; see
- * planning/items/2026-10-06-resource-kinds.mdx. A row's date is the most recent update across
- * every repo of its language — blank until the API carries one (see
- * `catalogue.ts`).
- *
- * Search matches the code, both names, and every alternate name.
- *
- * Download clones: what the payload carries is `repo_url`, and
- * `cloneRepository` is what takes one. A row with no URL, or a build with no
- * transfer configured, gets a disabled link with the reason in a tooltip.
- */
-
-import { Effect, Fiber, Option, Stream } from "effect";
 import ArrowDown from "lucide-solid/icons/arrow-down";
 import ArrowUp from "lucide-solid/icons/arrow-up";
-import ChevronsUpDown from "lucide-solid/icons/chevrons-up-down";
 import Download from "lucide-solid/icons/download";
 import Filter from "lucide-solid/icons/filter";
 import SearchIcon from "lucide-solid/icons/search";
 import X from "lucide-solid/icons/x";
-import { For, Show, createMemo, createSignal } from "solid-js";
+import { For, Show, createSignal } from "solid-js";
 
-import { Observability } from "#core/observability";
-import { Remote, remoteVerdict } from "#core/remote/remote";
 import { through } from "#core/remote/transport";
 
-import { announceSourceTexts, arrivalRoot, cloneArrival, type ArrivalKind } from "../../arrival";
-import {
-  catalogueFailureAttrs,
-  catalogueFor,
-  catalogueVerdict,
-  type CatalogueEntry,
-} from "../../catalogue";
-import { describe, describeTransfer, reasonOf, remoteReasonOf } from "../../describe";
+import { catalogueFor, type CatalogueEntry } from "../../catalogue";
 import { transportFor } from "../../endpoints";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
@@ -58,124 +26,59 @@ import {
   SegmentedControl,
   Tooltip,
   VirtualList,
+  ariaSortOf,
   cx,
-  toasts,
-  type SortDirection,
+  sortIcon,
 } from "../primitives";
+import { downloadEntry } from "./catalogueDownload";
+import {
+  SORTABLE,
+  createCatalogueEntries,
+  createCatalogueFilters,
+  createCatalogueRows,
+  sortChoices,
+  type CatalogueRow,
+  type Column,
+} from "./catalogueView";
 import type { PendingDownload } from "./downloads";
 import { ImportHub } from "./ImportHub";
 import { RegionIcon } from "./RegionIcon";
 import { formatDate } from "./summaries";
 
-/** The four sortable columns, in the order they are drawn. */
-const SORTABLE: readonly (readonly [Column, () => string])[] = [
-  ["code", () => t("Code")],
-  ["language", () => t("Language")],
-  ["region", () => t("Region")],
-  ["date", () => t("Date")],
-];
-
-/**
- * One grid template for the header row and every body row, so the two cannot
- * drift apart the way a hand-aligned pair of widths does. `minmax(0, …)` on the
- * name column is what lets a long repository path truncate instead of pushing
- * the Download button off the end.
- */
 const COLUMNS =
   "grid grid-cols-[var(--code-column)_minmax(0,1fr)_8rem_8rem_9rem] items-center gap-x-8 px-8 text-body";
 
-/** What a row sorts by in `key`, with the date read through `updated`. */
-const sortValue =
-  (key: Column, updated: (entry: CatalogueEntry) => string | undefined) =>
-  (entry: CatalogueEntry): string => {
-    switch (key) {
-      case "code":
-        return entry.code;
-      case "language":
-        return entry.naturalName;
-      case "region":
-        return entry.region ?? "";
-      case "date":
-        return updated(entry) ?? "";
-    }
-  };
-
-/** The two sort choices a column offers, in its own words. */
-const sortChoices = (column: Column): readonly (readonly [SortDirection, string])[] =>
-  column === "date"
-    ? [
-        ["desc", t("Newest first")],
-        ["asc", t("Oldest first")],
-      ]
-    : [
-        ["asc", t("A to Z")],
-        ["desc", t("Z to A")],
-      ];
-
-/** What one catalogue row is tall, before it has been measured. */
-const ROW_HEIGHT = 75;
-
-const ariaSort = (sort: SortDirection): "none" | "ascending" | "descending" =>
-  sort === "asc" ? "ascending" : sort === "desc" ? "descending" : "none";
-
-type Column = "code" | "language" | "region" | "date";
-
-/**
- * One row, with every value the table draws already computed.
- *
- * The whole point of this shape: **a row must not read a signal.** The live
- * catalogue is thousands of rows, and `nameOf(entry)` inside the `<For>` body
- * made every one of them a subscriber of the name-style signal — thousands of
- * scopes re-running to move one segmented control, which is what the
- * `HUGE_FAN_OUT` diagnostic was reporting. The derivation happens once, in the
- * `rows` memo; a row receives plain values, `busy` included.
- *
- * Two things were measured against a 1,333-row catalogue before this shape was
- * settled on, and both are worth writing down because both look right:
- *
- *   * a per-key store `createProjection` keyed by row id — the repair the
- *     diagnostic's own text suggests — measured WORSE (13,000 subscribers
- *     against 6,500), because a store read still registers a node per row;
- *   * a memo returning fresh row objects with an unkeyed `<For>` measured
- *     worse for the same reason: every flip tore down and rebuilt all 1,333
- *     rows. Hence `keyed={(row) => row.entry.id}` below.
- *
- * What is left is NOT ours and cannot be fixed here: at 1,333 rows the page
- * still reports ~6,500 subscribers on one unnamed signal, and the same number
- * appears when the row is five instances of a five-line component that reads
- * nothing at all. It is one subscriber per COMPONENT INSTANCE in Solid
- * 2.0.0-rc.6 — raw `<tr>`/`<td>` elements report zero. Nothing in this file,
- * or in `primitives/Table.tsx`, moves it.
- */
-interface CatalogueRow {
-  readonly entry: CatalogueEntry;
-  /** The language's own name. */
-  readonly name: string;
-  /** The English name, when it differs from `name`; else empty. */
-  readonly english: string;
-  /** The most recent update across every repo of this language. */
-  readonly updated: string | undefined;
-  /** Empty when Download is offered; otherwise why it is not. */
-  readonly refusal: string;
-  /** True while this row's clone is running. A value, never a signal read. */
-  readonly downloading: boolean;
-}
-
-/** A mark no search or language name contains, to split a message around. */
 const HOLE = "\u0000";
 
-/**
- * What a search that finds nothing says: why, the filters that may be to
- * blame (each one a chip that drops it), and the other way in — importing a
- * project that is not on WACS at all.
- */
+type Filters = ReturnType<typeof createCatalogueFilters>;
+
+const ActiveFilters = (props: {
+  readonly regions: readonly string[];
+  readonly onDropRegion: (region: string) => void;
+}) => (
+  <div class="flex flex-wrap items-center justify-center gap-4">
+    <span class="text-body font-medium text-on-surface-primary">{t("Filters active:")}</span>
+    <For each={props.regions}>
+      {(region) => (
+        <button
+          type="button"
+          class="inline-flex cursor-pointer items-center gap-2 rounded-full bg-surface-canvas px-4 py-2 text-body font-medium text-on-surface-primary transition-colors hover:bg-surface-tertiary"
+          aria-label={t("Remove the {region} filter", { region })}
+          onClick={() => props.onDropRegion(region)}
+        >
+          {region}
+          <X size={16} strokeWidth={2.5} aria-hidden="true" />
+        </button>
+      )}
+    </For>
+  </div>
+);
+
 function NoMatch(props: {
   readonly query: string;
   readonly regions: readonly string[];
   readonly onDropRegion: (region: string) => void;
 }) {
-  // One message, so a translator sees the whole sentence; the query is bolded
-  // by splitting the result around a placeholder no search can contain.
   const said = (): readonly string[] =>
     t(
       "Nothing matched your search for “{query}.” Try again using alternate spellings, dialect names, or any variant names for your language.",
@@ -201,22 +104,7 @@ function NoMatch(props: {
       </div>
 
       <Show when={props.regions.length > 0}>
-        <div class="flex flex-wrap items-center justify-center gap-4">
-          <span class="text-body font-medium text-on-surface-primary">{t("Filters active:")}</span>
-          <For each={props.regions}>
-            {(region) => (
-              <button
-                type="button"
-                class="inline-flex cursor-pointer items-center gap-2 rounded-full bg-surface-canvas px-4 py-2 text-body font-medium text-on-surface-primary transition-colors hover:bg-surface-tertiary"
-                aria-label={t("Remove the {region} filter", { region })}
-                onClick={() => props.onDropRegion(region)}
-              >
-                {region}
-                <X size={16} strokeWidth={2.5} aria-hidden="true" />
-              </button>
-            )}
-          </For>
-        </div>
+        <ActiveFilters regions={props.regions} onDropRegion={props.onDropRegion} />
       </Show>
 
       <div class="flex w-full items-center gap-6 text-body font-medium text-on-surface-tertiary">
@@ -233,384 +121,341 @@ function NoMatch(props: {
           )}
         </p>
       </div>
-      {/* The same import the old cards ran, as two buttons, each going
-          straight to the system picker. */}
+
       <ImportHub variant="buttons" />
     </div>
   );
 }
 
-/** How the table tells the page about a download it started. */
 export interface DownloadTracker {
   readonly start: (download: PendingDownload, from: DOMRect) => void;
   readonly update: (id: string, patch: Partial<PendingDownload>) => void;
 }
 
-export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
-  const shell = useShell();
-  const { services } = shell;
-  // One catalogue per mount. It is a pure value over `env`, so there is nothing
-  // to keep reactive and nothing to dispose.
-  const catalogue = catalogueFor(services.settings);
-  /** Read when the page opens: the setting is changed on another screen. */
-  const gatewaysOffered = services.settings.get(shellKeys(services.settings).showGatewayProjects);
+const SortRadios = (props: { readonly column: Column; readonly filters: Filters }) => (
+  <For each={sortChoices(props.column)}>
+    {([choice, text]) => (
+      <MenuRadio
+        checked={props.filters.sortOf(props.column) === choice}
+        icon={
+          choice === "asc" ? (
+            <ArrowUp size={16} aria-hidden="true" class="shrink-0" />
+          ) : (
+            <ArrowDown size={16} aria-hidden="true" class="shrink-0" />
+          )
+        }
+        onSelect={() => {
+          props.filters.setColumn(props.column);
+          props.filters.setDirection(choice);
+        }}
+      >
+        {text}
+      </MenuRadio>
+    )}
+  </For>
+);
 
-  // A row names its own server, which need not be this build's content host:
-  // a catalogue can list repositories on more than one. Desktop reaches any
-  // of them; a browser only those it has a transport for.
+const RegionFilters = (props: { readonly filters: Filters; readonly total: number }) => (
+  <>
+    <MenuSeparator />
+    <MenuLabel>{t("Filter")}</MenuLabel>
+    <For each={props.filters.regions()}>
+      {([name, count]) => (
+        <MenuCheckbox
+          checked={props.filters.regionFilter().has(name)}
+          icon={<RegionIcon region={name} />}
+          onChange={(on) => props.filters.toggleRegion(name, on)}
+        >
+          {name}
+          <span class="ms-2 text-smallest font-semibold tabular-nums text-on-surface-secondary">
+            {count}
+          </span>
+        </MenuCheckbox>
+      )}
+    </For>
+    <MenuCheckbox
+      checked={props.filters.regionFilter().size === 0}
+      icon={<RegionIcon region="" />}
+      onChange={() => props.filters.setRegionFilter(new Set<string>())}
+    >
+      {t("All regions")}
+      <span class="ms-2 text-smallest font-semibold tabular-nums text-on-surface-secondary">
+        {props.total}
+      </span>
+    </MenuCheckbox>
+  </>
+);
+
+const ColumnHeader = (props: {
+  readonly column: Column;
+  readonly label: string;
+  readonly filters: Filters;
+  readonly total: number;
+}) => (
+  <div
+    role="columnheader"
+    aria-sort={ariaSortOf(props.filters.sortOf(props.column))}
+    class="h-full"
+  >
+    <Menu
+      size="lg"
+      label={t("{column} options", { column: props.label })}
+      side="bottom"
+      align="start"
+      class="w-60"
+      fitViewport
+      triggerClass={
+        props.column === "code"
+          ? "-ms-8 -me-4 flex h-full w-[calc(100%+3rem)]"
+          : "-mx-4 flex h-full w-[calc(100%+2rem)]"
+      }
+      open={props.filters.menuFor() === props.column}
+      onOpenChange={(open) => props.filters.setMenuFor(open ? props.column : "")}
+      trigger={
+        <button
+          type="button"
+          data-column={props.column}
+          data-first={props.column === "code" ? "" : undefined}
+          class="flex w-full cursor-pointer items-center gap-1.5 p-4 text-start data-first:ps-8 font-medium text-inherit transition-colors hover:bg-surface-tertiary hover:text-on-surface-primary data-open:bg-surface-tertiary"
+          data-open={props.filters.menuFor() === props.column ? "" : undefined}
+        >
+          <span class="min-w-0 flex-1 truncate">{props.label}</span>
+          {sortIcon(props.filters.sortOf(props.column), 14)}
+          <Show when={props.column === "region" && props.filters.regionFilter().size > 0}>
+            <Filter size={14} aria-label={t("filtered")} class="text-brand" />
+          </Show>
+        </button>
+      }
+    >
+      <MenuLabel>{t("Sort")}</MenuLabel>
+      <SortRadios column={props.column} filters={props.filters} />
+      <Show when={props.column === "region" && props.filters.regions().length > 0}>
+        <RegionFilters filters={props.filters} total={props.total} />
+      </Show>
+    </Menu>
+  </div>
+);
+
+const DownloadCell = (props: {
+  readonly item: CatalogueRow;
+  readonly onDownload: (entry: CatalogueEntry, from: DOMRect) => void;
+}) => (
+  <div role="cell" class="text-end">
+    <Show
+      when={props.item.refusal === ""}
+      fallback={
+        <Tooltip label={props.item.refusal}>
+          <Button
+            variant="link"
+            size="flush"
+            aria-disabled="true"
+            class="opacity-60"
+            icon={<Download size={16} aria-hidden="true" />}
+          >
+            {t("Download")}
+          </Button>
+        </Tooltip>
+      }
+    >
+      <Button
+        variant="link"
+        size="flush"
+        loading={props.item.downloading}
+        icon={<Download size={16} aria-hidden="true" />}
+        onClick={(event) =>
+          props.onDownload(
+            props.item.entry,
+            (
+              event.currentTarget.closest("[role=row]") ?? event.currentTarget
+            ).getBoundingClientRect(),
+          )
+        }
+      >
+        {t("Download")}
+      </Button>
+    </Show>
+  </div>
+);
+
+const CatalogueRowView = (props: {
+  readonly item: CatalogueRow;
+  readonly index: number;
+  readonly onDownload: (entry: CatalogueEntry, from: DOMRect) => void;
+}) => (
+  <div
+    role="row"
+    aria-rowindex={props.index + 2}
+    data-entry={props.item.entry.id}
+    class={cx(
+      COLUMNS,
+      "border-b border-surface-border py-4 transition-colors hover:bg-surface-secondary",
+    )}
+  >
+    <div role="cell" class="whitespace-nowrap text-on-surface-secondary">
+      {props.item.entry.code}
+    </div>
+    <div role="cell" class="min-w-0">
+      <strong class="font-medium text-on-surface-primary">{props.item.name}</strong>
+      <Show when={props.item.english !== ""}>
+        <span class="ms-2 text-on-surface-tertiary">{props.item.english}</span>
+      </Show>
+
+      <div class="truncate font-mono text-smallest text-on-surface-tertiary">
+        {props.item.entry.id}
+      </div>
+    </div>
+    <div role="cell" class="text-on-surface-secondary">
+      {props.item.entry.region ?? "—"}
+    </div>
+    <div role="cell" class="text-on-surface-secondary">
+      {formatDate(props.item.updated) || "—"}
+    </div>
+    <DownloadCell item={props.item} onDownload={props.onDownload} />
+  </div>
+);
+
+const CatalogueToolbar = (props: {
+  readonly gatewaysOffered: boolean;
+  readonly filters: Filters;
+}) => (
+  <div class="flex flex-wrap items-center gap-3">
+    <PanelHeader title={t("Projects Available on WACS")} class="me-auto" />
+
+    <Show when={props.gatewaysOffered}>
+      <SegmentedControl
+        size="sm"
+        label={t("Which languages")}
+        items={[
+          { value: "translation", label: t("Translations") },
+          { value: "gateway", label: t("Gateway languages") },
+        ]}
+        value={props.filters.kind()}
+        onChange={props.filters.setKind}
+      />
+    </Show>
+    <Input
+      type="search"
+      size="lg"
+      wrapperClass="w-full sm:w-[28rem]"
+      class="w-full"
+      icon={<SearchIcon size={20} aria-hidden="true" />}
+      aria-label={t("Search projects available on WACS")}
+      placeholder={t("Search 'english' or 'axd'…")}
+      value={props.filters.query()}
+      onInput={(event) => props.filters.setQuery(event.currentTarget.value)}
+    />
+  </div>
+);
+
+const TableHead = (props: {
+  readonly filters: Filters;
+  readonly count: number;
+  readonly total: number;
+}) => (
+  <div
+    role="rowgroup"
+    class="scrollbar-subtle shrink-0 overflow-hidden [scrollbar-gutter:stable] border-b border-surface-border"
+  >
+    <div
+      role="row"
+      aria-rowindex={1}
+      data-catalogue={props.count}
+      class={cx(COLUMNS, "text-on-surface-secondary")}
+    >
+      <For each={SORTABLE}>
+        {([column, label]) => (
+          <ColumnHeader
+            column={column}
+            label={label()}
+            filters={props.filters}
+            total={props.total}
+          />
+        )}
+      </For>
+      <div role="columnheader">
+        <span class="sr-only">{t("Download")}</span>
+      </div>
+    </div>
+  </div>
+);
+
+const TableBody = (props: {
+  readonly filters: Filters;
+  readonly entries: readonly CatalogueEntry[] | undefined;
+  readonly virtualRows: readonly { key: string; item: CatalogueRow; estimate: number }[];
+  readonly rowIndex: ReadonlyMap<string, number>;
+  readonly onDownload: (entry: CatalogueEntry, from: DOMRect) => void;
+}) => (
+  <VirtualList<CatalogueRow>
+    role="rowgroup"
+    class="scrollbar-subtle min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]"
+    sections={props.virtualRows.length > 0 ? [{ key: "catalogue", rows: props.virtualRows }] : []}
+    empty={
+      <Show
+        when={props.entries}
+        fallback={
+          <p class="py-8 text-center text-body text-on-surface-tertiary">
+            {t("Loading projects…")}
+          </p>
+        }
+      >
+        <NoMatch
+          query={props.filters.query().trim()}
+          regions={[...props.filters.regionFilter()]}
+          onDropRegion={(name) => props.filters.toggleRegion(name, false)}
+        />
+      </Show>
+    }
+    row={(item) => (
+      <CatalogueRowView
+        item={item()}
+        index={props.rowIndex.get(item().entry.id) ?? 0}
+        onDownload={props.onDownload}
+      />
+    )}
+  />
+);
+
+const downloadReasonFor = (services: ReturnType<typeof useShell>["services"]) => {
   const transport = transportFor(services.settings, services.hostInfo.kind());
   const reachable = (url: string): boolean =>
     services.hostInfo.kind() !== "web" || through(transport, url) !== url;
-
-  const [entries, setEntries] = createSignal<readonly CatalogueEntry[] | undefined>(undefined, {
-    name: "catalogueEntries",
-  });
-  const [problem, setProblem] = createSignal("", { name: "catalogueProblem" });
-  const [query, setQuery] = createSignal("", { name: "catalogueQuery" });
-  const [column, setColumn] = createSignal<Column>("language", { name: "catalogueSort" });
-  const [direction, setDirection] = createSignal<SortDirection>("asc", {
-    name: "catalogueDirection",
-  });
-  const [busy, setBusy] = createSignal("", { name: "catalogueBusy" });
-  /** Which half of the catalogue is shown — see the file header. */
-  const [kind, setKind] = createSignal<CatalogueEntry["type"]>("translation", {
-    name: "catalogueKind",
-  });
-  /** Which column's header menu is open; "" for none. */
-  const [menuFor, setMenuFor] = createSignal<Column | "">("", { name: "catalogueMenu" });
-  /** Regions to keep; empty keeps every region (the "All regions" choice). */
-  const [regionFilter, setRegionFilter] = createSignal<ReadonlySet<string>>(new Set(), {
-    name: "catalogueRegionFilter",
-  });
-  const toggleRegion = (name: string, on: boolean): void => {
-    const next = new Set(regionFilter());
-    if (on) next.add(name);
-    else next.delete(name);
-    setRegionFilter(next);
-  };
-
-  /** The region filter's choices, each with how many rows it holds. */
-  const regions = createMemo(
-    (): readonly (readonly [string, number])[] => {
-      const counted = new Map<string, number>();
-      for (const entry of entries() ?? []) {
-        const key = entry.region ?? "";
-        counted.set(key, (counted.get(key) ?? 0) + 1);
-      }
-      // Named regions A–Z. Rows with no region are reached through "All
-      // regions", which is the unfiltered table.
-      counted.delete("");
-      return [...counted.entries()].sort(([left], [right]) => left.localeCompare(right));
-    },
-    { name: "catalogueRegions" },
-  );
-
-  // One read of the catalogue, as one operation: which source answered, how
-  // many rows, how long. Never the endpoint — `catalogue.source` says whether
-  // it was the live API, and the URL is the build's business.
-  const browsing = services.composition.observability.operation("catalogue.browse", {
-    "catalogue.source": catalogue.source,
-  });
-  void catalogue
-    .entries()
-    .then(({ rows: all, enriched }) => {
-      // Enrichment failing is the table drawing without regions and dates,
-      // not the browse failing: it passes, and says what it went without.
-      browsing.end("passed", {
-        "catalogue.entries": all.length,
-        "catalogue.gateways": all.filter((entry) => entry.type === "gateway").length,
-        "catalogue.enriched": enriched,
-      });
-      setEntries(all);
-    })
-    .catch((cause: unknown) => {
-      browsing.end(catalogueVerdict(cause), catalogueFailureAttrs(cause));
-      setEntries([]);
-      setProblem(describe(cause));
-    });
-
-  /** Per language code, the newest date across all of its repos. */
-  const latest = createMemo(
-    () => {
-      const newest = new Map<string, string>();
-      for (const entry of entries() ?? []) {
-        const updated = entry.updated;
-        if (updated === undefined) continue;
-        const key = entry.code.toLowerCase();
-        const seen = newest.get(key);
-        if (seen === undefined || updated > seen) newest.set(key, updated);
-      }
-      return newest;
-    },
-    { name: "catalogueLatest" },
-  );
-  const updatedOf = (entry: CatalogueEntry): string | undefined =>
-    latest().get(entry.code.toLowerCase());
-
-  const filtered = createMemo(
-    () => {
-      const needle = query().trim().toLowerCase();
-      const keep = regionFilter();
-      return (entries() ?? []).filter((entry) => {
-        if (entry.type !== kind()) return false;
-        // Gateway texts are the ones WA publishes; other owners' gateway-language
-        // repos are somebody's own work, not a source to read from.
-        if (kind() === "gateway" && entry.owner.toLowerCase() !== "wa-catalog") return false;
-        if (keep.size > 0 && (entry.region === undefined || !keep.has(entry.region))) return false;
-        if (needle === "") return true;
-        return (
-          entry.code.toLowerCase().includes(needle) ||
-          entry.id.toLowerCase().includes(needle) ||
-          entry.naturalName.toLowerCase().includes(needle) ||
-          entry.anglicizedName.toLowerCase().includes(needle) ||
-          entry.alternateNames.some((name) => name.toLowerCase().includes(needle))
-        );
-      });
-    },
-    { name: "catalogueFiltered" },
-  );
-
-  const sorted = createMemo(
-    () => {
-      const newest = latest();
-      const value = sortValue(column(), (entry) => newest.get(entry.code.toLowerCase()));
-      const sign = direction() === "desc" ? -1 : 1;
-      return [...filtered()].sort((left, right) => sign * value(left).localeCompare(value(right)));
-    },
-    { name: "catalogueSorted" },
-  );
-
-  const downloadReason = (entry: CatalogueEntry): string => {
+  return (entry: CatalogueEntry): string => {
     if (entry.gitUrl === "") return t("Sample data — this row names no repository to download.");
     if (!reachable(entry.gitUrl))
       return t("This browser has no way to reach the server this project is on.");
     return "";
   };
+};
 
-  /**
-   * The rows the table draws. Every reactive read the rows used to make — the
-   * name style, the two filters, the sort — happens HERE, once, and each row
-   * receives plain strings.
-   */
-  /** Each row's place in the sorted whole, for `aria-rowindex`. */
-  const rowIndex = createMemo(
-    (): ReadonlyMap<string, number> => new Map(sorted().map((entry, at) => [entry.id, at])),
-    { name: "catalogueRowIndex" },
+export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
+  const shell = useShell();
+  const { services } = shell;
+  const catalogue = catalogueFor(services.settings);
+  const gatewaysOffered = services.settings.get(shellKeys(services.settings).showGatewayProjects);
+
+  const downloadReason = downloadReasonFor(services);
+
+  const { entries, problem } = createCatalogueEntries(services, catalogue);
+  const [busy, setBusy] = createSignal("", { name: "catalogueBusy" });
+  const filters = createCatalogueFilters(entries);
+
+  const { rows, rowIndex, virtualRows, codeColumn } = createCatalogueRows(
+    entries,
+    filters,
+    busy,
+    downloadReason,
   );
 
-  const rows = createMemo(
-    (): readonly CatalogueRow[] => {
-      const running = busy();
-      return sorted().map((entry) => ({
-        entry,
-        name: entry.naturalName,
-        english: entry.anglicizedName === entry.naturalName ? "" : entry.anglicizedName,
-        updated: updatedOf(entry),
-        refusal: downloadReason(entry),
-        downloading: entry.id === running,
-      }));
-    },
-    { name: "catalogueRows" },
-  );
-
-  /**
-   * The same rows, as the virtualizer takes them: a stable key and a height to
-   * assume until the row has been on screen. Every row here is one line of
-   * text and a button, so one estimate is right for all of them and the list
-   * never has to correct itself.
-   */
-  const virtualRows = createMemo(
-    () => rows().map((row) => ({ key: row.entry.id, item: row, estimate: ROW_HEIGHT })),
-    { name: "catalogueVirtualRows" },
-  );
-
-  /**
-   * The Code column, as wide as the longest code and no wider. Measured once
-   * per catalogue in the table's own font: every virtual row is its own grid,
-   * so `max-content` would size each row differently.
-   *
-   * Measured at 16px and returned in REM, because the column holds body text
-   * (`text-body`, 1rem): when somebody raises their browser's default font
-   * size, the codes grow, and the column has to grow with them.
-   */
-  const codeColumn = createMemo(
-    () => {
-      const codes = (entries() ?? []).map((entry) => entry.code);
-      if (typeof document === "undefined") return "9rem";
-      const context = document.createElement("canvas").getContext("2d");
-      if (context === null) return "9rem";
-      const style = getComputedStyle(document.body);
-      context.font = `400 16px ${style.fontFamily}`;
-      // The header's word and its sort arrow are the floor.
-      let widest = context.measureText(t("Code")).width + 16;
-      for (const code of codes) widest = Math.max(widest, context.measureText(code).width);
-      return `${String((Math.ceil(widest) + 2) / 16)}rem`;
-    },
-    { name: "catalogueCodeColumn" },
-  );
-
-  const sortOf = (key: Column): SortDirection => (column() === key ? direction() : "none");
-
-  /**
-   * A download that fails must SAY SO. `services.run` rejects with the tagged
-   * failure itself, whose `toString` is the bare tag — so the reason and the
-   * description are read structurally (`src/app/describe.ts`), the toast keeps
-   * the error tone, it never auto-closes, and it carries an × like every other
-   * one. The previous version of this handler produced a toast that said
-   * "RemoteError" and could not be dismissed.
-   */
-  /**
-   * Download: the row flies up to the installed list as a card at once, and
-   * that card carries the progress. A failure is still a toast as well — it
-   * must SAY SO, and never auto-close (`src/app/describe.ts` reads the reason
-   * structurally, so the toast is not a bare tag).
-   *
-   * Progress comes from `Remote.progress()`, the transport's one stream. It is
-   * not per clone, which is fine while `busy` allows one download at a time.
-   */
   const download = (entry: CatalogueEntry, from: DOMRect): void => {
-    // A gateway text is a source text: it goes to the Library, never to the
-    // projects list (`src/app/arrival.ts`). A translation is a project.
-    const kind: ArrivalKind = entry.type === "gateway" ? "sourceText" : "project";
-    const into = arrivalRoot(services, kind, entry.gitUrl);
-    // Read once, at the click: the callbacks below run long after, outside
-    // any tracking scope, and must not read props there.
+    // Untracked on purpose: a one-time read, not a dependency (Solid 2: STRICT_READ_UNTRACKED).
     const { downloads } = props;
-    setBusy(entry.id);
-    // A project flies up to the installed list as a card that carries the
-    // progress. A source text has no card to become, so a toast carries it.
-    const toast =
-      kind === "sourceText"
-        ? toasts.progress({ title: t("Downloading {name}", { name: entry.repo }), message: "" })
-        : undefined;
-    if (toast === undefined)
-      downloads.start(
-        {
-          id: entry.id,
-          root: into,
-          language: entry.naturalName,
-          code: entry.code,
-          state: "downloading",
-          status: t("Starting…"),
-          percent: undefined,
-        },
-        from,
-      );
-    const watching = services.runtime.runFork(
-      Effect.flatMap(Remote, (remote) =>
-        Stream.runForEach(remote.progress(), (progress) =>
-          Effect.sync(() => {
-            const percent =
-              progress.total === undefined || progress.total === 0
-                ? undefined
-                : Math.min(100, Math.round((progress.loaded / progress.total) * 100));
-            if (toast === undefined)
-              downloads.update(entry.id, {
-                status: progress.unit === "bytes" ? describeTransfer(progress) : progress.phase,
-                // A byte count has no total, and says nothing about the bar.
-                ...(progress.unit === "bytes" ? {} : { percent }),
-              });
-            else
-              toasts.advance(toast, {
-                title: t("Downloading {name}", { name: entry.repo }),
-                message: describeTransfer(progress),
-              });
-          }),
-        ),
-      ),
-    );
-    // The same operation the import hub's clone opens, told apart by where it
-    // came from. No URL and no repository name: the catalogue row's type is
-    // the one fact about it worth filtering on.
-    const operation = services.composition.observability.operation("import.remote", {
-      "import.source": "catalogue",
-      "import.host": services.hostInfo.kind(),
-      "catalogue.type": entry.type,
-    });
-    void services
-      .run(
-        Effect.provideService(
-          Effect.gen(function* () {
-            // Pulled once per device: a copy already in the Library is the
-            // answer, whichever project or download brought it.
-            if (kind === "sourceText") {
-              const held = yield* services.library.cloned(entry.gitUrl);
-              if (Option.isSome(held)) return "held" as const;
-            }
-            yield* cloneArrival(services, kind, entry.gitUrl, { catalogueId: entry.id });
-            return "cloned" as const;
-          }),
-          Observability,
-          operation,
-        ),
-      )
-      .then((outcome) => {
-        operation.end("passed", { "import.phase": "complete", "import.outcome": outcome });
-        if (toast !== undefined)
-          toasts.update(toast, {
-            title: entry.repo,
-            message:
-              outcome === "held"
-                ? t("Already on this device, under Source texts.")
-                : t("Downloaded. Choose it as a source text beside any project."),
-            tone: "success",
-          });
-        else {
-          downloads.update(entry.id, { status: t("Done"), percent: 100 });
-          void announceSourceTexts(services, into);
-        }
-      })
-      .catch((cause: unknown) => {
-        operation.end(remoteVerdict(remoteReasonOf(cause)), {
-          "import.reason": reasonOf(cause) ?? "Unknown",
-        });
-        if (toast !== undefined) toasts.dismiss(toast);
-        else downloads.update(entry.id, { state: "failed", status: describe(cause) });
-        toasts.error({
-          title: t("Could not download {name}", { name: entry.repo }),
-          message: describe(cause),
-        });
-      })
-      .finally(() => {
-        Effect.runFork(Fiber.interrupt(watching));
-        setBusy("");
-      });
+    downloadEntry(services, downloads, setBusy, entry, from);
   };
 
   return (
-    // Takes the page's remaining height and never more: the table scrolls
-    // inside itself, and the page above it never scrolls away.
     <section class="flex min-h-0 flex-1 flex-col gap-3">
-      <div class="flex flex-wrap items-center gap-3">
-        <PanelHeader title={t("Projects Available on WACS")} class="me-auto" />
-        {/* Gateway languages are listed here only with Settings → Advanced
-            on; everyone else chooses one to read from the reference column's
-            language menu. Either way a gateway row is a source text and lands
-            in the Library (`arrival.ts`). */}
-        <Show when={gatewaysOffered}>
-          <SegmentedControl
-            size="sm"
-            label={t("Which languages")}
-            items={[
-              { value: "translation", label: t("Translations") },
-              { value: "gateway", label: t("Gateway languages") },
-            ]}
-            value={kind()}
-            onChange={setKind}
-          />
-        </Show>
-        <Input
-          type="search"
-          size="lg"
-          wrapperClass="w-full sm:w-[28rem]"
-          class="w-full"
-          icon={<SearchIcon size={20} aria-hidden="true" />}
-          aria-label={t("Search projects available on WACS")}
-          placeholder={t("Search 'english' or 'axd'…")}
-          value={query()}
-          onInput={(event) => setQuery(event.currentTarget.value)}
-        />
-      </div>
+      <CatalogueToolbar gatewaysOffered={gatewaysOffered} filters={filters} />
 
       <div class="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
         <Show when={problem() !== ""}>
@@ -619,10 +464,6 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
           </p>
         </Show>
 
-        {/* A grid with table ROLES, so a screen reader hears a table: the
-            header row and the windowed body are each a rowgroup, and every
-            row says its place in the whole (`aria-rowindex`), since most rows
-            are not in the DOM at any moment. */}
         <Card
           padded={false}
           role="table"
@@ -631,231 +472,13 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
           class="flex min-h-0 flex-1 flex-col overflow-hidden"
           style={{ "--code-column": codeColumn() }}
         >
-          {/* WINDOWED, and the catalogue is why: it lists every repository the
-              Language API knows, which on this account is 521 rows — 2,605
-              cells and 6,941 DOM nodes, all built, all measured, for the dozen
-              a reader can see. The section header is the column row, so the
-              list gets a sticky heading for free and the two stay aligned by
-              sharing one grid template.
-
-              A grid and not a `<table>`: a virtual row is positioned by a
-              transform, and a transform on a `<tr>` is not something table
-              layout honours. The roles carry the semantics the elements no
-              longer do. */}
-          {/* The column row, above the scroll pane. Both it and the list
-              reserve the scrollbar's gutter (`scrollbar-gutter: stable`),
-              scrolling or not, so the columns line up without measuring. */}
-          <div
-            role="rowgroup"
-            class="scrollbar-subtle shrink-0 overflow-hidden [scrollbar-gutter:stable] border-b border-surface-border"
-          >
-            <div
-              role="row"
-              aria-rowindex={1}
-              data-catalogue={rows().length}
-              class={cx(COLUMNS, "text-on-surface-secondary")}
-            >
-              <For each={SORTABLE}>
-                {([column, label]) => (
-                  <div role="columnheader" aria-sort={ariaSort(sortOf(column))} class="h-full">
-                    {/* The whole cell is the button, so the hover lights the
-                        area and not just the word. It opens the column's
-                        menu: Sort always, Filter where the column has one. */}
-                    <Menu
-                      size="lg"
-                      label={t("{column} options", { column: label() })}
-                      side="bottom"
-                      align="start"
-                      class="w-60"
-                      fitViewport
-                      triggerClass={
-                        // The hover reaches 16px into the 32px gap each side;
-                        // the first column reaches back to the table's edge.
-                        column === "code"
-                          ? "-ms-8 -me-4 flex h-full w-[calc(100%+3rem)]"
-                          : "-mx-4 flex h-full w-[calc(100%+2rem)]"
-                      }
-                      open={menuFor() === column}
-                      onOpenChange={(open) => setMenuFor(open ? column : "")}
-                      trigger={
-                        <button
-                          type="button"
-                          data-column={column}
-                          data-first={column === "code" ? "" : undefined}
-                          class="flex w-full cursor-pointer items-center gap-1.5 p-4 text-start data-first:ps-8 font-medium text-inherit transition-colors hover:bg-surface-tertiary hover:text-on-surface-primary data-open:bg-surface-tertiary"
-                          data-open={menuFor() === column ? "" : undefined}
-                        >
-                          {/* The label grows, so the sort and filter icons
-                              sit at the cell's far right. */}
-                          <span class="min-w-0 flex-1 truncate">{label()}</span>
-                          {sortOf(column) === "asc" ? (
-                            <ArrowUp size={14} aria-hidden="true" />
-                          ) : sortOf(column) === "desc" ? (
-                            <ArrowDown size={14} aria-hidden="true" />
-                          ) : (
-                            <ChevronsUpDown size={14} aria-hidden="true" class="opacity-50" />
-                          )}
-                          <Show when={column === "region" && regionFilter().size > 0}>
-                            <Filter size={14} aria-label={t("filtered")} class="text-brand" />
-                          </Show>
-                        </button>
-                      }
-                    >
-                      <MenuLabel>{t("Sort")}</MenuLabel>
-                      <For each={sortChoices(column)}>
-                        {([choice, text]) => (
-                          <MenuRadio
-                            checked={sortOf(column) === choice}
-                            icon={
-                              choice === "asc" ? (
-                                <ArrowUp size={16} aria-hidden="true" class="shrink-0" />
-                              ) : (
-                                <ArrowDown size={16} aria-hidden="true" class="shrink-0" />
-                              )
-                            }
-                            onSelect={() => {
-                              setColumn(column);
-                              setDirection(choice);
-                            }}
-                          >
-                            {text}
-                          </MenuRadio>
-                        )}
-                      </For>
-                      <Show when={column === "region" && regions().length > 0}>
-                        <MenuSeparator />
-                        <MenuLabel>{t("Filter")}</MenuLabel>
-                        <For each={regions()}>
-                          {([name, count]) => (
-                            <MenuCheckbox
-                              checked={regionFilter().has(name)}
-                              icon={<RegionIcon region={name} />}
-                              onChange={(on) => toggleRegion(name, on)}
-                            >
-                              {name}
-                              <span class="ms-2 text-smallest font-semibold tabular-nums text-on-surface-secondary">
-                                {count}
-                              </span>
-                            </MenuCheckbox>
-                          )}
-                        </For>
-                        <MenuCheckbox
-                          checked={regionFilter().size === 0}
-                          icon={<RegionIcon region="" />}
-                          onChange={() => setRegionFilter(new Set<string>())}
-                        >
-                          {t("All regions")}
-                          <span class="ms-2 text-smallest font-semibold tabular-nums text-on-surface-secondary">
-                            {(entries() ?? []).length}
-                          </span>
-                        </MenuCheckbox>
-                      </Show>
-                    </Menu>
-                  </div>
-                )}
-              </For>
-              <div role="columnheader">
-                <span class="sr-only">{t("Download")}</span>
-              </div>
-            </div>
-          </div>
-          <VirtualList<CatalogueRow>
-            role="rowgroup"
-            class="scrollbar-subtle min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]"
-            // No section at all when nothing matches: the list shows `empty` only
-            // then, and a section with zero rows would draw nothing instead.
-            sections={virtualRows().length > 0 ? [{ key: "catalogue", rows: virtualRows() }] : []}
-            empty={
-              <Show
-                when={entries()}
-                fallback={
-                  <p class="py-8 text-center text-body text-on-surface-tertiary">
-                    {t("Loading projects…")}
-                  </p>
-                }
-              >
-                <NoMatch
-                  query={query().trim()}
-                  regions={[...regionFilter()]}
-                  onDropRegion={(name) => toggleRegion(name, false)}
-                />
-              </Show>
-            }
-            // The column row lives OUTSIDE the scroller (above), so the
-            // scrollbar runs beside the rows only; the list draws no headers.
-            row={(item) => {
-              const entry = () => item().entry;
-              return (
-                <div
-                  role="row"
-                  aria-rowindex={(rowIndex().get(entry().id) ?? 0) + 2}
-                  data-entry={entry().id}
-                  class={cx(
-                    COLUMNS,
-                    "border-b border-surface-border py-4 transition-colors hover:bg-surface-secondary",
-                  )}
-                >
-                  <div role="cell" class="whitespace-nowrap text-on-surface-secondary">
-                    {entry().code}
-                  </div>
-                  <div role="cell" class="min-w-0">
-                    <strong class="font-medium text-on-surface-primary">{item().name}</strong>
-                    <Show when={item().english !== ""}>
-                      <span class="ms-2 text-on-surface-tertiary">{item().english}</span>
-                    </Show>
-                    {/* The repo itself, so two rows of one language can be told apart. */}
-                    <div class="truncate font-mono text-smallest text-on-surface-tertiary">
-                      {entry().id}
-                    </div>
-                  </div>
-                  <div role="cell" class="text-on-surface-secondary">
-                    {entry().region ?? "—"}
-                  </div>
-                  <div role="cell" class="text-on-surface-secondary">
-                    {formatDate(item().updated) || "—"}
-                  </div>
-                  <div role="cell" class="text-end">
-                    <Show
-                      when={item().refusal === ""}
-                      fallback={
-                        // Focusable although it does nothing, so a keyboard
-                        // reaches the tooltip that says why: `aria-disabled`,
-                        // not `disabled`, which would take it out of the tab
-                        // order along with its reason.
-                        <Tooltip label={item().refusal}>
-                          <Button
-                            variant="link"
-                            size="flush"
-                            aria-disabled="true"
-                            class="opacity-60"
-                            icon={<Download size={16} aria-hidden="true" />}
-                          >
-                            {t("Download")}
-                          </Button>
-                        </Tooltip>
-                      }
-                    >
-                      <Button
-                        variant="link"
-                        size="flush"
-                        loading={item().downloading}
-                        icon={<Download size={16} aria-hidden="true" />}
-                        onClick={(event) =>
-                          download(
-                            entry(),
-                            (
-                              event.currentTarget.closest("[role=row]") ?? event.currentTarget
-                            ).getBoundingClientRect(),
-                          )
-                        }
-                      >
-                        {t("Download")}
-                      </Button>
-                    </Show>
-                  </div>
-                </div>
-              );
-            }}
+          <TableHead filters={filters} count={rows().length} total={(entries() ?? []).length} />
+          <TableBody
+            filters={filters}
+            entries={entries()}
+            virtualRows={virtualRows()}
+            rowIndex={rowIndex()}
+            onDownload={download}
           />
         </Card>
       </div>

@@ -1,22 +1,3 @@
-/**
- * Where this project stands: the two clocks, as the cloud popover shows them.
- *
- * The two clocks are the whole idea. A translator does not want a ref
- * comparison; they want to know how much of their morning has left this
- * machine and how much of everyone else's has arrived. So there are exactly
- * two stat lines, always both shown, and each says when that side last moved
- * and how many of its versions the other side has not got.
- *
- * The shared line names who recorded the newest cloud version when there is
- * something to receive; the local line never does, because we already know.
- * In the copy mode "waiting to be sent" is what the person's own copy lacks —
- * a send goes there (`reading.ts`) — while the shared line stays the shared
- * project's.
- *
- * Only the clocks and the headline's colour are left of the card the file is
- * named for, which went with `/cloud` (2026-10-06).
- */
-
 import { Show } from "solid-js";
 
 import type { Clock, IncomingPlan, Sync } from "#core/sync";
@@ -40,8 +21,6 @@ function ClockLine(props: {
         title={props.clock.at === undefined ? undefined : exact(props.clock.at)}
       >
         <Show when={props.clock.at !== undefined} fallback={<span>{t("no versions yet")}</span>}>
-          {/* The time is the answer to "when", so it is the strong word —
-              in ink, not brand: colour is kept for what asks something. */}
           <span class="font-medium text-on-surface-primary">{ago(props.clock.at ?? 0)}</span>
           <Show when={props.clock.by !== undefined}>
             <span class="text-on-surface-tertiary">
@@ -65,10 +44,8 @@ function ClockLine(props: {
   );
 }
 
-/** The two clocks, side by side: this device's and the shared project's. */
 export function SyncClocks(props: {
   readonly sync: Sync;
-  /** What would arrive, for the shared side's words in verses; absent until it is worked out. */
   readonly plan?: IncomingPlan;
   readonly class?: string;
 }) {

@@ -1,16 +1,3 @@
-/**
- * Runs the Tauri CLI with the generated config overlays.
- *
- * `pnpm dev:tauri` and `pnpm build:tauri` go through here rather than calling
- * `tauri` directly, because both need the same two things first: the updater
- * overlay written from the environment, and — when `SEFER_CHANNEL=preview` —
- * the preview product name and identifier layered on top. Doing that in a
- * shell one-liner would not survive Windows, and forgetting it would silently
- * build a desktop app with no updater endpoint.
- *
- * Usage: `node tools/tauri/run.ts dev|build [extra tauri args…]`.
- */
-
 import { spawnSync } from "node:child_process";
 import process from "node:process";
 

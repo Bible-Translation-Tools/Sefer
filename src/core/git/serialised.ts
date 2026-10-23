@@ -1,16 +1,3 @@
-/**
- * The Git and Remote ports with every call in its repository's lane.
- *
- * Both hosts' Layers are wrapped here, once, by composition, so neither host
- * can forget a lane and no caller has to know lanes exist. A mutation runs in
- * the exclusive lane; a read that walks refs, the index or the log runs in the
- * shared one. `open` is left bare: it is what the lifecycle itself uses to look
- * at a root.
- *
- * A lifecycle refusal keeps each port's own error type — `GitError` `Refused`
- * ("Sefer declined before touching the repository"), `RemoteError` `Rejected`
- * — so no caller's error handling changes.
- */
 import { Effect } from "effect";
 
 import { RemoteError, type RemoteService } from "../remote/remote";
@@ -49,8 +36,6 @@ export const serialiseGit = (git: GitService, repositories: RepositoriesService)
     walk: (repo) => read(repo.root, git.walk(repo)),
     blobs: (repo, ids) => read(repo.root, git.blobs(repo, ids)),
     show: (repo, rev, path) => read(repo.root, git.show(repo, rev, path)),
-    // The list is read in the lane; each version's bytes are read later, by
-    // id, which needs none.
     previousVersions: (repo, path) => read(repo.root, git.previousVersions(repo, path)),
     timeline: (repo, paths, shared) => read(repo.root, git.timeline(repo, paths, shared)),
   };
@@ -69,20 +54,15 @@ export const serialiseRemote = (
       Effect.fail(asRemote(error)),
     );
   return {
-    // The folder does not exist yet; the lane is still the one a later open
-    // of it will ask for, so a second clone into the same folder waits.
     clone: (url, into, options) => write(into, "clone", remote.clone(url, into, options)),
     deepen: (repo, more) => write(repo.root, "deepen", remote.deepen(repo, more)),
     backfills: remote.backfills,
     attach: (repo, url) => write(repo.root, "attach", remote.attach(repo, url)),
     attachAs: (repo, name, url) => write(repo.root, "attach", remote.attachAs(repo, name, url)),
     urlOf: (repo, name) => read(repo.root, remote.urlOf(repo, name)),
-    // Every argument forwarded, the remote's name included: dropped, a read
-    // of the person's copy would silently read `origin` instead.
     fetchRef: (repo, from, into, name) =>
       write(repo.root, "fetch", remote.fetchRef(repo, from, into, name)),
     origin: (repo) => read(repo.root, remote.origin(repo)),
-    // Nothing local is read or written: a probe needs no lane.
     probe: remote.probe,
     fetch: (repo) => write(repo.root, "fetch", remote.fetch(repo)),
     fastForward: (repo, to) => write(repo.root, "fast-forward", remote.fastForward(repo, to)),

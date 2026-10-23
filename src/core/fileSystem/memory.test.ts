@@ -33,8 +33,6 @@ describe("memory FileSystem", () => {
     const { fileSystem } = makeMemoryFileSystem();
     const scoped = scopedTo(fileSystem, "/project");
 
-    // The refusal must name the escape, not the unimplemented method: that is
-    // the proof the scope judged the pattern instead of delegating it.
     await expect(Effect.runPromise(scoped.glob("../*.usfm"))).rejects.toThrow(
       /resolves outside the project root/,
     );

@@ -1,25 +1,3 @@
-/**
- * Every word the sync surfaces say, in one table keyed by the state.
- *
- * v1 learned this the expensive way: the chip, the banner, the panel and the
- * settings rows each grew their own wording for the same six situations, and
- * they drifted. So the glossary is physically one module, keyed by the enum,
- * and a surface that wants to describe a state has nowhere else to look.
- *
- * Three rules the strings themselves follow:
- *
- * 1. **No git words.** Nobody sees branch, commit, HEAD, merge, rebase, fetch
- *    or origin. The online copy is "the shared project"; a version is a
- *    version. The git vocabulary lives in `src/core`, where it is accurate,
- *    and stops at this file.
- * 2. **Every anxious state reassures about local safety.** Offline, behind,
- *    diverged and conflicted all end by saying the work is still here. A
- *    translator's first fear is losing a morning's work, and answering it
- *    costs one clause.
- * 3. **Every action says what it will do before it runs**, and names what
- *    moves and what does not.
- */
-
 import type {
   CombineRefusal,
   CombineState,
@@ -33,43 +11,95 @@ import { t, type Params } from "../../i18n";
 import type { SendOutcome } from "../../syncActions";
 import type { BadgeTone } from "../primitives";
 
-/**
- * One or many, as two whole messages rather than an "(s)".
- *
- * `src/app/i18n.ts` is interpolation only — no plural rules yet — so the two
- * forms are written out and chosen here. Both are literals, so the extractor
- * that replaces `t` later finds both, and no language is left with the English
- * assumption that one form plus an "s" covers it.
- */
 export const plural = (count: number, one: string, many: string, params: Params = {}): string =>
   t(count === 1 ? one : many, { count, ...params });
 
-/** What the headline and the paragraph say for one state, and its short name. */
 export interface StateCopy {
-  /** Two or three words, for a badge — which no surface draws since `/cloud` went. */
   readonly chip: string;
-  /** The popover's headline: the situation, as a sentence. */
   readonly headline: string;
-  /** One paragraph: what it means, and that the work is safe. */
   readonly detail: string;
   readonly tone: BadgeTone;
 }
 
-/**
- * What the reading adds to a state's words: whether the last failure was a
- * send (the work was saved, only the sending did not happen), and whether
- * anyone is signed in (a refusal to someone signed in is not a sign-in
- * problem — it is permission).
- */
 export interface StateContext {
   readonly sendRefused?: boolean | undefined;
   readonly signedIn?: boolean | undefined;
-  /**
-   * The project is worked on in the person's own copy: sending goes there, so
-   * "up to date" and "work to send" are about the copy, not the shared project.
-   */
   readonly inCopy?: boolean;
 }
+
+type QuietState = "checking" | "detached" | "unpublished" | "attached-clean" | "ahead";
+
+const accessCopy = (state: "offline" | "unauthorized", context: StateContext): StateCopy => {
+  switch (state) {
+    case "offline":
+      return {
+        chip: t("Offline"),
+        headline: t("You're offline"),
+        detail:
+          context.sendRefused === true
+            ? t(
+                "Saved on this device. Not sent yet: you're offline. Sefer sends it the next time you save or open this project. Your work is safe here.",
+              )
+            : t("Your work is still saved here. You can send it once you're back online."),
+        tone: "muted",
+      };
+    case "unauthorized":
+      if (context.signedIn === true)
+        return {
+          chip: t("Can't send"),
+          headline: t("This account can't send to the shared project"),
+          detail: t(
+            "Saved on this device. Not sent: this account may not have permission to write to the shared project, or its sign-in has expired. Your work is safe here.",
+          ),
+          tone: "warning",
+        };
+      return {
+        chip: t("Sign in again"),
+        headline: t("Sign in to keep sharing"),
+        detail:
+          context.sendRefused === true
+            ? t(
+                "Saved on this device. Not sent: sign in to send your changes to the shared project. Your work is safe here.",
+              )
+            : t("Sending and receiving updates is paused until you sign in again."),
+        tone: "error",
+      };
+  }
+};
+
+const troubleCopy = (state: Exclude<SyncState, QuietState>, context: StateContext): StateCopy => {
+  switch (state) {
+    case "behind":
+      return {
+        chip: t("Updates to receive"),
+        headline: t("There are updates to receive"),
+        detail: t(
+          "The shared project has versions you do not have yet. You will see exactly what changes before anything is applied.",
+        ),
+        tone: "warning",
+      };
+    case "diverged":
+      return {
+        chip: t("Needs review"),
+        headline: t("Both sides have moved"),
+        detail: t(
+          "You and the shared project both recorded work. Nothing is merged automatically — your text stays exactly as it is until you choose.",
+        ),
+        tone: "warning",
+      };
+    case "conflicted":
+      return {
+        chip: t("Unfinished"),
+        headline: t("A transfer stopped part-way"),
+        detail: t(
+          "Your work is still here and still saved. Finish this before sending or receiving anything else.",
+        ),
+        tone: "error",
+      };
+    default:
+      return accessCopy(state, context);
+  }
+};
 
 export const stateCopy = (state: SyncState, context: StateContext = {}): StateCopy => {
   switch (state) {
@@ -126,77 +156,14 @@ export const stateCopy = (state: SyncState, context: StateContext = {}): StateCo
         detail: t("Send it when you are ready. Nothing in the shared project is replaced."),
         tone: "warning",
       };
-    case "behind":
-      return {
-        chip: t("Updates to receive"),
-        headline: t("There are updates to receive"),
-        detail: t(
-          "The shared project has versions you do not have yet. You will see exactly what changes before anything is applied.",
-        ),
-        tone: "warning",
-      };
-    case "diverged":
-      return {
-        chip: t("Needs review"),
-        headline: t("Both sides have moved"),
-        detail: t(
-          "You and the shared project both recorded work. Nothing is merged automatically — your text stays exactly as it is until you choose.",
-        ),
-        tone: "warning",
-      };
-    case "conflicted":
-      return {
-        chip: t("Unfinished"),
-        headline: t("A transfer stopped part-way"),
-        detail: t(
-          "Your work is still here and still saved. Finish this before sending or receiving anything else.",
-        ),
-        tone: "error",
-      };
-    case "offline":
-      return {
-        chip: t("Offline"),
-        headline: t("You're offline"),
-        detail:
-          context.sendRefused === true
-            ? t(
-                "Saved on this device. Not sent yet: you're offline. Sefer sends it the next time you save or open this project. Your work is safe here.",
-              )
-            : t("Your work is still saved here. You can send it once you're back online."),
-        tone: "muted",
-      };
-    case "unauthorized":
-      // Signed in and still refused: a missing permission or an expired
-      // sign-in, which both hosts report as the same reason — so the words say
-      // both, and signing in again stays the one button.
-      if (context.signedIn === true)
-        return {
-          chip: t("Can't send"),
-          headline: t("This account can't send to the shared project"),
-          detail: t(
-            "Saved on this device. Not sent: this account may not have permission to write to the shared project, or its sign-in has expired. Your work is safe here.",
-          ),
-          tone: "warning",
-        };
-      return {
-        chip: t("Sign in again"),
-        headline: t("Sign in to keep sharing"),
-        detail:
-          context.sendRefused === true
-            ? t(
-                "Saved on this device. Not sent: sign in to send your changes to the shared project. Your work is safe here.",
-              )
-            : t("Sending and receiving updates is paused until you sign in again."),
-        tone: "error",
-      };
+    default:
+      return troubleCopy(state, context);
   }
 };
 
-/** "the front matter", "chapter 3" — one chapter, as a person names it. */
 const chapterLabel = (chapter: number): string =>
   chapter === FRONT_MATTER ? t("the front matter") : t("chapter {number}", { number: chapter });
 
-/** "1, 3 and 4", "the front matter and chapter 2" — a list, not a JSON array. */
 export const chapterList = (chapters: readonly number[]): string => {
   const labels = chapters.map(chapterLabel);
   if (labels.length <= 1) return labels[0] ?? "";
@@ -204,16 +171,6 @@ export const chapterList = (chapters: readonly number[]): string => {
   return t("{first} and {last}", { first: labels.slice(0, -1).join(", "), last });
 };
 
-/**
- * What arrives, in verses — the unit a translator works in — as two
- * sentences: what changed in the shared project, then whether any of it is
- * a verse this device changed too. "There are changes to 3 verses in 2 books.
- * You also changed 1 of those verses."
- *
- * Built from the totals rather than per book, because the per-book detail is
- * right below it and a summary that repeats the list is not a summary. A
- * change the engine could not place in a verse falls back to books.
- */
 export const planSummary = (plan: IncomingPlan): string => {
   if (plan.books.length === 0)
     return t("Nothing in your books changes; the updates are elsewhere in the project.");
@@ -223,13 +180,6 @@ export const planSummary = (plan: IncomingPlan): string => {
   return t("There are changes to {verses} in {books}.", { verses, books });
 };
 
-/**
- * What the shared project has that you do not, in the plan's own numbers —
- * "3 verses in 2 books to receive" — never in versions, and in Review's
- * status line's words. However many
- * versions it took them, a review compares the newest against yours ONCE, and
- * "3 versions you don't have" read like three reviews.
- */
 export const incomingWords = (plan: IncomingPlan): string | undefined => {
   if (plan.books.length === 0) return undefined;
   const books = plural(plan.books.length, "{count} book", "{count} books");
@@ -238,10 +188,8 @@ export const incomingWords = (plan: IncomingPlan): string | undefined => {
   return t("{verses} in {books} to receive", { verses, books });
 };
 
-/** What you have that the shared project does not — said, not counted: see `incomingWords`. */
 export const outgoingWords = (): string => t("Saved changes not sent yet");
 
-/** The second sentence: whether you changed any of the same verses, and how it reads. */
 export const planOverlap = (
   plan: IncomingPlan,
 ): { readonly text: string; readonly mine: boolean } | undefined => {
@@ -258,16 +206,6 @@ export const planOverlap = (
   };
 };
 
-/**
- * Why a combine did not run, in the words of the surface.
- *
- * Core's refusals are spelled in git — "refs/remotes/origin/main does not
- * exist" — because that is the accurate way to say them there. This is the one
- * place they cross into the vocabulary a translator reads, and every sentence
- * ends by saying where the work is, because a refused transfer is exactly when
- * somebody wonders.
- */
-/** Why a receive did not run, in the words Review's receipt uses. */
 export const receiveRefusal = (refusal: ReceiveRefusal, books: readonly string[] = []): string => {
   switch (refusal) {
     case "review":
@@ -328,13 +266,6 @@ export const combineRefusal = (refusal: CombineRefusal): string => {
   }
 };
 
-/**
- * Where the work is after a combine failed on the way through.
- *
- * `restored` is the ordinary answer and it is good news; `stranded` is the one
- * that needs a person, and it says so plainly rather than hiding behind "an
- * error occurred".
- */
 export const combineTrouble = (state: CombineState): string => {
   switch (state) {
     case "untouched":
@@ -354,14 +285,62 @@ export const combineTrouble = (state: CombineState): string => {
   }
 };
 
-/**
- * How a send ended, as the last line of a Record: the version is kept here
- * either way, and the line says that first whenever the send did not get
- * through. `state` is where the project stands afterwards, when it is known —
- * a refused send has already been followed by a check, so "behind" and
- * "diverged" can be told apart. A send to the person's own copy says so, and
- * points at offering it rather than at the team.
- */
+type SendCopy = ReturnType<typeof sendOutcomeCopy>;
+
+const refusedCopy = (
+  outcome: Extract<SendOutcome, { kind: "refused" }>,
+  state?: SyncState,
+): SendCopy => {
+  switch (outcome.reason) {
+    case "Rejected":
+      if (outcome.toCopy === true)
+        return {
+          tone: "warning",
+          title: t("Saved here. Not sent: your copy has changes this device does not"),
+          detail: t(
+            "They came from another device, or from changes you offered before. Compare with your copy and choose what to keep; then it sends as usual. Nothing is lost on either side.",
+          ),
+        };
+      if (outcome.description !== undefined)
+        return {
+          tone: "warning",
+          title: t("Saved here. Not sent to your copy"),
+          detail: t("Your work is safe on this device. What went wrong: {description}", {
+            description: outcome.description,
+          }),
+        };
+      return {
+        tone: "warning",
+        title: t("Saved here. Not sent: the shared project has changed"),
+        detail:
+          state === "behind" || state === "diverged"
+            ? t(
+                "It has versions you have not reviewed yet. Your work is safe on this device — compare the changes, choose, and record again to send.",
+              )
+            : t(
+                "The shared project would not take it as it is. Your work is safe on this device — check for changes and compare them.",
+              ),
+      };
+    case "Network":
+    case "Unavailable":
+      return {
+        tone: "warning",
+        title: t("Saved here. Not sent: the shared project could not be reached"),
+        detail: t(
+          "You may be offline. Your work is safe on this device, and Sefer sends it the next time you record a version or press Send.",
+        ),
+      };
+    case "Unauthorized":
+      return {
+        tone: "warning",
+        title: t("Saved here. Not sent: sign in to send"),
+        detail: t(
+          "Your sign-in has expired, or this account may not write to the shared project. Your work is safe on this device.",
+        ),
+      };
+  }
+};
+
 export const sendOutcomeCopy = (
   outcome: SendOutcome,
   state?: SyncState,
@@ -398,62 +377,10 @@ export const sendOutcomeCopy = (
         detail: t("This project does not send on save. Send it when you are ready."),
       };
     case "refused":
-      switch (outcome.reason) {
-        case "Rejected":
-          if (outcome.toCopy === true)
-            return {
-              tone: "warning",
-              title: t("Saved here. Not sent: your copy has changes this device does not"),
-              detail: t(
-                "They came from another device, or from changes you offered before. Compare with your copy and choose what to keep; then it sends as usual. Nothing is lost on either side.",
-              ),
-            };
-          if (outcome.description !== undefined)
-            return {
-              tone: "warning",
-              title: t("Saved here. Not sent to your copy"),
-              detail: t("Your work is safe on this device. What went wrong: {description}", {
-                description: outcome.description,
-              }),
-            };
-          return {
-            tone: "warning",
-            title: t("Saved here. Not sent: the shared project has changed"),
-            detail:
-              state === "behind" || state === "diverged"
-                ? t(
-                    "It has versions you have not reviewed yet. Your work is safe on this device — compare the changes, choose, and record again to send.",
-                  )
-                : t(
-                    "The shared project would not take it as it is. Your work is safe on this device — check for changes and compare them.",
-                  ),
-          };
-        case "Network":
-        case "Unavailable":
-          return {
-            tone: "warning",
-            title: t("Saved here. Not sent: the shared project could not be reached"),
-            detail: t(
-              "You may be offline. Your work is safe on this device, and Sefer sends it the next time you record a version or press Send.",
-            ),
-          };
-        case "Unauthorized":
-          return {
-            tone: "warning",
-            title: t("Saved here. Not sent: sign in to send"),
-            detail: t(
-              "Your sign-in has expired, or this account may not write to the shared project. Your work is safe on this device.",
-            ),
-          };
-      }
+      return refusedCopy(outcome, state);
   }
 };
 
-/**
- * What an offer says when work this device lacks is in the way
- * (`reviewNeeded`): in the person's copy, or in the shared project the copy
- * caught up with. The one decision, that review, comes next.
- */
 export const offerRefusalCopy = (needed: {
   readonly copy: boolean;
 }): { readonly title: string; readonly message: string } =>

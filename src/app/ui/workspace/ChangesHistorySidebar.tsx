@@ -1,17 +1,3 @@
-/**
- * The sidebar of the screens that read the project's versions: Changes
- * (Review — what is not recorded yet), History (what was), and Suggestions
- * (what is offered — shown to someone who can write to the shared project or
- * works in their own copy of it), as tabs over one panel, the way Zed's git
- * panel puts them.
- *
- * The tabs are links, and the route is the tab: Review draws Changes, History
- * draws History, so Back and Forward move between them and neither screen
- * keeps a tab of its own. Each screen claims the sidebar (`sidebarSlot`) and
- * puts its own list under the tabs. The Suggestions tab's count is the
- * network's (`collaboration`), so it follows the check rather than the page.
- */
-
 import type { JSX } from "@solidjs/web";
 import { Link } from "@tanstack/solid-router";
 import { Show } from "solid-js";
@@ -29,11 +15,6 @@ const TAB = [
   "not-aria-[current=page]:hover:text-on-surface-secondary",
 ].join(" ");
 
-/**
- * The tabs themselves: in the sidebar they share its width; above the page,
- * where the workspace draws them while the sidebar is hidden, they sit at
- * their own width — the screens stay one click apart either way.
- */
 export function VersionTabs(props: {
   readonly active: VersionsTab;
   readonly changes?: number;
@@ -68,7 +49,7 @@ export function VersionTabs(props: {
       >
         {t("History")}
       </Link>
-      {/* Suggestions: an editor's to review, and a person-in-their-copy's own. */}
+
       <Show
         when={
           facts()?.canWrite === true || facts()?.mode === "copy" || props.active === "suggestions"
@@ -92,7 +73,6 @@ export function VersionTabs(props: {
 
 export function ChangesHistorySidebar(props: {
   readonly active: VersionsTab;
-  /** Books with changes, when the screen knows; the Changes tab says how many. */
   readonly changes?: number;
   readonly children: JSX.Element;
 }) {

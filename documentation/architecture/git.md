@@ -363,7 +363,7 @@ person's own; `src/app/collaboration.ts` holds what the surfaces show. They join
    send is pointed anywhere but `origin`;
 3. the cloud popover (`CollabSection`), Settings' `CollabModeCard`, and the editors' list
    (`SuggestionsScreen` → `SuggestionsCard`, at `/project/$slug/suggestions`);
-4. `ReviewPanel.tsx` reads `?pull=<n>` through `suggestionRef`, and accepts after Record.
+4. Review's panel reads `?pull=<n>` (`src/app/ui/review/panel/createReviewRoute.ts`) and accepts after Record (`createRecordAction.ts`); `suggestionRef` (`src/app/suggestions.ts`) names the ref it reads.
 
 A copy is never forked twice: Gitea refuses a second fork of the same project, and a name the
 person already holds (both 409). So a copy made on another device is found among the shared

@@ -1,27 +1,3 @@
-/**
- * The app bar: the one piece of chrome that is always on screen.
- *
- * A bar across the top of the window in the theme's own surface — white in
- * light, the dark surface in dark — with a hairline under it. (It was a
- * column down the left; the top won.)
- *
- * Three bands, left to right. The mark, which is the way home. (The project
- * panel's show/hide is `PanelToggle`, beside the book's title or in its own
- * column, not here.) The MODES in the middle — Refine and Key terms — the
- * ways of working on a project's text; with no project open they are there
- * but disabled, so the bar keeps one shape — the empty state's included. A
- * mode joins when it is built, not before. At the end: with a project open,
- * the cloud (`SyncButton` — where sync is done, in its popover); then More,
- * Import (a zip, a folder or a clone, from anywhere), Settings, and Account
- * (disabled until there is an account).
- *
- * Every enabled tile is a place: a navigation lit from the pathname, never a
- * setting — the cloud is the one popover. The project-wide screens that used
- * to sit here (findings, history, glyphs, compare) live in the "More" menu at
- * the end until the bar decides where they belong; the cloud screen that was
- * among them is gone, its work done by the popover and Settings.
- */
-
 import type { JSX } from "@solidjs/web";
 import { useNavigate, useRouterState } from "@tanstack/solid-router";
 import Bell from "lucide-solid/icons/bell";
@@ -42,18 +18,12 @@ import { SyncButton } from "../cloud/SyncButton";
 import { ImportHub } from "../landing/ImportHub";
 import { IconButton, Menu, MenuItem, SegmentedControl } from "../primitives";
 
-/**
- * A bar button: the shared `IconButton` at its default (`md`, `subtle`), so
- * the bar's buttons look like every other icon button — the word is its
- * name and its tooltip, never drawn.
- */
 function BarButton(props: {
   readonly label: string;
   readonly testId: string;
   readonly icon: JSX.Element;
   readonly pressed?: "true" | "false";
   readonly disabled?: boolean;
-  /** The native tooltip; for a disabled tile, the reason. */
   readonly title?: string;
   readonly onClick?: () => void;
 }) {
@@ -79,10 +49,6 @@ type ProjectScreen =
   | "/project/$slug/inventory"
   | "/project/$slug/review";
 
-/**
- * The project screens the bar no longer shows, parked in one menu until
- * there is a decision about where each belongs. All need an open project.
- */
 function MoreMenu() {
   const navigate = useNavigate();
   const shell = useShell();
@@ -140,36 +106,93 @@ function MoreMenu() {
   );
 }
 
-export function AppBar() {
+function HomeButton() {
   const navigate = useNavigate();
   const shell = useShell();
-
-  const path = useRouterState({ select: (state) => state.location.pathname });
-  // Project screens are tested on the part after `/project/$slug`, so
-  // `at("/terms")` means "this project's terms".
-  const within = (): string => path().replace(/^\/project\/[^/]+/, "");
-  const at = (prefix: string): "true" | "false" => (within().startsWith(prefix) ? "true" : "false");
-  const open = (): boolean => shell.project() !== undefined;
-
-  /** Refine is the text itself: any project route that is not another mode. */
-  const refining = (): "true" | "false" =>
-    path().startsWith("/project/") && !within().startsWith("/terms") ? "true" : "false";
-  const terms = (): "true" | "false" => at("/terms");
-  /**
-   * Home: with a project open, back to where the reader left off in it —
-   * `/project/$slug`, which decides, as Back to editor does; otherwise `/`, which decides —
-   * the last project reopens where it was left, an empty device shows the
-   * empty state, and projects never opened here show the projects page.
-   */
   const goHome = (): void => {
     if (shell.project() !== undefined)
       void navigate({ to: "/project/$slug", params: { slug: shell.slug() } });
     else void navigate({ to: "/" });
   };
 
-  /** Which mode the switcher shows as chosen; none on a screen outside them. */
-  const mode = (): Mode | undefined =>
-    terms() === "true" ? "terms" : refining() === "true" ? "refine" : undefined;
+  return (
+    <div class="flex shrink-0 items-center gap-2">
+      <button
+        type="button"
+        data-testid="app-bar-home"
+        aria-label={t("Home")}
+        title={t("Home")}
+        class="flex h-12 shrink-0 cursor-pointer items-center gap-3 rounded-lg px-2 transition-colors hover:bg-surface-secondary"
+        onClick={goHome}
+      >
+        <span
+          aria-hidden="true"
+          class="size-8 bg-on-surface-primary"
+          style={{
+            "mask-image": "url(/sefer.svg)",
+            "mask-size": "contain",
+            "mask-repeat": "no-repeat",
+            "mask-position": "center",
+          }}
+        />
+        <span
+          aria-hidden="true"
+          class="text-h4 font-semibold text-on-surface-primary max-md:sr-only"
+        >
+          {t("Sefer")}
+        </span>
+      </button>
+    </div>
+  );
+}
+
+function ModeControl(props: {
+  mode: Mode | undefined;
+  open: boolean;
+  onChange: (next: Mode) => void;
+}) {
+  return (
+    <SegmentedControl<Mode>
+      label={t("Mode")}
+      iconsWhenNarrow
+      class="mx-auto w-full max-w-[20.75rem] max-md:w-auto"
+      value={props.mode}
+      onChange={props.onChange}
+      items={[
+        {
+          value: "refine",
+          label: t("Refine"),
+          icon: <FileText aria-hidden="true" />,
+          disabled: !props.open,
+        },
+        {
+          value: "terms",
+          label: t("Spiritual terms"),
+          icon: <ListChecks aria-hidden="true" />,
+          disabled: !props.open,
+        },
+      ]}
+    />
+  );
+}
+
+export function AppBar() {
+  const navigate = useNavigate();
+  const shell = useShell();
+
+  const path = useRouterState({ select: (state) => state.location.pathname });
+  const within = (): string => path().replace(/^\/project\/[^/]+/, "");
+  const at = (prefix: string): "true" | "false" => (within().startsWith(prefix) ? "true" : "false");
+  const open = (): boolean => shell.project() !== undefined;
+
+  const refining = (): "true" | "false" =>
+    path().startsWith("/project/") && !within().startsWith("/terms") ? "true" : "false";
+  const terms = (): "true" | "false" => at("/terms");
+
+  const mode = (): Mode | undefined => {
+    if (terms() === "true") return "terms";
+    return refining() === "true" ? "refine" : undefined;
+  };
   const goTo = (next: Mode): void => {
     if (next === "refine") void navigate({ to: "/project/$slug", params: { slug: shell.slug() } });
     else if (next === "terms")
@@ -182,72 +205,14 @@ export function AppBar() {
       aria-label={t("Sefer")}
       class="scrollbar-subtle flex h-18 w-full shrink-0 items-center gap-4 overflow-x-auto overflow-y-hidden border-b border-surface-border bg-surface-primary px-4 py-2"
     >
-      <div class="flex shrink-0 items-center gap-2">
-        {/* The mark and the name: the way home (see `goHome`). The mark is
-            `public/sefer.svg`, the tab's icon, used as a MASK so it takes the
-            theme's text colour in light and dark alike. */}
-        <button
-          type="button"
-          data-testid="app-bar-home"
-          aria-label={t("Home")}
-          title={t("Home")}
-          class="flex h-12 shrink-0 cursor-pointer items-center gap-3 rounded-lg px-2 transition-colors hover:bg-surface-secondary"
-          onClick={goHome}
-        >
-          <span
-            aria-hidden="true"
-            class="size-8 bg-on-surface-primary"
-            style={{
-              "mask-image": "url(/sefer.svg)",
-              "mask-size": "contain",
-              "mask-repeat": "no-repeat",
-              "mask-position": "center",
-            }}
-          />
-          <span
-            aria-hidden="true"
-            class="text-h4 font-semibold text-on-surface-primary max-md:sr-only"
-          >
-            {t("Sefer")}
-          </span>
-        </button>
-      </div>
+      <HomeButton />
 
-      {/* The modes. A choice of one way of working on the text, so a radio
-          group (`SegmentedControl`), not buttons; each still navigates, and
-          each needs an open project. */}
-      <SegmentedControl<Mode>
-        label={t("Mode")}
-        iconsWhenNarrow
-        // Centred, with the space either side taking up the slack: it grows to
-        // its widest (two 10rem tabs in the track), and shrinks before going
-        // icon-only.
-        class="mx-auto w-full max-w-[20.75rem] max-md:w-auto"
-        value={mode()}
-        onChange={goTo}
-        items={[
-          {
-            value: "refine",
-            label: t("Refine"),
-            icon: <FileText aria-hidden="true" />,
-            disabled: !open(),
-          },
-          {
-            value: "terms",
-            label: t("Spiritual terms"),
-            icon: <ListChecks aria-hidden="true" />,
-            disabled: !open(),
-          },
-        ]}
-      />
+      <ModeControl mode={mode()} open={open()} onChange={goTo} />
 
       <div class="flex shrink-0 items-center gap-2">
-        {/* Where the open project stands with the shared project; quiet
-            until something is waiting on a person. */}
         <SyncButton />
         <MoreMenu />
-        {/* The import menu from anywhere; a finished import lands on the
-            projects page, where the new project is. */}
+
         <ImportHub
           variant="menu"
           onImported={() => void navigate({ to: "/projects" })}
@@ -255,8 +220,7 @@ export function AppBar() {
             <BarButton label={t("Import")} testId="app-bar-import" icon={<Download size={20} />} />
           }
         />
-        {/* Settings live under the open project, so there is none to show
-            from the projects page. */}
+
         <BarButton
           label={t("Settings")}
           testId="app-bar-settings"
@@ -268,7 +232,7 @@ export function AppBar() {
             void navigate({ to: "/project/$slug/settings", params: { slug: shell.slug() } })
           }
         />
-        {/* A placeholder until there is an account to read a name from. */}
+
         <BarButton
           label={t("Account")}
           testId="app-bar-account"

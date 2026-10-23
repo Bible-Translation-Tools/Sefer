@@ -1,17 +1,3 @@
-/**
- * `/suggestions` — suggested changes, from both ends, in one tab beside
- * Changes and History (a suggestion is one more thing about to change the
- * project, and Review is where it changes):
- *
- * - **Yours**, for someone working in their own copy (`YourSuggestions`):
- *   what they offered, how each stands, offering more, withdrawing one;
- * - **To review**, for the shared project's editors (`SuggestionsCard`): each
- *   one to review in Review, or to decline with a note its author reads.
- *
- * One tab rather than two: four tabs do not fit the sidebar, and both lists
- * answer one question — what is suggested for this project.
- */
-
 import Inbox from "lucide-solid/icons/inbox";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import { Show, createSignal, onCleanup, untrack } from "solid-js";
@@ -26,24 +12,38 @@ import { claimSidebar } from "../workspace/sidebarSlot";
 import { SuggestionsCard } from "./SuggestionsCard";
 import { YourSuggestions } from "./YourSuggestions";
 
+const CheckAction = (props: {
+  readonly checkedAt: number | undefined;
+  readonly checking: boolean;
+  readonly onCheck: () => void;
+}) => (
+  <span class="inline-flex items-center gap-0.5 text-smallest text-on-surface-tertiary">
+    <Show when={props.checkedAt}>
+      {(at) => <span>{t("checked {when}", { when: ago(at()) })}</span>}
+    </Show>
+    <IconButton
+      size="sm"
+      label={t("Check for suggestions")}
+      disabled={props.checking}
+      icon={<RefreshCw class={cx(props.checking && "animate-spin")} />}
+      onClick={props.onCheck}
+    />
+  </span>
+);
+
 export function SuggestionsScreen() {
   const shell = useShell();
   const facts = () => collaboration.facts(shell.project()?.root);
-  /**
-   * Bumped by the refresh button: both lists read their suggestions again
-   * when it moves, and the tab's count with them.
-   */
   const [asked, setAsked] = createSignal(0, { name: "suggestionsAsked" });
   const [checking, setChecking] = createSignal(false, { name: "suggestionsChecking" });
   const check = (): void => {
     const opened = shell.project();
     if (opened === undefined || checking()) return;
     setChecking(true);
-    setAsked((n) => n + 1);
+    setAsked((count) => count + 1);
     void collaboration.refresh(shell.services, opened).finally(() => setChecking(false));
   };
-  // Somebody came to look: ask again, so the tab's count and the lists below
-  // say the same thing. A one-time read at mount, untracked on purpose.
+  // Untracked on purpose: a one-time read, not a dependency (Solid 2: STRICT_READ_UNTRACKED).
   untrack(() => {
     const opened = shell.project();
     if (opened !== undefined) void collaboration.refresh(shell.services, opened);
@@ -62,8 +62,6 @@ export function SuggestionsScreen() {
     ),
   );
 
-  // Neither list applies: a writer sees what waits, a person in their own copy
-  // sees their own, and someone who is both sees both.
   const nothing = (): boolean => facts()?.mode !== "copy" && facts()?.canWrite !== true;
 
   return (
@@ -72,24 +70,10 @@ export function SuggestionsScreen() {
         title={t("Suggestions")}
         subtitle={t("The shared project only changes when an editor accepts.")}
         actions={
-          // When the lists were asked, and asking again — as Review's status
-          // line does for the shared project.
-          <span class="inline-flex items-center gap-0.5 text-smallest text-on-surface-tertiary">
-            <Show when={facts()?.checkedAt}>
-              {(at) => <span>{t("checked {when}", { when: ago(at()) })}</span>}
-            </Show>
-            <IconButton
-              size="sm"
-              label={t("Check for suggestions")}
-              disabled={checking()}
-              icon={<RefreshCw class={cx(checking() && "animate-spin")} />}
-              onClick={check}
-            />
-          </span>
+          <CheckAction checkedAt={facts()?.checkedAt} checking={checking()} onCheck={check} />
         }
       />
-      {/* What waits on you first: an editor's queue is the reason most people
-          open this tab. */}
+
       <Show when={facts()?.canWrite === true ? shell.project() : undefined}>
         {(project) => <SuggestionsCard project={project()} signedIn asked={asked()} />}
       </Show>

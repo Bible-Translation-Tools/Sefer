@@ -1,16 +1,3 @@
-/**
- * The primitive inventory, under dials.
- *
- * The first committed screen on purpose. It needs no project, no filesystem
- * and no scripture, so it is the one that proves the deployed design build
- * works at all — and it is the screen somebody polishing buttons and spacing
- * actually wants open.
- *
- * Every colour here is a semantic token, which is also why this screen is
- * worth having: a primitive that only looks right in one theme shows it
- * immediately when the whole inventory is on one page.
- */
-
 import type { JSX } from "@solidjs/web";
 import { For } from "solid-js";
 
@@ -42,8 +29,6 @@ export const primitivesScreen: Screen = {
   id: "primitives",
   title: "Primitives",
   blurb: "Every primitive at once, so a token that only works in one theme shows itself.",
-  // Shared tweaks: they mean the same thing whichever variant is showing, so
-  // they survive the switch rather than resetting with it.
   tweaks: [
     { key: "size", label: "Size", kind: "choice", options: ["sm", "md"], initial: "md" },
     { key: "disabled", label: "Disabled", kind: "toggle" },
@@ -120,9 +105,7 @@ export const primitivesScreen: Screen = {
               </Select>
             </Row>
             <Row label="Switch">
-              {/* A static pair: this screen shows what the two states LOOK like,
-                  so neither one moves. The dials above are where this screen is
-                  driven from. */}
+              {}
               <Switch checked onChange={() => {}} label="On" disabled={off()} />
               <Switch checked={false} onChange={() => {}} label="Off" disabled={off()} />
             </Row>

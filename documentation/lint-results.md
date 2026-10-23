@@ -46,9 +46,9 @@ The generated half looks after itself; the judgement half does not. When a gate 
 | --- | --- | --- |
 | oxlint errors | 0 | `pnpm lint`, every commit |
 | oxlint warnings | 0 | `pnpm lint` fails on any, every commit |
-| fallow dead code (`pnpm deadcode`) | 2 issue(s) | every deploy; advisory on branches |
-| fallow duplication | 1.7% in 69 clone group(s) | none — advisory |
-| suppression comments | 12 | each listed below with its reason |
+| fallow dead code (`pnpm deadcode`) | 1 issue(s) | every deploy; advisory on branches |
+| fallow duplication | 1.6% in 60 clone group(s) | none — advisory |
+| suppression comments | 28 | each listed below with its reason |
 
 ### Oxlint warnings, by rule and file
 
@@ -58,24 +58,40 @@ None.
 
 | file | suppresses | says |
 | --- | --- | --- |
-| `src/app/composition.ts` | `oxlint-disable-next-line` | no-console -- the telemetry bridge itself failed; the ring cannot report on its own exporter |
-| `src/app/ProjectContext.tsx` | `oxlint-disable-next-line` | solid/reactivity -- runs once, when composition settles, under the component's owner |
-| `src/app/ui/cloud/SharedProjectCard.tsx` | `oxlint-disable-next-line` | solid/reactivity -- a handle, not a value: the same Account for the card's life |
-| `src/app/ui/cloud/SharedProjectCard.tsx` | `oxlint-disable-next-line` | solid/reactivity -- the account's work: runs once per press, reading the field at the moment of the ask |
-| `src/app/ui/workspace/BackToEditor.tsx` | `fallow-ignore-next-line` | unused-export -- the behaviour half, for a screen that draws its own door; BackToEditor is the only consumer today. |
-| `src/app/ui/workspace/ReferenceCard.tsx` | `oxlint-disable-next-line` | solid/reactivity -- a promise continuation: runs once, when the book is read |
-| `src/app/ui/workspace/ReferenceColumn.tsx` | `oxlint-disable-next-line` | solid/reactivity -- a promise continuation: runs once, when the bindings resolve |
-| `src/app/ui/workspace/ReferenceColumn.tsx` | `oxlint-disable-next-line` | solid/reactivity -- a promise continuation: runs once, when the project is registered |
-| `src/app/ui/workspace/ReferenceColumn.tsx` | `oxlint-disable-next-line` | solid/reactivity -- a promise continuation: runs once, when the copy is here |
-| `src/app/ui/workspace/ReferenceColumn.tsx` | `oxlint-disable-next-line` | solid/reactivity -- a promise continuation: runs once, when the copy is here |
-| `src/app/workflows/drafting.ts` | `fallow-ignore-file` | unused-file -- a deliberate stub; see the note below for why it is not wired. |
-| `src/core/git/contract.ts` | `fallow-ignore-file` | unused-file -- registered nowhere on purpose; see the note below. |
+| `src/app/composition.ts` | `oxlint-disable-next-line` | no-console |
+| `src/app/locale.ts` | `oxlint-disable-next-line` | solid/reactivity |
+| `src/app/paraglide/messages.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/_index.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/reference_bibles_offered.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/reference_download_title.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/reference_held_by.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/reference_language.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/reference_material.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/reference_none_yet.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/reference_search_placeholder.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/reference_shelf_bibles.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/reference_shelf_notes.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/reference_shelf_projects.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/settings_language_automatic.js` | `eslint-disable` | — |
+| `src/app/paraglide/registry.js` | `eslint-disable` | — |
+| `src/app/paraglide/runtime.js` | `eslint-disable` | — |
+| `src/app/paraglide/server.js` | `eslint-disable` | — |
+| `src/app/ProjectContext.tsx` | `oxlint-disable-next-line` | solid/reactivity |
+| `src/app/ui/cloud/SharedProjectCard.tsx` | `oxlint-disable-next-line` | solid/reactivity |
+| `src/app/ui/cloud/SharedProjectCard.tsx` | `oxlint-disable-next-line` | solid/reactivity |
+| `src/app/ui/workspace/BackToEditor.tsx` | `fallow-ignore-next-line` | unused-export |
+| `src/app/ui/workspace/ReferenceColumn.tsx` | `oxlint-disable-next-line` | solid/reactivity |
+| `src/app/ui/workspace/ReferenceColumn.tsx` | `oxlint-disable-next-line` | solid/reactivity |
+| `src/app/ui/workspace/ReferenceColumn.tsx` | `oxlint-disable-next-line` | solid/reactivity |
+| `src/app/ui/workspace/ReferenceColumn.tsx` | `oxlint-disable-next-line` | solid/reactivity |
+| `src/app/workflows/drafting.ts` | `fallow-ignore-file` | unused-file |
+| `src/core/git/contract.ts` | `fallow-ignore-file` | unused-file |
 
 ### Fallow configuration exceptions
 
 From `.fallowrc.jsonc`, where each one's reason is written beside it.
 
-- **Extra entries:** `src/App.tsx`, `src/Document.tsx`, `tools/vite/lucideSolidShim.ts`, `e2e-desktop/wdio.conf.ts`, `e2e-desktop/**/*.desktop.ts`
-- **Dependencies it cannot see used:** `@tauri-apps/cli`, `@solidjs/diagnostics`, `@tauri-apps/plugin-opener`, `@wdio/cli`, `@wdio/local-runner`, `@wdio/mocha-framework`, `@wdio/spec-reporter`, `@wdio/tauri-service`
+- **Extra entries:** `src/App.tsx`, `src/Document.tsx`, `tools/vite/lucideSolidShim.ts`, `e2e-desktop/wdio.conf.ts`, `e2e-desktop/**/*.desktop.ts`, `packages/editor/bench/vite.config.ts`, `packages/editor/bench/main.ts`
+- **Dependencies it cannot see used:** `@inlang/plugin-icu1`, `@tauri-apps/cli`, `@solidjs/diagnostics`, `@tauri-apps/plugin-opener`, `@wdio/cli`, `@wdio/local-runner`, `@wdio/mocha-framework`, `@wdio/spec-reporter`, `@wdio/tauri-service`
 
 <!-- lint-results:end -->

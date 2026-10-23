@@ -46,24 +46,30 @@ function isTestFrameworkObject(
   });
 }
 
+function computedMockMethod(property: ESTree.Expression | ESTree.PrivateIdentifier): string | null {
+  if (property.type !== "Literal") return null;
+  if (
+    property.value === "doMock" ||
+    property.value === "mock" ||
+    property.value === "unstable_mockModule"
+  ) {
+    return property.value;
+  }
+  return null;
+}
+
+function staticMethodName(property: ESTree.Expression | ESTree.PrivateIdentifier): string | null {
+  return property.type === "Identifier" ? property.name : null;
+}
+
 function moduleMockCall(sourceCode: SourceCode, callee: ESTree.Expression): boolean {
   if (!("property" in callee) || !("object" in callee) || !("computed" in callee)) return false;
   if (!isTestFrameworkObject(sourceCode, callee.object)) return false;
   const property = callee.property;
-  const method = callee.computed
-    ? property.type === "Literal" &&
-      (property.value === "doMock" ||
-        property.value === "mock" ||
-        property.value === "unstable_mockModule")
-      ? property.value
-      : null
-    : property.type === "Identifier"
-      ? property.name
-      : null;
+  const method = callee.computed ? computedMockMethod(property) : staticMethodName(property);
   return method !== null && moduleMockMethods.has(method);
 }
 
-/** Ban test framework module mocking in favor of real dependency seams. */
 export const noModuleMockingRule = defineRule({
   meta: {
     type: "problem",

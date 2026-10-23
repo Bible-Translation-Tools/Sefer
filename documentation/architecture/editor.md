@@ -4,7 +4,7 @@
 
 Nothing above the editor imports CodeMirror. The editor imports [Galley](galley.md)'s `Analysis` and core's `Book`/`Source` vocabulary, and nothing else from the application. Import from `packages/editor` (the barrel).
 
-**A CodeMirror line is not a USFM line.** In regular mode a newline means whatever its context draws: a paragraph break before a block marker, a space where it only joins text (`newline.inside`, "a joined newline IS a space", [Deleting at a join](#deleting-at-a-join)), nothing at all inside a held gap. So `doc.line`, `lineAt` and `split("\n")` say nothing about verses, paragraphs or what the reader sees; ask the structure instead (the TOC tile, the concrete syntax tree's nodes). Lines are only a unit where the editor says so: render windows (`wholeLinesOf`), the gutter — which is why a book with no paragraph markers has almost nothing to number — and USFM mode. Splitting on lines is the most common way new code gets this wrong.
+**A CodeMirror line is not a USFM line.** In regular mode a newline means whatever its context draws: a paragraph break before a block marker, a space where it only joins text (`newline.inside`, "a joined newline IS a space", [Deleting at a join](#deleting-at-a-join)), nothing at all inside a held gap. So `doc.line`, `lineAt` and `split("\n")` say nothing about verses, paragraphs or what the reader sees; ask the structure instead (the TOC tile, the concrete syntax tree's nodes). Lines are only a unit where the editor says so: render windows (`wholeLinesOf`) and USFM mode. Line by line draws one verse per row by laying the verses out, not by reading lines ([Line by line](#line-by-line)). Splitting on lines is the most common way new code gets this wrong.
 
 ## The analyzer facet
 
@@ -56,7 +56,7 @@ Each is named and each is its own contract; a visual clip is not an edit guard.
 
 ## Passthrough markers
 
-**Passthrough = standalone ∪ unknown.** Two kinds of marker are the registry's **`standalone`** class — **paint `none`, mutability `immortal`** — and so behave alike in regular mode: a marker the project registered as the engine's `standalone` category (today only en_ulb's `\s5`, and only in a project whose texts contain it — [galley](galley.md#the-marker-table-setextensions); the policy is `LEGACY_MARKERS` in `src/app/legacyMarkers.ts`), and any marker the engine does not know (Will, 2026-09-25). Either is not drawn, the caret goes around it, and no key addresses it alone. The engine still reports an unknown marker as a finding, and USFM mode's projection makes the class `point × direct` like every class: shown and edited as written, and deletes there are raw.
+**Passthrough = standalone ∪ unknown.** Two kinds of marker are the registry's **`standalone`** class — **paint `none`, mutability `immortal`** — and so behave alike in regular mode: a marker the project registered as the engine's `standalone` category (today only en_ulb's `\s5`, and only in a project whose texts contain it — [galley](galley.md#the-marker-table-setcustommarkers); the policy is `LEGACY_MARKERS` in `src/app/legacyMarkers.ts`), and any marker the engine does not know (Will, 2026-09-25). Either is not drawn, the caret goes around it, and no key addresses it alone. The engine still reports an unknown marker as a finding, and USFM mode's projection makes the class `point × direct` like every class: shown and edited as written, and deletes there are raw.
 
 The editor never names the marker. `mapping.ts` recognises the standalone category off the engine's marker row — a milestone that takes no closer, which no spec milestone is (`\ts` and the rest close with `\*`), so it is exactly the template a registered standalone resolves to, the same test onion's own walker makes — and an unknown marker by its row being the engine's row 0. Four rows, two per kind: `standalone.line` and `unknown.line` when the marker opens its line (the line's class, like a designator line), and `standalone` and `unknown` inside a line (a point mark beside milestones and optional breaks, hidden in place; `cst.ts` gathers both kinds and `lineTable.ts` keeps whichever the row calls `standalone`).
 
@@ -229,9 +229,43 @@ clip's own window rather than outside it.
 
 `editor.frontmatter.edit` dispatches a `focusFrontMatter` effect; a small view plugin picks it up and focuses the first field.
 
+## Line by line
+
+**A third way to show the same book**, beside Reading and USFM: one verse per row, for typing a verse at a time. It is a projection, not a mode — the `line-by-line` preset (`LINE_BY_LINE` in `core/registry.ts`) over regular mode, which `BookEditor` installs with `editorPolicy("regular", "line-by-line")` when the device setting `editor.lineByLine` is on. Nothing is written to lay it out: the assignment carries `verseLines`, and the decorations lay out by verse instead of by paragraph — a newline inside a verse draws as a space, a verse that starts mid-line gets a drawn break, marker-only lines take no space. In design builds the location bar offers Reading / Line by line / USFM as one segmented control; other builds keep the USFM switch alone.
+
+- **What it locks.** Verse and chapter numbers and headings are immortal and a STOP; the markup inside a verse (`\p`, a poetry break, their newlines and chrome) is immortal and a **step**: a third press policy beside stop and pass, where Backspace or Delete moves the caret over the cell and takes nothing, so the caret can still be walked back through a verse (`Cell.step`, Will, 2026-10-22). A table and a sidebar keep their own lines, drawn as in Reading and read-only (`keptAsReading` in `core/verseLines.ts`).
+- **Its keys** (`verseLineKeys`, acting only under the preset and falling through elsewhere; none edits): Enter and Shift-Enter step a verse, Tab and Shift-Tab step to an empty verse, Home and End stay inside the verse. A paste comes in as the verse's words only, a selection stays inside its verse, and typing into an empty verse writes after its number with the space it needs.
+- **Numbers hang.** Every indent is a multiple of `--usfm-indent`, and a hung verse number sits in the margin by `--usfm-hang` (`editor.css`). Reading hangs a number that opens a poetry line, so a level's words start in one place with or without one; line by line hangs every number, wraps included. A wrapped poetry line sits under its own words, so on screen an indent only ever means a marker.
+
+The tutorial is `src/app/tour/tours/lineByLine.ts` ([shell](shell.md), "Tutorials and workflows").
+
+## Features a host opts into
+
+The behaviour and data are always in the package, as plain commands and queries on the mount; a **feature** is one opinionated UI over them (`features.ts`). `mountBookEditor({ features })` takes none by default; `editorFeatures()` is all of them, as CodeMirror's `basicSetup` is, and is what Sefer's `BookEditor` and the bench mount.
+
+- **`verseMenu()`** (`recipes/verseMenu.ts`). A click on a verse number, in Reading or line by line, opens one menu: the number's findings with their fix first, then Change number, Remove verse marker (the text stays) and Add verse after. Those findings leave the hover popover when the menu is there (`hasVerseMenu`), and a flagged number takes the severity's colour. The three edits are `core/verseCommands.ts` (`renumberVerse`, `removeVerseMarker`, `addVerseAfter`), which the mount runs by offset.
+- **`attributePopover()`**. A press on a milestone's pip, or on a word that has attributes or whose marker takes them (kitchen's `MARKER_ATTRIBUTES`), opens a form of its attributes: values editable, keys locked, Enter writes them as one trusted Undo step. The data is `core/attributes.ts`, read through the analysis's `attrs` ([Galley](galley.md#the-one-call)); `attributesAt`, `onActivate` and `setAttributes` on the mount do it all with no popover.
+- **`figures({ resolveSource })`**. `\fig` is the registry's `figure` class whatever the host mounts: drawn on its own row, as wide as its `size` says, the caption ordinary editable text under it, the attribute list and closer hidden. The feature only says where a `src` points; without it a figure draws a frame. A press on the picture opens the attribute popover.
+- **`tables()`**. `\tr` is the `table` class and a cell's marker the `cell` class, immortal and a step, so a press never merges two cells. In Reading, Tab and Shift-Tab walk the cells, Tab in the last cell adds a row, and Backspace or Delete in a row with every cell empty takes the row. Row and column edits are `core/tableCommands.ts`, also editor actions (`table.rowAbove` … `table.deleteColumn`) in Sefer's palette as `editor.table.*`. Columns are aligned by `recipes/tableLayout.ts`, measured with a canvas and loaded only when a book has a table.
+- **`markupChips()`**. Markup with no drawing of its own is the registry's `unruled` class, drawn as one atomic chip, so Reading never shows a backslash; the feature is only the richer renderer (a page break as a rule, `\cp` as "published as"). A milestone is one pip with its attributes and terminator, crossed in one step.
+
+A sidebar (`\esb … \esbe`) is the `sidebar` container class, drawn as a box and not a feature. A container's edges are fences (`fenced` in `deletion.ts`): a press that would join across one does nothing, an emptied one goes whole, and a range that takes one edge and not the other is refused.
+
+## Copy and paste
+
+`core/clipboard.ts`, on by default in the view layer (`clipboard: false` keeps CodeMirror's own). Copy and cut write three flavours, Word's way: the words a reader sees (`text/plain`), the same words styled (`text/html`), and the USFM behind them in Sefer's own flavour (`application/x-sefer-usfm`), widened first — character formatting always comes, a block's marker comes when the selection takes the block's whole text or runs out of it, a note comes whole. A cut still deletes only what was selected. The copy records the book it came from (`clipboardOrigin`). Paste prefers Sefer's flavour, and in Reading a block-led fragment goes where a block goes (into an empty block, above the block at its start, on its own line mid-line, splitting the block as Word does); verse and chapter numbers are dropped when the copy came from another book and kept for a cut and paste within one's own. Every paste is still one `input.paste` transaction the phases judge. USFM mode copies and pastes the text as it is.
+
+## The editor's words
+
+The editor's own UI strings (chip labels, the attribute popover's hints, the verse menu) are keys in `core/words.ts`'s `PHRASES`, English by default. A host translates through `mountBookEditor({ words })`, an `EditorWords { marker?, phrase? }`; whatever it answers `undefined` for stays English. Sefer passes none yet.
+
+The editor alone, with every scenario and the clipboard on screen, is the bench: `pnpm editor:bench` ([verification](../agents/verification.md#the-editor-bench)).
+
 ## Diagnostics, sink 1
 
-`recipes/lint.ts` turns `structureAt(state).analysis.diagnostics` into inline marks and gutter fix actions. Rebuilt from the current state every keystroke, so an inline mark cannot be stale. A finding whose whole span is inside hidden markup is dropped by default — that test reads the **paint index** (`PAINT_PORT.hidden`), not the decoration set. A fix carries the analysis's `EngineStamp` and is discarded if the document moved under it.
+`recipes/lint.ts` turns `structureAt(state).analysis.diagnostics` into inline marks whose hover popover (`lintHover.ts` keeps it open while the pointer travels to it) offers the fix. Rebuilt from the current state every keystroke, so an inline mark cannot be stale. A finding whose whole span is inside hidden markup is dropped by default — that test reads the **paint index** (`PAINT_PORT.hidden`), not the decoration set. A fix carries the analysis's `EngineStamp` and is discarded if the document moved under it.
+
+**There is no lint gutter.** `recipes/findingMarks.ts` draws one mark per drawn row at the left edge, in that row's worst severity (error a red circle, warning an amber triangle, otherwise a square), as a CodeMirror layer measured with the selection, so it follows wraps, scrolling and resizing — a gutter could only mark the top of a paragraph, and a line the view joins into the one before (`\p` then `\v 1`) got none. The marks are for scanning and take no clicks: a finding is acted on where it is drawn — its word, its verse number (the verse menu, below), its footnote caller, which takes the severity's colour when a finding starts at its note. Reading and USFM keep 1.5rem of side padding so the marks never sit on the text (`editor.css`).
 
 ## Rendering: the window
 
@@ -296,7 +330,6 @@ Every event carries the correlation `<bookId>#<trace seq>`, so one keystroke's s
 
 ## What was not ported
 
-- **`attrs`/`attrResolve`** — the aligned-word popover needs two engine free functions the pinned wasm handle does not export. The half-ported popover threw a `TODO(seam)` and nothing installed it, so it is parked: [parked code](../../planning/items/2026-09-23-parked.mdx).
 - **`formatEdits`** — the engine's normalisation is a [Galley](galley.md) door now, but it is not the editor's: nothing in `packages/editor` references it. `Fixes.formatBook` (`src/core/fixes/fixes.ts`) calls it and applies the edits as one `book.apply`; see [findings](findings.md).
 - **`startEngine` / `runAnalyze`** — replaced by the `Galley` Layer and the analyzer facet.
 
@@ -304,16 +337,17 @@ Every event carries the correlation `<bookId>#<trace seq>`, so one keystroke's s
 
 `cst.ts`'s typed arrays are a CACHE over the Galley reader, not a second reader: every value is read through `TokenRow`/`NodeRow`/`Tree`/`Toc`, so a wire change lands in scripture-kitchen's generated reader and reaches the editor as a type error, not a misread. What the planes add is the editor's own — line openings, note/origin/wrapper scope, block extents, designator roles, the `mapping.ts` rows. Two helpers are named so they cannot be mistaken for the reader's: `firstTokenFrom(pos)` (the first token starting at or after a position; `Tree.tokenAt` answers the one containing it and throws outside the document) and `isHorizontalSpace(i)` (a `Pad` token or a `Text` token flagged `TOKEN_BLANK`; `TokenView.isBlank()` is the flag alone).
 
-| what                                  | where                                                                                                                                                     |
-| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| the engine seam                       | `core/analyzer.ts`                                                                                                                                        |
-| the fold (structure)                  | `core/docStructure.ts`, `cst.ts`, `fold.ts`, `lineTable.ts`, `blockTable.ts`, `notes.ts`, `designators.ts`                                                |
-| classification, then policy           | `core/mapping.ts` → `core/registry.ts`                                                                                                                    |
-| the plan, owned targets, paint, stops | `core/plan.ts`, `owned.ts`, `paint.ts`, `stops.ts`, `exceptions.ts`, `scroll.ts`                                                                          |
-| rules and commands                    | `core/phases.ts`, `compose.ts`, `sealed.ts`, `clip.ts`, `input.ts`, `deletion.ts`, `caret.ts`, `kernel.ts`                                                |
-| structured entry                      | `core/insert.ts`, `actions.ts`, `frontmatter.ts`                                                                                                          |
-| rendering                             | `core/decorations.ts`, `render.ts`, `editorState.ts`, `editor.css`                                                                                        |
-| instruments                           | `core/instrument.ts`, `meter.ts`, `timing.ts`, `trace.ts`, `../observability.ts`                                                                          |
-| the Book, the funnel, views           | `book.ts`, `funnel.ts`, `views.ts`                                                                                                                        |
-| recipes over the editor               | `recipes/lint.ts`, `lintHover.ts`, `satellite.ts`, `noteEditor.ts`, `emptyBlocks.ts`, `flash.ts`, `pairing.ts`, `reference.ts`, `whereAmI.ts`, `align.ts` |
-| test tools (not tests)                | `testing/harness.ts`, `testing/mount.ts`                                                                                                                  |
+| what                                  | where                                                                                                                                                                        |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| the engine seam                       | `core/analyzer.ts`                                                                                                                                                           |
+| the fold (structure)                  | `core/docStructure.ts`, `cst.ts`, `fold.ts`, `lineTable.ts`, `blockTable.ts`, `notes.ts`, `designators.ts`                                                                   |
+| classification, then policy           | `core/mapping.ts` → `core/registry.ts`                                                                                                                                       |
+| the plan, owned targets, paint, stops | `core/plan.ts`, `owned.ts`, `paint.ts`, `stops.ts`, `exceptions.ts`, `scroll.ts`                                                                                             |
+| rules and commands                    | `core/phases.ts`, `compose.ts`, `sealed.ts`, `clip.ts`, `input.ts`, `deletion.ts`, `caret.ts`, `kernel.ts`, `verseLines.ts`, `clipboard.ts`                                  |
+| structured entry                      | `core/insert.ts`, `actions.ts`, `frontmatter.ts`, `verseCommands.ts`, `tableCommands.ts`, `attributes.ts`, `figures.ts`                                                      |
+| rendering                             | `core/decorations.ts`, `render.ts`, `editorState.ts`, `editor.css`                                                                                                           |
+| instruments                           | `core/instrument.ts`, `meter.ts`, `timing.ts`, `trace.ts`, `../observability.ts`                                                                                             |
+| the Book, the funnel, views           | `book.ts`, `funnel.ts`, `views.ts`, `bookEditor.ts` (`mountBookEditor`), `features.ts`, `core/words.ts`                                                                      |
+| recipes over the editor               | `recipes/lint.ts`, `lintHover.ts`, `findingMarks.ts`, `satellite.ts`, `noteEditor.ts`, `emptyBlocks.ts`, `flash.ts`, `pairing.ts`, `reference.ts`, `whereAmI.ts`, `align.ts` |
+| opt-in features                       | `recipes/verseMenu.ts`, `attributePopover.ts`, `figures.ts`, `tables.ts`, `tableLayout.ts`, `markupChips.ts`                                                                 |
+| test tools (not tests)                | `testing/harness.ts`, `testing/mount.ts`; the bench, `packages/editor/bench/`                                                                                                |

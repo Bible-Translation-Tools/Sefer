@@ -1,19 +1,3 @@
-/**
- * The project sidebar: which project is open, and where in it you are.
- *
- * Top to bottom: the project (name, and language with its code); a search box
- * that filters the list below it, and on Enter takes the book — to the
- * chapter it names, if it names one (`typedPlace`); a testament
- * switch; and the books of that testament as an accordion, each opening onto
- * a four-column grid of its chapters.
- *
- * The focused book's grid comes from the editor's own chapter table
- * (`shell.outline`), which knows about front matter. Any other book is Plain,
- * with no parsed structure, so its grid is counted from its `\c` markers —
- * and only when that book is expanded, so the sidebar still reads no text
- * until somebody asks for one book's chapters.
- */
-
 import { chaptersAddress, introAddress } from "@sefer/text/location/address";
 import { useNavigate, useRouterState } from "@tanstack/solid-router";
 import { Option } from "effect";
@@ -43,32 +27,24 @@ interface Row {
 }
 
 interface Chapter {
-  /** The row in the focused book's chapter table; the 1-based number otherwise. */
   readonly index: number;
   readonly label: string;
   readonly intro: boolean;
 }
 
-export function ProjectSidebar() {
-  const shell = useShell();
-  /**
-   * The `panels` layout (a design tweak): the project is in the app bar, both
-   * testaments are listed under their headings, and the search is always open.
-   */
-  const panels = (): boolean => layout() === "panels";
-  const navigate = useNavigate();
+type Shell = ReturnType<typeof useShell>;
+
+function createSearchBox() {
   const [query, setQuery] = createSignal("", { name: "sidebarQuery" });
   const [searchOpen, setSearchOpen] = createSignal(false, { name: "sidebarSearchOpen" });
   const closeSearch = () => {
     setQuery("");
     setSearchOpen(false);
   };
-  /**
-   * The testament somebody picked, and the book that was focused when they
-   * did. Derived, not synced by an effect: a choice holds until the editor
-   * opens another book, and then the testament follows it — landing in
-   * Psalms shows the OT.
-   */
+  return { query, setQuery, searchOpen, setSearchOpen, closeSearch };
+}
+
+function createTestamentPick(shell: Shell) {
   const [picked, setPicked] = createSignal<
     { readonly testament: Testament; readonly during: string | undefined } | undefined
   >(undefined, { name: "sidebarTestament" });
@@ -81,13 +57,125 @@ export function ProjectSidebar() {
   const pickTestament = (next: Testament): void => {
     setPicked({ testament: next, during: shell.focused()?.id });
   };
-  /** The one open book; `undefined` means "follow the focused book". */
+  return { testament, pickTestament };
+}
+
+function chaptersOf(shell: Shell, id: string): readonly Chapter[] {
+  if (shell.focused()?.id === id) {
+    const rows: Chapter[] = [];
+    shell.outline().forEach((chapter, index) => {
+      if (chapter.label !== "") rows.push({ index, label: chapter.label, intro: false });
+      else if (index === 0 && chapter.to > chapter.from)
+        rows.push({ index, label: t("Intro"), intro: true });
+    });
+    return rows;
+  }
+  const held = Option.getOrUndefined(shell.services.projectAnalysis.analysis(id));
+  if (held === undefined) return [];
+  return tocViewOf(held.analysis).chapters.flatMap((chapter): Chapter[] => {
+    if (chapter.number > 0)
+      return [{ index: chapter.number, label: String(chapter.number), intro: false }];
+    return chapter.to > chapter.from ? [{ index: 0, label: t("Intro"), intro: true }] : [];
+  });
+}
+
+function openChapter(shell: Shell, id: string, chapter: Chapter): void {
+  if (shell.focused()?.id === id) shell.showChapter(chapter.index);
+  else if (chapter.intro) shell.showReference(introAddress(id));
+  else shell.showReference(chaptersAddress(id, chapter.index));
+}
+
+function currentChapter(shell: Shell): number | undefined {
+  const clipped = shell.chapter();
+  if (clipped !== null) return clipped;
+  const project = shell.project();
+  const book = shell.focused();
+  if (project === undefined || book === undefined) return undefined;
+  const held = shell.lastLocation(project.root);
+  return held?.bookId === book.id ? held.at : undefined;
+}
+
+function BookRow(props: {
+  readonly row: Row;
+  readonly open: boolean;
+  readonly wanted: string;
+  readonly current: number | undefined;
+  readonly onToggle: () => void;
+}) {
+  const shell = useShell();
+  const focused = (): boolean => shell.focused()?.id === props.row.id;
+  const chapters = createMemo(
+    (): readonly Chapter[] => {
+      if (!props.open) return [];
+      // The panels layout (a design tweak) starts the grid at chapter 1: no
+      // Intro tile. Open question for the developer — see
+      // planning/items/2026-10-19-intro-tile-in-the-chapter-grid.mdx.
+      const all = chaptersOf(shell, props.row.id).filter(
+        (chapter) => !(layout() === "panels" && chapter.intro),
+      );
+      const wanted = props.wanted;
+      return wanted === "" ? all : all.filter((chapter) => chapter.label.startsWith(wanted));
+    },
+    { name: "sidebarChapters" },
+  );
+  return (
+    <li>
+      <button
+        type="button"
+        data-testid={`sidebar-book-${props.row.id}`}
+        data-book={props.row.id}
+        data-focused={focused() ? "" : undefined}
+        aria-expanded={props.open ? "true" : "false"}
+        class="flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-lg p-3 text-start text-small font-medium transition-colors data-focused:text-brand not-data-focused:text-sidebar-on-surface not-data-focused:hover:bg-sidebar-surface-hover"
+        onClick={() => props.onToggle()}
+      >
+        <BookIcon size={20} aria-hidden="true" class="shrink-0" />
+        <span class="min-w-0 flex-1 truncate">{props.row.name}</span>
+        <span aria-hidden="true" class="shrink-0">
+          <Show when={props.open} fallback={<ChevronRight size={14} />}>
+            <ChevronDown size={14} />
+          </Show>
+        </span>
+      </button>
+
+      <Show when={props.open && chapters().length > 0}>
+        <ol class="grid grid-cols-[repeat(auto-fill,minmax(3.75rem,1fr))] gap-px px-3 pt-1 pb-3">
+          <For each={chapters()}>
+            {(chapter) => (
+              <li>
+                <button
+                  type="button"
+                  data-chapter={chapter.index}
+                  data-testid={`chapter-tile-${chapter.intro ? "intro" : chapter.label}`}
+                  data-current={focused() && props.current === chapter.index ? "" : undefined}
+                  class="h-12 w-full cursor-pointer truncate rounded-lg border px-3 text-center text-small font-medium tabular-nums transition-colors data-current:border-brand data-current:bg-surface-primary data-current:font-semibold data-current:text-brand not-data-current:border-transparent not-data-current:text-on-surface-secondary not-data-current:hover:bg-surface-canvas"
+                  onClick={() => openChapter(shell, props.row.id, chapter)}
+                >
+                  {chapter.label}
+                </button>
+              </li>
+            )}
+          </For>
+        </ol>
+      </Show>
+    </li>
+  );
+}
+
+export function ProjectSidebar() {
+  const shell = useShell();
+  /**
+   * The `panels` layout (a design tweak): the project is in the app bar, both
+   * testaments are listed under their headings, and the search is always open.
+   */
+  const panels = (): boolean => layout() === "panels";
+  const navigate = useNavigate();
+  const { query, setQuery, searchOpen, setSearchOpen, closeSearch } = createSearchBox();
+  const { testament, pickTestament } = createTestamentPick(shell);
   const [opened, setOpened] = createSignal<string | null | undefined>(undefined, {
     name: "sidebarOpened",
   });
 
-  // A memo over the open project, so typing in a book does not rebuild
-  // sixty-six rows.
   const rows = createMemo(
     (): readonly Row[] => {
       const project = shell.project();
@@ -102,12 +190,6 @@ export function ProjectSidebar() {
     { name: "sidebarBooks" },
   );
 
-  /**
-   * What the filter box means, read by the project's Location — the same
-   * names, localized and alternate, that the palette and every "go to" use.
-   * `books` is every book the words could mean; `chapter` is set once a
-   * number follows them.
-   */
   const search = createMemo(
     () => {
       const text = query().trim();
@@ -122,11 +204,12 @@ export function ProjectSidebar() {
     { name: "sidebarSearch" },
   );
   const searching = (): boolean => search() !== undefined;
+  const emptyNote = (): string => {
+    if (rows().length === 0) return t("This project has no books yet.");
+    if (searching()) return t("No book matches {query}", { query: query().trim() });
+    return t("No books in this testament.");
+  };
 
-  /**
-   * The books on show. While searching, both testaments: somebody typing
-   * "Genesis" with New Testament selected wants Genesis, not an empty list.
-   */
   const shown = createMemo(
     (): readonly Row[] => {
       const found = search();
@@ -137,10 +220,6 @@ export function ProjectSidebar() {
     { name: "sidebarShown" },
   );
 
-  /**
-   * Enter takes the book: to the chapter the text names when it names one
-   * ("mark 3"), else the first book on show, as the palette's "Go to" does.
-   */
   const takeSearch = (): void => {
     const place = typedChapter(shell.location, query());
     const first = shown()[0];
@@ -160,51 +239,19 @@ export function ProjectSidebar() {
     return choice === undefined ? shell.focused()?.id === id : choice === id;
   };
 
-  const chaptersOf = (id: string): readonly Chapter[] => {
-    if (shell.focused()?.id === id) {
-      const rows: Chapter[] = [];
-      shell.outline().forEach((chapter, index) => {
-        if (chapter.label !== "") rows.push({ index, label: chapter.label, intro: false });
-        // The front matter row, and only if it holds something.
-        else if (index === 0 && chapter.to > chapter.from)
-          rows.push({ index, label: t("Intro"), intro: true });
+  const toggle = (id: string): void => {
+    // The panels layout (a design tweak): a book's row OPENS it — at its front
+    // matter the first time, where the reader left it after that
+    // (`shell.bookLocation`). Its own row folds it again.
+    if (panels() && shell.focused()?.id !== id) {
+      setOpened(undefined);
+      void navigate({
+        to: "/project/$slug/book/$book",
+        params: { slug: shell.slug(), book: encodeURIComponent(id) },
       });
-      return rows;
+      return;
     }
-    // Any other book: the engine's TOC from the analysis the project holds
-    // for it — never a scan of the text. Row 0 is the front matter, offered as
-    // "Intro" when it holds something, as it is for the focused book — so the
-    // tile is there before the book has been opened, not only after.
-    const held = Option.getOrUndefined(shell.services.projectAnalysis.analysis(id));
-    if (held === undefined) return [];
-    return tocViewOf(held.analysis).chapters.flatMap((chapter): Chapter[] => {
-      if (chapter.number > 0)
-        return [{ index: chapter.number, label: String(chapter.number), intro: false }];
-      return chapter.to > chapter.from ? [{ index: 0, label: t("Intro"), intro: true }] : [];
-    });
-  };
-
-  const openChapter = (id: string, chapter: Chapter): void => {
-    // The focused book goes through `showChapter`, which decides clip vs
-    // scroll and knows the intro row; any other book is a reference.
-    if (shell.focused()?.id === id) shell.showChapter(chapter.index);
-    else if (chapter.intro) shell.showReference(introAddress(id));
-    else shell.showReference(chaptersAddress(id, chapter.index));
-  };
-
-  /**
-   * The chapter the reader is in: the clipped one in chapter view, otherwise
-   * the one at the top of the editor, which the editor reports as it scrolls
-   * (the same place the location bar's crumb reads).
-   */
-  const currentChapter = (): number | undefined => {
-    const clipped = shell.chapter();
-    if (clipped !== null) return clipped;
-    const project = shell.project();
-    const book = shell.focused();
-    if (project === undefined || book === undefined) return undefined;
-    const held = shell.lastLocation(project.root);
-    return held?.bookId === book.id ? held.at : undefined;
+    setOpened(isOpen(id) ? null : id);
   };
 
   /**
@@ -222,7 +269,7 @@ export function ProjectSidebar() {
     () => ({
       nav: list(),
       book: shell.focused()?.id,
-      chapter: currentChapter(),
+      chapter: currentChapter(shell),
       showing: shell.sidebarShowing(),
       all: panels(),
     }),
@@ -248,87 +295,15 @@ export function ProjectSidebar() {
     },
   );
 
-  const BookRow = (rowProps: { readonly row: Row }) => {
-    const focused = (): boolean => shell.focused()?.id === rowProps.row.id;
-    const open = (): boolean => isOpen(rowProps.row.id);
-    const chapters = createMemo(
-      (): readonly Chapter[] => {
-        if (!open()) return [];
-        // The panels layout (a design tweak) starts the grid at chapter 1: no
-        // Intro tile. Open question for the developer — see
-        // planning/items/2026-10-19-intro-tile-in-the-chapter-grid.mdx.
-        const all = chaptersOf(rowProps.row.id).filter((chapter) => !(panels() && chapter.intro));
-        const wanted = search()?.chapter ?? "";
-        return wanted === "" ? all : all.filter((chapter) => chapter.label.startsWith(wanted));
-      },
-      { name: "sidebarChapters" },
-    );
-    // No block behind an open book: its chapters are bare numbers, and the
-    // current one is the white tile with a brand border and text.
-    return (
-      <li>
-        <button
-          type="button"
-          data-testid={`sidebar-book-${rowProps.row.id}`}
-          data-book={rowProps.row.id}
-          data-focused={focused() ? "" : undefined}
-          aria-expanded={open() ? "true" : "false"}
-          class="flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-lg p-3 text-start text-small font-medium transition-colors data-focused:text-brand not-data-focused:text-sidebar-on-surface not-data-focused:hover:bg-sidebar-surface-hover"
-          onClick={() => {
-            // The panels layout (a design tweak): a book's row OPENS it — at
-            // its front matter the first time, where the reader left it after
-            // that (`shell.bookLocation`). Its own row folds it again.
-            if (panels() && !focused()) {
-              setOpened(undefined);
-              void navigate({
-                to: "/project/$slug/book/$book",
-                params: { slug: shell.slug(), book: encodeURIComponent(rowProps.row.id) },
-              });
-              return;
-            }
-            setOpened(open() ? null : rowProps.row.id);
-          }}
-        >
-          <BookIcon size={20} aria-hidden="true" class="shrink-0" />
-          <span class="min-w-0 flex-1 truncate">{rowProps.row.name}</span>
-          <span aria-hidden="true" class="shrink-0">
-            <Show when={open()} fallback={<ChevronRight size={14} />}>
-              <ChevronDown size={14} />
-            </Show>
-          </span>
-        </button>
-
-        <Show when={open() && chapters().length > 0}>
-          <ol
-            // Indented to the book's icon (the row's 12px padding). As many
-            // columns as 3.75rem tiles — 12px padding round a 14px label as
-            // wide as "Intro" — fit, so a wider panel shows more. 1px apart.
-            class="grid grid-cols-[repeat(auto-fill,minmax(3.75rem,1fr))] gap-px px-3 pt-1 pb-3"
-          >
-            <For each={chapters()}>
-              {(chapter) => (
-                <li>
-                  <button
-                    type="button"
-                    data-chapter={chapter.index}
-                    data-testid={`chapter-tile-${chapter.intro ? "intro" : chapter.label}`}
-                    data-current={focused() && currentChapter() === chapter.index ? "" : undefined}
-                    class="h-12 w-full cursor-pointer truncate rounded-lg border px-3 text-center text-small font-medium tabular-nums transition-colors data-current:border-brand data-current:bg-surface-primary data-current:font-semibold data-current:text-brand not-data-current:border-transparent not-data-current:text-on-surface-secondary not-data-current:hover:bg-surface-canvas"
-                    onClick={() => openChapter(rowProps.row.id, chapter)}
-                  >
-                    {chapter.label}
-                  </button>
-                </li>
-              )}
-            </For>
-          </ol>
-        </Show>
-      </li>
-    );
-  };
-
-  // With no project open the panel says what it is for — its books arrive
-  // with a project — and the project control above it is the way to one.
+  const bookRow = (row: Row) => (
+    <BookRow
+      row={row}
+      open={isOpen(row.id)}
+      wanted={search()?.chapter ?? ""}
+      current={currentChapter(shell)}
+      onToggle={() => toggle(row.id)}
+    />
+  );
 
   return (
     <div
@@ -351,8 +326,6 @@ export function ProjectSidebar() {
           </div>
         }
       >
-        {/* The search is an icon beside the testament switch; it opens the
-            field below, and closes again from Escape or an empty blur. */}
         <Show when={panels()}>
           {/* Always open, pinned above the list: the list scrolls under it. */}
           <div class="flex items-center gap-controls px-4 py-2">
@@ -402,8 +375,6 @@ export function ProjectSidebar() {
               data-testid="sidebar-search"
               icon={<SearchIcon />}
               aria-label={t("Search for book and chapter")}
-              // An example, not a description: it fits the narrow panel and
-              // shows what the search understands. The label keeps the words.
               placeholder={t("Mark 5")}
               value={query()}
               onInput={(event) => setQuery(event.currentTarget.value)}
@@ -421,21 +392,13 @@ export function ProjectSidebar() {
         <nav ref={setList} aria-label={t("Books")} class="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
           <Show
             when={shown().length > 0}
-            fallback={
-              <p class="px-2 py-4 text-small text-on-surface-tertiary">
-                {rows().length === 0
-                  ? t("This project has no books yet.")
-                  : searching()
-                    ? t("No book matches {query}", { query: query().trim() })
-                    : t("No books in this testament.")}
-              </p>
-            }
+            fallback={<p class="px-2 py-4 text-small text-on-surface-tertiary">{emptyNote()}</p>}
           >
             <Show
               when={panels()}
               fallback={
                 <ul>
-                  <For each={shown()}>{(row) => <BookRow row={row} />}</For>
+                  <For each={shown()}>{(row) => bookRow(row)}</For>
                 </ul>
               }
             >
@@ -457,7 +420,7 @@ export function ProjectSidebar() {
                         </h3>
                         <ul>
                           <For each={shown().filter((row) => row.testament === section.testament)}>
-                            {(row) => <BookRow row={row} />}
+                            {(row) => bookRow(row)}
                           </For>
                         </ul>
                       </section>
@@ -467,8 +430,7 @@ export function ProjectSidebar() {
               </div>
             </Show>
           </Show>
-          {/* Writer books this project does not have yet: the migration's
-              own screen, filtered to this project (`/migrate?into=`). */}
+
           <Button
             variant="tertiary"
             size="sm"
@@ -485,8 +447,6 @@ export function ProjectSidebar() {
         </nav>
       </Show>
 
-      {/* The mockup's "Update available" pill: one `Updater.check()` per
-          session, read here rather than asked for. */}
       <Show when={shell.updateAvailable()}>
         <footer class="border-t border-sidebar-border p-4">
           <Badge tone="brand">{t("Update available")}</Badge>
@@ -496,11 +456,6 @@ export function ProjectSidebar() {
   );
 }
 
-/**
- * The project control at the top of the sidebar: the open project, which goes
- * to the project list, or with none open an invitation to find one. Exported
- * so a screen that claims the sidebar (Key terms) keeps it above its own list.
- */
 export function ProjectControl() {
   const navigate = useNavigate();
   const shell = useShell();
@@ -516,8 +471,6 @@ export function ProjectControl() {
         layout() === "panels" && shell.project() !== undefined && "pt-[76px]",
       )}
     >
-      {/* With no project open the button is an invitation rather than a
-        label: two lines of brand text and an arrow. Same destination. */}
       <Show
         when={shell.project()}
         fallback={

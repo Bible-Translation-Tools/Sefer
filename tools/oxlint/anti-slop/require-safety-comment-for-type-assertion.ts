@@ -65,7 +65,6 @@ function hasSafetyComment(sourceCode: SourceCode, node: TypeAssertion, pattern: 
   }
 }
 
-/** Require every non-const type assertion to state its unverifiable invariant. */
 export const requireSafetyCommentForTypeAssertionRule = defineRule({
   meta: {
     type: "problem",

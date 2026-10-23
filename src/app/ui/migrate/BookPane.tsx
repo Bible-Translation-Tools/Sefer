@@ -28,13 +28,12 @@ import type { Health } from "#core/migrate/check";
 
 import { t } from "../../i18n";
 import { passagesDiffering, sourceCensus, type Opened } from "../../migrate";
-import { useShell } from "../../ProjectContext";
+import { useShell, type Shell } from "../../ProjectContext";
 import { formatDate } from "../landing/summaries";
 import { Badge, Button, Card, cx } from "../primitives";
 import { ReviewReader, type ReviewBook } from "../review/ReviewReader";
 import { healthLine } from "./healthLine";
 
-/** Chapters and verses out of USFM, for reading; every other marker is dropped. */
 const reading = (
   usfm: string,
 ): readonly { chapter: string; verses: readonly [string, string][] }[] => {
@@ -59,19 +58,177 @@ const reading = (
 const COLUMNS =
   "grid grid-cols-[2rem_minmax(12rem,1.5fr)_5rem_7rem_minmax(0,1fr)_9rem_5rem] items-center gap-x-4 px-4";
 
+const healthOfCandidate = (
+  held: Opened,
+  expected: Health | undefined,
+): { readonly text: string; readonly off: boolean } => {
+  if (held.state === "refused")
+    return { text: t("refused: {reason}", { reason: held.reason }), off: true };
+  if (held.state !== "ready") return { text: t("Checking…"), off: false };
+  return {
+    text: healthLine(held.health),
+    off:
+      held.health.diagnostics.errors > 0 ||
+      (expected !== undefined &&
+        (expected.chapters !== held.health.chapters || expected.verses !== held.health.verses)),
+  };
+};
+
+const comparedBooks = (
+  services: Shell["services"],
+  book: string,
+  name: string,
+  baseline: string | undefined,
+  working: string | undefined,
+  same: boolean,
+): readonly ReviewBook[] => {
+  if (baseline === undefined || working === undefined || same) return [];
+  const skeleton = diffSkeleton(services.galley, book, baseline, working);
+  if (Result.isFailure(skeleton)) return [];
+  return [
+    {
+      bookId: book,
+      name,
+      currentText: working,
+      baselineText: baseline,
+      skeleton: skeleton.success,
+    },
+  ];
+};
+
+function PickedReading(props: { readonly text: string }) {
+  return (
+    <div class="max-h-[55vh] overflow-y-auto px-6 py-4 font-scripture">
+      <For each={reading(props.text)}>
+        {(chapter) => (
+          <section class="mb-4">
+            <h3 class="mb-1 text-h4 font-bold">{chapter.chapter}</h3>
+            <p>
+              <For each={chapter.verses}>
+                {(verse) => (
+                  <>
+                    <sup class="me-0.5 text-on-surface-tertiary">{verse[0]}</sup>
+                    {verse[1]}{" "}
+                  </>
+                )}
+              </For>
+            </p>
+          </section>
+        )}
+      </For>
+    </div>
+  );
+}
+
+function CandidateHeader() {
+  return (
+    <div
+      role="row"
+      class={cx(
+        COLUMNS,
+        "border-b border-surface-border py-2 text-small text-on-surface-secondary",
+      )}
+    >
+      <span role="columnheader">
+        <span class="sr-only">{t("Use")}</span>
+      </span>
+      <span role="columnheader">{t("Who")}</span>
+      <span role="columnheader">{t("Status")}</span>
+      <span role="columnheader">{t("Updated")}</span>
+      <span role="columnheader">{t("Health")}</span>
+      <span role="columnheader">{t("Differs from picked")}</span>
+      <span role="columnheader">
+        <span class="sr-only">{t("Compare")}</span>
+      </span>
+    </div>
+  );
+}
+
+function CandidateRow(props: {
+  readonly candidate: BookCandidate;
+  readonly book: string;
+  readonly picked: string | undefined;
+  readonly recommended: string | undefined;
+  readonly ready: boolean;
+  readonly health: { readonly text: string; readonly off: boolean };
+  readonly differs: string;
+  readonly comparable: boolean;
+  readonly comparing: boolean;
+  readonly onUse: (id: string) => void;
+  readonly onCompare: () => void;
+}) {
+  return (
+    <label
+      role="row"
+      data-testid={`candidate-${candidateLabel(props.candidate)}`}
+      class={cx(
+        COLUMNS,
+        "cursor-pointer border-b border-surface-border py-2 text-small hover:bg-surface-secondary",
+        props.picked === props.candidate.id && "bg-surface-secondary",
+      )}
+    >
+      <span role="cell">
+        <input
+          type="radio"
+          name={`use-${props.book}`}
+          checked={props.picked === props.candidate.id}
+          disabled={!props.ready}
+          onChange={() => props.onUse(props.candidate.id)}
+        />
+      </span>
+      <span role="cell" class="flex min-w-0 items-center gap-2">
+        <span class="truncate font-medium">{candidateLabel(props.candidate)}</span>
+        <Show when={props.recommended === props.candidate.id}>
+          <Badge tone="brand">{t("Recommended")}</Badge>
+        </Show>
+      </span>
+      <span role="cell" class="text-on-surface-secondary">
+        {props.candidate.hints.status ?? "—"}
+      </span>
+      <span role="cell" class="text-on-surface-secondary">
+        {formatDate(props.candidate.hints.modified) || "—"}
+      </span>
+      <span
+        role="cell"
+        class={cx(
+          "truncate",
+          props.health.off ? "font-semibold text-on-surface-error" : "text-on-surface-secondary",
+        )}
+        title={props.health.text}
+      >
+        {props.health.text}
+      </span>
+      <span role="cell" class="tabular-nums text-on-surface-secondary">
+        {props.differs}
+      </span>
+      <span role="cell" class="text-end">
+        <Show when={props.comparable}>
+          <Button
+            size="sm"
+            variant={props.comparing ? "secondary" : "tertiary"}
+            onClick={(event) => {
+              event.preventDefault();
+              props.onCompare();
+            }}
+          >
+            {props.comparing ? t("Hide") : t("Compare")}
+          </Button>
+        </Show>
+      </span>
+    </label>
+  );
+}
+
 export function BookPane(props: {
   readonly book: string;
   readonly candidates: readonly BookCandidate[];
   readonly opened: (id: string) => Opened;
-  /** The candidate the book will be assembled from. */
   readonly picked: string | undefined;
-  /** What the rule would pick, marked Recommended. */
   readonly recommended: string | undefined;
   readonly onUse: (id: string) => void;
 }) {
   const shell = useShell();
   const { services } = shell;
-  /** The candidate compared against the pick; "" for none. */
   const [comparing, setComparing] = createSignal("", { name: "bookPaneComparing" });
   const [source, setSource] = createSignal<
     { readonly title: string; readonly health: Health } | undefined
@@ -80,8 +237,6 @@ export function BookPane(props: {
 
   const name = (): string => CANON.find((entry) => entry.id === props.book)?.name ?? props.book;
 
-  // The source text's census, once per book: the sources every candidate's
-  // manifest lists, and the first one this device holds.
   createEffect(
     () =>
       props.candidates.flatMap((candidate) => {
@@ -99,7 +254,6 @@ export function BookPane(props: {
     return held.state === "ready" ? held.staged.usfm : undefined;
   };
 
-  /** Per candidate, passages differing from the pick; two-way, in a loop. */
   const differing = createMemo(
     (): ReadonlyMap<string, number | undefined> => {
       const picked = textOf(props.picked);
@@ -114,20 +268,7 @@ export function BookPane(props: {
     { name: "bookPaneDiffering" },
   );
 
-  const healthOf = (id: string): { readonly text: string; readonly off: boolean } => {
-    const held = props.opened(id);
-    if (held.state === "refused")
-      return { text: t("refused: {reason}", { reason: held.reason }), off: true };
-    if (held.state !== "ready") return { text: t("Checking…"), off: false };
-    const expected = source()?.health;
-    return {
-      text: healthLine(held.health),
-      off:
-        held.health.diagnostics.errors > 0 ||
-        (expected !== undefined &&
-          (expected.chapters !== held.health.chapters || expected.verses !== held.health.verses)),
-    };
-  };
+  const healthOf = (id: string) => healthOfCandidate(props.opened(id), source()?.health);
 
   const differingText = (id: string): string => {
     if (id === props.picked) return t("picked");
@@ -136,24 +277,17 @@ export function BookPane(props: {
     return count === 0 ? t("same text") : t("{count} passages", { count });
   };
 
-  /** Review's reader: the pick on the right, the compared one on the left. */
   const compared = createMemo(
     (): readonly ReviewBook[] => {
       const left = comparing();
-      const baseline = textOf(left === "" ? undefined : left);
-      const working = textOf(props.picked);
-      if (baseline === undefined || working === undefined || left === props.picked) return [];
-      const skeleton = diffSkeleton(services.galley, props.book, baseline, working);
-      if (Result.isFailure(skeleton)) return [];
-      return [
-        {
-          bookId: props.book,
-          name: name(),
-          currentText: working,
-          baselineText: baseline,
-          skeleton: skeleton.success,
-        },
-      ];
+      return comparedBooks(
+        services,
+        props.book,
+        name(),
+        textOf(left === "" ? undefined : left),
+        textOf(props.picked),
+        left === props.picked,
+      );
     },
     { name: "bookPaneCompared" },
   );
@@ -181,120 +315,33 @@ export function BookPane(props: {
       </div>
 
       <div role="table" aria-label={t("Candidates for {book}", { book: name() })}>
-        <div
-          role="row"
-          class={cx(
-            COLUMNS,
-            "border-b border-surface-border py-2 text-small text-on-surface-secondary",
-          )}
-        >
-          <span role="columnheader">
-            <span class="sr-only">{t("Use")}</span>
-          </span>
-          <span role="columnheader">{t("Who")}</span>
-          <span role="columnheader">{t("Status")}</span>
-          <span role="columnheader">{t("Updated")}</span>
-          <span role="columnheader">{t("Health")}</span>
-          <span role="columnheader">{t("Differs from picked")}</span>
-          <span role="columnheader">
-            <span class="sr-only">{t("Compare")}</span>
-          </span>
-        </div>
+        <CandidateHeader />
         <For each={props.candidates}>
           {(candidate) => (
-            <label
-              role="row"
-              data-testid={`candidate-${candidateLabel(candidate)}`}
-              class={cx(
-                COLUMNS,
-                "cursor-pointer border-b border-surface-border py-2 text-small hover:bg-surface-secondary",
-                props.picked === candidate.id && "bg-surface-secondary",
-              )}
-            >
-              <span role="cell">
-                <input
-                  type="radio"
-                  name={`use-${props.book}`}
-                  checked={props.picked === candidate.id}
-                  disabled={props.opened(candidate.id).state !== "ready"}
-                  onChange={() => props.onUse(candidate.id)}
-                />
-              </span>
-              <span role="cell" class="flex min-w-0 items-center gap-2">
-                <span class="truncate font-medium">{candidateLabel(candidate)}</span>
-                <Show when={props.recommended === candidate.id}>
-                  <Badge tone="brand">{t("Recommended")}</Badge>
-                </Show>
-              </span>
-              <span role="cell" class="text-on-surface-secondary">
-                {candidate.hints.status ?? "—"}
-              </span>
-              <span role="cell" class="text-on-surface-secondary">
-                {formatDate(candidate.hints.modified) || "—"}
-              </span>
-              <span
-                role="cell"
-                class={cx(
-                  "truncate",
-                  healthOf(candidate.id).off
-                    ? "font-semibold text-on-surface-error"
-                    : "text-on-surface-secondary",
-                )}
-                title={healthOf(candidate.id).text}
-              >
-                {healthOf(candidate.id).text}
-              </span>
-              <span role="cell" class="tabular-nums text-on-surface-secondary">
-                {differingText(candidate.id)}
-              </span>
-              <span role="cell" class="text-end">
-                <Show
-                  when={
-                    candidate.id !== props.picked &&
-                    differing().get(candidate.id) !== undefined &&
-                    differing().get(candidate.id) !== 0
-                  }
-                >
-                  <Button
-                    size="sm"
-                    variant={comparing() === candidate.id ? "secondary" : "tertiary"}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      setComparing(comparing() === candidate.id ? "" : candidate.id);
-                    }}
-                  >
-                    {comparing() === candidate.id ? t("Hide") : t("Compare")}
-                  </Button>
-                </Show>
-              </span>
-            </label>
+            <CandidateRow
+              candidate={candidate}
+              book={props.book}
+              picked={props.picked}
+              recommended={props.recommended}
+              ready={props.opened(candidate.id).state === "ready"}
+              health={healthOf(candidate.id)}
+              differs={differingText(candidate.id)}
+              comparable={
+                candidate.id !== props.picked &&
+                differing().get(candidate.id) !== undefined &&
+                differing().get(candidate.id) !== 0
+              }
+              comparing={comparing() === candidate.id}
+              onUse={props.onUse}
+              onCompare={() => setComparing(comparing() === candidate.id ? "" : candidate.id)}
+            />
           )}
         </For>
       </div>
 
       <Show
         when={compared().length > 0}
-        fallback={
-          <div class="max-h-[55vh] overflow-y-auto px-6 py-4 font-scripture">
-            <For each={reading(textOf(props.picked) ?? "")}>
-              {(chapter) => (
-                <section class="mb-4">
-                  <h3 class="mb-1 text-h4 font-bold">{chapter.chapter}</h3>
-                  <p>
-                    <For each={chapter.verses}>
-                      {(verse) => (
-                        <>
-                          <sup class="me-0.5 text-on-surface-tertiary">{verse[0]}</sup>
-                          {verse[1]}{" "}
-                        </>
-                      )}
-                    </For>
-                  </p>
-                </section>
-              )}
-            </For>
-          </div>
-        }
+        fallback={<PickedReading text={textOf(props.picked) ?? ""} />}
       >
         <div class="flex h-[55vh] min-h-0 flex-col">
           <ReviewReader

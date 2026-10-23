@@ -1,12 +1,3 @@
-/**
- * Where the caret may legally stand — condition C1, stated exactly once.
- *
- * Every motion command and the settlement phase consume this, so "is this a
- * stop" has one answer in the whole editor. `settle(pos, direction)` is how an
- * illegal position becomes a legal one, which is the only way a caret ever
- * lands inside markup and comes back out.
- */
-
 import { type EditorState, findClusterBreak } from "@codemirror/state";
 
 import type { DocLine, DocStructure } from "./docStructure";
@@ -26,7 +17,7 @@ export interface Stops {
 
 const GUARD = 512;
 
-const isBlankRow = (l: DocLine): boolean => l.cls === "blank" && l.contentFrom >= l.to;
+const isBlankRow = (line: DocLine): boolean => line.cls === "blank" && line.contentFrom >= line.to;
 
 interface PipApproach {
   readonly origin: number;
@@ -60,14 +51,14 @@ export function alignedOnACluster(state: EditorState, pos: number): number {
   return prev !== off && findClusterBreak(line.text, prev, true) !== off ? line.from + prev : pos;
 }
 
-export function stopsIn(state: EditorState, s: DocStructure, r: PaintPort): Stops {
+export function stopsIn(state: EditorState, structure: DocStructure, paint: PaintPort): Stops {
   const end = state.doc.length;
   const visual = isVisual(state);
 
-  const chromeStop = (l: DocLine, pos: number): number | null => {
+  const chromeStop = (line: DocLine, pos: number): number | null => {
     let p = pos;
     for (let guard = 0; guard < 8; guard++) {
-      const c = chromeForCaret(l).find(
+      const c = chromeForCaret(line).find(
         (x) => (p > x.from && p < x.to) || (x.lean === "fwd" ? p === x.from : p === x.to),
       );
       if (!c) break;
@@ -78,8 +69,8 @@ export function stopsIn(state: EditorState, s: DocStructure, r: PaintPort): Stop
     return p === pos ? null : p;
   };
 
-  const atomAround = (l: DocLine, pos: number): { from: number; to: number } | null => {
-    for (const a of r.atomic(state, l)) if (pos > a.from && pos < a.to) return a;
+  const atomAround = (line: DocLine, pos: number): { from: number; to: number } | null => {
+    for (const a of paint.atomic(state, line)) if (pos > a.from && pos < a.to) return a;
     return null;
   };
 
@@ -88,7 +79,7 @@ export function stopsIn(state: EditorState, s: DocStructure, r: PaintPort): Stop
     if (pipMemo) return pipMemo;
     const out: [number, number][] = [];
     if (pipActive(state, "slot.v"))
-      for (const v of s.verses)
+      for (const v of structure.verses)
         if (v.num !== null && v.contentFrom > v.markerFrom) out.push([v.markerFrom, v.contentFrom]);
     pipMemo = out;
     return out;
@@ -99,29 +90,16 @@ export function stopsIn(state: EditorState, s: DocStructure, r: PaintPort): Stop
     return null;
   };
 
-  // Hidden AND drawing nothing in its place: no box, no join, no break widget.
   const hiddenAt = (p: number): boolean =>
-    p >= 0 && p < end && r.hidden(state, p, p + 1) && !r.draws(state, p) && !r.joined(state, p);
+    p >= 0 &&
+    p < end &&
+    paint.hidden(state, p, p + 1) &&
+    !paint.draws(state, p) &&
+    !paint.joined(state, p);
   const isNewline = (p: number): boolean => p < end && state.doc.sliceString(p, p + 1) === "\n";
-  // A line break the reader sees: a newline that is neither hidden nor joined.
   const visibleBreak = (p: number): boolean =>
-    p >= end || (isNewline(p) && !hiddenAt(p) && !r.joined(state, p));
+    p >= end || (isNewline(p) && !hiddenAt(p) && !paint.joined(state, p));
 
-  /**
-   * THE LINE-END RULE. When a line's visible text is followed by hidden
-   * markup that runs up to the line break — a paragraph's end before a blank
-   * line and a standalone `\s5`, a wrapper's hidden attributes — the stop is
-   * the end of the VISIBLE text, and nothing between it and the break is one.
-   * Answers that end for any position from it to the break, and `null`
-   * anywhere else.
-   *
-   * It is the position admission lets an insertion through at (the run
-   * begins there, and a change at a guarded run's edge is not inside it), so
-   * the caret settlement leaves and the position typing is accepted at are
-   * the same one. Before it, End and a click past the end landed one past the
-   * text, strictly inside the run, where every keystroke and Insert footnote
-   * was refused.
-   */
   const visibleEnd = (pos: number): number | null => {
     let q = pos;
     for (let g = 0; g < GUARD && hiddenAt(q); g++) q++;
@@ -129,13 +107,9 @@ export function stopsIn(state: EditorState, s: DocStructure, r: PaintPort): Stop
     let e = pos;
     for (let g = 0; g < GUARD && e > 0 && hiddenAt(e - 1); g++) e--;
     if (e === q || e === 0) return null;
-    // The run starts a line (the char before it is a line break the reader
-    // sees): there is no visible text on this line to end.
-    if (isNewline(e - 1) && !r.joined(state, e - 1)) return null;
+    if (isNewline(e - 1) && !paint.joined(state, e - 1)) return null;
     return e;
   };
-  // Only a position at a hidden run, or at a break right after one, can be in
-  // the rule's reach; everything else skips the scan.
   const nearALineEndRun = (pos: number): boolean =>
     hiddenAt(pos) ||
     (pos > 0 && isNewline(pos) && hiddenAt(pos - 1)) ||
@@ -143,34 +117,34 @@ export function stopsIn(state: EditorState, s: DocStructure, r: PaintPort): Stop
 
   const isStop = (pos: number): boolean => {
     if (!visual) return true;
-    const l = lineAt(s, state, pos);
-    if (!l) return true;
-    if (isBlankRow(l)) return false;
-    if (r.draws(state, pos)) return true;
+    const line = lineAt(structure, state, pos);
+    if (!line) return true;
+    if (isBlankRow(line)) return false;
+    if (paint.draws(state, pos)) return true;
     if (alignedOnACluster(state, pos) !== pos) return false;
-    if (chromeStop(l, pos) !== null) return false;
-    if (atomAround(l, pos)) return false;
+    if (chromeStop(line, pos) !== null) return false;
+    if (atomAround(line, pos)) return false;
     if (pipAround(pos)) return false;
     if (nearALineEndRun(pos)) {
       const e = visibleEnd(pos);
       if (e !== null) return e === pos;
     }
-    if (inDesignatorDelimiter(s, pos)) return true;
-    if (r.joined(state, pos)) return true;
+    if (inDesignatorDelimiter(structure, pos)) return true;
+    if (paint.joined(state, pos)) return true;
     if (pos >= end) return true;
-    return !r.hidden(state, pos, pos + 1);
+    return !paint.hidden(state, pos, pos + 1);
   };
 
   const paintStep = (pos: number): number => {
-    const l = lineAt(s, state, pos);
-    if (!l) return pos;
-    if (isBlankRow(l)) return Math.min(l.to + 1, end);
-    if (r.draws(state, pos)) return pos;
-    const c = chromeStop(l, pos);
+    const line = lineAt(structure, state, pos);
+    if (!line) return pos;
+    if (isBlankRow(line)) return Math.min(line.to + 1, end);
+    if (paint.draws(state, pos)) return pos;
+    const c = chromeStop(line, pos);
     if (c !== null) return c;
-    if (inDesignatorDelimiter(s, pos)) return pos;
+    if (inDesignatorDelimiter(structure, pos)) return pos;
     if (pos >= end) return pos;
-    if (!r.hidden(state, pos, pos + 1)) return pos;
+    if (!paint.hidden(state, pos, pos + 1)) return pos;
     return pos + 1;
   };
 
@@ -186,9 +160,6 @@ export function stopsIn(state: EditorState, s: DocStructure, r: PaintPort): Stop
 
   const settle = (pos: number, toward: SettleDirection): number => {
     if (!visual || isStop(pos)) return pos;
-    // Between a line's visible end and its break, every direction means the
-    // same place on screen: that end. An arrow key that wants the next line
-    // keeps stepping (`moveCaret` does), so this never traps one.
     if (nearALineEndRun(pos)) {
       const e = visibleEnd(pos);
       if (e !== null) return e;
@@ -202,10 +173,10 @@ export function stopsIn(state: EditorState, s: DocStructure, r: PaintPort): Stop
   };
 
   const held = (pos: number, origin: number): number => {
-    const l = lineAt(s, state, pos);
+    const line = lineAt(structure, state, pos);
     let p = pos;
-    if (l) {
-      const a = atomAround(l, p);
+    if (line) {
+      const a = atomAround(line, p);
       if (a) p = p - a.from <= a.to - p ? a.from : a.to;
     }
     const pip = pipAround(p);
@@ -214,10 +185,11 @@ export function stopsIn(state: EditorState, s: DocStructure, r: PaintPort): Stop
   };
 
   const pass = (pos: number, forward: boolean): number => {
-    const l = lineAt(s, state, pos);
+    const line = lineAt(structure, state, pos);
     let p = pos;
-    if (l)
-      for (const a of r.atomic(state, l)) if (p > a.from && p < a.to) p = forward ? a.to : a.from;
+    if (line)
+      for (const a of paint.atomic(state, line))
+        if (p > a.from && p < a.to) p = forward ? a.to : a.from;
     for (const [a, b] of pips()) if (p > a && p < b) p = forward ? b : a;
     return p;
   };

@@ -1,33 +1,3 @@
-/**
- * The front matter card: `\id`, `\ide`, `\h`, `\toc1-3` and `\mt*` shown in
- * regular mode as labelled fields instead of as lines of markup.
- *
- * The marker name is a LOCKED label and only the value is editable, because
- * a marker is spec vocabulary and renaming one silently changes what the line
- * means. Changing
- * `\h` to `\toc2` is a USFM-mode edit, on purpose.
- *
- * Three decisions worth stating:
- *
- *  - **One block widget, not a Solid island.** The card has to know the
- *    document's offsets on every keystroke and must not hold a second copy of
- *    the text; a CodeMirror widget over the canonical state is already that,
- *    and mounting Solid into it would add a second subscription to the book
- *    for no gain (shell.md's single-subscription rule).
- *  - **Each field writes exactly its own line's value span**, `[contentFrom,
- *    to)`, as one change through the view — so it reaches `book.fromView`,
- *    publishes one receipt, and is one Undo step.
- *  - **The write is `trusted`.** Front matter sits before the first `\c`, so
- *    while the reader is clipped to a chapter `refuseEditsOutsideTheClip`
- *    would refuse every card edit. The card is a structured surface with
- *    hard-edged targets — the same argument that makes the attrs popover
- *    trusted — so it says so rather than being silently inert.
- *
- * The widget updates its inputs IN PLACE (`updateDOM`) rather than being
- * rebuilt, because a rebuild between "type" and "blur" would drop the caret
- * out of the field the reader is using.
- */
-
 import { StateEffect, type EditorState, type Extension } from "@codemirror/state";
 import {
   Decoration,
@@ -42,12 +12,6 @@ import { blockHost } from "./blockHost";
 import { structureField, type DocStructure } from "./docStructure";
 import { isVisual, modeFacet, trusted } from "./kernel";
 
-/**
- * The markers the card owns, in the order USFM writes them. A line whose
- * marker is not on this list ends the front matter, and so does `\c`: the card
- * is the book's header, not everything before chapter one.
- */
-// TODO: USER TODO: NEED TO THINK ABOUT IF WE REALLY ARE WANTING TO HARD CODE THIS.
 const FRONT_MARKERS = [
   "id",
   "ide",
@@ -67,8 +31,6 @@ const FRONT_MARKERS = [
 
 const FRONT = new Set<string>(FRONT_MARKERS);
 
-/** What each marker is called, for the label. Unknown markers show the marker. */
-// TODO: WOULD HAVE LOCALIZE AT SOME POINT, SO WHILE THIS IS POC, CAN'T BE FOR SURE FINAL PATTERN
 const LABELS: Record<string, string> = {
   id: "Book",
   ide: "Encoding",
@@ -87,34 +49,21 @@ const LABELS: Record<string, string> = {
 };
 
 interface FrontRow {
-  /** The marker as written, no backslash. */
   readonly marker: string;
   readonly label: string;
   readonly value: string;
-  /** The whole line. */
   readonly from: number;
   readonly to: number;
-  /** The value span this field writes — after the marker and its delimiter. */
   readonly valueFrom: number;
 }
 
-/**
- * The header lines, read off the structure.
- *
- * Stops at the first line that is neither blank nor a front marker, so a book
- * whose `\mt` is followed by `\c 1` gives six rows and a book with an
- * introduction gives the same six — `\ip` is content, and content is the
- * editor's job, not the card's.
- */
-function frontMatterRows(state: EditorState, s: DocStructure): FrontRow[] {
+function frontMatterRows(state: EditorState, structure: DocStructure): FrontRow[] {
   const out: FrontRow[] = [];
   const doc = state.doc;
-  for (let i = 0; i < s.lines.length; i++) {
-    const line = s.lines.at(i);
+  for (let i = 0; i < structure.lines.length; i++) {
+    const line = structure.lines.at(i);
     const marker = line.marker;
     if (marker === null) {
-      // A blank line between header lines is layout, not a boundary; anything
-      // else (text with no marker) is content and ends the header.
       if (doc.sliceString(line.from, line.to).trim() === "") continue;
       break;
     }
@@ -131,7 +80,6 @@ function frontMatterRows(state: EditorState, s: DocStructure): FrontRow[] {
   return out;
 }
 
-/** The value a field may write: one line, no markup sigil, no quote games. */
 const cleanValue = (s: string): string => s.replace(/[\\\n\r]+/g, " ").replace(/\s+$/, "");
 
 const rowsKey = (rows: readonly FrontRow[]): string => rows.map((r) => r.marker).join("|");
@@ -146,22 +94,12 @@ class FrontMatterWidget extends WidgetType {
     this.rows = rows;
   }
 
-  /**
-   * Same markers AND same values is the same widget. A different value goes to
-   * `updateDOM`, which patches the inputs the reader is not in; a different
-   * marker list rebuilds, because the fields themselves changed.
-   */
   eq(other: FrontMatterWidget): boolean {
     return (
       rowsKey(this.rows) === rowsKey(other.rows) && valuesKey(this.rows) === valuesKey(other.rows)
     );
   }
 
-  /**
-   * The card is one focus region of its own. `ignoreEvent` keeps CodeMirror
-   * from treating a click in a field as a click in the document — the document
-   * position under the card is markup the card exists to replace.
-   */
   ignoreEvent(): boolean {
     return true;
   }
@@ -182,8 +120,6 @@ class FrontMatterWidget extends WidgetType {
       const input = inputs[i];
       const row = this.rows[i];
       if (input.dataset.marker !== row.marker) return false;
-      // Never overwrite what the reader is typing; the field owns its value
-      // until it blurs, and the blur is what writes.
       if (document.activeElement === input) continue;
       if (input.value !== row.value) input.value = row.value;
     }
@@ -227,14 +163,6 @@ class FrontMatterWidget extends WidgetType {
   }
 }
 
-/**
- * One field's write.
- *
- * The span is resolved from the CURRENT state by position in the row list
- * rather than from the offsets the widget was built with: between building the
- * card and blurring a field, an edit elsewhere in the book may have moved
- * every offset, and writing a stale one would land in the wrong line.
- */
 function write(view: EditorView, index: number, marker: string, value: string): void {
   const rows = frontMatterRows(view.state, view.state.field(structureField));
   const row = rows[index];
@@ -252,9 +180,9 @@ export const focusFrontMatter = StateEffect.define<null>();
 
 function cardDecorations(state: EditorState): DecorationSet {
   if (!isVisual(state)) return Decoration.none;
-  const s = state.field(structureField, false);
-  if (s === undefined) return Decoration.none;
-  const rows = frontMatterRows(state, s);
+  const structure = state.field(structureField, false);
+  if (structure === undefined) return Decoration.none;
+  const rows = frontMatterRows(state, structure);
   if (rows.length === 0) return Decoration.none;
   const from = rows[0].from;
   const to = rows[rows.length - 1].to;
@@ -265,11 +193,6 @@ function cardDecorations(state: EditorState): DecorationSet {
   return Decoration.set([Decoration.replace({ block: true }).range(from, to)]);
 }
 
-/**
- * The focus door. A `ViewPlugin` and not a command, because focusing is a DOM
- * act and the widget's inputs only exist once the card has been drawn — the
- * effect may arrive in the same transaction that created it.
- */
 const frontMatterFocus = ViewPlugin.fromClass(
   class {
     #view: EditorView;

@@ -1,38 +1,31 @@
-/**
- * The book editor: the one view over a seated Book's canonical state.
- *
- * Everything CodeMirror-shaped about showing a whole book lives here, so a
- * host mounts it, moves it with methods and hears from it through callbacks —
- * Sefer's `BookEditor` is a Solid wrapper of this (planning item "embeddable
- * editor"):
- *
- *  - The view is created over `book.state` and every transaction goes through
- *    `book.fromView`, which is where a keystroke becomes a receipt every
- *    reader sees. Binding a view that dispatched on its own would make the
- *    book's publication silently incomplete — `apply` throws rather than
- *    report a receipt nobody heard.
- *  - The mountable half (the meter, the caret report, the front matter card,
- *    empty blocks, pairing, flash) is appended to the Book's canonical state
- *    ONCE PER BOOK, because `appendConfig` through a bound view lands in the
- *    Book and outlives the view.
- *  - Mode and chapter are dispatched through a compartment and a clip. Neither
- *    is a document change, so `fromView` ignores them — a projection is
- *    presentation and a clip is a view choice, and neither is an edit.
- */
-
 import { forEachDiagnostic, setDiagnosticsEffect } from "@codemirror/lint";
-import { Compartment, EditorState, StateEffect } from "@codemirror/state";
+import { Compartment, EditorState, StateEffect, type TransactionSpec } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { tocViewOf } from "@sefer/text/engine/location";
 import type { Address } from "@sefer/text/location/address";
 import { addressAt, resolve } from "@sefer/text/location/locate";
 
 import { seatedOf, type EditorBook } from "./book";
+import {
+  activateMarkup,
+  type Attribute,
+  attributeActivation,
+  attributeChange,
+  type AttributedMarkup,
+  attributesAt,
+} from "./core/attributes";
 import { structureAt } from "./core/editorState";
+import { type Figure, figuresIn } from "./core/figures";
 import { frontMatterCard } from "./core/frontmatter";
 import { annotateOpen } from "./core/instrument";
+import { trusted } from "./core/kernel";
 import { keystrokeMeter } from "./core/meter";
+import { deleteColumn, deleteRow, insertColumn, insertRow } from "./core/tableCommands";
 import { span } from "./core/timing";
+import { type UnsupportedMarkup, unsupportedMarkup } from "./core/unsupported";
+import { addVerseAfter, removeVerseMarker, renumberVerse, verseAt } from "./core/verseCommands";
+import { type EditorWords, editorWords } from "./core/words";
+import type { EditorFeature } from "./features";
 import { handleFor, markMoved, type EditorHandle } from "./handle";
 import { annotateRepaint } from "./observability";
 import { annotateEmptyBlocks, blockNamer, showEmptyBlocks } from "./recipes/emptyBlocks";
@@ -67,6 +60,19 @@ export interface BookEditorOptions {
   readonly pairBlocks?: boolean;
   /** A viewer: nothing can be typed, and everything else — lint, reveal, where — still works. */
   readonly readOnly?: boolean;
+  /**
+   * The opt-in UI: `editorFeatures()` for all of it, as Sefer mounts, or a
+   * host's choice of `verseMenu()`, `attributePopover()`. None by default; the
+   * commands and queries under them are on the mount either way. Decided by
+   * the book's first mount.
+   */
+  readonly features?: readonly EditorFeature[];
+  /**
+   * The words the editor shows, in the host's language: what a marker is
+   * called (the chips) and every UI phrase (`PHRASES`). Anything left out is
+   * English. Decided by the book's first mount.
+   */
+  readonly words?: EditorWords;
 }
 
 /** One mark the linter draws: the engine's and the host's (`setHostDiagnostics`) as one set. */
@@ -98,6 +104,39 @@ export interface BookEditorMount extends EditorHandle {
   /** Called when the drawn set changes, not on every lint pass. Returns the detach. */
   onDiagnostics(listener: (drawn: readonly DrawnDiagnostic[]) => void): () => void;
   setReadOnly(readOnly: boolean): void;
+  /** The milestone or character run with an attribute list at an offset, or `null`. */
+  attributesAt(offset: number): AttributedMarkup | null;
+  /**
+   * Called when a press activates attributed markup (and with `null` when it
+   * is let go), whether or not the default popover is showing. Returns the detach.
+   */
+  onActivate(listener: (target: AttributedMarkup | null) => void): () => void;
+  /** Gives `target` these attributes, as one Undo step. */
+  setAttributes(target: AttributedMarkup, attributes: readonly Attribute[]): void;
+  /**
+   * The verse at an offset (its marker, number or text) gets this number.
+   * False when there is no verse there, or `number` is no verse number.
+   */
+  renumberVerse(offset: number, number: string): boolean;
+  /** Removes the marker of the verse at an offset; its text joins the verse before. */
+  removeVerseMarker(offset: number): boolean;
+  /** Adds an empty verse after the one at an offset, numbered one past it, with the caret in it. */
+  addVerseAfter(offset: number): boolean;
+  /** A table's rows and columns, at the cell holding an offset; false where there is no table. */
+  insertTableRow(offset: number, where: "above" | "below"): boolean;
+  deleteTableRow(offset: number): boolean;
+  insertTableColumn(offset: number, side: "before" | "after"): boolean;
+  deleteTableColumn(offset: number): boolean;
+  /**
+   * Markup Reading has no drawing for in a range (the whole book without one):
+   * what the chips feature draws, for a host that draws it its own way.
+   */
+  unsupportedMarkup(range?: {
+    readonly from: number;
+    readonly to: number;
+  }): readonly UnsupportedMarkup[];
+  /** The figures in a range (the whole book without one): their caption and attribute spans. */
+  figures(range?: { readonly from: number; readonly to: number }): readonly Figure[];
   /** The scripture address an offset is in (a verse, a heading's unit, the intro). */
   addressAt(offset: number): Address | undefined;
   /** Where the caret is, as an address. */
@@ -124,24 +163,14 @@ export interface BookEditorMount extends EditorHandle {
   destroy(): void;
 }
 
-/**
- * Which books have already had the mountable half appended to their canonical
- * state, and the projection compartment that went in with it. Weak and
- * module-level, because it is a fact about the BOOK and not about one view: a
- * second view over the same book (leave the route, come back) would otherwise
- * append the whole set again — two meters, two notes per keypress, two front
- * matter cards — and a compartment that is not in the config is a
- * reconfigure that does nothing.
- */
 const mountedConfig = new WeakMap<
   EditorBook,
   { readonly projection: Compartment; readonly readOnly: Compartment }
 >();
 
-/** Every caret listener of a book, so the once-per-book listener reaches this view's. */
+const activateListeners = new WeakMap<EditorBook, Set<(target: AttributedMarkup | null) => void>>();
 const caretListeners = new WeakMap<EditorBook, Set<(head: number) => void>>();
 
-/** Every listener for a new drawn set, by book, as the caret's are. */
 const drawnListeners = new WeakMap<EditorBook, Set<() => void>>();
 
 const listenersOf = <T>(map: WeakMap<EditorBook, Set<T>>, book: EditorBook): Set<T> => {
@@ -180,30 +209,8 @@ const sameDrawn = (a: readonly DrawnDiagnostic[], b: readonly DrawnDiagnostic[])
     );
   });
 
-/**
- * The offset a remembered place names now, or `undefined`.
- *
- * A LADDER, because the document may have moved while the reader was away —
- * they may have been in Find for the express purpose of changing it:
- *
- *   1. the exact offset, when the document is unmoved;
- *   2. the VERSE, by its number, scoped to its chapter;
- *   3. the CHAPTER, by `\c`'s own label;
- *   4. nothing, and stay at the top.
- *
- * Every rung below the first is looked up by what the document SAYS rather
- * than by an ordinal or an offset, so a book that gained a `\toc` line still
- * resolves and a verse that was deleted falls to its chapter instead of
- * landing in whatever now occupies its coordinates.
- */
 const placeOf = (state: EditorState, place: RememberedPlace): number | undefined => {
   const structureNow = structureAt(state);
-  // The hash when BOTH sides have one — a fresh view has not parsed yet, so
-  // `analysis` is routinely null exactly here — and the length otherwise. Same
-  // length is weaker than same hash: an edit that swapped one word for another
-  // of equal width would pass it, and the cost of being wrong is an offset a
-  // few characters stale, which at scroll granularity nobody can see. A
-  // different length is proof of change either way, and drops to the verse.
   const hash = structureNow.analysis?.sourceHash;
   const unmoved =
     hash !== undefined && place.hash !== undefined
@@ -213,8 +220,6 @@ const placeOf = (state: EditorState, place: RememberedPlace): number | undefined
   const chapter = structureNow.chapters.find((row) => row.label === place.chapter);
   if (chapter === undefined) return undefined;
   if (place.verse === undefined) return chapter.from;
-  // Scoped to the chapter: verse numbers repeat, and `10` alone names sixty
-  // places in a book.
   const verse = structureNow.verses.find(
     (row) =>
       row.markerFrom >= chapter.from && row.markerFrom < chapter.to && row.num === place.verse,
@@ -222,34 +227,13 @@ const placeOf = (state: EditorState, place: RememberedPlace): number | undefined
   return verse?.markerFrom ?? chapter.from;
 };
 
-/** The document position sitting at the top of the viewport, right now. */
 const topOfViewport = (view: EditorView): number | undefined => {
   const box = view.scrollDOM.getBoundingClientRect();
-  // A few pixels in, so the probe lands inside the first visible line rather
-  // than on the boundary above it.
   return view.posAtCoords({ x: box.left + 4, y: box.top + 4 }) ?? undefined;
 };
 
-/** The meter's measurement, onto the gesture it measured, or the repaint nobody typed for. */
 const meterFor = (book: EditorBook) =>
   keystrokeMeter((measured) => {
-    // Onto the gesture's own record. The meter measures THROUGH the paint,
-    // which lands after the transaction's rules are done but before the next
-    // transaction opens, so the gesture is still the one that is open — and
-    // `annotateOpen` says so rather than assuming it.
-    //
-    // Both are measured from the DOM EVENT, where the gesture's own span
-    // starts at the first phase rule a fraction of a millisecond later — so
-    // `to_paint_ms` can read slightly longer than the span that carries it.
-    //
-    // `to_paint_ms` is also mostly not work: a keystroke that lands mid-frame
-    // waits for the next vsync, so ~16ms at 60Hz is the floor, not a cost.
-    // `gesture_ms` is the half we can do anything about, and
-    // `browser_input_ms` is the part of it the browser owns.
-    //
-    // `to_paint_source` says which instrument answered. `event` is the
-    // browser's own Event Timing number and is what to trust; `frame` is the
-    // requestAnimationFrame inference, which reads up to a frame high.
     const painted: Readonly<Record<string, string | number>> =
       measured.render === null
         ? {}
@@ -276,8 +260,6 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
     parent: options.parent,
     dispatchTransactions: (transactions) => {
       if (view === undefined) return;
-      // CodeMirror's update and DOM sync, named, so the keystroke meter can
-      // say where a gesture went instead of leaving it in `other`.
       const done = span("dispatch");
       book.fromView(view, transactions);
       done();
@@ -285,12 +267,9 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
   });
   const created = view;
   const unbind = book.bindView(created);
-  // The note editor mounts a satellite over this book, from the Book's funnel;
-  // this is the one place that knows both the view and the Book.
   const unname = noteBookIs(created, book);
 
   const heard = listenersOf(caretListeners, book);
-  /** This mount's caret listeners, wrapped so two mounts passing one function stay two. */
   const mineCaret = new Set<(head: number) => void>();
   const listen = (listener: (head: number) => void): (() => void) => {
     const own = (head: number): void => listener(head);
@@ -303,7 +282,6 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
   };
   if (options.onCaret !== undefined) listen(options.onCaret);
   const drawnHeard = listenersOf(drawnListeners, book);
-  /** This mount's own listeners, so `destroy` takes back only what it added. */
   const mine = new Set<() => void>();
 
   let config = mountedConfig.get(book);
@@ -314,7 +292,6 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
       effects: StateEffect.appendConfig.of([
         config.projection.of([]),
         config.readOnly.of([]),
-        // A new drawn set, to whoever asked: only on a lint publication.
         EditorView.updateListener.of((update) => {
           if (drawnHeard.size === 0) return;
           const linted = update.transactions.some((tr) =>
@@ -324,20 +301,24 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
         }),
         meterFor(book).extension,
         flashing(),
-        // Where the caret is, on `selectionSet` and not every update: a
-        // document change that does not move the caret is not news, and an
-        // update fires for scrolls, measurements and reconfigures too.
         EditorView.updateListener.of((update) => {
           if (!update.selectionSet) return;
           for (const listener of heard) listener(update.state.selection.main.head);
         }),
         frontMatterCard(),
-        // Blocks with no words, named where the words go.
+        attributeActivation,
+        ...(options.features ?? []),
+        ...(options.words === undefined ? [] : [editorWords.of(options.words)]),
+        EditorView.updateListener.of((update) => {
+          const listeners = activateListeners.get(book);
+          if (listeners === undefined || listeners.size === 0) return;
+          for (const tr of update.transactions)
+            for (const effect of tr.effects)
+              if (effect.is(activateMarkup))
+                for (const listener of listeners) listener(effect.value);
+        }),
         ...(options.blockName === undefined ? [] : [blockNamer.of(options.blockName)]),
         annotateEmptyBlocks(options.emptyBlocks === true),
-        // The editor's half of the block pairing: it marks the block the
-        // caret is in, and the panes beside it mark the block at the same
-        // address.
         pairingHere(options.pairBlocks === true),
       ]),
     });
@@ -345,15 +326,18 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
   const { projection: compartment, readOnly: readOnlyCompartment } = config;
   const readOnlyOf = (on: boolean) =>
     on ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : [];
-  // Always set, never inherited: the compartment lives in the Book's state,
-  // and an earlier viewer over this book may have left it read-only.
   created.dispatch({
     effects: readOnlyCompartment.reconfigure(readOnlyOf(options.readOnly === true)),
   });
 
+  const run = (spec: TransactionSpec | null): boolean => {
+    if (spec === null || created.state.readOnly) return false;
+    created.dispatch(spec);
+    return true;
+  };
+
   const toc = () => {
     const analysis = book.structure().analysis;
-    // A parse of an older text would name the wrong verse; none until it lands.
     if (analysis === null || analysis.text.length !== created.state.doc.length) return undefined;
     return tocViewOf(analysis);
   };
@@ -366,8 +350,6 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
     const from = Math.min(range.from, length);
     const to = Math.min(range.to ?? from, length);
     markMoved(created);
-    // The caret goes where the reader was sent, not only the scroll: every
-    // command that asks "which chapter" or "where am I" reads the caret.
     created.dispatch({
       selection: { anchor: from },
       effects: EditorView.scrollIntoView(from, { y: at === "top" ? "start" : "center" }),
@@ -375,7 +357,6 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
     return flash(created, { from, to });
   };
 
-  /** The mode the view is configured for, so a flip can be told from a first set. */
   let showing: string | undefined;
 
   return handleFor(created, {
@@ -386,14 +367,9 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
       showing = key;
       const anchor = flipped ? topOfViewport(created) : undefined;
       if (flipped) markMoved(created);
-      // The mode class rides the compartment as an editor attribute, not a
-      // hand-added class: CodeMirror rewrites `view.dom`'s class attribute
-      // from its facets whenever focus changes.
       created.dispatch({
         effects: [
           compartment.reconfigure(policyView(policy)),
-          // In the SAME transaction as the reconfigure: a separate dispatch
-          // measures the old layout, and the reader is thrown to the top.
           ...(anchor === undefined ? [] : [EditorView.scrollIntoView(anchor, { y: "start" })]),
         ],
       });
@@ -409,15 +385,10 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
       const at = placeOf(created.state, place);
       if (at === undefined || at <= 0) return undefined;
       markMoved(created);
-      // The CARET goes with the scroll: a fresh view puts it at offset 0, and
-      // the first thing typed would land at the top of the book.
       created.dispatch({
         selection: { anchor: at },
         effects: EditorView.scrollIntoView(at, { y: "start" }),
       });
-      // TWICE, a frame apart. CodeMirror ESTIMATES the height of content it
-      // has not rendered, so a jump deep into a book lands approximately; the
-      // first scroll measures the region, the second lands on it.
       requestAnimationFrame(() => {
         if (created.dom.isConnected)
           created.dispatch({ effects: EditorView.scrollIntoView(at, { y: "start" }) });
@@ -442,6 +413,35 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
         mine.delete(check);
       };
     },
+    attributesAt: (offset: number) => attributesAt(created.state, offset),
+    onActivate: (listener: (target: AttributedMarkup | null) => void) => {
+      const held = listenersOf(activateListeners, book);
+      held.add(listener);
+      return () => held.delete(listener);
+    },
+    setAttributes: (target: AttributedMarkup, attributes: readonly Attribute[]) => {
+      created.dispatch({
+        changes: attributeChange(target, attributes),
+        annotations: trusted.of("attributes"),
+        userEvent: "input.attributes",
+      });
+    },
+    figures: (range?: { readonly from: number; readonly to: number }) =>
+      figuresIn(created.state, range?.from ?? 0, range?.to ?? created.state.doc.length),
+    unsupportedMarkup: (range?: { readonly from: number; readonly to: number }) =>
+      unsupportedMarkup(created.state, range?.from ?? 0, range?.to ?? created.state.doc.length),
+    insertTableRow: (offset: number, where: "above" | "below") =>
+      run(insertRow(created.state, offset, where)),
+    deleteTableRow: (offset: number) => run(deleteRow(created.state, offset)),
+    insertTableColumn: (offset: number, side: "before" | "after") =>
+      run(insertColumn(created.state, offset, side)),
+    deleteTableColumn: (offset: number) => run(deleteColumn(created.state, offset)),
+    renumberVerse: (offset: number, number: string) =>
+      run(renumberVerse(created.state, verseAt(created.state, offset), number)),
+    removeVerseMarker: (offset: number) =>
+      run(removeVerseMarker(created.state, verseAt(created.state, offset))),
+    addVerseAfter: (offset: number) =>
+      run(addVerseAfter(created.state, verseAt(created.state, offset))),
     setReadOnly: (on: boolean) =>
       created.dispatch({ effects: readOnlyCompartment.reconfigure(readOnlyOf(on)) }),
     addressAt: (offset: number) => addressOf(offset),
@@ -459,8 +459,6 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
     },
     destroy: () => {
       for (const own of mineCaret) heard.delete(own);
-      // Read-only belongs to this mount, not to the Book whose state carries
-      // the compartment: the next editor over this book starts editable.
       created.dispatch({ effects: readOnlyCompartment.reconfigure(readOnlyOf(false)) });
       for (const check of mine) drawnHeard.delete(check);
       unname();

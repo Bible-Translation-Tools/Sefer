@@ -1,21 +1,3 @@
-/**
- * The desktop answer to the `Git` port: a thin adapter over the git2 commands
- * in `src-tauri/src/git.rs`.
- *
- * Native git on desktop rather than isomorphic-git: real performance on a
- * project with a full New Testament of history, and one implementation of
- * merge and packfile behaviour instead of two. The Web host keeps isomorphic-git because a browser has no alternative.
- *
- * Everything here is translation, not policy. The one rule this file enforces
- * is the receipts rule — a receipt path becomes repository-relative through
- * core's `repositoryPath` or it is `Refused` — and Rust re-checks it, because
- * this process can write anywhere the user can.
- *
- * Every member of the port is answered; nothing here refuses by name.
- * `src/core/git/contract.ts` is the spec, and it cannot be run against this
- * Layer from Node — `invoke` needs a Tauri runtime — so the same case, plus one
- * per command, lives as `#[cfg(test)] mod tests` in `src-tauri/src/git.rs`.
- */
 import { invoke } from "@tauri-apps/api/core";
 import { Effect, Layer, Option } from "effect";
 
@@ -35,7 +17,6 @@ import {
   type WalkedCommit,
 } from "#core/git/git";
 
-/** The wire shape of `git.rs`'s `GitCommit`. */
 interface WireCommit {
   readonly id: string;
   readonly message: string;
@@ -44,10 +25,6 @@ interface WireCommit {
   readonly at: number;
 }
 
-/**
- * The wire shape of `git.rs`'s `GitWalkedCommit`: already the port's shape,
- * so it is passed through. `serde` names the fields as the port does.
- */
 type WireWalkedCommit = WalkedCommit;
 
 interface WireChangedPath {
@@ -55,20 +32,11 @@ interface WireChangedPath {
   readonly kind: string;
 }
 
-/**
- * The Rust side prefixes every error with a stable reason name (see
- * `src-tauri/src/errors.rs`), precisely so this function never has to read
- * libgit2 prose. An unrecognised prefix is `Io`: a new failure should degrade
- * to "something went wrong" rather than to a reason it is not.
- */
 const REASONS: Readonly<Record<string, GitFailureReason>> = {
   NotARepository: "NotARepository",
   Io: "Io",
   Conflict: "Conflict",
   Refused: "Refused",
-  // The transport reasons only Remote distinguishes collapse into Io here:
-  // Git's port does not name them, and pretending otherwise would invent a
-  // reason the caller cannot act on.
   AuthFailed: "Io",
   Offline: "Io",
   Rejected: "Io",
@@ -94,15 +62,12 @@ const commitOf = (wire: WireCommit): Commit => ({
   at: wire.at,
 });
 
-/** Unknown kinds are reported as `modified`, the least surprising claim. */
 const changeKindOf = (kind: string): ChangedPath["kind"] =>
   kind === "added" || kind === "deleted" || kind === "untracked" ? kind : "modified";
 
 const show = (repo: Repo, rev: string, path: string): Effect.Effect<Uint8Array, GitError> =>
   Effect.gen(function* () {
     const relative = yield* relativeOrRefuse(repo, path);
-    // Tauri serialises `Vec<u8>` as a JSON number array; this is the
-    // history-view path (one file, on demand), never the editing path.
     const bytes = yield* call<readonly number[]>("git_show", {
       root: repo.root,
       rev,
@@ -111,7 +76,6 @@ const show = (repo: Repo, rev: string, path: string): Effect.Effect<Uint8Array, 
     return new Uint8Array(bytes);
   });
 
-/** git2 per call; `timeline` composes them, as there is no index on desktop. */
 const tauriGit = {
   open: (root) => Effect.as(call<void>("git_open", { root }), { root }),
   init: (root) => Effect.as(call<void>("git_init", { root }), { root }),
@@ -155,23 +119,12 @@ const tauriGit = {
       return entries.map(commitOf);
     }),
 
-  /**
-   * The four sync reads. None of them touches a file: after a fetch the
-   * cloud's commits are already in the object database, so the whole
-   * comparison — how far ahead, how far behind, which books would change — is
-   * worked out before a byte of the work tree moves.
-   *
-   * None of the four is `Refused`; `git.rs` exports the matching commands and
-   * `cargo test` holds them to the same answers the Web layer gives.
-   */
   logFrom: (repo, ref) =>
     Effect.map(
       call<readonly WireCommit[]>("git_log_from", { root: repo.root, rev: ref }),
       (entries) => entries.map(commitOf),
     ),
 
-  // `None` is an ANSWER: a project attached to a repository nobody has pushed
-  // to yet has no tracking ref, and that is the ordinary unpublished state.
   resolve: (repo, ref) =>
     Effect.map(
       call<string | null>("git_resolve_ref", { root: repo.root, rev: ref }),
@@ -199,8 +152,6 @@ const tauriGit = {
 
   walk: (repo) => call<readonly WireWalkedCommit[]>("git_walk", { root: repo.root }),
 
-  // One call for the lot: a replay asks for hundreds of small blobs, and each
-  // `invoke` is a round trip. Number arrays, as `show`; Writer chunks are tiny.
   blobs: (repo, ids) =>
     Effect.map(
       call<readonly (readonly number[])[]>("git_blobs", { root: repo.root, ids }),
@@ -217,8 +168,6 @@ const tauriGit = {
         root: repo.root,
         path: relative,
       });
-      // Bytes stay deferred: a per-book history is long and only the version
-      // someone opens is worth reading out of the object database.
       return entries.map((wire): Version => ({
         commit: commitOf(wire),
         bytes: () => show(repo, wire.id, relative),

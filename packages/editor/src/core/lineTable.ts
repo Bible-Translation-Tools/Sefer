@@ -1,13 +1,3 @@
-/**
- * The line table: one lazy `DocLine` per document line, over the columns
- * `buildStructure` filled.
- *
- * Rows are built on demand and memoized, because a chapter of Psalms is a few
- * hundred lines and a keystroke reads three of them. Also holds the small
- * predicates every consumer asks of a line — is it blank, does it open a
- * paragraph, does it paint its own line.
- */
-
 import { TOKEN } from "@sefer/text/engine/analysis";
 
 import { spellingAt } from "./cst";
@@ -25,6 +15,7 @@ import { type ClassKey, paintsItsOwnLineAmbient } from "./registry";
 const NO_NOTES: NoteRange[] = [];
 const NO_WORDS: WordRange[] = [];
 const NO_MILESTONES: { from: number; to: number; name: string }[] = [];
+const NO_UNRULED: { from: number; to: number; name: string }[] = [];
 const NO_BREAKS: { from: number; to: number }[] = [];
 const NO_STANDALONES: { from: number; to: number }[] = [];
 
@@ -38,8 +29,8 @@ export const NO_LINES: LineTable = {
   *[Symbol.iterator]() {},
 };
 
-function openerOfLine(f: Fold, from: number, to: number): number {
-  const cst = f.cst;
+function openerOfLine(fold: Fold, from: number, to: number): number {
+  const cst = fold.cst;
   const { startAt, endAt, kindAt } = cst;
   for (let i = cst.firstTokenFrom(from); i < cst.count && startAt[i] <= to; i++) {
     if (kindAt[i] === TOKEN.NEWLINE) return -1;
@@ -67,9 +58,11 @@ class Line implements DocLine {
   #milestones = NO_MILESTONES;
   #breaks = NO_BREAKS;
   #standalones = NO_STANDALONES;
+  #unruled = NO_UNRULED;
+  #cells = NO_UNRULED;
 
-  constructor(f: Fold, n: number, from: number, to: number) {
-    this.#f = f;
+  constructor(fold: Fold, n: number, from: number, to: number) {
+    this.#f = fold;
     this.n = n;
     this.from = from;
     this.to = to;
@@ -134,8 +127,35 @@ class Line implements DocLine {
         if (this.#breaks === NO_BREAKS) this.#breaks = [];
         this.#breaks.push({ from, to });
       } else if (row.id === "milestone.token") {
+        // One milestone is one span: its marker, any attributes and its `\*`, so it draws as
+        // one pip and the caret never stops between its pieces. A terminator reached on its
+        // own was taken with the marker before it.
+        if (
+          cst.kindAt[i] === TOKEN.MILESTONE_TERMINATOR &&
+          (this.#milestones.at(-1)?.to ?? -1) >= to
+        )
+          continue;
+        let last = i;
+        if (cst.kindAt[i] === TOKEN.MILESTONE)
+          for (let j = i + 1; j < cst.count && startAt[j] < this.to; j++) {
+            if (cst.kindAt[j] === TOKEN.MILESTONE_TERMINATOR) last = j;
+            if (cst.kindAt[j] !== TOKEN.ATTR_LIST && !cst.isHorizontalSpace(j)) break;
+          }
         if (this.#milestones === NO_MILESTONES) this.#milestones = [];
-        this.#milestones.push({ from, to: cst.payloadEnd(i), name: spellingAt(cst, i, f.doc) });
+        this.#milestones.push({
+          from,
+          to: last === i ? cst.payloadEnd(i) : endAt[last],
+          name: spellingAt(cst, i, f.doc),
+        });
+      } else if (row.set === "cell") {
+        if (this.#cells === NO_UNRULED) this.#cells = [];
+        this.#cells.push({ from, to, name: spellingAt(cst, i, f.doc) });
+      } else if (row.set === "unruled") {
+        // A milestone's own span already holds its attribute list.
+        const milestone = this.#milestones.at(-1);
+        if (milestone !== undefined && from >= milestone.from && to <= milestone.to) continue;
+        if (this.#unruled === NO_UNRULED) this.#unruled = [];
+        this.#unruled.push({ from, to, name: spellingAt(cst, i, f.doc) });
       } else if (row.set === "standalone" && row.line !== true) {
         if (this.#standalones === NO_STANDALONES) this.#standalones = [];
         this.#standalones.push({ from, to });
@@ -171,6 +191,14 @@ class Line implements DocLine {
     this.#open();
     return this.#num;
   }
+  get cells(): { from: number; to: number; name: string }[] {
+    this.#walk();
+    return this.#cells;
+  }
+  get unruled(): { from: number; to: number; name: string }[] {
+    this.#walk();
+    return this.#unruled;
+  }
   get milestones(): { from: number; to: number; name: string }[] {
     this.#walk();
     return this.#milestones;
@@ -198,8 +226,8 @@ export class Lines implements LineTable {
   readonly #to: Uint32Array;
   #memo: (Line | undefined)[] | null = null;
 
-  constructor(f: Fold, from: Uint32Array, to: Uint32Array, count: number) {
-    this.#f = f;
+  constructor(fold: Fold, from: Uint32Array, to: Uint32Array, count: number) {
+    this.#f = fold;
     this.#from = from;
     this.#to = to;
     this.length = count;
@@ -246,9 +274,10 @@ export class Lines implements LineTable {
   }
 }
 
-export const isBlankLine = (l: DocLine): boolean => l.to === l.from;
+export const isBlankLine = (line: DocLine): boolean => line.to === line.from;
 
-export const isDesignatorLine = (l: DocLine): boolean => l.cls === "slot.v" || l.cls === "slot.c";
+export const isDesignatorLine = (line: DocLine): boolean =>
+  line.cls === "slot.v" || line.cls === "slot.c";
 
 /**
  * Is this line's marker one that must start its line — a Paragraph or Header
@@ -258,10 +287,11 @@ export const isDesignatorLine = (l: DocLine): boolean => l.cls === "slot.v" || l
  * it is part of it. A `\v`, a `\c`, a milestone, a character marker or a note
  * may follow text directly, and the newline before one is only a line break.
  */
-export const bindsToItsLine = (l: DocLine): boolean =>
-  l.cls === "blank" || l.cls.startsWith("block.");
+export const bindsToItsLine = (line: DocLine): boolean =>
+  line.cls === "blank" || line.cls.startsWith("block.");
 
-export const opensAParagraph = (l: DocLine): boolean =>
-  l.marker !== null && (l.cls === "block.para" || l.cls === "blank");
+export const opensAParagraph = (line: DocLine): boolean =>
+  line.marker !== null &&
+  (line.cls === "block.para" || line.cls === "blank" || line.cls === "table");
 
-export const paintsItsOwnLine = (l: DocLine): boolean => paintsItsOwnLineAmbient(l.cls);
+export const paintsItsOwnLine = (line: DocLine): boolean => paintsItsOwnLineAmbient(line.cls);

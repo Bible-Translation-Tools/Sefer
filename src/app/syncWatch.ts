@@ -1,19 +1,3 @@
-/**
- * Where the open project stands with the shared project, as ONE answer for
- * every surface that shows it: the app bar's cloud button, Review's status
- * line, and the Record dialog's last line.
- *
- * It was once a sync screen's alone, read when it mounted, so the only way to
- * learn that a send had been refused was to go and look. Now the check on
- * open, every send, and every receive all leave their reading here, and the
- * surfaces read it — the way `syncStatus` holds the network for everyone. A
- * reading is local work (refs and logs already in the object database); the
- * network is touched only by the check and the send that call `refresh`.
- *
- * One project at a time, because one is open at a time: a reading for any
- * other root is not an answer, and `facts(root)` says so with `undefined`.
- */
-
 import { Effect } from "effect";
 import { createSignal, flush } from "solid-js";
 
@@ -35,26 +19,9 @@ const [fetched, setFetched] = createSignal<ReadonlyMap<string, number>>(new Map(
   name: "syncWatchFetchedAt",
 });
 
-/**
- * Surveys are numbered as they start, and one is published only if nothing
- * newer has been: an older reading that lands late is dropped, and a newer
- * one still under way does not hold back one that has finished.
- */
 let started = 0;
 let published = 0;
 
-/**
- * One pass over the repository, as two operations, published here.
- *
- * `sync.survey` is the reading and ends with the state it derived, which is
- * also handed to `rememberSync` for a diagnostics export — and `sync.plan` is
- * the incoming plan, opened only when the device is behind. The plan FOLLOWS
- * the survey rather than running inside it: the survey has already decided
- * the state and ended by the time the plan starts, so it is a cause and not a
- * parent.
- *
- * Counts and flags only. Never the origin URL, the account or a commit.
- */
 const survey = async (services: Services, options: ReadSyncOptions): Promise<SyncFacts> => {
   const mine = ++started;
   const observability = services.composition.observability;
@@ -75,8 +42,6 @@ const survey = async (services: Services, options: ReadSyncOptions): Promise<Syn
       behind: reading.behind.length,
       observedAt: Date.now(),
     });
-    // `offline` is the device, or the last transfer, saying the network did
-    // not answer: kept and exported, but not the alarm.
     surveying.end(state === "offline" ? "unavailable" : "passed", {
       "sync.state": state,
       "sync.ahead": reading.ahead.length,
@@ -112,15 +77,12 @@ const survey = async (services: Services, options: ReadSyncOptions): Promise<Syn
     }
     return facts;
   } catch (cause) {
-    // Both programs are typed never-failing, so reaching here is a defect in
-    // our code: the alarm. `end` is a no-op on whichever already ended.
     surveying.end("failed");
     planning?.end("failed");
     throw cause;
   }
 };
 
-/** What a reading of `project` depends on, as a snapshot of the signals now. */
 const optionsFor = (services: Services, project: Project): ReadSyncOptions => ({
   root: project.root,
   project,
@@ -134,30 +96,20 @@ const optionsFor = (services: Services, project: Project): ReadSyncOptions => ({
 });
 
 export const syncWatch = {
-  /** The last reading of the project at `root`, or `undefined` when there is none yet. */
   facts: (root: string | undefined): SyncFacts | undefined => {
     const found = held();
     return root !== undefined && found?.root === root ? found.facts : undefined;
   },
-  /** The same reading, decided: the state, the two clocks and the one right button. */
   sync: (root: string | undefined): Sync | undefined => {
     const facts = syncWatch.facts(root);
     return facts === undefined ? undefined : sync(facts.reading, facts.plan.contested.length > 0);
   },
-  /** When this session last fetched the project at `root`. */
   fetchedAt: (root: string): number | undefined => fetched().get(root),
-  /** A fetch got through: the shared side of the reading is as new as now. */
   noteFetched: (root: string): void => {
     setFetched((was) => new Map(was).set(root, Date.now()));
   },
-  /** Read `options` and publish it. */
   survey,
-  /** Read the open project again and publish it; for after a check, a send or a record. */
   refresh: (services: Services, project: Project): Promise<SyncFacts> => {
-    // A caller has usually just written one of the signals read below — a
-    // check marking itself finished, a send noting how it ended — and Solid 2
-    // applies a write at the next flush, so without one the reading would
-    // describe the moment before.
     flush();
     return survey(services, optionsFor(services, project));
   },

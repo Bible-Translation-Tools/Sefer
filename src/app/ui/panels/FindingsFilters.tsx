@@ -1,17 +1,3 @@
-/**
- * The findings panel's filter toolbar — one row above the list.
- *
- * Severity is three values, so it is shown whole as a `ToggleGroup`. Producer
- * is a short `MultiSelect`; codes are long, so theirs is searchable (a
- * combobox). Books are the shared `BookScope`, the control Find scopes by. Each folded trigger says what it is filtering to, so the row is
- * a handful of controls and a search box.
- *
- * Every control is still subtractive: it hides rows, it never deletes a
- * finding, and the header beside it always says "N of TOTAL shown" so a
- * filtered panel cannot read as a clean project. Counts are `Badge`s, and the
- * severity ones take the severity's own tone, which is the only colour here.
- */
-
 import type { BookId } from "@sefer/text/book";
 import { bookName } from "@sefer/text/location/canon";
 import Search from "lucide-solid/icons/search";
@@ -42,21 +28,91 @@ const countOf = <T,>(rows: readonly Facet<T>[], value: T): number =>
 
 export interface FindingsFiltersProps {
   readonly state: FindingsFilterState;
-  /** Counts over the UNFILTERED list, so a chip's count never moves as you click. */
   readonly facets: Facets;
-  /** Every book in the project, from the census — clean ones included. */
   readonly books: readonly BookId[];
   readonly class?: string;
 }
 
-export function FindingsFilters(props: FindingsFiltersProps) {
-  const filter = (): FindingsFilter => props.state.filter();
-  const shell = useShell();
-  /** What the project calls a book, else the English name, else its id. */
-  const nameOf = (bookId: BookId): string => bookName(bookId, metadataOf(shell.project()));
+const some = (kept: number, total: number): string =>
+  kept >= total ? t("all") : t("{kept} of {total}", { kept, total });
 
-  // The scope is this control's; the filter holds only the books it means.
-  // Reopened, a narrowed filter reads as Custom over the books it held.
+const narrowedSummary = (held: readonly string[] | null, total: number): string =>
+  held === null ? t("all") : t("{kept} of {total}", { kept: held.length, total });
+
+const byText = (value: string, query: string): boolean =>
+  value.toLowerCase().includes(query.toLowerCase());
+
+function SeverityToggle(props: FindingsFiltersProps) {
+  return (
+    <ToggleGroup
+      label={t("Severity")}
+      items={props.facets.severities.map((facet: Facet<Severity>) => ({
+        value: facet.value,
+        label: t(facet.value),
+        adornment: <Badge tone={severityTone(facet.value)}>{facet.count}</Badge>,
+      }))}
+      pressed={(value) => props.state.filter().severities.includes(value)}
+      onToggle={(value) =>
+        props.state.update({ severities: toggled(props.state.filter().severities, value) })
+      }
+    />
+  );
+}
+
+function ProducerSelect(props: FindingsFiltersProps) {
+  const filter = (): FindingsFilter => props.state.filter();
+  return (
+    <MultiSelect
+      id="producer"
+      label={t("Producer")}
+      summary={some(filter().producers.length, props.facets.producers.length)}
+      narrowed={filter().producers.length < props.facets.producers.length}
+      items={props.facets.producers}
+      key={(facet: Facet<Producer>) => facet.value}
+      selected={(facet) => filter().producers.includes(facet.value)}
+      onToggle={(facet) =>
+        props.state.update({ producers: toggled(filter().producers, facet.value) })
+      }
+    >
+      {(facet) => (
+        <>
+          <span class="flex-1">{producerLabel(facet.value)}</span>
+          <Badge>{facet.count}</Badge>
+        </>
+      )}
+    </MultiSelect>
+  );
+}
+
+function CodeSelect(props: FindingsFiltersProps) {
+  const filter = (): FindingsFilter => props.state.filter();
+  return (
+    <MultiSelect
+      id="code"
+      label={t("Codes")}
+      summary={narrowedSummary(filter().codes, props.facets.codes.length)}
+      narrowed={filter().codes !== null}
+      items={props.facets.codes}
+      key={(facet: Facet<string>) => facet.value}
+      match={(facet, query) => byText(codeLabel(facet.value), query) || byText(facet.value, query)}
+      selected={(facet) => chosen(filter().codes, facet.value)}
+      onToggle={(facet) => props.state.update({ codes: narrowed(filter().codes, facet.value) })}
+      clear={{ label: t("All codes"), onClear: () => props.state.update({ codes: null }) }}
+    >
+      {(facet) => (
+        <>
+          <span class="flex-1 truncate" title={facet.value}>
+            {codeLabel(facet.value)}
+          </span>
+          <Badge>{facet.count}</Badge>
+        </>
+      )}
+    </MultiSelect>
+  );
+}
+
+const createScope = (props: FindingsFiltersProps, filter: () => FindingsFilter) => {
+  const shell = useShell();
   const [kind, setKind] = createSignal<BookScopeKind>(
     untrack(() => (filter().books === null ? "project" : "custom")),
     { name: "findingsScope" },
@@ -67,7 +123,6 @@ export function FindingsFilters(props: FindingsFiltersProps) {
       name: "findingsCustomBooks",
     },
   );
-  /** This book: the open one, else the one last open (Findings has no editor of its own). */
   const thisBook = (): BookId | undefined => {
     const project = shell.project();
     return (
@@ -83,16 +138,15 @@ export function FindingsFilters(props: FindingsFiltersProps) {
     },
   );
 
-  /** "2 of 3" for an allow-list, and nothing at all when it allows everything. */
-  const some = (kept: number, total: number): string =>
-    kept >= total ? t("all") : t("{kept} of {total}", { kept, total });
+  return { kind, setKind, custom, setCustom, thisBook };
+};
 
-  /** The same for a `null`-means-everything set. */
-  const narrowedSummary = (held: readonly string[] | null, total: number): string =>
-    held === null ? t("all") : t("{kept} of {total}", { kept: held.length, total });
+export function FindingsFilters(props: FindingsFiltersProps) {
+  const filter = (): FindingsFilter => props.state.filter();
+  const shell = useShell();
+  const nameOf = (bookId: BookId): string => bookName(bookId, metadataOf(shell.project()));
 
-  const byText = (value: string, query: string): boolean =>
-    value.toLowerCase().includes(query.toLowerCase());
+  const { kind, setKind, custom, setCustom, thisBook } = createScope(props, filter);
 
   return (
     <div
@@ -100,41 +154,10 @@ export function FindingsFilters(props: FindingsFiltersProps) {
       aria-label={t("Filters")}
       data-findings-filters
     >
-      <ToggleGroup
-        label={t("Severity")}
-        items={props.facets.severities.map((facet: Facet<Severity>) => ({
-          value: facet.value,
-          label: t(facet.value),
-          adornment: <Badge tone={severityTone(facet.value)}>{facet.count}</Badge>,
-        }))}
-        pressed={(value) => filter().severities.includes(value)}
-        onToggle={(value) =>
-          props.state.update({ severities: toggled(filter().severities, value) })
-        }
-      />
+      <SeverityToggle state={props.state} facets={props.facets} books={props.books} />
 
-      <MultiSelect
-        id="producer"
-        label={t("Producer")}
-        summary={some(filter().producers.length, props.facets.producers.length)}
-        narrowed={filter().producers.length < props.facets.producers.length}
-        items={props.facets.producers}
-        key={(facet: Facet<Producer>) => facet.value}
-        selected={(facet) => filter().producers.includes(facet.value)}
-        onToggle={(facet) =>
-          props.state.update({ producers: toggled(filter().producers, facet.value) })
-        }
-      >
-        {(facet) => (
-          <>
-            <span class="flex-1">{producerLabel(facet.value)}</span>
-            <Badge>{facet.count}</Badge>
-          </>
-        )}
-      </MultiSelect>
+      <ProducerSelect state={props.state} facets={props.facets} books={props.books} />
 
-      {/* Which books: the same control Find scopes by. It sets the books
-          filter; This book follows the book you last had open. */}
       <BookScope
         value={kind()}
         onChange={setKind}
@@ -149,34 +172,9 @@ export function FindingsFilters(props: FindingsFiltersProps) {
       />
 
       <Show when={props.facets.codes.length > 0}>
-        <MultiSelect
-          id="code"
-          label={t("Codes")}
-          summary={narrowedSummary(filter().codes, props.facets.codes.length)}
-          narrowed={filter().codes !== null}
-          items={props.facets.codes}
-          key={(facet: Facet<string>) => facet.value}
-          match={(facet, query) =>
-            byText(codeLabel(facet.value), query) || byText(facet.value, query)
-          }
-          selected={(facet) => chosen(filter().codes, facet.value)}
-          onToggle={(facet) => props.state.update({ codes: narrowed(filter().codes, facet.value) })}
-          clear={{ label: t("All codes"), onClear: () => props.state.update({ codes: null }) }}
-        >
-          {(facet) => (
-            <>
-              <span class="flex-1 truncate" title={facet.value}>
-                {codeLabel(facet.value)}
-              </span>
-              <Badge>{facet.count}</Badge>
-            </>
-          )}
-        </MultiSelect>
+        <CodeSelect state={props.state} facets={props.facets} books={props.books} />
       </Show>
 
-      {/* Inline, not folded: a text filter is the one control a reader reaches
-          for without planning to, and a search box behind a menu is a search
-          box nobody uses. */}
       <Input
         type="search"
         size="sm"
@@ -187,9 +185,6 @@ export function FindingsFilters(props: FindingsFiltersProps) {
         value={filter().text}
         onInput={(event) => props.state.update({ text: event.currentTarget.value })}
       />
-
-      {/* TODO(2026-10-01, Will): no "Hide stale" switch until we decide what
-          replaces it on this screen; the filter field and its logic hold. */}
     </div>
   );
 }

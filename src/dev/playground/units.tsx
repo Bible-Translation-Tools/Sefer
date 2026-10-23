@@ -1,17 +1,3 @@
-/**
- * The pieces every diff experiment needs: reading order, one side's text, the
- * word marks, and the gutter the decision lives in.
- *
- * Shared rather than copied because the experiments are meant to differ in
- * LAYOUT and nothing else — two experiments drawing their rows two different
- * ways would tell you about the drawing rather than about the layout, which is
- * the one thing a playground must not do. (Of the row experiments only
- * "excerpts" is left; "continuous", the in-editor diff and the excerpt bench
- * grew into `/review` and were removed on 2026-09-28.)
- *
- * Outside `experiments/`, so the registry's glob does not pick it up.
- */
-
 import { For, Show, createMemo } from "solid-js";
 
 import { cx } from "#app/ui/primitives";
@@ -20,73 +6,18 @@ import { readingRuns, type DecisionUnit, type MergeSide, type TextRun } from "#c
 
 import type { Bench } from "./experiment";
 
-/**
- * The units in READING order: the engine sends them in the current
- * document's order (0.1.8), so this is the array.
- */
 export const inOrder = (bench: Bench): readonly DecisionUnit[] => bench.skeleton?.units ?? [];
 
-/**
- * The reader-visible text of one side of a unit, markers masked away.
- *
- * ## ONE MASKER, and it is the engine's
- *
- * Nothing here eats markup. A changed row and an unchanged one both read
- * through the engine's reader text, so a page of mixed rows says the same
- * thing about every footnote:
- *
- *   * a changed unit's words are its runs minus the markup runs
- *     (`readingRuns`, `core/galley/diff.ts`) — the runs tile the span and say
- *     which of them are markup;
- *   * an unchanged unit, and the whole-side fallback below, are the engine's
- *     `"text"` mask cut to the unit's span (`review/reading.ts`).
- *
- * Those are the same cut by construction: the non-markup runs of a span
- * concatenate to its `"text"` mask. Note prose is IN that reading —
- *
- *   "Paul, a servant1:1 Some manuscripts read slave. of Christ Jesus…"
- *
- * — because the diff has to be over a reading that removes nothing, or a
- * change inside a note would be a change nobody could see to decide about.
- * Whether a note should be shown folded is a rendering question for the row,
- * and the runs' spans are what would let a row answer it.
- */
 const sideText = (bench: Bench, unit: DecisionUnit, side: MergeSide): string | undefined =>
   side === "baseline"
     ? textOf(bench.galley, bench.baselineText, unit.baseline, false)
     : textOf(bench.galley, bench.currentText, unit.current, false);
 
-/**
- * How a change is COLOURED, and why there are two answers.
- *
- * `side` is what `/review` does today, and the reasoning is in `UnitCard.tsx`:
- * red/green is a judgement. It says one side is a deletion and the other an
- * addition, which is true of a diff against your own past and false of a
- * comparison between two people's work — so the tint is by SIDE, brand for one
- * and neutral for the other, and neither is coloured like a mistake.
- *
- * `wasNow` is the classic, and it is here because that argument only holds for
- * the comparison case. Reviewing your own edits IS a was/now, everybody who has
- * used a diff already reads red as gone and green as new, and refusing them
- * that because of a case they are not in is the tool being clever at them.
- *
- * Both keep the non-colour channel — removed text is struck through, added text
- * is underlined — so neither depends on hue alone. That is what makes this a
- * preference rather than an accessibility hazard: the meaning survives with the
- * colour turned off, and a reader who cannot separate red from green reads the
- * same page from the strike and the rule.
- *
- * LIKELY A SETTING, not a dial, once it settles: it is a property of the reader,
- * not of the screen, so it belongs beside the other reading preferences rather
- * than on each diff surface.
- */
 export type DiffTone = "side" | "wasNow";
 
 const RUN_TONE: Record<DiffTone, Record<TextRun["kind"], string>> = {
   side: {
     unchanged: "",
-    // Struck through rather than tinted: a deletion in a document you are
-    // reading is a word with a line through it, and it stays legible.
     removed: "line-through decoration-2 decoration-on-surface-tertiary text-on-surface-tertiary",
     added: "rounded-[2px] bg-brand-light text-brand-strong",
   },
@@ -108,17 +39,6 @@ const Runs = (props: { readonly runs: readonly TextRun[]; readonly tone: DiffTon
   </For>
 );
 
-/**
- * One unit as ONE paragraph, the way tracked changes reads: the words both
- * sides share said once, the removed words struck through where they stood, the
- * added words tinted.
- *
- * The zip works because the two run lists share their `unchanged` runs in
- * order — `baseline` is unchanged + removed, `current` is unchanged + added —
- * so walking both and emitting the shared runs once reconstructs the sentence
- * with both edits inside it. Markup runs are dropped from both first, which
- * keeps that pairing: an unchanged run is the same characters on both sides.
- */
 const Merged = (props: { readonly unit: DecisionUnit; readonly tone: DiffTone }) => {
   const runs = createMemo((): readonly TextRun[] => {
     const text = props.unit.text;
@@ -152,23 +72,6 @@ const Merged = (props: { readonly unit: DecisionUnit; readonly tone: DiffTone })
   return <Runs runs={runs()} tone={props.tone} />;
 };
 
-/**
- * One side's RAW USFM — the markup visible, for one row.
- *
- * This is the whole of "flip just this result", and it needs nothing from the
- * engine that is not already on the wire: a decision unit's `baseline` and
- * `current` are UTF-16 spans into each side's OWN document
- * (`onion-wasm::diff`: "Spans are UTF-16 offsets into each side's own
- * document"), which is the same space the JS string is in. So the flip is a
- * slice.
- *
- * What it does NOT include is the enclosing markup. A unit is a block, so its
- * span carries its own `\v`/`\p`; but flip a FIND hit the same way and the
- * `\add ` in front of the matched word sits outside the span. A hit's flip
- * would ask the parse for that, not assemble it: the dish's `Tree.enclosing(
- * from, to)` answers the smallest node wrapping a range (the `\add` node, with
- * its extent), and `Tree.spansIn(from, to)` what the range is made of.
- */
 const sourceOf = (bench: Bench, unit: DecisionUnit, side: MergeSide): string | undefined => {
   const range = side === "baseline" ? unit.baseline : unit.current;
   if (range === undefined) return undefined;
@@ -177,7 +80,6 @@ const sourceOf = (bench: Bench, unit: DecisionUnit, side: MergeSide): string | u
   return raw.trim() === "" ? undefined : raw;
 };
 
-/** The two decision buttons, small enough to live in a margin. */
 export const Gutter = (props: {
   readonly held: MergeSide | undefined;
   readonly onPick: (side: MergeSide | undefined) => void;
@@ -207,15 +109,6 @@ export const Gutter = (props: {
   </div>
 );
 
-/**
- * The tone a WHOLE side carries when there are no runs to mark.
- *
- * A one-sided unit — a verse the draft has and the editor does not, or the
- * reverse — has no intra-unit diff, because there is nothing to diff it
- * against. Every character of it is the change. Marking only the runs therefore
- * leaves the most drastic units on the page as the only unmarked ones, which is
- * exactly backwards and is what made the first pass read as toneless.
- */
 const WHOLE: Record<DiffTone, Record<"was" | "now", string>> = {
   side: {
     was: "text-on-surface-tertiary line-through decoration-1",
@@ -227,52 +120,22 @@ const WHOLE: Record<DiffTone, Record<"was" | "now", string>> = {
   },
 };
 
-/** No unit on this side at all — said in words, because blank is ambiguous. */
 const Absent = () => (
   <span class="text-smallest text-on-surface-tertiary italic">nothing on this side</span>
 );
 
-/**
- * One unit's body, in whichever of the two readings the layout asked for.
- *
- * `merged` is the tracked-changes paragraph; `split` is the two columns, whose
- * rows line up by construction because a row IS a reference.
- *
- * Three cases, and the third is the one that is easy to forget: a unit with
- * runs is marked word by word, an unchanged unit is plain reading text, and a
- * ONE-SIDED unit is tinted whole and says "nothing on this side" opposite it.
- */
 export const UnitBody = (props: {
   readonly bench: Bench;
   readonly unit: DecisionUnit;
   readonly split: boolean;
   readonly tone: DiffTone;
-  /** Show this row's raw USFM instead of the reading. */
   readonly markup?: boolean;
 }) => {
-  /**
-   * One side's reading text, or `undefined` when there is none to show.
-   *
-   * Emptiness and absence are collapsed here ON PURPOSE, and only here. The
-   * engine reports a one-sided unit by a null RANGE, but it also emits a
-   * zero-width range for a side that exists and holds nothing — and to a reader
-   * looking at a column those are the same fact: there is no text here. The
-   * distinction that matters ("is the verse missing, or is it empty") is
-   * carried by `status`, which is what decides whether the column says so.
-   */
   const side = (which: MergeSide): string | undefined => {
     const text = sideText(props.bench, props.unit, which);
     return text === undefined || text.trim() === "" ? undefined : text;
   };
 
-  /**
-   * This side's word runs, or `undefined` when there are none.
-   *
-   * A one-sided unit still carries a `text`: the engine emits runs for the side
-   * that exists and an EMPTY list for the side that does not. So "has runs" is
-   * `length > 0`, not `text !== undefined` — reading it the other way is what
-   * left the empty column silent instead of saying it was empty.
-   */
   const runsFor = (which: MergeSide): readonly TextRun[] | undefined => {
     const text = props.unit.text;
     if (text === undefined) return undefined;
@@ -280,7 +143,6 @@ export const UnitBody = (props: {
     return runs.length === 0 ? undefined : runs;
   };
 
-  /** The side a one-sided unit actually lives on, so it can be tinted whole. */
   const onlyOn = (): MergeSide | undefined => {
     if (props.unit.status === "unchanged") return undefined;
     const hasBaseline = runsFor("baseline") !== undefined || side("baseline") !== undefined;
@@ -293,7 +155,6 @@ export const UnitBody = (props: {
   const whole = (which: MergeSide): string =>
     onlyOn() === which ? WHOLE[props.tone][which === "baseline" ? "was" : "now"] : "";
 
-  /** A column: the marked runs, the tinted whole, or the absence. */
   const Column = (columnProps: { readonly which: MergeSide }) => (
     <Show
       when={runsFor(columnProps.which)}
@@ -301,8 +162,6 @@ export const UnitBody = (props: {
         <Show
           when={side(columnProps.which)}
           fallback={
-            // Only a CHANGED unit's empty column is an absence worth saying.
-            // A chapter heading is empty on both sides and always was.
             <Show when={props.unit.status !== "unchanged"}>
               <Absent />
             </Show>

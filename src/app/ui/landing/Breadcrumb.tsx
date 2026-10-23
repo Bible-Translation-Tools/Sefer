@@ -1,26 +1,8 @@
-/**
- * The muted trail at the top left of every landing screen
- * ("Sefer / Find Project / Start" in the mockup).
- *
- * It is not navigation state — it is a caption. The router already knows where
- * we are, and a crumb that tried to derive itself from the match would print
- * route ids rather than the words the designer wrote. So the screen says its own
- * trail, and only a crumb given a `to` is a link.
- */
-
 import { Link, type LinkProps } from "@tanstack/solid-router";
 import { For, Show } from "solid-js";
 
 export interface Crumb {
   readonly label: string;
-  /**
-   * A typed route path; a crumb without one is plain text.
-   *
-   * Taken from `Link`'s own prop rather than spelled out here. A hand-written
-   * union of the four landing routes was a second copy of the route tree, and
-   * it went stale the moment a route was added: `/projects` was a type error
-   * in three files that had nothing wrong with them.
-   */
   readonly to?: LinkProps["to"];
 }
 
@@ -36,7 +18,6 @@ export function Breadcrumb(props: { readonly crumbs: readonly Crumb[] }) {
               </Show>
               <Show when={crumb.to} fallback={<span>{crumb.label}</span>}>
                 {(to) => (
-                  // `search: true` so `?fixture=1` survives a crumb click.
                   <Link
                     to={to()}
                     search={true}

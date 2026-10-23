@@ -20,10 +20,62 @@ import { roleFor } from "../kinds/table";
 import { useShell } from "../ProjectContext";
 import { Button, Card, PanelHeader, toasts } from "./primitives";
 
+interface SourceTextRowProps {
+  readonly resource: Resource;
+  readonly asking: boolean;
+  readonly busy: boolean;
+  readonly onAsk: () => void;
+  readonly onCancel: () => void;
+  readonly onAdopt: () => void;
+}
+
+function SourceTextRow(props: SourceTextRowProps) {
+  return (
+    <li class="flex flex-wrap items-center gap-3 py-2" data-source-text={props.resource.id}>
+      <span class="min-w-0 flex-1 truncate text-small">
+        <span class="font-medium">{props.resource.title}</span>
+        <span class="text-on-surface-tertiary">
+          {[props.resource.language, props.resource.version]
+            .filter((part) => part !== undefined && part !== "")
+            .map((part) => ` · ${part}`)
+            .join("")}
+        </span>
+      </span>
+      <Show
+        when={props.asking}
+        fallback={
+          <Button
+            size="sm"
+            variant="tertiary"
+            data-testid={`adopt-${props.resource.id}`}
+            onClick={() => props.onAsk()}
+          >
+            {t("Edit as your own project…")}
+          </Button>
+        }
+      >
+        <span class="flex items-center gap-2">
+          <Button size="sm" variant="tertiary" onClick={() => props.onCancel()}>
+            {t("Cancel")}
+          </Button>
+          <Button
+            size="sm"
+            variant="primary"
+            loading={props.busy}
+            disabled={props.busy}
+            onClick={() => props.onAdopt()}
+          >
+            {t("Move to my projects")}
+          </Button>
+        </span>
+      </Show>
+    </li>
+  );
+}
+
 export function SourceTextsCard() {
   const { services } = useShell();
   const [copies, setCopies] = createSignal<readonly Resource[]>([], { name: "settingsCopies" });
-  /** The copy whose move is being confirmed, by id. */
   const [asking, setAsking] = createSignal<string | undefined>(undefined, {
     name: "settingsAdoptAsking",
   });
@@ -32,19 +84,17 @@ export function SourceTextsCard() {
   createEffect(
     () => libraryRevision(),
     () => {
-      void services.run(services.library.resources()).then((held) =>
-        setCopies(
-          // Scripture only: "Edit as your own project" makes a project of
-          // a copy's books, and reference material (Translation Notes,
-          // packed on the Web) has none; it is removed from the projects
-          // page instead.
-          held.filter(
-            (resource) =>
-              resource.root.startsWith(`${services.libraryRoot}/`) &&
-              roleFor(resource) === "source",
+      void services
+        .run(services.library.resources())
+        .then((held) =>
+          setCopies(
+            held.filter(
+              (resource) =>
+                resource.root.startsWith(`${services.libraryRoot}/`) &&
+                roleFor(resource) === "source",
+            ),
           ),
-        ),
-      );
+        );
     },
   );
 
@@ -76,45 +126,14 @@ export function SourceTextsCard() {
         <ul class="divide-y divide-surface-border">
           <For each={copies()}>
             {(resource) => (
-              <li class="flex flex-wrap items-center gap-3 py-2" data-source-text={resource.id}>
-                <span class="min-w-0 flex-1 truncate text-small">
-                  <span class="font-medium">{resource.title}</span>
-                  <span class="text-on-surface-tertiary">
-                    {[resource.language, resource.version]
-                      .filter((part) => part !== undefined && part !== "")
-                      .map((part) => ` · ${part}`)
-                      .join("")}
-                  </span>
-                </span>
-                <Show
-                  when={asking() === resource.id}
-                  fallback={
-                    <Button
-                      size="sm"
-                      variant="tertiary"
-                      data-testid={`adopt-${resource.id}`}
-                      onClick={() => setAsking(resource.id)}
-                    >
-                      {t("Edit as your own project…")}
-                    </Button>
-                  }
-                >
-                  <span class="flex items-center gap-2">
-                    <Button size="sm" variant="tertiary" onClick={() => setAsking(undefined)}>
-                      {t("Cancel")}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="primary"
-                      loading={busy()}
-                      disabled={busy()}
-                      onClick={() => adopt(resource)}
-                    >
-                      {t("Move to my projects")}
-                    </Button>
-                  </span>
-                </Show>
-              </li>
+              <SourceTextRow
+                resource={resource}
+                asking={asking() === resource.id}
+                busy={busy()}
+                onAsk={() => setAsking(resource.id)}
+                onCancel={() => setAsking(undefined)}
+                onAdopt={() => adopt(resource)}
+              />
             )}
           </For>
         </ul>

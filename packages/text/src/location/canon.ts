@@ -1,21 +1,3 @@
-/**
- * The protestant canon: which books there are, in what order, and what English
- * calls them.
- *
- * Bible data, not presentation, which is why it sits in core. It answers a
- * different question from `canonicalOrder` in `project/discovery.ts`: that one
- * orders the books a FOLDER holds by the number a translator put in the file
- * name, which is the honest reading of a directory. This one is the canon
- * itself, and it is what lets someone type "mark" and arrive at `MRK`.
- *
- * The English names are NOT translatable chrome. The right translation of a
- * book name is the one the PROJECT uses — a Scripture Burrito publishes it in
- * `localizedNames`, a Resource Container in `projects[].title`, and both land
- * on `ProjectMetadata.bookNames`. This table is the fallback for a project
- * that names nothing, and putting sixty-six names in the UI catalogue would
- * offer a translator two places to disagree about what Mark is called.
- */
-
 import { localized, type LocalizedText } from "../localized";
 
 /**

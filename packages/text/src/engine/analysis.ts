@@ -1,20 +1,5 @@
-/**
- * `Analysis` — the one value every consumer of the engine reads, plus the pure
- * helpers that read it.
- *
- * This file is the vocabulary half of the Galley seam. `galley.ts` owns the
- * wasm handle and the single `analyze` call; everything downstream (the
- * editor's fold, findings, fixes, project analysis) imports FROM HERE and
- * never from the engine package. That is why its types are re-exported below:
- * the pinned build is regenerated upstream, and one import site to re-point
- * is the whole cost of moving to a new tag.
- *
- * Nothing here allocates a fiber or touches the wasm wall. These are the
- * functions the keystroke path calls, so they are plain and synchronous.
- */
-
 import { declaredVersion } from "@wycliffeassociates/scripture-kitchen/reader";
-import type { Dish, DiagnosticView } from "@wycliffeassociates/scripture-kitchen/reader";
+import type { AttrList, Dish, DiagnosticView } from "@wycliffeassociates/scripture-kitchen/reader";
 import {
   Category,
   MARKERS,
@@ -23,13 +8,13 @@ import {
   TokenKind,
 } from "@wycliffeassociates/scripture-kitchen/reader";
 
-// The reader's surface, re-exported so the engine has exactly one importer.
 export {
   Category,
   CloseReason,
   ClosingBehavior,
   DiagnosticView,
   isMarkerKind,
+  MARKER_ATTRIBUTES,
   MARKERS,
   MarkerKind,
   NODE_ID_BIT,
@@ -44,7 +29,7 @@ export {
   TokenView,
   Tree,
 } from "@wycliffeassociates/scripture-kitchen/reader";
-export type { Dish } from "@wycliffeassociates/scripture-kitchen/reader";
+export type { AttrList, Dish } from "@wycliffeassociates/scripture-kitchen/reader";
 
 /**
  * One parse, with everything needed to prove which text it describes.
@@ -68,6 +53,14 @@ export interface Analysis {
   readonly engineMs: number;
   /** The `\usfm` version the document declares, or `null`. Gates severity. */
   readonly usfmVersion: string | null;
+  /**
+   * One attribute list broken into names and values: the engine's `attrs`
+   * over `text`, bound by the host that built this analysis, so every surface
+   * holding one reads attributes the engine's way with no wiring of its own.
+   * `[from, to)` is an `AttrList` token's span; spans come back in UTF-16.
+   * Lazy: the parse carries no attributes, and a list is broken on demand.
+   */
+  readonly attrs: (from: number, to: number) => AttrList;
 }
 
 /**
@@ -120,15 +113,6 @@ export const toLf = (text: string): { readonly text: string; readonly changed: b
   return { text: text.replace(/\r\n?/g, "\n"), changed: true };
 };
 
-// ---------------------------------------------------------------------------
-// Token and marker classification
-//
-// A "class word" packs what a consumer asks of a marker — its coarse family in
-// the low three bits, orthogonal facts above them — into one integer, so the
-// editor's per-token pass reads one number instead of resolving a table row
-// and branching on `kind`, `category` and spelling separately.
-// ---------------------------------------------------------------------------
-
 /** `TokenKind` under the names the editor's tables use. */
 export const TOKEN = {
   MARKER: TokenKind.Marker,
@@ -173,22 +157,9 @@ export const coarse = (cls: number): number => cls & 0b111;
 /** Is one `FLAG` set? */
 export const has = (cls: number, flag: number): boolean => (cls & flag) !== 0;
 
-/**
- * The class word for marker table row `idx`, refined by a token's kind bits.
- *
- * `kindBits` is the raw byte — spelling bit included — because the closer and
- * unknown facts are only knowable from it: `\+bd` and `\bd*` resolve to the
- * same row, and only the bits say which one this token is. Pass `null` when
- * classifying a row rather than a token.
- *
- * Row 0 is the unknown marker, so `idx === 0` is what UNKNOWN means.
- */
-export const classWordOf = (idx: number, kindBits: number | null): number => {
-  const row = MARKERS[idx];
-  if (row === undefined) return 0;
-  const unknown = idx === 0;
+const classOfKind = (kind: (typeof MARKERS)[number]["kind"]): number => {
   let word: number = CLASS.OTHER;
-  switch (row.kind) {
+  switch (kind) {
     case MarkerKind.Paragraph:
     case MarkerKind.Header:
       word = CLASS.PARA;
@@ -217,7 +188,12 @@ export const classWordOf = (idx: number, kindBits: number | null): number => {
     default:
       word = CLASS.OTHER;
   }
-  switch (row.category) {
+  return word;
+};
+
+const flagsOfCategory = (category: (typeof MARKERS)[number]["category"]): number => {
+  let word = 0;
+  switch (category) {
     case Category.ParaTitlesSections:
       word |= FLAG.HEADING;
       break;
@@ -236,6 +212,25 @@ export const classWordOf = (idx: number, kindBits: number | null): number => {
     default:
       break;
   }
+  return word;
+};
+
+/**
+ * The class word for marker table row `idx`, refined by a token's kind bits.
+ *
+ * `kindBits` is the raw byte — spelling bit included — because the closer and
+ * unknown facts are only knowable from it: `\+bd` and `\bd*` resolve to the
+ * same row, and only the bits say which one this token is. Pass `null` when
+ * classifying a row rather than a token.
+ *
+ * Row 0 is the unknown marker, so `idx === 0` is what UNKNOWN means.
+ */
+export const classWordOf = (idx: number, kindBits: number | null): number => {
+  const row = MARKERS[idx];
+  if (row === undefined) return 0;
+  const unknown = idx === 0;
+  let word = classOfKind(row.kind);
+  word |= flagsOfCategory(row.category);
   if (kindBits !== null) {
     const kind = kindBits & ~TOKEN_SPELLING_BIT;
     const spelled = (kindBits & TOKEN_SPELLING_BIT) !== 0;
@@ -270,14 +265,6 @@ export interface NotePart {
   readonly from: number;
   readonly to: number;
 }
-
-// ---------------------------------------------------------------------------
-// Diagnostics
-//
-// A `DiagnosticView` is a cursor, not a value: these read one and hand back
-// something a UI can hold. No text crosses the wasm wall to render a message —
-// the caller supplies `slice` over the document it already has.
-// ---------------------------------------------------------------------------
 
 export type Severity = "error" | "warning" | "info" | "hint";
 
@@ -316,10 +303,6 @@ export const diagnosticSeverity = (
       return null;
   }
 };
-
-// ---------------------------------------------------------------------------
-// The book's own name
-// ---------------------------------------------------------------------------
 
 const headings = new WeakMap<Dish, string | null>();
 

@@ -6,12 +6,6 @@ import { CreateProject } from "#app/ui/landing/CreateProject";
 import { ShellGate } from "#app/ui/ShellGate";
 import "#app/ui/theme";
 
-/**
- * Create project. Not a landing tab — it is where the filter card's
- * "+ Create new project" button goes — so it carries the breadcrumb without
- * the segmented control.
- */
-
 function CreateProjectRoute() {
   return (
     <main class="min-w-0 max-w-4xl space-y-4 p-6">

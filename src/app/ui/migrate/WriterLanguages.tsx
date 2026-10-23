@@ -1,19 +1,3 @@
-/**
- * Writer projects on WACS, one row per language: the first step of Migrate
- * from Writer. The same table as Projects Available on WACS — Code,
- * Language, Region, how many Writer projects, the newest change — kept here
- * and not on the projects page, which does not promote Writer (Will,
- * 2026-10-07).
- *
- * The search runs on the server and only from two letters: every language at
- * once is thousands of rows (`catalogue.ts`, `writerLanguages`). An answer
- * that arrives after a newer search is dropped. A row opens that language's
- * Writer projects, the assembling step.
- */
-
-import ArrowDown from "lucide-solid/icons/arrow-down";
-import ArrowUp from "lucide-solid/icons/arrow-up";
-import ChevronsUpDown from "lucide-solid/icons/chevrons-up-down";
 import SearchIcon from "lucide-solid/icons/search";
 import { For, Show, createMemo, createSignal, untrack } from "solid-js";
 
@@ -23,7 +7,15 @@ import { t } from "../../i18n";
 import { writerLanguages } from "../../migrate";
 import { useShell } from "../../ProjectContext";
 import { formatDate } from "../landing/summaries";
-import { Card, Input, VirtualList, cx, type SortDirection } from "../primitives";
+import {
+  Card,
+  Input,
+  VirtualList,
+  ariaSortOf,
+  cx,
+  sortIcon,
+  type SortDirection,
+} from "../primitives";
 
 type Column = "code" | "language" | "region" | "projects" | "date";
 
@@ -40,7 +32,6 @@ const COLUMNS =
 
 const ROW_HEIGHT = 57;
 
-/** Wait this long after the last keystroke before asking the server. */
 const SETTLE_MS = 300;
 
 const sortValue = (column: Column, row: WriterLanguage): string | number => {
@@ -58,31 +49,16 @@ const sortValue = (column: Column, row: WriterLanguage): string | number => {
   }
 };
 
-export function WriterLanguages(props: {
-  readonly initial: string;
-  readonly onPick: (code: string) => void;
-}) {
+const createLanguageSearch = (initial: string) => {
   const { services } = useShell();
-  // Read once: the search a person starts from (a project's own language).
-  const initial = untrack(() => props.initial);
   const [query, setQuery] = createSignal(initial, { name: "writerLanguagesQuery" });
   const [rows, setRows] = createSignal<readonly WriterLanguage[] | undefined>(undefined, {
     name: "writerLanguagesRows",
   });
   const [problem, setProblem] = createSignal("", { name: "writerLanguagesProblem" });
   const [loading, setLoading] = createSignal(false, { name: "writerLanguagesLoading" });
-  const [column, setColumn] = createSignal<Column>("date", { name: "writerLanguagesSort" });
-  const [direction, setDirection] = createSignal<SortDirection>("desc", {
-    name: "writerLanguagesDirection",
-  });
-
   let asked = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
-  /**
-   * Asks the server once typing settles. Every write happens in the timer or
-   * after the answer, never in the caller: the first search runs from the
-   * component's own setup, where writing a signal is not allowed.
-   */
   const schedule = (text: string): void => {
     clearTimeout(timer);
     asked += 1;
@@ -116,6 +92,15 @@ export function WriterLanguages(props: {
   };
   schedule(initial);
 
+  return { query, rows, problem, loading, search };
+};
+
+const createSort = (rows: () => readonly WriterLanguage[] | undefined) => {
+  const [column, setColumn] = createSignal<Column>("date", { name: "writerLanguagesSort" });
+  const [direction, setDirection] = createSignal<SortDirection>("desc", {
+    name: "writerLanguagesDirection",
+  });
+
   const sorted = createMemo(
     () => {
       const key = column();
@@ -134,10 +119,7 @@ export function WriterLanguages(props: {
     { name: "writerLanguagesSorted" },
   );
 
-  const virtualRows = createMemo(
-    () => sorted().map((row) => ({ key: row.code, item: row, estimate: ROW_HEIGHT })),
-    { name: "writerLanguagesVirtual" },
-  );
+  const sortOf = (key: Column): SortDirection => (column() === key ? direction() : "none");
 
   const sortBy = (key: Column): void => {
     if (column() === key) setDirection(direction() === "asc" ? "desc" : "asc");
@@ -145,6 +127,65 @@ export function WriterLanguages(props: {
       setColumn(key);
       setDirection(key === "date" || key === "projects" ? "desc" : "asc");
     }
+  };
+
+  return { sorted, sortOf, sortBy };
+};
+
+function LanguageRow(props: {
+  readonly item: WriterLanguage;
+  readonly onPick: (code: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="row"
+      data-writer-language={props.item.code}
+      class={cx(
+        COLUMNS,
+        "w-full cursor-pointer border-b border-surface-border py-3 text-start transition-colors hover:bg-surface-secondary",
+      )}
+      onClick={() => props.onPick(props.item.code)}
+    >
+      <span role="cell" class="truncate whitespace-nowrap text-on-surface-secondary">
+        {props.item.code}
+      </span>
+      <span role="cell" class="min-w-0 truncate">
+        <strong class="font-medium text-on-surface-primary">{props.item.naturalName}</strong>
+        <Show when={props.item.anglicizedName !== props.item.naturalName}>
+          <span class="ms-2 text-on-surface-tertiary">{props.item.anglicizedName}</span>
+        </Show>
+      </span>
+      <span role="cell" class="truncate text-on-surface-secondary">
+        {props.item.region ?? "—"}
+      </span>
+      <span role="cell" class="tabular-nums text-on-surface-secondary">
+        {props.item.projects}
+      </span>
+      <span role="cell" class="text-on-surface-secondary">
+        {formatDate(props.item.updated) || "—"}
+      </span>
+    </button>
+  );
+}
+
+export function WriterLanguages(props: {
+  readonly initial: string;
+  readonly onPick: (code: string) => void;
+}) {
+  const initial = untrack(() => props.initial);
+  const { query, rows, problem, loading, search } = createLanguageSearch(initial);
+  const { sorted, sortOf, sortBy } = createSort(rows);
+  const virtualRows = createMemo(
+    () => sorted().map((row) => ({ key: row.code, item: row, estimate: ROW_HEIGHT })),
+    { name: "writerLanguagesVirtual" },
+  );
+
+  const emptyNote = (): string => {
+    if (query().trim().length < 2)
+      return t("Type two letters or more of a language's name or code.");
+    if (loading() || rows() === undefined) return t("Searching…");
+    return t("No language with Writer projects matches “{query}”.", { query: query().trim() });
   };
 
   return (
@@ -183,25 +224,14 @@ export function WriterLanguages(props: {
           <div role="row" class={cx(COLUMNS, "text-on-surface-secondary")}>
             <For each={SORTABLE}>
               {([key, label]) => (
-                <div
-                  role="columnheader"
-                  aria-sort={
-                    column() !== key ? "none" : direction() === "asc" ? "ascending" : "descending"
-                  }
-                >
+                <div role="columnheader" aria-sort={ariaSortOf(sortOf(key))}>
                   <button
                     type="button"
                     class="flex w-full cursor-pointer items-center gap-1.5 py-3 text-start font-medium hover:text-on-surface-primary"
                     onClick={() => sortBy(key)}
                   >
                     <span class="min-w-0 flex-1 truncate">{label()}</span>
-                    {column() !== key ? (
-                      <ChevronsUpDown size={14} aria-hidden="true" class="opacity-50" />
-                    ) : direction() === "asc" ? (
-                      <ArrowUp size={14} aria-hidden="true" />
-                    ) : (
-                      <ArrowDown size={14} aria-hidden="true" />
-                    )}
+                    {sortIcon(sortOf(key), 14)}
                   </button>
                 </div>
               )}
@@ -212,48 +242,8 @@ export function WriterLanguages(props: {
           role="rowgroup"
           class="scrollbar-subtle min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]"
           sections={virtualRows().length > 0 ? [{ key: "languages", rows: virtualRows() }] : []}
-          empty={
-            <p class="py-8 text-center text-body text-on-surface-tertiary">
-              {query().trim().length < 2
-                ? t("Type two letters or more of a language's name or code.")
-                : loading() || rows() === undefined
-                  ? t("Searching…")
-                  : t("No language with Writer projects matches “{query}”.", {
-                      query: query().trim(),
-                    })}
-            </p>
-          }
-          row={(item) => (
-            <button
-              type="button"
-              role="row"
-              data-writer-language={item().code}
-              class={cx(
-                COLUMNS,
-                "w-full cursor-pointer border-b border-surface-border py-3 text-start transition-colors hover:bg-surface-secondary",
-              )}
-              onClick={() => props.onPick(item().code)}
-            >
-              <span role="cell" class="truncate whitespace-nowrap text-on-surface-secondary">
-                {item().code}
-              </span>
-              <span role="cell" class="min-w-0 truncate">
-                <strong class="font-medium text-on-surface-primary">{item().naturalName}</strong>
-                <Show when={item().anglicizedName !== item().naturalName}>
-                  <span class="ms-2 text-on-surface-tertiary">{item().anglicizedName}</span>
-                </Show>
-              </span>
-              <span role="cell" class="truncate text-on-surface-secondary">
-                {item().region ?? "—"}
-              </span>
-              <span role="cell" class="tabular-nums text-on-surface-secondary">
-                {item().projects}
-              </span>
-              <span role="cell" class="text-on-surface-secondary">
-                {formatDate(item().updated) || "—"}
-              </span>
-            </button>
-          )}
+          empty={<p class="py-8 text-center text-body text-on-surface-tertiary">{emptyNote()}</p>}
+          row={(item) => <LanguageRow item={item()} onPick={props.onPick} />}
         />
       </Card>
     </section>

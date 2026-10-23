@@ -1,29 +1,3 @@
-/**
- * What Sefer knows about a project, whichever container it came in.
- *
- * A project on disk declares itself in one of two formats:
- *
- *   metadata.json    Scripture Burrito       `burrito.ts`
- *   manifest.yaml    Resource Container      `resourceContainer.ts`
- *
- * `en_ulb` — the project most of this is tested against — is a Resource
- * Container. Both decoders are Effect schemas; this module is the shape they
- * decode INTO, so that nothing downstream has to ask which kind it got.
- *
- * One shape, two adapters, and the rule that the raw container types never
- * leave `src/core/resources`. A screen asking "what language is this project
- * in" should not have to know that one format spells it
- * `languages[0].name[locale]` and the other `dublin_core.language.title`.
- *
- * DELIBERATELY SMALL. This is what the APPLICATION needs, not the union of two
- * specifications. Burrito's ingredients and checksums stay in `checksum.ts`
- * where they are used, because they are a Burrito concept and a Resource
- * Container has no answer for them; `ProjectAdmin.updateMetadata` still writes
- * through the Burrito schema, because Sefer authors burritos and has no
- * business rewriting somebody's `manifest.yaml`. Reading is common; writing is
- * not.
- */
-
 import type { LocalizedText } from "@sefer/text/localized";
 import { Data, Result } from "effect";
 import { parse as parseYaml } from "yaml";
@@ -39,76 +13,27 @@ import {
   type ResourceContainerManifest,
 } from "./resourceContainer";
 
-/** A human string keyed by locale, as both formats store their names. */
-
-/**
- * Which way the project's TEXT runs.
- *
- * The project's, not the application's: a translator working in Arabic reads
- * Sefer's own chrome in whatever language they set, and their scripture in
- * theirs. Only the editor and the excerpt views honour this.
- */
 export type TextDirection = "ltr" | "rtl";
 
 export interface ProjectLanguageMetadata {
-  /** BCP-47, or "" when the project declares no language at all. */
   readonly tag: string;
-  /** The language's NAME by locale. Empty when it declares none. */
   readonly name: LocalizedText;
-  /** `ltr` unless the project says otherwise — the honest default, not a guess. */
   readonly direction: TextDirection;
 }
 
 export interface ProjectMetadata {
-  /** Which container this was read from, for a screen that needs to say so. */
   readonly container: "burrito" | "resourceContainer";
-  /**
-   * The project's own stable identity, when it claims one.
-   *
-   * Burrito states it as `identification.primary[authority][id]` and a
-   * Resource Container as `dublin_core.identifier`; both mean "this is the
-   * same project wherever you found it", which is what `ProjectId` needs so
-   * that two checkouts of one project are one project, rather than falling
-   * back to its path.
-   */
   readonly id: string | undefined;
-  /** The project's own name, by locale. Empty when it declares none. */
   readonly name: LocalizedText;
   readonly language: ProjectLanguageMetadata;
-  /** The locale the project itself prefers, when it names one. */
   readonly defaultLocale: string | undefined;
-  /**
-   * What this project calls its books, by book id then locale — Burrito's
-   * `localizedNames`. A Resource Container's `projects[]` carry a `title` in
-   * one language rather than a locale map, and that one is keyed under the
-   * project's own default locale so both read the same way.
-   */
   readonly bookNames: Readonly<Record<string, LocalizedText>>;
-  /**
-   * The source texts the project declares — Burrito `relationships`, or a
-   * Resource Container's `dublin_core.source` — every listed version, as
-   * written. `highestVersions` picks the one to hold.
-   */
   readonly related: readonly RelatedResource[];
-  /**
-   * What the container says it holds: a Burrito flavor (`textTranslation`)
-   * or a Resource Container subject (`Bible`, `Translation Notes`).
-   */
   readonly subject: string | undefined;
-  /** The version the resource declares (`dublin_core.version`); Burrito has none. */
   readonly version: string | undefined;
-  /**
-   * A Resource Container's `dublin_core.type` (`book`, `bundle`, `help`,
-   * `dict`, `man`) and `dublin_core.format` (one MIME type for the whole
-   * resource, `text/markdown`). What `recognize` (`kinds/content.ts`) reads,
-   * with `id`, to say what the resource holds and which reader parses it.
-   * Burrito answers neither here: its flavor is `subject`, and its MIME types
-   * are per ingredient.
-   */
   readonly declared: Declared;
 }
 
-/** What a Resource Container declares it is, in its own words. */
 export interface Declared {
   readonly type: string | undefined;
   readonly format: string | undefined;
@@ -117,24 +42,16 @@ export interface Declared {
 const ONE = (locale: string | undefined, value: string): LocalizedText =>
   value === "" ? {} : { [locale === undefined || locale === "" ? "und" : locale]: value };
 
-/**
- * A burrito's primary id: the first `identification.primary[authority][id]`
- * key. Burritos in practice carry one authority and one id, so taking the
- * first is the simple reading.
- */
 const primaryIdOf = (metadata: BurritoMetadata): string | undefined => {
   for (const ids of Object.values(metadata.identification.primary ?? {}))
     for (const id of Object.keys(ids)) return id;
   return undefined;
 };
 
-/** A Burrito, in the shape the application reads. */
 export const fromBurrito = (metadata: BurritoMetadata): ProjectMetadata => {
   const language = metadata.languages.at(0);
   const bookNames: Record<string, LocalizedText> = {};
   for (const [id, names] of Object.entries(metadata.localizedNames ?? {})) {
-    // `short` is the one every burrito carries and the one a crumb wants;
-    // `long` is for a title bar and nothing asks for it yet.
     bookNames[id] = names.short;
   }
   return {
@@ -155,22 +72,11 @@ export const fromBurrito = (metadata: BurritoMetadata): ProjectMetadata => {
   };
 };
 
-/**
- * A Resource Container, in the same shape.
- *
- * Dublin Core has no locale map — `title` is one string in one language, and
- * the language it is in is the one the manifest declares. So both names are
- * keyed under `dublin_core.language.identifier`, which makes `localized()` find
- * them for a reader in that language and fall through to "any name at all"
- * for everyone else. That is the correct answer and not a workaround: a
- * one-language name IS available in exactly one locale.
- */
 const fromResourceContainer = (manifest: ResourceContainerManifest): ProjectMetadata => {
   const core = manifest.dublin_core;
   const locale = core.language.identifier;
   const bookNames: Record<string, LocalizedText> = {};
   for (const project of manifest.projects) {
-    // RC identifiers are lowercase (`gen`); every id Sefer holds is upper.
     bookNames[project.identifier.toUpperCase()] = ONE(locale, project.title);
   }
   return {
@@ -180,8 +86,6 @@ const fromResourceContainer = (manifest: ResourceContainerManifest): ProjectMeta
     language: {
       tag: locale,
       name: ONE(locale, core.language.title),
-      // RC states direction as a bare string, so anything that is not `rtl` is
-      // read as `ltr` rather than trusted through.
       direction: core.language.direction === "rtl" ? "rtl" : "ltr",
     },
     defaultLocale: locale === "" ? undefined : locale,
@@ -194,30 +98,15 @@ const fromResourceContainer = (manifest: ResourceContainerManifest): ProjectMeta
 };
 
 class MetadataError extends Data.TaggedError("MetadataError")<{
-  /** `Syntax` — not JSON, or not YAML. `Shape` — parsed, but not the format. */
   readonly reason: "Syntax" | "Shape";
   readonly description: string;
 }> {}
 
-/**
- * `manifest.yaml`'s bytes, decoded and narrowed.
- *
- * The YAML parser is a real one. Sefer classified a Resource Container by
- * regex before this — `/^dublin_core\s*:/m` over the first twenty lines — with
- * a comment saying the reader that needed the values would supply the parser.
- * This is that reader, and a regex cannot feed a schema.
- */
 export const readResourceContainer = (
   text: string,
 ): Result.Result<ProjectMetadata, MetadataError> =>
   Result.map(readResourceContainerManifest(text), fromResourceContainer);
 
-/**
- * The same bytes, decoded but not narrowed: for a reader inside
- * `src/core/resources` that needs what `ProjectMetadata` leaves out — the
- * per-book `projects[]` paths a help's reader walks (`kinds/tn`). The raw
- * container type still never leaves this folder.
- */
 export const readResourceContainerManifest = (
   text: string,
 ): Result.Result<ResourceContainerManifest, MetadataError> => {

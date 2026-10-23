@@ -1,20 +1,3 @@
-/**
- * The annotator's own styles, as a string injected into its shadow root.
- *
- * A shadow root rather than a class-name convention, and this is the single
- * most important decision in the folder. The tool's whole job is to sit on top
- * of a design somebody is actively changing — changing the very tokens,
- * resets and font stacks the tool would otherwise inherit. A panel that
- * restyles itself when you darken a token is a panel you cannot trust to tell
- * you what the token did. Shadow DOM is the only way to be certain, and it
- * also means this module needs no build step and no CSS file to copy when it
- * is lifted into another project.
- *
- * Deliberately NOT theme-aware. It is one fixed dark chrome in both themes,
- * so the tool always reads as "not part of the page" — which is exactly what
- * it is.
- */
-
 export const PANEL_STYLES = `
 :host { all: initial; }
 * { box-sizing: border-box; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
@@ -183,15 +166,7 @@ textarea:focus { outline: 2px solid #3d6be0; outline-offset: -1px; }
 .pin .bubble .where { color: #8d8d98; font-size: 10px; word-break: break-all; }
 `;
 
-/**
- * Styles for the two things that must live in the PAGE rather than the shadow
- * root, because they position themselves against page elements: the hover
- * outline and the crosshair cursor.
- *
- * Scoped under one attribute and one class, both prefixed, so they cannot
- * collide with anything the host has. This is the only mark the annotator
- * leaves on the document, and it is removed on `destroy()`.
- */
+/** Styles for the two things that must live in the PAGE rather than the shadow root, because they position themselves against page elements: the hover outline and the crosshair cursor. */
 export const PAGE_STYLES = `
 [data-sefer-annotate-mode="comment"], [data-sefer-annotate-mode="comment"] * { cursor: crosshair !important; }
 .sefer-annotate-outline {

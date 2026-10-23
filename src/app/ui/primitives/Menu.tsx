@@ -1,25 +1,3 @@
-/**
- * The menu: a list of actions or choices that opens from a trigger.
- *
- * Built on our `Popover`, so corvu supplies the floating, the outside click
- * and `Esc`; the first row takes focus on open through `Popover`'s
- * `initialFocus`. Focus does NOT go back to the trigger on close yet — see the
- * note in `Popover.tsx`. What a menu adds over a popover is
- * the keyboard a menu promises: focus lands on the first item, the arrow keys
- * move between items (wrapping), Home and End jump to the ends, and every row
- * says what it is — `menuitem`, `menuitemradio` or `menuitemcheckbox`.
- *
- * Three kinds of row:
- *  - `MenuItem` does something and closes the menu.
- *  - `MenuRadio` chooses one of a set (a sort order) and closes the menu.
- *  - `MenuCheckbox` toggles (a filter) and STAYS open, so several can be set.
- *
- * `MenuLabel` heads a group, `MenuSeparator` divides groups.
- *
- * Two densities. `md` is the compact list (the app bar's More, a card's actions);
- * `lg` is the roomy one with body text (a table column's Sort and Filter).
- */
-
 import type { JSX } from "@solidjs/web";
 import Check from "lucide-solid/icons/check";
 import { createContext, createSignal, useContext } from "solid-js";
@@ -50,8 +28,6 @@ const row = variants({
   ].join(" "),
   variants: {
     size: {
-      // The default: 12px all round, a 12px icon-to-label gap, 14px medium,
-      // a 20px icon — at least the 48px touch target.
       md: "min-h-12 gap-3 p-3 text-small font-medium [&>svg]:size-5",
       lg: "gap-4 p-4 text-body font-medium",
     },
@@ -61,42 +37,39 @@ const row = variants({
 
 const ITEMS = '[role^="menuitem"]:not(:disabled)';
 
-/** Arrow keys, Home and End, over the enabled rows. */
+const itemForKey = (
+  key: string,
+  items: readonly HTMLElement[],
+  at: number,
+): HTMLElement | undefined => {
+  if (key === "ArrowDown") return items[(at + 1) % items.length];
+  if (key === "ArrowUp") return items[(at - 1 + items.length) % items.length];
+  if (key === "Home") return items[0];
+  if (key === "End") return items.at(-1);
+  return undefined;
+};
+
 const rove = (event: KeyboardEvent, menu: HTMLElement): void => {
   const items = [...menu.querySelectorAll<HTMLElement>(ITEMS)];
   if (items.length === 0) return;
   const at = items.findIndex((item) => item === document.activeElement);
-  const next =
-    event.key === "ArrowDown"
-      ? items[(at + 1) % items.length]
-      : event.key === "ArrowUp"
-        ? items[(at - 1 + items.length) % items.length]
-        : event.key === "Home"
-          ? items[0]
-          : event.key === "End"
-            ? items.at(-1)
-            : undefined;
+  const next = itemForKey(event.key, items, at);
   if (next === undefined) return;
   event.preventDefault();
   next.focus();
 };
 
 export interface MenuProps {
-  /** Names the menu for a screen reader. */
   readonly label: string;
   readonly trigger: JSX.Element;
   readonly children: JSX.Element;
   readonly size?: MenuSize;
   readonly side?: PopoverSide;
   readonly align?: PopoverAlign;
-  /** Controlled, when the trigger has to show the open state; otherwise leave both out. */
   readonly open?: boolean;
   readonly onOpenChange?: (open: boolean) => void;
-  /** Classes for the panel — a width, usually. */
   readonly class?: ClassValue;
-  /** Classes for the trigger's wrapper, when it must fill its box (a table header). */
   readonly triggerClass?: ClassValue;
-  /** Cap at the room in the viewport and scroll inside, for a long menu. */
   readonly fitViewport?: boolean;
 }
 
@@ -137,10 +110,8 @@ export function Menu(props: MenuProps) {
 
 interface RowProps {
   readonly children: JSX.Element;
-  /** Leading icon; an `md` menu sizes it, an `lg` one leaves it to the caller. */
   readonly icon?: JSX.Element;
   readonly disabled?: boolean;
-  /** Why it is disabled, or anything else worth a native tooltip. */
   readonly title?: string;
   readonly class?: ClassValue;
   readonly "data-testid"?: string;
@@ -216,7 +187,7 @@ export function MenuCheckbox(
     >
       {props.icon}
       <span class="min-w-0 flex-1 truncate">{props.children}</span>
-      {/* The drawn box: an outline when off, a brand fill with a check when on. */}
+
       <span
         aria-hidden="true"
         class="flex size-4 shrink-0 items-center justify-center rounded-sm border-2 border-on-surface-tertiary text-transparent transition-colors group-aria-checked:border-brand group-aria-checked:bg-brand group-aria-checked:text-button-primary-on-surface"
@@ -227,14 +198,7 @@ export function MenuCheckbox(
   );
 }
 
-export function MenuLabel(props: {
-  readonly children: JSX.Element;
-  /**
-   * The horizontal padding, when the rows under it set their own (`px-6`)
-   * rather than the menu size's: a label lines up with its rows.
-   */
-  readonly inset?: string;
-}) {
+export function MenuLabel(props: { readonly children: JSX.Element; readonly inset?: string }) {
   const menu = useMenu();
   return (
     <p

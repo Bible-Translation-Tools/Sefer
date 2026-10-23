@@ -1,14 +1,3 @@
-/**
- * ProjectAdmin: the jobs that act on a project as a whole rather
- * than on its text — rename, delete, read and edit its metadata, export a
- * copy. It sits over `FileSystem` and the Scripture Burrito schema, and it
- * owns two rules that must not be softened:
- *
- *   - metadata is only ever written back through the schema, so an edit
- *     cannot leave `metadata.json` invalid for the next reader;
- *   - deleting a project asks first, always, through a confirm port the host
- *     supplies — there is no silent path.
- */
 import {
   Context,
   Data,
@@ -33,21 +22,10 @@ import {
   type ProjectMetadata,
 } from "../resources/projectMetadata";
 
-/**
- * Where a project's name lives when it is not a burrito. `.sefer/` is Sefer's
- * own corner of a project folder — never something another tool reads.
- */
 const SEFER_PROJECT_FILE = PROJECT_STATE_FILE;
 
 export type ExportFormat = "burrito" | "usfm-zip";
 
-/**
- * `NotFound` — the project, or the metadata being edited, is not there.
- * `Invalid` — `metadata.json` is not JSON, or not Scripture Burrito.
- * `Refused` — the person said no, or Sefer declined the request.
- * `Unsupported` — the format is not implemented in this build.
- * `Io` — the host's storage failed.
- */
 export type AdminFailureReason = "NotFound" | "Invalid" | "Refused" | "Unsupported" | "Io";
 
 export class AdminError extends Data.TaggedError("AdminError")<{
@@ -55,70 +33,21 @@ export class AdminError extends Data.TaggedError("AdminError")<{
   readonly description?: string | undefined;
 }> {}
 
-/**
- * The host's confirmation, seen as a plain port so core does not depend on
- * the `Dialogs` service. Composition passes `Dialogs.confirm`.
- */
 export type Confirm = (message: string) => Effect.Effect<boolean>;
 
-/** A shallow patch over decoded metadata: whole top-level members replace. */
 export type MetadataPatch = Partial<BurritoMetadata>;
 
 export interface ProjectAdminService {
-  /**
-   * Renames the project as people see it ON THIS DEVICE, not the folder on
-   * disk and not its metadata: the name goes in `.sefer/project.json`, which
-   * the repository never records. A burrito's `identification.name` is left
-   * alone — it travels with the project, and two people renaming it would be
-   * a difference nobody can reconcile. Moving the folder is a separate job
-   * with different consequences (open books, git remotes).
-   */
   readonly rename: (root: string, name: string) => Effect.Effect<void, AdminError>;
-  /** Removes the project folder, but only after `confirm` answers true. */
   readonly delete: (root: string, confirm: Confirm) => Effect.Effect<void, AdminError>;
-  /**
-   * What the project declares, from `metadata.json` or `manifest.yaml`.
-   * `None` when it carries neither; `Invalid` only when a BURRITO is broken.
-   */
   readonly metadata: (root: string) => Effect.Effect<Option.Option<ProjectMetadata>, AdminError>;
-  /**
-   * The name a `rename` recorded on this device — `.sefer/project.json`'s
-   * `name`, and `None` when there is no such file or it says nothing.
-   *
-   * The FIRST answer for what a project is called: a name somebody chose
-   * here outranks the one its metadata declares, and the folder's own name
-   * comes last.
-   *
-   * Never fails. A project whose private corner is unreadable is a project
-   * with no recorded name, which is the ordinary case anyway.
-   */
   readonly recordedName: (root: string) => Effect.Effect<Option.Option<string>>;
-  /** Merges, re-validates through the schema, and refuses rather than writing something invalid. */
   readonly updateMetadata: (root: string, patch: MetadataPatch) => Effect.Effect<void, AdminError>;
-  /**
-   * Recomputes `checksum.md5` and `size` for the named ingredients (every one,
-   * when `names` is omitted) from the files on disk, and writes the metadata
-   * back through the same schema gate as every other edit. Returns the names
-   * that moved — empty means nothing was written.
-   *
-   * A project with no `metadata.json` has no ingredients to refresh and
-   * succeeds with nothing changed: the caller is a save hook, and a folder of
-   * loose USFM is not an error.
-   */
   readonly refreshChecksums: (
     root: string,
     names?: readonly string[],
   ) => Effect.Effect<readonly string[], AdminError>;
-  /**
-   * The project as a zip, in memory — the bytes `export("usfm-zip")` writes.
-   *
-   * Separate from `export` because a browser has nowhere to write a file the
-   * person can find: the Web host hands these bytes to a download instead of
-   * naming a path (see documentation/architecture/landing.md). A host with a
-   * real filesystem uses `export`.
-   */
   readonly archive: (root: string) => Effect.Effect<Uint8Array, AdminError>;
-  /** Returns the path that was written. */
   readonly export: (
     root: string,
     format: ExportFormat,
@@ -136,14 +65,6 @@ const ioFailure = (error: PlatformError.PlatformError): AdminError =>
     description: error.reason.description ?? error.message,
   });
 
-/**
- * What a shared copy of a project does NOT carry.
- *
- * `.sefer/` is Sefer's own corner — provenance, the name chosen here — and it
- * describes this device's history with the project, not the project. A
- * `.sefer-tmp` sibling is an atomic write that was interrupted. `.git` is a
- * repository, which is a transfer of its own (`Remote`), not a folder to zip.
- */
 const isPrivatePath = (name: string): boolean =>
   name === ".sefer" ||
   name.startsWith(".sefer/") ||
@@ -153,17 +74,6 @@ const isPrivatePath = (name: string): boolean =>
   name.startsWith(".git/") ||
   name.includes("/.git/");
 
-/**
- * The burrito root a file belongs to: the nearest ancestor holding
- * `metadata.json`, and the name the file goes by inside it — which is exactly
- * the ingredient key the metadata uses.
- *
- * `None` when there is none within `depth` levels, which is the ordinary
- * answer for a folder of loose USFM. The save hook asks this about every book
- * it writes, so the walk is bounded rather than open-ended: a burrito's
- * ingredients live at the root or a folder or two below it, never further up
- * a stranger's directory tree.
- */
 export const ingredientFor = (
   fileSystem: FileSystem.FileSystem,
   path: string,
@@ -185,7 +95,6 @@ export const ingredientFor = (
 const makeProjectAdmin = (fileSystem: FileSystem.FileSystem): ProjectAdminService => {
   const metadataPath = (root: string): string => `${root}/${METADATA_FILE}`;
 
-  /** The raw JSON object, before the schema sees it — `None` when absent. */
   const rawMetadata = (
     root: string,
   ): Effect.Effect<Option.Option<Record<string, unknown>>, AdminError> =>
@@ -207,12 +116,10 @@ const makeProjectAdmin = (fileSystem: FileSystem.FileSystem): ProjectAdminServic
           new AdminError({ reason: "Invalid", description: `${METADATA_FILE} is not an object` }),
         );
       }
-      // SAFETY: the check above rules out null, arrays and primitives, so what
-      // remains of a JSON.parse result is a plain object with string keys.
+      // SAFETY: the check above rules out null, arrays and primitives, so what remains of a JSON.parse result is a plain object with string keys.
       return Option.some({ ...(parsed as Record<string, unknown>) });
     });
 
-  /** The single gate every metadata write goes through. */
   const writeMetadata = (
     root: string,
     value: Record<string, unknown>,
@@ -239,19 +146,6 @@ const makeProjectAdmin = (fileSystem: FileSystem.FileSystem): ProjectAdminServic
     );
   };
 
-  /**
-   * The project folder as a zip, in memory.
-   *
-   * Every entry is under the project's own folder name, so unzipping produces
-   * the folder and not a heap of loose files in whatever directory the reader
-   * was in — and so the archive imports straight back through
-   * `platform/web/intake.ts`, whose `stripCommonRoot` expects exactly that
-   * shape. Sefer's private files are left out (`isPrivatePath`).
-   *
-   * In memory rather than streamed: a whole-Bible Burrito is a few megabytes
-   * of text, `fflate`'s streaming API costs a worker to use properly, and the
-   * import side of the same trade already reads archives this way.
-   */
   const archive = (root: string): Effect.Effect<Uint8Array, AdminError> =>
     Effect.gen(function* () {
       const names = yield* Effect.mapError(
@@ -277,13 +171,6 @@ const makeProjectAdmin = (fileSystem: FileSystem.FileSystem): ProjectAdminServic
       });
     });
 
-  /**
-   * The BURRITO, decoded — the write paths' read.
-   *
-   * `rename` and `refreshChecksums` edit `metadata.json` through its schema,
-   * so they need the burrito itself and not the application's view of it. Kept
-   * private: nothing outside this file writes metadata.
-   */
   const burrito = (root: string): Effect.Effect<Option.Option<BurritoMetadata>, AdminError> =>
     Effect.flatMap(rawMetadata(root), (raw) =>
       Option.match(raw, {
@@ -299,20 +186,6 @@ const makeProjectAdmin = (fileSystem: FileSystem.FileSystem): ProjectAdminServic
       }),
     );
 
-  /**
-   * What the project declares, from whichever container it uses.
-   *
-   * Reading is common to both formats and writing is not: `updateMetadata`
-   * below still goes through the Burrito schema, because Sefer authors
-   * burritos and has no business rewriting somebody's `manifest.yaml`. So this
-   * door answers `ProjectMetadata` and the write door keeps its own raw read.
-   *
-   * A `manifest.yaml` that does not decode is NOT an error here the way a
-   * broken `metadata.json` is. A burrito is Sefer's own file and a bad one is
-   * a defect worth reporting; a Resource Container came from somewhere else,
-   * and a project whose manifest we cannot read is still a perfectly good
-   * folder of USFM that should list and open.
-   */
   const metadata = (root: string): Effect.Effect<Option.Option<ProjectMetadata>, AdminError> =>
     Effect.gen(function* () {
       const raw = yield* rawMetadata(root);
@@ -335,12 +208,6 @@ const makeProjectAdmin = (fileSystem: FileSystem.FileSystem): ProjectAdminServic
   return {
     rename: (root, name) =>
       Effect.gen(function* () {
-        // The name is this device's, in Sefer's own corner, and never the
-        // project's metadata: `metadata.json` travels with the project, and a
-        // name two people changed there is a difference nobody can reconcile.
-        // `.sefer/` is excluded from the repository, so this never reaches a
-        // commit and someone else's rename never overwrites it.
-        // Merged, so the reference picks kept in the same file survive.
         yield* Effect.mapError(updateProjectState(fileSystem, root, { name }), ioFailure);
       }),
 
@@ -371,8 +238,7 @@ const makeProjectAdmin = (fileSystem: FileSystem.FileSystem): ProjectAdminServic
         }
         if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
           return Option.none<string>();
-        // SAFETY: the guard above leaves only a plain object; `name` is read as
-        // `unknown` and narrowed before it is used.
+        // SAFETY: the guard above leaves only a plain object; `name` is read as `unknown` and narrowed before it is used.
         const name = (parsed as Record<string, unknown>).name;
         return typeof name === "string" && name.trim() !== ""
           ? Option.some(name.trim())
@@ -415,8 +281,6 @@ const makeProjectAdmin = (fileSystem: FileSystem.FileSystem): ProjectAdminServic
       format === "usfm-zip"
         ? Effect.gen(function* () {
             const bytes = yield* archive(root);
-            // The folder someone picked may not exist yet — a copy is usually
-            // saved beside things, into a folder named for the occasion.
             const parent = parentPath(to);
             if (parent !== "")
               yield* Effect.mapError(

@@ -1,0 +1,54 @@
+\id PHP Bench: the layouts a typist meets
+\usfm 3.1
+\h Edges
+\mt1 Edges
+\c 1
+\s1 A verse that runs across paragraphs
+\p
+\v 1 This verse starts in one paragraph
+\p and ends in the next.
+\v 2 A second verse shares that paragraph.
+\s1 Poetry across verses
+\q1
+\v 3 The first line of a verse,
+\q2 its second line,
+\q1 and a third.
+\q1
+\v 4 One line of its own.
+\b
+\p
+\v 5 After a blank line.
+\s1 Empty verses
+\p
+\v 6
+\v 7
+\v 8 Text after two empty verses.
+\s1 Ranges, notes and odd numbers
+\p
+\v 9-10 A bridged verse.
+\v 11 A verse ending in a footnote.\f + \fr 1:11: \ft The note's text.\f*
+\v 12 A cross reference\x - \xo 1:12: \xt Rom 1:1\x* mid-verse.
+\v 14 Thirteen is missing.
+\v 13 And comes late.
+\v 14 Fourteen again.
+\c 2
+\cl Chapter Two
+\p
+\v 1 A short chapter, one paragraph,
+\v 2 two verses.
+\s1 A table
+\p
+\v 3 The census of the tribes:
+\tr \th1 Tribe \thr2 Number
+\tr \tc1 Reuben \tcr2 46,500
+\tr \tc1 Simeon \tcr2 59,300
+\tr \tc1 Gad \tcr2 45,650
+\tr \tc1 Judah, the largest \tcr2 74,600
+\p
+\v 4 And the counting ended.
+\c 3
+\s1 A heading before anything else
+\m
+\v 1 Continues in a margin paragraph.
+\p
+\v 2 Ends the book without a newline.

@@ -1,13 +1,3 @@
-/**
- * History's third row: your text, against the selected version, for one card.
- *
- * Offered only where your text differs from that version at the card's
- * passage, and opened by the card's "Yours differs". It is the card's own
- * unified view — your text, with this version's wording opened beside a
- * change — clipped to the passages that differ, read-only: what you would
- * replace by adopting either side.
- */
-
 import { mountDiffView } from "@sefer/editor";
 import { For, createEffect, createSignal, untrack } from "solid-js";
 
@@ -17,9 +7,7 @@ import type { Hunk } from "../diff/hunks";
 import { hunkPaint } from "../diff/paint";
 
 export function YoursRow(props: {
-  /** Your text against this version: `baseline` is the version, `current` yours. */
   readonly sides: DiffSides;
-  /** Your text's passages that differ, as cards cut them. */
   readonly hunks: readonly Hunk[];
   readonly usfm: boolean;
   readonly label: string;
@@ -47,7 +35,6 @@ function YoursClip(props: {
     ({ parent, sides, hunk, usfm }) => {
       if (parent === undefined) return;
       const mode = usfm ? "usfm" : "default";
-      // A one-time build of a read-only view; a new comparison rebuilds it.
       const mount = untrack(() =>
         mountDiffView({
           parent,

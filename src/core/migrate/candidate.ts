@@ -1,20 +1,3 @@
-/**
- * Book candidates: one book from one place, and the rule that picks between
- * several for the same book.
- *
- * "Migrate from Writer" assembles a Bible from single-book Writer projects.
- * Where a book comes from is the producers' business:
- *
- *   folder or zip   `local.ts`: every Writer project under a picked root
- *   remote          the catalogue's listing (`src/app/catalogue.ts`), cloned
- *                   into staging only when opened
- *
- * Everything after the producer is one path: `open` stages the book, the
- * template renders it (`writerBook.ts`), and `check.ts` validates it and says
- * how healthy it is. The book is the atomic unit, and the join key is the
- * USFM book code within one (language, resource): no Bible prints John twice.
- */
-
 import { CANON, type Testament } from "@sefer/text/location/canon";
 import { Data, Effect, FileSystem, Option } from "effect";
 
@@ -30,12 +13,10 @@ import {
 } from "./writerBook";
 import { readWriterHistory, type WriterHistory } from "./writerHistory";
 
-/** What the catalogue says about a candidate. Inactive ones are hidden by default. */
 export type CandidateStatus = "Primary" | "Active" | "Inactive";
 
 export type CandidateOrigin =
   | {
-      /** Anything with a fetchable URL: the catalogue today. */
       readonly kind: "remote";
       readonly owner: string;
       readonly repo: string;
@@ -44,9 +25,7 @@ export type CandidateOrigin =
   | { readonly kind: "folder" | "zip"; readonly name: string; readonly root: string };
 
 export interface BookCandidate {
-  /** Unique within a run: where it is, then the book. */
   readonly id: string;
-  /** Claimed: the manifest's `project.id`, or the API's `book_slug`. Upper case. */
   readonly book: string;
   readonly language: string;
   readonly resource: string;
@@ -54,20 +33,12 @@ export interface BookCandidate {
   readonly hints: { readonly status?: CandidateStatus; readonly modified?: string };
 }
 
-/** A candidate, opened: its Writer project, rendered, with who worked on it. */
 export interface StagedBook {
   readonly candidate: BookCandidate;
   readonly project: WriterProject;
   readonly usfm: string;
-  /**
-   * Who to credit. Translators from the manifest, and commit authors where
-   * there is history to read; names with no email are kept for the message
-   * body, since a `Co-authored-by` without an address credits nobody.
-   */
   readonly authors: readonly Author[];
-  /** Where it was pulled from, when it was: what `.upstreams.json` records. */
   readonly upstream?: { readonly url: string; readonly commit: string };
-  /** Its Writer saves, oldest first, when it has a history: what assembly replays. */
   readonly history?: WriterHistory;
 }
 
@@ -76,23 +47,17 @@ class CandidateError extends Data.TaggedError("CandidateError")<{
   readonly description: string;
 }> {}
 
-/** `owner/repo` for a remote, the folder name otherwise: what a tab is called. */
 export const candidateLabel = (candidate: BookCandidate): string =>
   candidate.origin.kind === "remote" ? candidate.origin.owner : candidate.origin.name;
 
 export const testamentOfBook = (book: string): Testament =>
   CANON.find((entry) => entry.id === book)?.testament ?? "nt";
 
-/** Canonical position, for ordering rows; unknown books sort last. */
 const canonIndex = (book: string): number => {
   const index = CANON.findIndex((entry) => entry.id === book);
   return index === -1 ? CANON.length : index;
 };
 
-/**
- * Writer commits some saves under its own name rather than the person's. That
- * is the tool, not a translator, and it is never credited.
- */
 const isWriterItself = (name: string): boolean =>
   /^(ts-?desktop|translation ?studio|btt ?writer)$/i.test(name.trim());
 
@@ -111,7 +76,6 @@ const authorsFrom = (project: WriterProject, committed: readonly Author[]): read
   return out;
 };
 
-/** The title the template falls back to when the project has none: the canon's name for the book. */
 const fallbackTitle = (project: WriterProject): string =>
   CANON.find((entry) => entry.id === project.book)?.name ?? project.book;
 
@@ -122,12 +86,6 @@ const render = (project: WriterProject, root: string) =>
     return writerBookToUsfm(tree, project.book, fallbackTitle(project));
   });
 
-/**
- * Opens a candidate: stages it if it is remote, recognises the Writer
- * project, and renders it. Refuses THIS candidate, never the run, when the
- * folder is not a Writer project or its manifest names another book than the
- * one it was listed as (the API said 1 John; the manifest says Jude).
- */
 export const openCandidate = (
   candidate: BookCandidate,
   stagingRoot: string,
@@ -145,10 +103,6 @@ export const openCandidate = (
     let upstream: StagedBook["upstream"];
     if (candidate.origin.kind === "remote") {
       root = `${stagingRoot}/${candidate.origin.owner}_${candidate.origin.repo}`;
-      // A staging folder from an earlier look is reused, unless it is
-      // shallow: its history is replayed into the project, so all of it is
-      // cloned (Writer projects are 50–100 KB), and one an older build left
-      // with only its newest version is cloned again.
       const staged =
         (yield* Effect.orElseSucceed(fileSystem.exists(`${root}/manifest.json`), () => false)) &&
         !(yield* Effect.orElseSucceed(
@@ -186,8 +140,6 @@ export const openCandidate = (
         }),
       );
 
-    // History, where there is any: the newest commit's author and the commit
-    // the work was taken at. A folder with no `.git` has neither.
     const logged = observability.span("migrate.log");
     const committed: Author[] = [];
     const repo = yield* Effect.option(git.open(root));
@@ -212,9 +164,6 @@ export const openCandidate = (
       "migrate.upstream": upstream !== undefined,
     });
 
-    // The saves to replay. A history that cannot be read refuses the
-    // candidate, saying why, rather than arriving without it (Will,
-    // 2026-10-09: fail loud).
     let history: WriterHistory | undefined;
     if (repo._tag === "Some") {
       const read = observability.span("migrate.history.read");
@@ -255,7 +204,6 @@ export const openCandidate = (
     };
   });
 
-/** Rank for the default: Primary, then Active, then anything unlabelled; Inactive never. */
 const rank = (candidate: BookCandidate): number => {
   switch (candidate.hints.status) {
     case "Primary":
@@ -287,7 +235,6 @@ export const defaultCandidate = (
   return ranked[0];
 };
 
-/** One row per book, in canonical order. */
 export interface BookRow {
   readonly book: string;
   readonly candidates: readonly BookCandidate[];

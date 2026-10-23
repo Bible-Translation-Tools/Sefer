@@ -1,22 +1,6 @@
-/**
- * The fold: one `Analysis` and its text become typed-array tables plus lazy
- * rows.
- *
- * `buildStructure` is the only builder, and it REFUSES a parse that does not
- * describe exactly this text — `describesExactly`, not a length — because every
- * offset below indexes into the string it was told about.
- *
- * `structureField` is the state's memo: by `Text` instance first (CodeMirror
- * shares the instance across non-doc transactions), then the `borrowedStructure`
- * facet (a satellite takes the canonical parse when its text matches), then the
- * last structure built, and only then the engine. That chain is why ten open
- * excerpts over one book cost zero extra parses.
- */
-
 import { EditorState, Facet, StateField, type Text } from "@codemirror/state";
 import {
   type Analysis,
-  type TokenView,
   MARKERS,
   NONE,
   NodeView,
@@ -106,17 +90,14 @@ export function buildStructure(
   const cst = scanCst(doc, analysis);
   const { startAt, endAt, nodes, designatorOf, shapeAt, lineFrom, lineTo, lineCount } = cst;
 
-  // SAFETY: `Fold` is the mutable scratch record the builders below fill in;
-  // the fields are assigned in this literal and by the two table constructors
-  // that follow (`lines`, `blocks`), which is exactly what `Fold` declares.
+  // SAFETY: `Fold` is the mutable scratch record the builders below fill in; the fields are assigned in this literal and by the two table constructors that follow (`lines`, `blocks`), which is exactly what `Fold` declares.
   const f = {
     doc,
     cst,
     clip: clip ?? null,
     chapterOfToken: new Int32Array(cst.count).fill(-1),
     verseOfToken: new Int32Array(cst.count).fill(-1),
-    // SAFETY: empty literals, annotated so the pushes below stay typed; an
-    // empty array cannot be the wrong element type yet.
+    // SAFETY: empty literals, annotated so the pushes below stay typed; an empty array cannot be the wrong element type yet.
     chapters: [] as ChapterRow[],
     // SAFETY: as above.
     verses: [] as VerseRow[],
@@ -149,8 +130,8 @@ export function buildStructure(
   const wanted = (from: number, to: number) => !clip || (to >= clip.from && from <= clip.to);
 
   f.contentAfter = (markerRow: number): number => {
-    const d = designatorOf[markerRow];
-    return endAt[d < 0 ? markerRow : d];
+    const designator = designatorOf[markerRow];
+    return endAt[designator < 0 ? markerRow : designator];
   };
 
   const noteRows: { line: number; note: NoteRange }[] = [];
@@ -196,7 +177,7 @@ export function buildStructure(
       continue;
     }
     const verdict: Mapping = facts.row.verdict;
-    if (!isMapped(verdict) || verdict.class !== "char") continue;
+    if (!isMapped(verdict) || (verdict.class !== "char" && verdict.class !== "figure")) continue;
     if (!wanted(facts.from, facts.to) || at < 0) continue;
     const node = new NodeView(cst.tree, facts.id);
     let surfaceFrom = facts.from;
@@ -206,10 +187,7 @@ export function buildStructure(
     for (let i = 0, n = node.childCount(); i < n; i++) {
       const child = node.child(i);
       if (child.isNode) continue;
-      // SAFETY: `isNode` is the reader's own discriminator — false means this
-      // child is a token, checked one line above.
-      const t = child as TokenView;
-      const id = t.id;
+      const id = child.id;
       if (i === 0) surfaceFrom = endAt[id];
       const kind = cst.kindAt[id];
       if (kind === TOKEN.ATTR_LIST) {
@@ -227,6 +205,7 @@ export function buildStructure(
         from: facts.from,
         to: facts.to,
         marker: facts.markerIdx,
+        figure: verdict.class === "figure",
         surfaceFrom,
         surfaceTo: attrFrom,
         attrFrom,
@@ -257,9 +236,16 @@ export function buildStructure(
   dish.toc.forEachChapter((_number, from, to, token) => {
     const head = lineIdxAt(from);
     const has = token !== NONE;
-    const d = has ? (designatorOf[token] ?? -1) : -1;
-    const labelFrom = !has ? from : d < 0 ? endAt[token] : startAt[d];
-    const labelTo = !has ? from : d < 0 ? endAt[token] : cst.payloadEnd(d);
+    const designator = has ? (designatorOf[token] ?? -1) : -1;
+    let labelFrom = from;
+    let labelTo = from;
+    if (has && designator < 0) {
+      labelFrom = endAt[token];
+      labelTo = endAt[token];
+    } else if (has) {
+      labelFrom = startAt[designator];
+      labelTo = cst.payloadEnd(designator);
+    }
     const lastAt = lineIdxFrom(head, Math.max(from, to - 1));
     const row: ChapterRow = {
       ordinal: chapters.length,
@@ -277,13 +263,20 @@ export function buildStructure(
 
   const verses = f.verses;
   dish.toc.forEachVerse((_chapter, _first, _last, _at, token) => {
-    const d = designatorOf[token] ?? -1;
+    const designator = designatorOf[token] ?? -1;
     const markerEnd = endAt[token];
-    const numFrom = d < 0 ? markerEnd : startAt[d];
-    const numTo = d < 0 ? markerEnd : cst.payloadEnd(d);
+    const numFrom = designator < 0 ? markerEnd : startAt[designator];
+    const numTo = designator < 0 ? markerEnd : cst.payloadEnd(designator);
     f.verseOfToken[token] = verses.length;
     verses.push(
-      new Verse(doc, startAt[token], markerEnd, numFrom, numTo, d < 0 ? markerEnd : endAt[d]),
+      new Verse(
+        doc,
+        startAt[token],
+        markerEnd,
+        numFrom,
+        numTo,
+        designator < 0 ? markerEnd : endAt[designator],
+      ),
     );
   });
 
@@ -351,11 +344,11 @@ export function buildStructure(
   };
 }
 
-export function lineIndexAt(s: DocStructure, pos: number): number {
-  const lines = s.lines;
+export function lineIndexAt(structure: DocStructure, pos: number): number {
+  const lines = structure.lines;
   if (!lines.length) return -1;
   const end = lines.toAt(lines.length - 1);
-  return lines.indexAt(pos < 0 ? 0 : pos > end ? end : pos);
+  return lines.indexAt(Math.min(Math.max(pos, 0), end));
 }
 
 const docCache = new WeakMap<EditorState, string>();
@@ -371,8 +364,8 @@ export function docText(state: EditorState): string {
 
 export const borrowedStructure = Facet.define<(state: EditorState) => DocStructure | null>();
 
-function fits(s: DocStructure, doc: string): boolean {
-  return !!s.analysis && describesExactly(s.analysis, doc);
+function fits(structure: DocStructure, doc: string): boolean {
+  return !!structure.analysis && describesExactly(structure.analysis, doc);
 }
 
 function borrowFor(state: EditorState, doc: string): DocStructure | null {
@@ -386,9 +379,9 @@ function borrowFor(state: EditorState, doc: string): DocStructure | null {
 const structureByText = new WeakMap<Text, DocStructure>();
 let recent: DocStructure | null = null;
 
-function remember(text: Text, s: DocStructure): DocStructure {
-  structureByText.set(text, s);
-  return s;
+function remember(text: Text, structure: DocStructure): DocStructure {
+  structureByText.set(text, structure);
+  return structure;
 }
 
 function analyzeState(state: EditorState): DocStructure {
@@ -401,9 +394,9 @@ function analyzeState(state: EditorState): DocStructure {
   if (recent && fits(recent, doc)) return remember(text, recent);
   try {
     const analysis = analyzed(state.facet(analyzer), doc);
-    const s = buildStructure(doc, analysis, null);
-    recent = s;
-    return remember(text, s);
+    const structure = buildStructure(doc, analysis, null);
+    recent = structure;
+    return remember(text, structure);
   } catch (err) {
     stateFailed("analyze", err);
     return EMPTY_STRUCTURE;

@@ -15,22 +15,54 @@ import { layout } from "#app/ui/workspace/layoutTweak";
 import { ReferenceColumn } from "#app/ui/workspace/ReferenceColumn";
 import { Toolbar } from "#app/ui/workspace/Toolbar";
 
-/**
- * The editor screen: the workspace toolbar, the reference column, and the book
- * in a card.
- *
- * The chapter picker is gone from this page on purpose. A book opens WHOLE —
- * one document, scrolled — and narrowing it to a chapter is a navigation, so
- * it belongs where every other navigation is: the chapter grid under the
- * focused book in the project sidebar (`src/app/ui/workspace/ProjectSidebar.tsx`).
- * `editor.preferChapterView` still decides what a book opens on; the shell
- * reads it in `focus`, and `editor.chapter.next/previous/whole` still work
- * from the palette.
- *
- * Everything on this page reads the Book through the shell. The page itself
- * holds no text, no structure and no analysis — `BookEditor` owns the one
- * subscription, and this component only reads what the shell already knows.
- */
+function BookWorkspace(props: {
+  readonly book: Parameters<typeof BookEditor>[0]["book"];
+  readonly initial: number;
+  readonly collapsed: boolean;
+  readonly shut: boolean;
+  readonly panelClass: string | undefined;
+  readonly onBound: (count: number) => void;
+}) {
+  const shell = useShell();
+  return (
+    <>
+      <Resizable.Root
+        class="min-h-0 flex-1"
+        onSizesChange={(sizes) => {
+          const first = sizes[0];
+          if (first !== undefined) shell.setReferenceWidth(first);
+        }}
+      >
+        <Resizable.Panel
+          initialSize={props.initial}
+          minSize={REFERENCE_WIDTH.min}
+          maxSize={REFERENCE_WIDTH.max}
+          class={props.panelClass}
+        >
+          <Show when={!props.shut}>
+            <ReferenceColumn onBound={props.onBound} />
+          </Show>
+        </Resizable.Panel>
+        <Resizable.Handle
+          label={t("Resize the reference pane")}
+          class={props.collapsed || props.shut ? "hidden" : undefined}
+        />
+        <Resizable.Panel
+          class={cx(
+            "flex flex-col gap-2 py-4 ps-[7.5px]",
+            props.collapsed || props.shut ? "grow! [flex-basis:auto]!" : undefined,
+          )}
+        >
+          <div class="flex min-h-0 flex-1 flex-col">
+            <Show when={props.book.id} keyed>
+              <BookEditor book={props.book} />
+            </Show>
+          </div>
+        </Resizable.Panel>
+      </Resizable.Root>
+    </>
+  );
+}
 
 /**
  * The panels layout's editor: the heart language, the only text that can be
@@ -130,47 +162,21 @@ function EditorPanel(props: { readonly book: EditorBook; readonly split?: boolea
 
 function BookPage(props: { readonly root: string; readonly bookId: string }) {
   const shell = useShell();
-  // The page holds the editors' alignment: they each report where they are,
-  // and it decides who follows (`@sefer/editor` `createAlignedGroup`). Reveal: a
-  // pane moves only when the verse scrolled to is not already in its view.
   const aligned = createAlignedGroup("reveal");
-  // Plain variables: `Resizable.Panel` reads its three sizes once, during
-  // registration, and a JSX expression there is a memo read outside a tracking
-  // scope — which Solid 2 warns about, correctly. The initial width is the
-  // REMEMBERED one (`workspace.referenceWidth`); the split owns it from there
-  // and hands it back on every drag.
   const referenceInitial = untrack(() => shell.referenceWidth());
-  const referenceMin = REFERENCE_WIDTH.min;
-  const referenceMax = REFERENCE_WIDTH.max;
 
-  /**
-   * How many references are bound, reported by the column.
-   *
-   * With none, the pane is not a pane — it is the picker, and the editor
-   * should have the rest of the row. The panel stays MOUNTED and takes a fixed
-   * narrow basis instead of being removed, for the reason `__root.tsx` gives
-   * about the sidebar: `Resizable` registers panels during render and has no
-   * unregister, so an unmounted panel renumbers the split and destroys the
-   * editor's view beside it.
-   */
   const [references, setReferences] = createSignal(0, { name: "boundReferences" });
-  /** The column folded to its cards (its own collapse button). */
-  const [folded, setFolded] = createSignal(false, { name: "referencesFolded" });
-  const collapsed = (): boolean => references() === 0 || folded();
-  /** Shut from the crumb strip's toggle: the column is gone and the editor has the row. */
+  const collapsed = (): boolean => references() === 0;
   const shut = (): boolean => !shell.referenceOpen();
+  const panelClass = (): string | undefined => {
+    if (shut()) return "hidden";
+    return collapsed() ? "[flex-basis:13rem]!" : undefined;
+  };
 
-  // Open the project and seat the book the URL names, and do it again whenever
-  // the URL names a different one. Idempotent: `focus` runs
-  // `project.instantiate`, which is itself idempotent.
   createEffect(
     () => ({ root: props.root, bookId: props.bookId }),
     ({ root, bookId }) => {
-      // `untrack`, and not merely a read: an effect's callback is an untracked
-      // scope in Solid 2, so a bare `shell.project()` here is a read the
-      // runtime warns about (STRICT_READ_UNTRACKED) rather than a subscription.
-      // It is a deliberate one-time question — is the project this URL names
-      // already open — and saying so to the compiler is the whole fix.
+      // An effect's callback is untracked in Solid 2: a deliberate one-time question, said with untrack.
       const open = untrack(() => shell.project()?.root);
       const opened = open === root ? Promise.resolve() : untrack(() => shell.openProject(root));
       void opened.then(() => shell.focus(bookId));
@@ -193,17 +199,10 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
       class={cx("flex h-full min-h-0 min-w-0 flex-col gap-3 p-6", panels() && "bg-surface-primary")}
       data-refine={layout()}
     >
-      {/* Above everything, and on THIS route as well as the project page:
-          unsaved work found on open is the first thing to answer, and opening
-          a project now lands on the book rather than on the census, so a
-          banner mounted only there is a banner nobody sees. */}
       <RecoveryBanner />
-      {/* The editor waits for the recovery answer too: it is asked beside the
-          analysis and lands first, so the banner above is never late. */}
       <Show
         when={shell.recoveryOffer() !== undefined ? shell.focused() : undefined}
         fallback={
-          /* Opening a book parses it; blank unless a big one runs long. */
           <div class="h-full" data-opening={props.bookId}>
             <DelayedSpinner />
           </div>
@@ -243,8 +242,8 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
                             padding, so the two control rows share a line. */}
                         <Resizable.Panel
                           initialSize={referenceInitial}
-                          minSize={referenceMin}
-                          maxSize={referenceMax}
+                          minSize={REFERENCE_WIDTH.min}
+                          maxSize={REFERENCE_WIDTH.max}
                           class="flex min-w-0 flex-col pe-6 pt-3.5"
                         >
                           <ReferenceColumn variant="gateway" onBound={setReferences} />
@@ -266,59 +265,15 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
                 </AlignedProvider>
               }
             >
-              {/* The editor and its references are one aligned group: scroll
-                either and a following pane brings the same verse into view. */}
               <AlignedProvider value={aligned}>
-                <Resizable.Root
-                  class="min-h-0 flex-1"
-                  onSizesChange={(sizes) => {
-                    const first = sizes[0];
-                    if (first !== undefined) shell.setReferenceWidth(first);
-                  }}
-                >
-                  <Resizable.Panel
-                    initialSize={referenceInitial}
-                    minSize={referenceMin}
-                    maxSize={referenceMax}
-                    class={shut() ? "hidden" : collapsed() ? "[flex-basis:13rem]!" : undefined}
-                  >
-                    {/* Unmounted while shut, the panel kept: its panes are
-                        editors, and nothing reads them while they are hidden. */}
-                    <Show when={!shut()}>
-                      <ReferenceColumn onBound={setReferences} onFolded={setFolded} />
-                    </Show>
-                  </Resizable.Panel>
-                  {/* Hidden rather than unmounted, same reason as the panel. */}
-                  <Resizable.Handle
-                    label={t("Resize the reference pane")}
-                    class={collapsed() || shut() ? "hidden" : undefined}
-                  />
-                  {/* No `<Card>` around the editor: `.editor-host` (app.css) IS
-                  the card — white, bordered, 12px radius — and the scripture's
-                  own generous padding is inside the view, where CodeMirror can
-                  keep the measure at 40rem and centre it. A second card would
-                  be a second border around the same rectangle. */}
-                  <Resizable.Panel
-                    class={cx(
-                      // 7.5px each side of the 9px handle: 24px between the
-                      // reference text and the editor, the page's own margin.
-                      "flex flex-col gap-2 py-4 ps-[7.5px]",
-                      // With the pane collapsed the editor takes the row back; the
-                      // `!` is load-bearing because `Resizable.Panel` writes its
-                      // share as an inline `flex-basis`.
-                      collapsed() || shut() ? "grow! [flex-basis:auto]!" : undefined,
-                    )}
-                  >
-                    {/* Keyed on the book id: a different book is a different
-                    canonical state, so the view is rebuilt rather than
-                    repointed. */}
-                    <div class="flex min-h-0 flex-1 flex-col">
-                      <Show when={book().id} keyed>
-                        <BookEditor book={book()} />
-                      </Show>
-                    </div>
-                  </Resizable.Panel>
-                </Resizable.Root>
+                <BookWorkspace
+                  book={book()}
+                  initial={referenceInitial}
+                  collapsed={collapsed()}
+                  shut={shut()}
+                  panelClass={panelClass()}
+                  onBound={setReferences}
+                />
               </AlignedProvider>
             </Show>
           </>
@@ -330,7 +285,6 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
 
 export const Route = createFileRoute("/_app/project/$slug/book/$book")({
   head: () => ({ meta: [{ title: "Sefer — book" }] }),
-  // The project is already open: `project/$slug` did it. See the note there.
   component: () => {
     const params = Route.useParams();
     const shell = useShell();

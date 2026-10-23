@@ -2,15 +2,17 @@
 id: d6a2480e-4238-40d3-8d3a-f789914a4d7c
 title: "Hold what's shown, and editing sessions"
 kind: idea
-status: discussing
+status: parked
 created: 2026-10-14
-updated: 2026-10-14
+updated: 2026-10-20
 sha: 50aa9cd
 priority: 3
 tags: [review]
 related: [6c8936de-cbb7-450c-a5cc-ae6d62d13f65]
 source: sefer-next-features doc, 2026-10-07 to 13
 ---
+
+**Parked 2026-10-20.** Will: probably a misunderstanding of what was already built, and may not need doing.
 
 **Decided direction (Oct 7): canonicalise, no new primitive.** A view keeps what it showed until the
 reader moves on, and marks a row settled or stale rather than removing it. The behaviour already
@@ -31,6 +33,11 @@ global today: per-card undo would light up undo buttons on every other card of t
 
 **Approve with edits needs no session:** it can mean "the verse differs from the saved file when you
 approve", the disk-vs-working baseline Review already uses.
+
+**Built since (2026-10-15):** a card can hold its own session. `mountCard({ session: true })`
+keeps the inverse of that card's edits, so Key terms' Cancel undoes only what was typed in the
+card, never someone else's edit (`packages/editor/src/recipes/card.ts`). Undo history itself is
+still global.
 
 <Question id="history">Global undo with a prominent button, per-card history, or PR #5's buffer in front of the buffer?</Question>
 

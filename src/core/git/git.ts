@@ -1,40 +1,16 @@
 import type { SourceStamp } from "@sefer/text/source";
-/**
- * The Git port: the intersection of the user's version-control jobs, not the
- * union of two libraries' APIs. Desktop answers it with git2 behind Tauri
- * commands, the Web with isomorphic-git over the Effect `FileSystem` — so the
- * port names only what both can do and what a scripture editor actually needs:
- * open a project's repository, commit exactly what Save wrote, read history,
- * and read the bytes of an earlier version.
- *
- * Nothing here knows a library exists. `src/platform/web/git.ts` and
- * `src/platform/tauri/git.ts` are the Layers; `contract.ts` is the one suite
- * both must pass.
- */
 import { Context, Data, Effect, Option, Result } from "effect";
 
 import { escapesRoot, normalisePath } from "../fileSystem/path";
 
-/**
- * The branch a repository Sefer creates starts on. A clone takes whatever
- * branch the server's HEAD names instead; this is only for `init`.
- */
 export const DEFAULT_BRANCH = "master";
 
-/** A commit's object id, opaque to core: a hex SHA on both hosts today. */
 export type CommitId = string;
 
-/** An open repository. `root` is the project folder — the work tree, not `.git`. */
 export interface Repo {
   readonly root: string;
 }
 
-/**
- * The part of SaveCoordinator's `SaveReceipt` that Git needs, declared
- * structurally so the port does not depend on the Save module. Git commits
- * receipts and nothing else, so `path` is the whole contract and `stamp` is
- * carried only to keep a receipt recognisable at a glance.
- */
 export interface SaveReceiptLike {
   readonly path: string;
   readonly stamp: SourceStamp;
@@ -49,25 +25,16 @@ export interface Commit {
   readonly id: CommitId;
   readonly message: string;
   readonly author: Author;
-  /** Commit time in milliseconds since the epoch. */
   readonly at: number;
 }
 
-/**
- * Who and when, exactly as a commit records it: what `walk` hands back so a
- * history can be rewritten into another shape without losing a minute or a
- * zone.
- */
 export interface Signature {
   readonly name: string;
   readonly email: string;
-  /** Seconds since the epoch, as git stores it. */
   readonly at: number;
-  /** The zone the person was in, in minutes east of UTC: `+0200` is 120. */
   readonly offset: number;
 }
 
-/** One file a commit changed: its new blob, or `null` when the commit deleted it. */
 export interface WalkedChange {
   readonly path: string;
   readonly blob: string | null;
@@ -76,33 +43,19 @@ export interface WalkedChange {
 export interface WalkedCommit {
   readonly id: CommitId;
   readonly parents: readonly CommitId[];
-  /**
-   * As the host reads it: verbatim on desktop; the Web's reader normalises
-   * line endings and ends it with one newline. Its first line is the same.
-   */
   readonly message: string;
   readonly author: Signature;
   readonly committer: Signature;
-  /**
-   * The files it changed from its first parent (from nothing, for the first
-   * commit): repository-relative, files only, renames as a delete and an add.
-   */
   readonly changes: readonly WalkedChange[];
 }
 
 export type ChangeKind = "added" | "modified" | "deleted" | "untracked";
 
 export interface ChangedPath {
-  /** Repository-relative, forward slashes — the shape both libraries speak. */
   readonly path: string;
   readonly kind: ChangeKind;
 }
 
-/**
- * `alsoParents` makes a decision commit: HEAD stays the first parent and these
- * follow, so the commit joins the other side's history to ours. The tree is
- * still exactly what the receipts staged; git's merge never runs.
- */
 export interface CommitOptions {
   readonly alsoParents?: readonly CommitId[];
 }
@@ -111,24 +64,11 @@ export interface Status {
   readonly changed: readonly ChangedPath[];
 }
 
-/**
- * A file as it stood at one commit. The bytes are deferred: history lists are
- * long, and a version's content is read only when something displays or
- * diffs it.
- */
 export interface Version {
   readonly commit: Commit;
   readonly bytes: () => Effect.Effect<Uint8Array, GitError>;
 }
 
-/**
- * `NotARepository` — the folder has no repository to open.
- * `Io` — the host's storage or the object database refused the operation.
- * `Conflict` — the repository's state contradicts the request (a merge in
- * progress, a rev that does not name what was asked for).
- * `Refused` — Sefer declined before touching the repository: a receipt path
- * outside the root, or a host whose implementation is not wired yet.
- */
 export type GitFailureReason = "NotARepository" | "Io" | "Conflict" | "Refused";
 
 export class GitError extends Data.TaggedError("GitError")<{
@@ -137,21 +77,9 @@ export class GitError extends Data.TaggedError("GitError")<{
 }> {}
 
 export interface GitService {
-  /** Fails with `NotARepository` rather than creating one. */
   readonly open: (root: string) => Effect.Effect<Repo, GitError>;
-  /** Idempotent: initialising an existing repository opens it. */
   readonly init: (root: string) => Effect.Effect<Repo, GitError>;
   readonly status: (repo: Repo) => Effect.Effect<Status, GitError>;
-  /**
-   * Stages exactly the receipt paths and commits them. Nothing is committed
-   * that Sefer did not write: an untracked scratch file, a stray editor
-   * backup, or a receipt whose path falls outside `repo.root` (which is
-   * `Refused`) never reaches a commit.
-   *
-   * An empty receipt list is `Refused` — an empty commit records nothing
-   * true — except when `alsoParents` joins another history: the join is
-   * the thing recorded, even when the other side changed no file.
-   */
   readonly commit: (
     repo: Repo,
     receipts: readonly SaveReceiptLike[],
@@ -159,80 +87,31 @@ export interface GitService {
     author: Author,
     options?: CommitOptions,
   ) => Effect.Effect<CommitId, GitError>;
-  /**
-   * The best common ancestor of two revs, from commit ancestry alone — no
-   * tree is read. `None` when they share no history (or, in a shallow
-   * repository, none that is here yet).
-   */
   readonly mergeBase: (
     repo: Repo,
     a: string,
     b: string,
   ) => Effect.Effect<Option.Option<CommitId>, GitError>;
-  /** Newest first. With `path`, only commits that touched that path. */
   readonly log: (repo: Repo, path?: string) => Effect.Effect<readonly Commit[], GitError>;
-  /**
-   * Commits reachable from `ref`, newest first — `log` for a ref that is not
-   * HEAD. The sync surface needs it for exactly one thing: the cloud's side of
-   * the comparison, read off `refs/remotes/origin/<branch>` after a fetch.
-   */
   readonly logFrom: (repo: Repo, ref: string) => Effect.Effect<readonly Commit[], GitError>;
-  /**
-   * `ref` as a commit id, or `None` when the repository has no such ref.
-   *
-   * `None` is an ANSWER, not a failure: a project attached to a repository
-   * nobody has pushed to yet has no remote-tracking ref, and that is the
-   * ordinary "unpublished" state rather than something to report as broken.
-   */
   readonly resolve: (repo: Repo, ref: string) => Effect.Effect<Option.Option<CommitId>, GitError>;
-  /** The branch HEAD is on; `None` on a detached or unborn HEAD. */
   readonly branch: (repo: Repo) => Effect.Effect<Option.Option<string>, GitError>;
-  /**
-   * Is older history missing from this device — a `latest` clone not yet
-   * deepened? History says so rather than showing a short past as the whole.
-   */
   readonly shallow: (repo: Repo) => Effect.Effect<boolean, GitError>;
-  /**
-   * Repository-relative paths whose content differs between two revs, with the
-   * kind seen FROM `from` TO `to` — a path absent at `from` is `added`, one
-   * absent at `to` is `deleted`.
-   *
-   * This is what makes an incoming plan possible without transferring
-   * anything twice: after a fetch, the cloud's commits are already in the
-   * object database, so which books and chapters would change can be worked
-   * out and shown before a single byte of the work tree moves.
-   */
   readonly changedPathsBetween: (
     repo: Repo,
     from: string,
     to: string,
   ) => Effect.Effect<readonly ChangedPath[], GitError>;
-  /**
-   * HEAD's first-parent line, OLDEST first: each commit's who, when and
-   * message, and which files it changed — blob ids, not bytes. One call, so a
-   * host walks its own object database once (Writer migration replays a
-   * book's hundreds of saves from it). An unborn HEAD is an empty history.
-   */
   readonly walk: (repo: Repo) => Effect.Effect<readonly WalkedCommit[], GitError>;
-  /** The bytes of each blob, by id: what `walk` named and the caller chose to read. */
   readonly blobs: (
     repo: Repo,
     ids: readonly string[],
   ) => Effect.Effect<ReadonlyMap<string, Uint8Array>, GitError>;
-  /** The bytes of `path` at `rev` — a ref name or a commit id. */
   readonly show: (repo: Repo, rev: string, path: string) => Effect.Effect<Uint8Array, GitError>;
-  /** The per-file history of `path`, newest first, bytes on demand. */
   readonly previousVersions: (
     repo: Repo,
     path: string,
   ) => Effect.Effect<readonly Version[], GitError>;
-  /**
-   * History's whole timeline in one call: HEAD's commits newest first, each
-   * of `paths`' versions, and — given `shared`, a ref — which commits that
-   * ref reaches (`undefined` when there is no such ref). The Web answers it
-   * from its book-change index in one read; a host without one composes
-   * `log`, `previousVersions` and `logFrom` (`composedTimeline`).
-   */
   readonly timeline: (
     repo: Repo,
     paths: readonly string[],
@@ -242,12 +121,10 @@ export interface GitService {
 
 export interface GitTimeline {
   readonly commits: readonly Commit[];
-  /** By the path as asked; a path that fails to read is absent. */
   readonly versions: ReadonlyMap<string, readonly Version[]>;
   readonly shared: ReadonlySet<CommitId> | undefined;
 }
 
-/** `timeline` from the per-path calls, for a host with no index to answer it at once. */
 export const composedTimeline =
   (git: Pick<GitService, "log" | "logFrom" | "resolve" | "previousVersions">) =>
   (repo: Repo, paths: readonly string[], shared?: string): Effect.Effect<GitTimeline, GitError> =>
@@ -261,7 +138,6 @@ export const composedTimeline =
       return { commits, versions, shared: yield* sharedFrom(git, repo, shared) };
     });
 
-/** The commits `ref` reaches, or `undefined` when there is no such ref. */
 export const sharedFrom = (
   git: Pick<GitService, "logFrom" | "resolve">,
   repo: Repo,
@@ -279,13 +155,6 @@ export const sharedFrom = (
 
 export class Git extends Context.Service<Git, GitService>()("Git") {}
 
-/**
- * The receipts rule in one function: a saved path becomes a repository-relative
- * path, or nothing at all. `None` is the caller's cue to fail with `Refused` —
- * a path outside the project is a bug upstream, never something to commit
- * anyway. Paths already relative are accepted as given so a receipt may quote
- * either form; a relative path that climbs out of the root is refused too.
- */
 export const repositoryPath = (root: string, path: string): Option.Option<string> => {
   const normalisedRoot = normalisePath(root);
   const normalisedPath = normalisePath(path);
@@ -300,7 +169,6 @@ export const repositoryPath = (root: string, path: string): Option.Option<string
   return Option.some(normalisedPath.slice(normalisedRoot === "/" ? 1 : normalisedRoot.length + 1));
 };
 
-/** `repositoryPath`, with `None` turned into the `Refused` it always means. */
 export const relativeOrRefuse = (repo: Repo, path: string): Effect.Effect<string, GitError> =>
   Option.match(repositoryPath(repo.root, path), {
     onNone: () =>

@@ -1,14 +1,3 @@
-/**
- * The row vocabulary of the fold: what a line, block, chapter, verse, note and
- * word ARE, as interfaces, plus the mutable `Fold` scratch record the builders
- * fill in.
- *
- * Types only (and one throw). It exists so `docStructure.ts` can build the
- * typed-array columns while `lineTable.ts`, `blockTable.ts`, `notes.ts` and
- * `designators.ts` each own one lazy row class over them — the tables are the
- * data, these are the shapes a reader sees.
- */
-
 import type { NotePart } from "@sefer/text/engine/analysis";
 
 import type { CstScan } from "./cst";
@@ -28,6 +17,10 @@ export interface DocLine {
   readonly notes: NoteRange[];
   readonly words: WordRange[];
   readonly milestones: { from: number; to: number; name: string }[];
+  /** A table row's cell markers (`\th1`, `\tc2`): each a column's opening. */
+  readonly cells: { from: number; to: number; name: string }[];
+  /** Markup with no class of its own yet (`unruled`): each token, drawn as a chip. */
+  readonly unruled: { from: number; to: number; name: string }[];
   readonly breaks: { from: number; to: number }[];
   /** Standalone markers inside the line; one that opens the line is the line's class instead. */
   readonly standalones: { from: number; to: number }[];
@@ -44,6 +37,11 @@ export interface WordRange {
   from: number;
   to: number;
   marker: number;
+  /**
+   * A figure (`\fig … \fig*`): a run whose opener paints a point, the picture,
+   * where a character run's is hidden. Its surface is the caption.
+   */
+  figure: boolean;
   surfaceFrom: number;
   surfaceTo: number;
   attrFrom: number;

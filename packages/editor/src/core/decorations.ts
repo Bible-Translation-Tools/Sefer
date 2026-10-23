@@ -1,14 +1,3 @@
-/**
- * Structure and plan into CodeMirror decorations — the whole of what the reader
- * actually sees.
- *
- * Two builders, because the two modes are genuinely different pictures:
- * `buildRegular` hides markup and draws widgets in its place; `buildUsfm` shows
- * the source with syntax classes. Both emit atomic ranges and bidi isolates
- * alongside the visible set, because a hidden marker the caret can walk into and
- * an RTL verse that reorders its own markup are the same class of bug.
- */
-
 import { RangeSetBuilder } from "@codemirror/state";
 import {
   Decoration,
@@ -17,6 +6,7 @@ import {
   EditorView,
   WidgetType,
 } from "@codemirror/view";
+import { MARKERS } from "@sefer/text/engine/analysis";
 import {
   FLAG,
   NOTE_PART,
@@ -27,8 +17,13 @@ import {
 
 import { blockHost } from "./blockHost";
 import { lineIndexAt, type DocStructure, type NoteRange } from "./docStructure";
+import { figureSource } from "./figures";
+import type { DocLine, WordRange } from "./fold";
 import type { DocPlan, PlanSpan, ResolvedSlot } from "./plan";
 import type { WidgetKey } from "./registry";
+import { chipRenderer, markupOf } from "./unsupported";
+import { keptAsReading, type KeptAsReading } from "./verseLines";
+import { markerWords } from "./words";
 
 class JoinWidget extends WidgetType {
   readonly glyph: string;
@@ -36,14 +31,14 @@ class JoinWidget extends WidgetType {
     super();
     this.glyph = glyph;
   }
-  eq(o: JoinWidget) {
-    return o.glyph === this.glyph;
+  eq(other: JoinWidget) {
+    return other.glyph === this.glyph;
   }
   toDOM() {
-    const s = document.createElement("span");
-    s.className = "usfm-join";
-    s.textContent = this.glyph;
-    return s;
+    const span = document.createElement("span");
+    span.className = "usfm-join";
+    span.textContent = this.glyph;
+    return span;
   }
   ignoreEvent() {
     return false;
@@ -56,13 +51,13 @@ class EmptySlotWidget extends WidgetType {
     super();
     this.kind = kind;
   }
-  eq(o: EmptySlotWidget) {
-    return o.kind === this.kind;
+  eq(other: EmptySlotWidget) {
+    return other.kind === this.kind;
   }
   toDOM() {
-    const s = document.createElement("span");
-    s.className = `usfm-slot usfm-slot-${this.kind}`;
-    return s;
+    const span = document.createElement("span");
+    span.className = `usfm-slot usfm-slot-${this.kind}`;
+    return span;
   }
   ignoreEvent() {
     return false;
@@ -87,19 +82,141 @@ class PipWidget extends WidgetType {
     super();
     this.name = name;
   }
-  eq(o: PipWidget) {
-    return o.name === this.name;
+  eq(other: PipWidget) {
+    return other.name === this.name;
   }
   toDOM() {
-    const s = document.createElement("span");
-    s.className = "usfm-pip";
-    s.title = `\\${this.name}`;
-    s.textContent = this.name.endsWith("-s") ? "⟦" : "⟧";
-    return s;
+    const span = document.createElement("span");
+    span.className = "usfm-pip";
+    span.title = `\\${this.name}`;
+    span.textContent = this.name.endsWith("-s") ? "⟦" : "⟧";
+    return span;
   }
   ignoreEvent() {
     return false;
   }
+}
+
+/**
+ * A figure's picture: the host's (`figureSource`) when it resolves the `src`,
+ * else a frame labelled in the host's words. As wide as USFM's `size` says:
+ * `col` one text column, drawn half the text's width; `span` the page, all of it.
+ */
+class FigureWidget extends WidgetType {
+  constructor(
+    readonly src: string,
+    readonly size: "col" | "span",
+    readonly title: string,
+  ) {
+    super();
+  }
+  eq(other: FigureWidget) {
+    return other.src === this.src && other.size === this.size && other.title === this.title;
+  }
+  toDOM(view: EditorView) {
+    const figure = document.createElement("span");
+    figure.className = "usfm-fig";
+    figure.dataset.size = this.size;
+    figure.title = this.title;
+    const picture = this.src === "" ? undefined : view.state.facet(figureSource)?.(this.src);
+    if (picture !== undefined) {
+      const image = document.createElement("img");
+      image.src = picture;
+      image.alt = "";
+      image.draggable = false;
+      figure.append(image);
+    } else {
+      const frame = document.createElement("span");
+      frame.className = "usfm-fig-frame";
+      frame.textContent = markerWords(view.state, "fig", false);
+      figure.append(frame);
+    }
+    return figure;
+  }
+  ignoreEvent() {
+    return false;
+  }
+}
+
+const FIGURE_CAPTION = Decoration.mark({ class: "usfm-fig-caption" });
+
+/**
+ * A table cell's marker: a thin column separator, none before the row's first
+ * cell. Its words are an ordinary run after it (`usfm-cell`, its column in
+ * `data-col` for a layout to align on).
+ */
+class CellWidget extends WidgetType {
+  constructor(readonly first: boolean) {
+    super();
+  }
+  eq(other: CellWidget) {
+    return other.first === this.first;
+  }
+  toDOM() {
+    const separator = document.createElement("span");
+    separator.className = this.first ? "usfm-cell-sep usfm-cell-sep-first" : "usfm-cell-sep";
+    return separator;
+  }
+  ignoreEvent() {
+    return false;
+  }
+}
+
+/** `\thr3` → a header cell, right-aligned, column 3. */
+const cellShape = (
+  spelled: string,
+): { header: boolean; align: "start" | "center" | "end"; col: number } => {
+  const m = /^\\t([hc])([rc]?)(\d*)/.exec(spelled);
+  const align = m?.[2] === "r" ? "end" : m?.[2] === "c" ? "center" : "start";
+  return { header: m?.[1] === "h", align, col: Number(m?.[3] || "1") };
+};
+
+/** A published chapter's (`\cp`) line, a caption under the chapter number. */
+const CP_LINE = Decoration.line({ class: "usfm-cp" });
+
+/**
+ * An `unruled` mark: a chip, drawn by the host's renderer (`chipRenderer`)
+ * or as a plain label in the host's words.
+ */
+class ChipWidget extends WidgetType {
+  constructor(
+    readonly from: number,
+    readonly to: number,
+    readonly text: string,
+  ) {
+    super();
+  }
+  eq(other: ChipWidget) {
+    return other.text === this.text;
+  }
+  toDOM(view: EditorView) {
+    const markup = markupOf(view.state, this.from, this.to, this.text);
+    const render = view.state.facet(chipRenderer);
+    if (render !== null) return render(markup, view);
+    const chip = document.createElement("span");
+    chip.className = markup.closing ? "usfm-chip usfm-chip-end" : "usfm-chip";
+    chip.textContent = markup.label;
+    chip.title = markup.text.trim();
+    return chip;
+  }
+  ignoreEvent() {
+    return false;
+  }
+}
+
+/** A figure's widget, its `src` and `size` broken from its attribute list by the engine. */
+function figureWidget(doc: string, structure: DocStructure, word: WordRange): FigureWidget {
+  const list =
+    word.attrTo > word.attrFrom && structure.analysis !== null
+      ? structure.analysis.attrs(word.attrFrom, word.attrTo).attrs
+      : [];
+  const named = list.map(({ name, value }) => ({
+    name: name.from === name.to ? "default" : doc.slice(name.from, name.to),
+    value: doc.slice(value.from, value.to),
+  }));
+  const src = named.find((a) => a.name === "src")?.value ?? "";
+  const size = named.find((a) => a.name === "size")?.value === "span" ? "span" : "col";
+  return new FigureWidget(src, size, named.map((a) => `${a.name}: ${a.value}`).join("\n"));
 }
 
 class VersePipWidget extends WidgetType {
@@ -108,15 +225,15 @@ class VersePipWidget extends WidgetType {
     super();
     this.num = num;
   }
-  eq(o: VersePipWidget) {
-    return o.num === this.num;
+  eq(other: VersePipWidget) {
+    return other.num === this.num;
   }
   toDOM() {
-    const s = document.createElement("span");
-    s.className = "usfm-verse-pip";
-    s.title = `verse ${this.num}`;
-    s.textContent = this.num;
-    return s;
+    const span = document.createElement("span");
+    span.className = "usfm-verse-pip";
+    span.title = `verse ${this.num}`;
+    span.textContent = this.num;
+    return span;
   }
   ignoreEvent() {
     return false;
@@ -139,19 +256,20 @@ class CallerWidget extends WidgetType {
     this.kind = kind;
     this.at = at;
   }
-  eq(o: CallerWidget) {
-    return o.mark === this.mark && o.kind === this.kind && o.at === this.at;
+  eq(other: CallerWidget) {
+    return other.mark === this.mark && other.kind === this.kind && other.at === this.at;
   }
   toDOM(view: EditorView) {
-    const s = document.createElement("span");
-    s.className = `usfm-caller usfm-caller-${this.kind}`;
-    s.textContent = this.mark;
-    s.title = "click to read this note at the foot of the chapter";
-    s.onmousedown = (e) => {
+    const span = document.createElement("span");
+    span.className = `usfm-caller usfm-caller-${this.kind}`;
+    span.dataset["noteAt"] = String(this.at);
+    span.textContent = this.mark;
+    span.title = "click to read this note at the foot of the chapter";
+    span.onmousedown = (e) => {
       e.preventDefault();
       toggleNote(view, this.at, "caller");
     };
-    return s;
+    return span;
   }
   ignoreEvent() {
     return false;
@@ -164,7 +282,6 @@ export function noteApparatusText(doc: string, note: NoteRange, part: number): s
   return out.replace(/\s+/g, " ").trim();
 }
 
-/** What an empty note body says, so that there is something to click. */
 const EMPTY_NOTE_BODY = "Add note text";
 
 /**
@@ -192,10 +309,10 @@ class NotesWidget extends WidgetType {
     super();
     this.notes = notes;
   }
-  eq(o: NotesWidget) {
+  eq(other: NotesWidget) {
     return (
-      o.notes.length === this.notes.length &&
-      o.notes.every((n, i) => n.mark === this.notes[i].mark && n.body === this.notes[i].body)
+      other.notes.length === this.notes.length &&
+      other.notes.every((n, i) => n.mark === this.notes[i].mark && n.body === this.notes[i].body)
     );
   }
   toDOM(view: EditorView) {
@@ -207,14 +324,10 @@ class NotesWidget extends WidgetType {
       row.dataset.noteRow = String(n.from);
       row.title = "click the note to edit it, or its number to go back to the text";
       row.onmousedown = (e) => {
-        // SAFETY: a mousedown on a rendered row always targets an element
-        // inside it; `closest` is the only thing read from it.
+        // SAFETY: a mousedown on a rendered row always targets an element inside it; `closest` is the only thing read from it.
         const target = e.target as HTMLElement;
-        // An open editor owns its own clicks, and so does the Done button.
         if (target.closest(".usfm-note-edit") || target.closest(".usfm-note-done")) return;
         e.preventDefault();
-        // The BODY is the note itself, so clicking it means "let me write
-        // this"; the mark and the reference are the pointer back to the text.
         toggleNote(view, n.from, target.closest(".usfm-note-body") === null ? "back" : "edit");
       };
       for (const [cls, text] of [
@@ -244,8 +357,8 @@ class NotesWidget extends WidgetType {
       const row = rows[i];
       if (row.dataset.noteRow !== String(n.from)) return;
       const open = row.querySelector(".usfm-note-edit")?.firstChild != null;
-      const set = (cls: string, text: string) => {
-        const el = row.querySelector<HTMLElement>(`.${cls}`);
+      const set = (className: string, text: string) => {
+        const el = row.querySelector<HTMLElement>(`.${className}`);
         if (el && el.textContent !== text && !open) el.textContent = text;
       };
       set("usfm-note-mark", n.mark);
@@ -271,8 +384,8 @@ class NotesWidget extends WidgetType {
 export type NoteGesture = "caller" | "back" | "edit";
 
 let toggleNote: (view: EditorView, at: number, how: NoteGesture) => void = () => {};
-export function setNoteToggler(fn: typeof toggleNote) {
-  toggleNote = fn;
+export function setNoteToggler(toggle: typeof toggleNote) {
+  toggleNote = toggle;
 }
 
 export const DEFAULT_BUILD_OPTS: BuildOpts = {};
@@ -293,52 +406,46 @@ export interface BuildOpts {
 }
 
 function narrow(
-  win: { from: number; to: number } | null | undefined,
+  windowRange: { from: number; to: number } | null | undefined,
   range: { from: number; to: number } | null | undefined,
 ): { from: number; to: number } | null {
-  if (!win) return range ?? null;
-  if (!range) return win;
-  return { from: Math.max(win.from, range.from), to: Math.min(win.to, range.to) };
+  if (!windowRange) return range ?? null;
+  if (!range) return windowRange;
+  return { from: Math.max(windowRange.from, range.from), to: Math.min(windowRange.to, range.to) };
 }
 
-/**
- * WHEN to draw, once for both modes: the lines a window covers, and the
- * tokens. Regular mode jumped to the window's first line and stopped at its
- * last while USFM walked every line and every token of the book and skipped
- * the ones outside; now both take the window's rows from `lineIndexAt`, and
- * tokens by a binary search on their starts (they ascend, and tile the
- * document). WHAT to draw stays each mode's own.
- */
 function windowLines(
-  s: DocStructure,
-  win: { from: number; to: number } | null,
+  structure: DocStructure,
+  windowRange: { from: number; to: number } | null,
 ): { readonly first: number; readonly last: number } {
-  if (win === null) return { first: 0, last: s.lines.length - 1 };
-  return { first: Math.max(0, lineIndexAt(s, win.from)), last: lineIndexAt(s, win.to) };
+  if (windowRange === null) return { first: 0, last: structure.lines.length - 1 };
+  return {
+    first: Math.max(0, lineIndexAt(structure, windowRange.from)),
+    last: lineIndexAt(structure, windowRange.to),
+  };
 }
 
 type TokenRows = NonNullable<DocStructure["analysis"]>["dish"]["tokens"]["rows"];
 
 function forTokensIn(
   rows: TokenRows,
-  win: { from: number; to: number } | null,
+  windowRange: { from: number; to: number } | null,
   visit: (kindBits: number, markerIdx: number, from: number, to: number) => void,
 ): void {
   let first = 0;
-  if (win !== null) {
-    // The last token starting at or before the window: it may run into it.
+  if (windowRange !== null) {
     let low = 0;
     let high = rows.length;
     while (low < high) {
       const mid = (low + high) >> 1;
-      if (rows.seek(mid).start <= win.from) low = mid + 1;
+      if (rows.seek(mid).start <= windowRange.from) low = mid + 1;
       else high = mid;
     }
     first = Math.max(0, low - 1);
   }
   for (let i = first, n = rows.length; i < n; i++) {
     const token = rows.seek(i);
-    if (win !== null && token.start > win.to) break;
+    if (windowRange !== null && token.start > windowRange.to) break;
     visit(token.kind, token.marker, token.start, token.end);
   }
 }
@@ -350,12 +457,12 @@ export interface BuildResult {
 
 class BreakWidget extends WidgetType {
   readonly cls: string;
-  constructor(cls: string) {
+  constructor(className: string) {
     super();
-    this.cls = cls;
+    this.cls = className;
   }
-  eq(o: BreakWidget) {
-    return o.cls === this.cls;
+  eq(other: BreakWidget) {
+    return other.cls === this.cls;
   }
   toDOM() {
     const el = document.createElement("span");
@@ -369,22 +476,28 @@ class BreakWidget extends WidgetType {
 
 type Pending = { from: number; to: number; deco: Decoration };
 
-// Decoration specs are untyped bags (CodeMirror types `spec` as `any`), so
-// the editor's own flags are read back through the narrow shapes below rather
-// than trusted. SAFETY: this literal IS the spec, written here and nowhere
-// else; the assertion only widens it to what `Decoration.replace` accepts.
+// SAFETY: this literal IS the spec, written here and nowhere else; the assertion only widens it to what `Decoration.replace` accepts.
 const UNIT = { usfmUnit: true } as Record<string, unknown>;
 const HIDDEN = Decoration.replace(UNIT);
 
-export function isUnit(d: Decoration) {
-  // SAFETY: `spec` is `any` in CodeMirror's types; this reads one optional
-  // flag and compares it to `true`, so a spec without it answers false.
-  return (d.spec as { usfmUnit?: boolean }).usfmUnit === true;
+type DecorationSpec = {
+  usfmUnit?: boolean;
+  usfmIsolate?: boolean;
+  widget?: unknown;
+  block?: boolean;
+  class?: string;
+  attributes?: unknown;
+};
+
+// SAFETY: `spec` is `any` in CodeMirror's types; every read of it goes through here and compares optional fields, so a spec without them answers false or undefined.
+const specOf = (deco: Decoration): DecorationSpec => deco.spec;
+
+export function isUnit(deco: Decoration) {
+  return specOf(deco).usfmUnit === true;
 }
 
-export function isInvisible(d: Decoration) {
-  // SAFETY: as `isUnit` — three optional fields read off an `any` spec.
-  const spec = d.spec as { usfmUnit?: boolean; widget?: unknown; block?: boolean };
+export function isInvisible(deco: Decoration) {
+  const spec = specOf(deco);
   return spec.usfmUnit === true && spec.widget === undefined;
 }
 
@@ -401,16 +514,44 @@ const NUM_ISOLATE: Record<"v" | "c", Decoration> = {
   }),
 };
 
-export function isIsolate(d: Decoration) {
-  // SAFETY: as `isUnit` — one optional flag read off an `any` spec.
-  return (d.spec as { usfmIsolate?: boolean }).usfmIsolate === true;
+export function isIsolate(deco: Decoration) {
+  return specOf(deco).usfmIsolate === true;
 }
 
 const DELIMITER = Decoration.mark({ class: "usfm-delim" });
 
+/** A verse number hung in the margin, and the space after it, which the hang takes up. */
+const NUM_HUNG = Decoration.mark({
+  class: "usfm-num usfm-num-v usfm-num-hung",
+  bidiIsolate: Direction.LTR,
+  usfmIsolate: true,
+});
+const DELIMITER_HUNG = Decoration.mark({ class: "usfm-delim usfm-delim-hung" });
+
+/**
+ * The verses whose number hangs in the margin (ecthesis): in line by line every
+ * verse; otherwise a verse that opens a poetry line, so each poetry level's
+ * words start at the same place with or without a number.
+ */
+function hungVerses(doc: string, structure: DocStructure, plan: DocPlan): Set<number> {
+  const verses = structure.verses;
+  if (plan.verseLines) return new Set(verses.map((verse) => verse.markerFrom));
+  const hung = new Set<number>();
+  let k = 0;
+  for (let i = 0; i < structure.blocks.length; i++) {
+    const block = structure.blocks.at(i);
+    if (!block.poetry || !plan.block(i).startsLine) continue;
+    while (k < verses.length && verses[k].markerFrom < block.contentFrom) k++;
+    const verse = verses[k];
+    if (verse === undefined || verse.markerFrom >= block.to) continue;
+    if (doc.slice(block.contentFrom, verse.markerFrom).trim() === "") hung.add(verse.markerFrom);
+  }
+  return hung;
+}
+
 export function buildRegular(
   doc: string,
-  s: DocStructure,
+  structure: DocStructure,
   plan: DocPlan,
   opts: BuildOpts,
 ): BuildResult {
@@ -419,9 +560,11 @@ export function buildRegular(
   const join = plan.joinWidget
     ? Decoration.replace({ widget: WIDGETS[plan.joinWidget](""), ...UNIT })
     : HIDDEN;
-  const win = narrow(opts.window, opts.range);
+  const windowRange = narrow(opts.window, opts.range);
   const outside = (from: number, to: number) =>
-    win !== null && win !== undefined && (to < win.from || from > win.to);
+    windowRange !== null &&
+    windowRange !== undefined &&
+    (to < windowRange.from || from > windowRange.to);
   const hide = (from: number, to: number) => {
     if (to > from) add.push({ from, to, deco: HIDDEN });
   };
@@ -429,7 +572,7 @@ export function buildRegular(
     for (const h of spans) hide(h.from, h.to);
   };
 
-  const slot = (r: ResolvedSlot) => {
+  const slot = (r: ResolvedSlot, hung = false) => {
     if (r.form === "pip" && r.residual) {
       add.push({
         from: r.from,
@@ -439,25 +582,33 @@ export function buildRegular(
       return;
     }
     hideAll(r.hidden);
-    if (r.digits) add.push({ from: r.digits.from, to: r.digits.to, deco: NUM_ISOLATE[r.kind] });
-    if (r.delimiter) add.push({ from: r.delimiter.from, to: r.delimiter.to, deco: DELIMITER });
+    if (r.digits)
+      add.push({
+        from: r.digits.from,
+        to: r.digits.to,
+        deco: hung && r.kind === "v" ? NUM_HUNG : NUM_ISOLATE[r.kind],
+      });
+    if (r.delimiter)
+      add.push({
+        from: r.delimiter.from,
+        to: r.delimiter.to,
+        deco: hung ? DELIMITER_HUNG : DELIMITER,
+      });
     if (r.box !== null)
       add.push({
         from: r.box,
         to: r.box,
-        // AFTER the number's place (side 1), so the caret there sits on the
-        // box's left edge — inside the outline — rather than past it.
         deco: Decoration.widget({ widget: new EmptySlotWidget(r.kind), side: 1 }),
       });
   };
 
-  const rows = windowLines(s, win);
+  const rows = windowLines(structure, windowRange);
   for (let row = rows.first; row <= rows.last; row++) {
-    const l = s.lines.at(row);
+    const l = structure.lines.at(row);
     if (outside(l.from, l.to)) continue;
-    const rl = plan.line(l.n);
+    const resolvedLine = plan.line(l.n);
     if (l.cls === "block.meta" || l.cls === "block.front") {
-      if (rl.paints)
+      if (resolvedLine.paints)
         add.push({
           from: l.from,
           to: l.from,
@@ -465,25 +616,35 @@ export function buildRegular(
             class: l.cls === "block.meta" ? "usfm-meta" : `usfm-front usfm-${l.marker}`,
           }),
         });
-      hideAll(rl.hidden);
+      hideAll(resolvedLine.hidden);
     } else if (l.cls === "block.heading") {
-      hideAll(rl.hidden);
-    } else if (rl.standalone) {
-      // A standalone marker draws nothing; "point" (a projection that shows
-      // it) leaves the marker's own text on the page.
-      if (rl.standalone.form === "hidden") hide(rl.standalone.from, rl.standalone.to);
-    } else if (rl.slot) {
-      if (rl.paints)
+      hideAll(resolvedLine.hidden);
+    } else if (resolvedLine.standalone) {
+      if (resolvedLine.standalone.form === "hidden")
+        hide(resolvedLine.standalone.from, resolvedLine.standalone.to);
+    } else if (resolvedLine.slot) {
+      if (resolvedLine.paints)
         add.push({ from: l.from, to: l.from, deco: Decoration.line({ class: "usfm-chap" }) });
-      slot(rl.slot);
+      slot(resolvedLine.slot);
     }
 
-    for (const m of rl.marks) {
+    for (const m of resolvedLine.marks) {
       if (m.form !== "point") {
         hide(m.from, m.to);
         continue;
       }
-      if (m.kind === "standalone") continue;
+      if (m.kind === "standalone" || m.kind === "cell") continue;
+      if (m.kind === "unruled") {
+        const text = doc.slice(m.from, m.to);
+        if (m.from === l.from && /^\\cp\b/.test(text))
+          add.push({ from: l.from, to: l.from, deco: CP_LINE });
+        add.push({
+          from: m.from,
+          to: m.to,
+          deco: Decoration.replace({ widget: new ChipWidget(m.from, m.to, text), ...UNIT }),
+        });
+        continue;
+      }
       add.push({
         from: m.from,
         to: m.to,
@@ -495,29 +656,61 @@ export function buildRegular(
       });
     }
 
-    for (const wd of l.words) {
-      const w = plan.wordAt.get(wd.from);
-      if (!w) continue;
-      hideAll(w.hidden);
-      if (w.scope)
+    const cells = resolvedLine.marks.filter((m) => m.kind === "cell" && m.form === "point");
+    cells.forEach((cell, at) => {
+      const shape = cellShape(doc.slice(cell.from, cell.to));
+      add.push({
+        from: cell.from,
+        to: cell.to,
+        deco: Decoration.replace({ widget: new CellWidget(at === 0), ...UNIT }),
+      });
+      const contentTo = cells[at + 1]?.from ?? l.to;
+      if (contentTo > cell.to)
         add.push({
-          from: w.scope.from,
-          to: w.scope.to,
-          deco: Decoration.mark({ class: "usfm-word", attributes: { "data-w": String(w.from) } }),
+          from: cell.to,
+          to: contentTo,
+          deco: Decoration.mark({
+            class: `usfm-cell${shape.header ? " usfm-cell-head" : ""} usfm-cell-${shape.align}`,
+            attributes: { "data-col": String(shape.col) },
+          }),
+        });
+    });
+
+    for (const wd of l.words) {
+      const resolvedWord = plan.wordAt.get(wd.from);
+      if (!resolvedWord) continue;
+      hideAll(resolvedWord.hidden);
+      if (resolvedWord.point)
+        add.push({
+          from: resolvedWord.point.from,
+          to: resolvedWord.point.to,
+          deco: Decoration.replace({ widget: figureWidget(doc, structure, wd), ...UNIT }),
+        });
+      if (resolvedWord.scope && resolvedWord.scope.to > resolvedWord.scope.from)
+        add.push({
+          from: resolvedWord.scope.from,
+          to: resolvedWord.scope.to,
+          deco: resolvedWord.figure
+            ? FIGURE_CAPTION
+            : Decoration.mark({
+                class: `usfm-word usfm-c-${(MARKERS[wd.marker]?.name ?? "").replace(/^\+/, "")}`,
+                attributes: { "data-w": String(resolvedWord.from) },
+              }),
         });
     }
   }
 
-  for (let k = 0; k < s.verses.length; k++) {
-    const v = s.verses[k];
+  const hung = hungVerses(doc, structure, plan);
+  for (let k = 0; k < structure.verses.length; k++) {
+    const v = structure.verses[k];
     if (outside(v.markerFrom, v.contentFrom)) continue;
-    slot(plan.verse(k));
+    slot(plan.verse(k), hung.has(v.markerFrom));
   }
 
   if (opts.highlight) {
     const needle = opts.highlight.toLowerCase();
-    const lo = win ? Math.max(0, win.from - needle.length) : 0;
-    const hi = win ? Math.min(doc.length, win.to + needle.length) : doc.length;
+    const lo = windowRange ? Math.max(0, windowRange.from - needle.length) : 0;
+    const hi = windowRange ? Math.min(doc.length, windowRange.to + needle.length) : doc.length;
     const hay = doc.slice(lo, hi).toLowerCase();
     for (let i = hay.indexOf(needle); i >= 0; i = hay.indexOf(needle, i + needle.length)) {
       add.push({
@@ -535,35 +728,61 @@ export function buildRegular(
     });
   }
 
-  for (let i = 0; i < s.blocks.length; i++) {
-    if (outside(s.blocks.fromAt(i), s.blocks.toAt(i))) continue;
-    const b = s.blocks.at(i);
-    const rb = plan.block(i);
-    for (const r of rb.reflow) {
+  if (plan.sidebarBox)
+    for (let i = 0; i < structure.blocks.length; i++) {
+      if (structure.blocks.clsAt(i) !== "sidebar") continue;
+      const from = structure.blocks.fromAt(i);
+      const to = structure.blocks.toAt(i);
+      if (outside(from, to)) continue;
+      const first = doc.lastIndexOf("\n", from - 1) + 1;
+      for (let at = first; at <= to;) {
+        const end = doc.indexOf("\n", at);
+        const lineTo = end < 0 || end > to ? to : end;
+        // The last line shown: a closer alone on the line after is hidden with it (`resolveContainer`).
+        const next = end < 0 || end >= to ? -1 : end + 1;
+        const shownLast =
+          lineTo >= to || (next >= 0 && /^\s*\\[A-Za-z]+\s*$/.test(doc.slice(next, to)));
+        const edges = `${at === first ? " usfm-sidebar-first" : ""}${shownLast ? " usfm-sidebar-last" : ""}`;
+        add.push({ from: at, to: at, deco: Decoration.line({ class: `usfm-sidebar${edges}` }) });
+        if (end < 0 || end >= to) break;
+        at = end + 1;
+      }
+    }
+
+  // Line by line keeps a table and a sidebar as Reading draws them, on their own lines.
+  const kept = plan.verseLines ? keptAsReading(structure) : null;
+  if (kept !== null) joined += layOutVerseLines(structure, plan, add, outside, kept);
+  for (let i = 0; i < structure.blocks.length; i++) {
+    if (kept !== null && !kept.blocks.has(i)) continue;
+    if (outside(structure.blocks.fromAt(i), structure.blocks.toAt(i))) continue;
+    const b = structure.blocks.at(i);
+    const resolvedBlock = plan.block(i);
+    for (const r of resolvedBlock.reflow) {
       if (r.kind === "hide") {
         add.push({ from: r.from, to: r.to, deco: HIDDEN });
         continue;
       }
       add.push({ from: r.from, to: r.to, deco: join });
     }
-    joined += rb.joined;
+    joined += resolvedBlock.joined;
     const head = b.cls === "block.heading" ? " usfm-head" : "";
-    const cls = rb.paints ? `usfm-block usfm-${b.kind}${head}` : "";
-    if (rb.startsLine) {
-      if (cls) add.push({ from: b.from, to: b.from, deco: Decoration.line({ class: cls }) });
+    const className = resolvedBlock.paints ? `usfm-block usfm-${b.kind}${head}` : "";
+    if (resolvedBlock.startsLine) {
+      if (className)
+        add.push({ from: b.from, to: b.from, deco: Decoration.line({ class: className }) });
       continue;
     }
-    if (rb.headHidden) hide(rb.headHidden.from, rb.headHidden.to);
-    if (rb.breakAt !== null)
+    if (resolvedBlock.headHidden) hide(resolvedBlock.headHidden.from, resolvedBlock.headHidden.to);
+    if (resolvedBlock.breakAt !== null)
       add.push({
-        from: rb.breakAt,
-        to: rb.breakAt,
-        deco: Decoration.widget({ widget: new BreakWidget(cls), side: -1 }),
+        from: resolvedBlock.breakAt,
+        to: resolvedBlock.breakAt,
+        deco: Decoration.widget({ widget: new BreakWidget(className), side: -1 }),
       });
-    if (rb.inblk)
+    if (resolvedBlock.inblk)
       add.push({
-        from: rb.inblk.from,
-        to: rb.inblk.to,
+        from: resolvedBlock.inblk.from,
+        to: resolvedBlock.inblk.to,
         deco: Decoration.mark({ class: `usfm-inblk usfm-${b.kind}` }),
       });
   }
@@ -586,7 +805,6 @@ export function buildRegular(
   const clip = opts.clip;
   for (const ap of plan.apparatus) {
     if (outside(ap.chapter.from, ap.chapter.to)) continue;
-    // Drawn where it is anchored, so shown only when that point is in the clip.
     if (clip !== null && clip !== undefined && (ap.at < clip.from || ap.at > clip.to)) continue;
     add.push({
       from: ap.at,
@@ -606,12 +824,140 @@ export function buildRegular(
     });
   }
 
-  return finish(add, doc, opts, { joined, blocks: s.blocks.length });
+  return finish(add, doc, opts, { joined, blocks: structure.blocks.length });
+}
+
+class VerseSeparatorWidget extends WidgetType {
+  readonly poetry: boolean;
+  constructor(poetry: boolean) {
+    super();
+    this.poetry = poetry;
+  }
+  eq(other: VerseSeparatorWidget) {
+    return other.poetry === this.poetry;
+  }
+  toDOM() {
+    const span = document.createElement("span");
+    span.className = this.poetry ? "usfm-verse-sep usfm-verse-sep-poetry" : "usfm-verse-sep";
+    span.textContent = this.poetry ? " / " : " ";
+    return span;
+  }
+  ignoreEvent() {
+    return false;
+  }
+}
+
+const separator = (poetry: boolean): Decoration =>
+  Decoration.replace({ widget: new VerseSeparatorWidget(poetry), ...UNIT });
+
+const VERSE_BREAK = Decoration.widget({ widget: new BreakWidget("usfm-verse-break"), side: -1 });
+const VERSE_LINE = Decoration.line({ class: "usfm-verse-line" });
+const VERSE_HEADING = Decoration.line({ class: "usfm-verse-heading" });
+
+const isPoetryMarker = (marker: string | null): boolean => marker?.startsWith("q") === true;
+
+/**
+ * Line-by-line: one verse per visual line, whatever the file's layout. A line
+ * that opens a verse, a chapter or a heading keeps its newline before it; any
+ * other newline is inside a verse and is drawn as a space, or a thin slash
+ * before poetry. A verse that starts mid-line gets a drawn break. Nothing is
+ * written: the text and its offsets stay as they are.
+ */
+function layOutVerseLines(
+  structure: DocStructure,
+  plan: DocPlan,
+  add: Pending[],
+  outside: (from: number, to: number) => boolean,
+  kept: KeptAsReading,
+): number {
+  const isKept = (pos: number): boolean =>
+    kept.spans.some((span) => pos >= span.from && pos <= span.to);
+  const verseStarts = new Set(structure.verses.map((verse) => verse.markerFrom));
+  const opensVerse = (line: DocLine): boolean =>
+    verseStarts.has(line.contentFrom) || verseStarts.has(line.from);
+  const standsAlone = (line: DocLine): boolean =>
+    isKept(line.from) ||
+    line.cls === "slot.c" ||
+    line.cls === "block.heading" ||
+    line.cls === "block.meta" ||
+    line.cls === "block.front";
+  const showsNothing = (line: DocLine): boolean =>
+    line.cls !== "slot.c" && !opensVerse(line) && line.contentFrom >= line.to;
+  const lineStarts = new Set<number>();
+
+  let joined = 0;
+  let previous: DocLine | null = null;
+  for (const line of structure.lines) {
+    if (showsNothing(line)) continue;
+    const visibleFrom = opensVerse(line) ? line.from : line.contentFrom;
+    if (previous !== null && !outside(previous.to, line.contentFrom)) {
+      const keepsBreak = opensVerse(line) || standsAlone(line) || standsAlone(previous);
+      if (keepsBreak) {
+        if (line.from > previous.to + 1)
+          add.push({ from: previous.to + 1, to: line.from, deco: HIDDEN });
+      } else {
+        add.push({
+          from: previous.to,
+          to: line.contentFrom,
+          deco: separator(isPoetryMarker(line.marker)),
+        });
+        joined++;
+      }
+    }
+    if (isKept(line.from)) {
+      lineStarts.add(line.from);
+      lineStarts.add(line.contentFrom);
+      previous = line;
+      continue;
+    }
+    if (line.cls === "block.para" && line.contentFrom > line.from && visibleFrom === line.from)
+      add.push({ from: line.from, to: line.contentFrom, deco: HIDDEN });
+    const visualStart = previous === null ? line.from : previous.to + 1;
+    if (opensVerse(line) && !outside(visualStart, visualStart))
+      add.push({ from: visualStart, to: visualStart, deco: VERSE_LINE });
+    if (line.cls === "block.heading" && !outside(visualStart, visualStart))
+      add.push({ from: visualStart, to: visualStart, deco: VERSE_HEADING });
+    lineStarts.add(line.from);
+    lineStarts.add(line.contentFrom);
+    previous = line;
+  }
+
+  for (let i = 0; i < structure.blocks.length; i++) {
+    if (kept.blocks.has(i)) continue;
+    const block = structure.blocks.at(i);
+    if (plan.block(i).startsLine || outside(block.from, block.contentFrom)) continue;
+    if (verseStarts.has(block.contentFrom)) {
+      if (block.contentFrom > block.from)
+        add.push({ from: block.from, to: block.contentFrom, deco: HIDDEN });
+      continue;
+    }
+    add.push({ from: block.from, to: block.contentFrom, deco: separator(block.poetry) });
+  }
+
+  for (const verse of structure.verses) {
+    if (lineStarts.has(verse.markerFrom) || outside(verse.markerFrom, verse.markerFrom)) continue;
+    add.push({ from: verse.markerFrom, to: verse.markerFrom, deco: VERSE_BREAK });
+  }
+  return joined;
+}
+
+function setOfPending(add: Pending[]): DecorationSet {
+  add.sort((a, b) => a.from - b.from || a.deco.startSide - b.deco.startSide || a.to - b.to);
+  const builder = new RangeSetBuilder<Decoration>();
+  let lastTo = -1;
+  for (const d of add) {
+    if (d.to > d.from && specOf(d.deco).class === undefined) {
+      if (d.from < lastTo) continue;
+      lastTo = d.to;
+    }
+    builder.add(d.from, d.to, d.deco);
+  }
+  return builder.finish();
 }
 
 export function buildNoteApparatus(
   doc: string,
-  s: DocStructure,
+  structure: DocStructure,
   range: { from: number; to: number },
 ): DecorationSet {
   const add: Pending[] = [];
@@ -629,7 +975,7 @@ export function buildNoteApparatus(
 
   let nested: string | null = null;
   let at = range.from;
-  const parts = s.notes
+  const parts = structure.notes
     .filter((n) => n.to > range.from && n.from < range.to)
     .flatMap((n) => n.parts);
   for (const part of parts) {
@@ -661,28 +1007,17 @@ export function buildNoteApparatus(
   }
   hide(at, range.to);
 
-  add.sort((a, b) => a.from - b.from || a.deco.startSide - b.deco.startSide || a.to - b.to);
-  const builder = new RangeSetBuilder<Decoration>();
-  let lastTo = -1;
-  for (const d of add) {
-    // SAFETY: one optional field read off CodeMirror's `any` spec; an absent
-    // `class` is exactly the case being tested for.
-    if (d.to > d.from && (d.deco.spec as { class?: string }).class === undefined) {
-      if (d.from < lastTo) continue;
-      lastTo = d.to;
-    }
-    builder.add(d.from, d.to, d.deco);
-  }
-  return builder.finish();
+  return setOfPending(add);
 }
 
-export function buildUsfm(doc: string, s: DocStructure, opts: BuildOpts): BuildResult {
+export function buildUsfm(doc: string, structure: DocStructure, opts: BuildOpts): BuildResult {
   const add: Pending[] = [];
-  const win = narrow(opts.window, opts.range);
-  const outside = (from: number, to: number) => win !== null && (to < win.from || from > win.to);
-  const rows = windowLines(s, win);
+  const windowRange = narrow(opts.window, opts.range);
+  const outside = (from: number, to: number) =>
+    windowRange !== null && (to < windowRange.from || from > windowRange.to);
+  const rows = windowLines(structure, windowRange);
   for (let row = rows.first; row <= rows.last; row++) {
-    const l = s.lines.at(row);
+    const l = structure.lines.at(row);
     if (outside(l.from, l.to)) continue;
     if (l.marker)
       add.push({
@@ -691,16 +1026,16 @@ export function buildUsfm(doc: string, s: DocStructure, opts: BuildOpts): BuildR
         deco: Decoration.line({ class: `usfm-src usfm-src-${l.marker}` }),
       });
   }
-  const dish = s.analysis?.dish;
+  const dish = structure.analysis?.dish;
   if (dish) {
-    forTokensIn(dish.tokens.rows, win, (kindBits, markerIdx, from, to) => {
+    forTokensIn(dish.tokens.rows, windowRange, (kindBits, markerIdx, from, to) => {
       if (to <= from || outside(from, to)) return;
       const kind = kindBits & ~TOKEN_SPELLING_BIT;
-      const cls = tokenClass(kind, classWordOf(markerIdx, kindBits));
-      if (cls) add.push({ from, to, deco: Decoration.mark({ class: cls }) });
+      const className = tokenClass(kind, classWordOf(markerIdx, kindBits));
+      if (className) add.push({ from, to, deco: Decoration.mark({ class: className }) });
     });
   }
-  return finish(add, doc, opts, { joined: 0, blocks: s.blocks.length });
+  return finish(add, doc, opts, { joined: 0, blocks: structure.blocks.length });
 }
 
 function tokenClass(kind: number, cls: number): string | null {
@@ -739,9 +1074,8 @@ function finish(
 
   add.sort((a, b) => a.from - b.from || a.deco.startSide - b.deco.startSide || a.to - b.to);
 
-  const isReplace = (d: Decoration) => {
-    // SAFETY: two optional fields read off CodeMirror's `any` spec.
-    const spec = d.spec as { class?: string; attributes?: unknown };
+  const isReplace = (deco: Decoration) => {
+    const spec = specOf(deco);
     return spec.class === undefined && spec.attributes === undefined;
   };
   const builder = new RangeSetBuilder<Decoration>();
@@ -751,9 +1085,7 @@ function finish(
     let { from, to } = d;
     if (to > from && isReplace(d.deco)) {
       if (from < lastTo) {
-        // SAFETY: one optional field read off CodeMirror's `any` spec.
-        const spec = d.deco.spec as { widget?: unknown };
-        if (spec.widget !== undefined || to <= lastTo) continue;
+        if (specOf(d.deco).widget !== undefined || to <= lastTo) continue;
         from = lastTo;
       }
       lastTo = to;

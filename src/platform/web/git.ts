@@ -1,9 +1,3 @@
-/**
- * The Web answer to the `Git` port: isomorphic-git driven over the Effect
- * `FileSystem` through `nodeFsView`, so the same repository the OPFS layer
- * stores is the one Git reads. This file is the only place in the Web host
- * that knows isomorphic-git exists; core sees the port.
- */
 import { Buffer } from "buffer";
 
 import { Effect, FileSystem, Layer, Option } from "effect";
@@ -43,9 +37,6 @@ import { Observability } from "#core/observability";
 
 import { ensureBookIndex } from "./history/store";
 
-// isomorphic-git 1.38.4 reads a global `Buffer` (`Buffer.from`, `Buffer.alloc`,
-// `Buffer.concat`, `Buffer.isBuffer`) and no bundler supplies one to a browser
-// build. The Web host must install one before calling into Git.
 Object.assign(globalThis, { Buffer });
 
 const describeError = (error: unknown): string =>
@@ -54,7 +45,6 @@ const describeError = (error: unknown): string =>
 const failed = (reason: GitFailureReason, error: unknown): GitError =>
   new GitError({ reason, description: describeError(error) });
 
-/** Every call into isomorphic-git funnels through here, so no throw escapes. */
 const attempt = <A>(reason: GitFailureReason, call: () => Promise<A>): Effect.Effect<A, GitError> =>
   Effect.tryPromise({ try: call, catch: (error) => failed(reason, error) });
 
@@ -74,11 +64,6 @@ const commitOf = (entry: {
   at: entry.commit.author.timestamp * 1000,
 });
 
-/**
- * isomorphic-git reports status as a matrix of `[path, head, workdir, stage]`
- * counters rather than named states; this is the translation to the four kinds
- * the port names. Rows where all three agree are unchanged and dropped.
- */
 const changeKindOf = (
   head: number,
   workdir: number,
@@ -96,17 +81,9 @@ const makeWebGit = (
 ): GitService => {
   const fs = nodeFsView(fileSystem, Effect.runPromise);
 
-  /**
-   * A file's bytes at a commit, found through RAW trees: isomorphic-git's
-   * `readBlob({ filepath })` parses every tree on the way and throws
-   * `UnsafeFilepathError` on a name git itself accepts (en_ulb's 2018 root
-   * tree has `00-About_the_ULB\ULB-Intro.md`), so an old version of Genesis
-   * could not be read because of a file nobody asked for.
-   */
   const show = (repo: Repo, rev: string, path: string): Effect.Effect<Uint8Array, GitError> =>
     Effect.gen(function* () {
       const filepath = yield* relativeOrRefuse(repo, path);
-      // A rev may be a ref name ("HEAD", a branch) or an object id.
       const oid = yield* Effect.orElseSucceed(
         attempt("Conflict", () => git.resolveRef({ fs, dir: repo.root, ref: rev })),
         () => rev,
@@ -133,13 +110,6 @@ const makeWebGit = (
       });
     });
 
-  /**
-   * A top-level book's history, from the book-change index: git's default
-   * simplification over parent links, with no tree parsed — so neither a
-   * name git accepts nor a long history can stop it — and current with HEAD,
-   * extending only what is new.
-   */
-  /** The book-change index, current with HEAD: read, or extended, once per ask. */
   const indexOf = (repo: Repo) =>
     Effect.gen(function* () {
       const started = performance.now();
@@ -162,7 +132,6 @@ const makeWebGit = (
   const bookHistory = (repo: Repo, filepath: string) =>
     Effect.map(indexOf(repo), (index) => bookHistoryFrom(index, filepath));
 
-  /** A version from the index: its blob id is known, so its bytes are one read by id. */
   const versionFrom =
     (repo: Repo, filepath: string) =>
     (version: BookVersion): Version => ({
@@ -207,12 +176,6 @@ const makeWebGit = (
       return entries.map(commitOf);
     });
 
-  /**
-   * HEAD's first-parent line, oldest first, each commit's changes found by
-   * comparing RAW trees — descending only into subtrees whose ids differ, and
-   * reading names without judging them (see `show`). A tree's entries are
-   * read once per walk however many commits share it.
-   */
   const walk = (repo: Repo): Effect.Effect<readonly WalkedCommit[], GitError> =>
     attempt("Io", async () => {
       const cache = {};
@@ -221,7 +184,7 @@ const makeWebGit = (
       try {
         head = await git.resolveRef({ fs, dir, ref: "HEAD" });
       } catch {
-        return []; // an unborn HEAD: no history yet
+        return [];
       }
       type Entry = { readonly mode: string; readonly id: string };
       const trees = new Map<string, ReadonlyMap<string, Entry>>();
@@ -246,24 +209,24 @@ const makeWebGit = (
         prefix: string,
         out: WalkedChange[],
       ): Promise<void> => {
-        const [old, now] = await Promise.all([entries(before), entries(after)]);
-        for (const name of new Set([...old.keys(), ...now.keys()])) {
-          const was = old.get(name);
-          const is = now.get(name);
-          if (was?.id === is?.id && was?.mode === is?.mode) continue;
+        const [entriesBefore, entriesAfter] = await Promise.all([entries(before), entries(after)]);
+        for (const name of new Set([...entriesBefore.keys(), ...entriesAfter.keys()])) {
+          const entryBefore = entriesBefore.get(name);
+          const entryAfter = entriesAfter.get(name);
+          if (entryBefore?.id === entryAfter?.id && entryBefore?.mode === entryAfter?.mode)
+            continue;
           const path = `${prefix}${name}`;
-          if (isTree(was) || isTree(is))
+          if (isTree(entryBefore) || isTree(entryAfter))
             await compare(
-              isTree(was) ? was?.id : undefined,
-              isTree(is) ? is?.id : undefined,
+              isTree(entryBefore) ? entryBefore?.id : undefined,
+              isTree(entryAfter) ? entryAfter?.id : undefined,
               `${path}/`,
               out,
             );
-          if (isFile(is)) out.push({ path, blob: is?.id ?? null });
-          else if (isFile(was)) out.push({ path, blob: null });
+          if (isFile(entryAfter)) out.push({ path, blob: entryAfter?.id ?? null });
+          else if (isFile(entryBefore)) out.push({ path, blob: null });
         }
       };
-      // Each commit is read once: as itself, and then as the next one's parent.
       type Read = Awaited<ReturnType<typeof git.readCommit>>["commit"];
       const commits = new Map<string, Read>();
       const commitAt = async (oid: string): Promise<Read> => {
@@ -273,8 +236,6 @@ const makeWebGit = (
         commits.set(oid, commit);
         return commit;
       };
-      // A shallow clone's boundary commits have parents that are not here:
-      // they are roots, as git2 treats them on desktop.
       const shallow = new Set(
         await fs
           .readFile(`${dir}/.git/shallow`, "utf8")
@@ -293,7 +254,6 @@ const makeWebGit = (
         const parentTree = parent === undefined ? undefined : (await commitAt(parent)).tree;
         const changes: WalkedChange[] = [];
         await compare(parentTree, commit.tree, "", changes);
-        // isomorphic-git's timezoneOffset is JavaScript's: minutes WEST of UTC.
         const signed = (who: typeof commit.author) => ({
           name: who.name,
           email: who.email,
@@ -340,8 +300,6 @@ const makeWebGit = (
         return { root } satisfies Repo;
       }),
 
-    // isomorphic-git's init leaves an existing repository alone, so this is
-    // the "open or create" the project flow wants.
     init: (root) =>
       Effect.as(
         attempt("Io", () => git.init({ fs, dir: root, defaultBranch: DEFAULT_BRANCH })),
@@ -368,20 +326,11 @@ const makeWebGit = (
     ): Effect.Effect<CommitId, GitError> =>
       Effect.gen(function* () {
         const also = options?.alsoParents ?? [];
-        // A join records something true with no file of its own: the other
-        // history's commits changed nothing this side lacks. Anything else
-        // with no receipts is a bug upstream, and an empty commit would say so
-        // in the history a translator reads.
         if (receipts.length === 0 && also.length === 0) {
           return yield* refuse("nothing to commit: Save produced no receipts");
         }
-        // The receipts rule: stage exactly what Save wrote, one path at a
-        // time, so a file nobody saved cannot ride along in the commit.
         const staged: string[] = [];
         for (const receipt of receipts) staged.push(yield* relativeOrRefuse(repo, receipt.path));
-        // A commit that fails must not leave the index holding paths no commit
-        // records, or the next ordinary commit would carry them: every path
-        // staged here goes back to HEAD's on the way out.
         const unstage = Effect.forEach(staged, (filepath) =>
           Effect.ignore(attempt("Io", () => git.resetIndex({ fs, dir: repo.root, filepath }))),
         );
@@ -389,8 +338,6 @@ const makeWebGit = (
           Effect.gen(function* () {
             for (const filepath of staged)
               yield* attempt("Io", () => git.add({ fs, dir: repo.root, filepath }));
-            // isomorphic-git's `parent` REPLACES HEAD as the parent list, so a
-            // decision commit names HEAD first itself.
             const parent =
               also.length === 0
                 ? undefined
@@ -435,9 +382,6 @@ const makeWebGit = (
         (entries) => entries.map(commitOf),
       ),
 
-    // isomorphic-git throws `NotFoundError` for a ref that is not there, and
-    // "the cloud has nothing on this branch yet" is an answer rather than a
-    // fault — hence Option, and hence swallowing the throw here and only here.
     resolve: (repo, ref) =>
       Effect.orElseSucceed(
         Effect.map(
@@ -447,8 +391,6 @@ const makeWebGit = (
         Option.none<CommitId>,
       ),
 
-    // git writes `.git/shallow` for a clone with a depth, and removes it once
-    // the history is whole.
     shallow: (repo) =>
       attempt("Io", () =>
         fs
@@ -469,9 +411,6 @@ const makeWebGit = (
           fs,
           dir: repo.root,
           trees: [git.TREE({ ref: from }), git.TREE({ ref: to })],
-          // `git.walk`'s map runs per entry with one side possibly absent. A
-          // directory is not a change; two blobs with the same oid are not
-          // either, and comparing oids is why this needs no blob reads.
           map: async (filepath, entries) => {
             if (filepath === ".") return;
             const before = entries?.[0] ?? null;
@@ -492,8 +431,6 @@ const makeWebGit = (
 
     show,
 
-    // A book's versions carry their blob ids from the index, so reading one is
-    // one object read by id, with no tree walked at all.
     previousVersions: (repo, path) =>
       Effect.gen(function* () {
         const filepath = yield* relativeOrRefuse(repo, path);
@@ -506,11 +443,6 @@ const makeWebGit = (
       }),
   };
 
-  // History's timeline from ONE read of the index: its commits are HEAD's
-  // log, newest first; each book's versions are a walk over them; and the
-  // shared project's commits are what its tip reaches inside the index. A
-  // repository the index cannot be built for (no HEAD yet) composes the
-  // per-path calls instead.
   const timeline: GitService["timeline"] = (repo, paths, shared) =>
     Effect.gen(function* () {
       const built = yield* Effect.result(indexOf(repo));

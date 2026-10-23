@@ -1,22 +1,3 @@
-/**
- * Intake: every project that arrives — a zip, a folder, a clone — leaves with
- * a repository, on one branch, whose first commit covers exactly what arrived.
- *
- * A zip or folder that carries its own `.git` keeps its history and loses
- * everything else a `.git` can carry: remotes and their refs (the friend's
- * remote is not ours), credentials in a URL or a helper, hooks, reflogs. That
- * is an ALLOWLIST applied in place — anything not named here is removed,
- * including whatever a future git version adds — and a fresh config. One that
- * cannot be adopted (a pointer to a repository elsewhere, a merge left half
- * done, history that cannot be read) is replaced by a fresh one, and the
- * files are kept either way.
- *
- * Then `.sefer/` is excluded, so this device's own corner (provenance, the
- * name chosen here) never reaches a commit, and the arrival is recorded:
- * the files the import wrote, as receipts, when git sees any of them as new.
- *
- * Pure over the ports: the FileSystem for the allowlist, `Git` for the rest.
- */
 import { Effect, FileSystem, Option, type PlatformError } from "effect";
 
 import { joinPath } from "../fileSystem/path";
@@ -24,33 +5,19 @@ import { Observability } from "../observability";
 import { Git, GitError, type Author, type CommitId, type Repo } from "./git";
 import { Repositories } from "./repository";
 
-/** Why an arriving `.git` was not adopted. */
 export type AdoptFallback = "gitfile" | "in-progress" | "unreadable";
 
 export interface IntakeResult {
   readonly repo: Repo;
-  /** True when the arriving history was kept. */
   readonly adopted: boolean;
-  /** Why an arriving `.git` was replaced by a fresh one, when it was. */
   readonly fallback: AdoptFallback | undefined;
-  /** The arrival commit, when the files were not already what HEAD holds. */
   readonly arrival: CommitId | undefined;
 }
 
-/**
- * What survives adoption at the top of `.git`; `config` is rewritten.
- *
- * `index` stays: it is the repository's own record of what HEAD holds, and
- * without it every file reads as changed — on the Web, where a commit is
- * built from the index, the arrival then re-recorded the whole tree as a
- * commit identical to HEAD.
- */
 const KEEP = new Set(["objects", "refs", "HEAD", "shallow", "packed-refs", "config", "index"]);
 
-/** What survives under `refs/`: branches and tags, never another remote's refs. */
 const KEEP_REFS = new Set(["heads", "tags"]);
 
-/** A merge, rebase, cherry-pick or revert someone left half done. */
 const IN_PROGRESS = [
   "MERGE_HEAD",
   "rebase-merge",
@@ -59,16 +26,11 @@ const IN_PROGRESS = [
   "REVERT_HEAD",
 ];
 
-/**
- * isomorphic-git's own `init` config, which libgit2 opens as well: nothing in
- * it names a remote, a credential, a hook path or a user.
- */
 const CONFIG =
   "[core]\n\trepositoryformatversion = 0\n\tfilemode = false\n\tbare = false\n\tlogallrefupdates = true\n\tsymlinks = false\n\tignorecase = true\n";
 
 const EXCLUDE = ".sefer/";
 
-/** `packed-refs` without another remote's refs, and without the peel lines that followed them. */
 const withoutRemoteRefs = (text: string): string => {
   const out: string[] = [];
   let dropping = false;
@@ -83,11 +45,6 @@ const withoutRemoteRefs = (text: string): string => {
   return out.join("\n");
 };
 
-/**
- * Applies the allowlist to `root/.git` in place. `None` when it is adoptable
- * and adopted; the reason otherwise, having changed nothing that matters
- * (the caller replaces the whole `.git`).
- */
 const adopt = (
   fileSystem: FileSystem.FileSystem,
   gitDir: string,
@@ -115,7 +72,6 @@ const adopt = (
     return Option.none();
   });
 
-/** `.sefer/` in the repository's own exclude file, once. */
 export const excludeSeferFolder = (
   fileSystem: FileSystem.FileSystem,
   root: string,
@@ -133,25 +89,16 @@ export const excludeSeferFolder = (
   });
 
 export interface IntakeOptions {
-  /** The project folder the files were written into. */
   readonly root: string;
-  /** Repository-relative paths the import wrote: the arrival commit's receipts. */
   readonly written: readonly string[];
-  /** What it arrived from, for the arrival commit's message ("Imported from …"). */
   readonly from: string;
   readonly author: Author;
-  /** The whole message, when "Imported from …" is not enough (the Writer assembly's credits). */
   readonly message?: string;
 }
 
 const isPrivate = (path: string): boolean =>
   path === ".git" || path.startsWith(".git/") || path === ".sefer" || path.startsWith(".sefer/");
 
-/**
- * Adopts or creates the repository, excludes `.sefer/`, and records the
- * arrival — all in the repository's exclusive lane, since the allowlist
- * writes inside `.git` directly.
- */
 export const intakeRepository = (
   options: IntakeOptions,
 ): Effect.Effect<
@@ -181,8 +128,6 @@ const program = (options: IntakeOptions) =>
       const refused = yield* adopt(fileSystem, gitDir);
       if (Option.isSome(refused)) fallback = refused.value;
       else {
-        // Adoptable on paper; now it has to open and read. Status reads HEAD's
-        // commit and tree, which is where an unreadable history shows itself.
         const readable = yield* Effect.result(
           Effect.flatMap(git.open(options.root), (repo) => git.status(repo)),
         );
@@ -201,7 +146,6 @@ const program = (options: IntakeOptions) =>
     if (!adopted) observability?.note("repository.init", "passed");
     yield* excludeSeferFolder(fileSystem, options.root);
 
-    // The arrival: what the import wrote, of which git sees something new.
     const changed = new Set((yield* git.status(repo)).changed.map((entry) => entry.path));
     const receipts = options.written
       .filter((path) => !isPrivate(path) && changed.has(path))

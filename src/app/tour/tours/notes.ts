@@ -18,7 +18,6 @@ import type { Tour, TourContext } from "../machine";
 
 const PROJECT = "/r/Will_Kelly/leb-x-bisa_reg/book/JHN?host=content.bibletranslationtools.org";
 
-/** On the open project's book screen, in John, with the reference column open. */
 const toBook = (context: TourContext): void => {
   context.shell.setReferenceOpen(true);
   void context.navigate({
@@ -29,11 +28,9 @@ const toBook = (context: TourContext): void => {
 
 const present = (selector: string): boolean => document.querySelector(selector) !== null;
 
-/** What the notes pane says it is answering, or "" before the caret is in a verse. */
 const placeShown = (): string =>
   document.querySelector("[data-testid=notes-pane]")?.getAttribute("data-place") ?? "";
 
-/** The place the "move to another verse" step started from. */
 let firstPlace = "";
 
 /** Ten minutes: en_tn is about 8.5 MB, a little under three minutes on slow 3G. */
@@ -42,6 +39,7 @@ const DOWNLOAD_MS = 600_000;
 export const notesTour: Tour = {
   id: "notes",
   kind: "tutorial",
+  audience: "internal",
   title: "Translation Notes",
   summary:
     "Download WA's Translation Notes, read them beside your text as you move verse to verse, and search them in Find.",
@@ -50,8 +48,6 @@ export const notesTour: Tour = {
   steps: [
     {
       go: (context) => void context.navigate({ href: PROJECT }),
-      // Either the link's Download (the project is not here yet) or the
-      // project opening straight away (it is).
       ready: () =>
         present("[data-tour=open-by-link-download]") || present("[data-testid=editor-host]"),
       timeoutMs: 60_000,
@@ -67,12 +63,10 @@ export const notesTour: Tour = {
       ready: () => present("[data-testid=reference-language]"),
       timeoutMs: DOWNLOAD_MS,
       spotlight: {
-        // The whole column, with the card beside it: a card below the menu's
-        // button would cover the menu it asks you to open.
         anchor: "aside[data-references]",
         side: "right",
         title: "Choose them beside the text",
-        body: "Open the Reference language menu at the top of this column. If “Translation Notes · English (en)” is with the texts on this device, choose it. If not, open Reference material and, under Translation Notes, choose English (en): the notes come down once for this device, a toast in the corner shows how far it has got, and they open here when they arrive.",
+        body: "Open the Reference language menu at the top of this column. If “Translation Notes · English (en)” is with the texts on this device, choose it. If not, open Reference material, choose Translation Notes in the toggle at its top, then English (en): the notes come down once for this device, a toast in the corner shows how far it has got, and they open here when they arrive.",
       },
       advance: () => present("[data-testid=notes-pane]"),
     },

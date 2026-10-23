@@ -21,46 +21,44 @@ import { ProjectSidebar } from "#app/ui/workspace/ProjectSidebar";
 import { useScreen } from "#app/ui/workspace/screen";
 import { sidebarClaim } from "#app/ui/workspace/sidebarSlot";
 
-/**
- * The application shell, as a PATHLESS layout: the app bar, the project
- * sidebar, the palette and the status line, wrapped around every screen that
- * is part of the application.
- *
- * ## Why this is a route and not the root
- *
- * It used to live in `__root.tsx`, which meant every route in the tree
- * rendered inside the app bar — `/design` included. That is right for a design
- * screen which genuinely sits inside the workspace and wrong for onboarding,
- * a project list, or anything full-bleed: a designer judging a screen could
- * not see its real framing, only this one.
- *
- * The alternative considered was a frame-level dial (`?chrome=0`) read in the
- * root. It was rejected because "is this screen inside the application frame"
- * is a structural fact about a screen, and a query parameter answers it at
- * runtime, from a URL somebody can mistype or share. Expressed as a layout it
- * is visible in the file tree, cannot be got wrong by accident, and `/design`
- * is a blank canvas because of WHERE IT IS rather than because of a flag.
- *
- * What `__root` keeps is what every screen needs whatever its frame: the head,
- * the one `ProjectProvider`, and the design annotator. A prototype on
- * `/design` still has services, a theme and the comment panel; what it does
- * not have is this chrome — nor the shell's chords, since `installCommandKeys`
- * is here. A prototype answering the application's Mod-K would be answering
- * for an application it is not part of.
- *
- * The chrome is the mockups' workspace (`documentation/architecture/design-direction.md`,
- * "Overall layout"): a permanent APP BAR for "where in Sefer am I", and
- * under it a resizable project SIDEBAR for "where in this project am I",
- * which the projects page does without.
- *
- * Why the collapsed sidebar is hidden rather than unmounted: `Resizable`
- * registers its panels DURING render, in document order, so a conditionally
- * rendered panel would renumber the split — and unmounting the sidebar's
- * SIBLING (the panel holding the routed content) would destroy and rebuild the
- * editor's `EditorView` every time someone tapped the toggle. The canonical
- * text would survive that, because it lives in the Book; the reader's scroll
- * position and selection would not.
- */
+function WorkspacePage(props: {
+  readonly toggle: ReturnType<typeof usePanelToggleLeading>;
+  readonly tabs: ReturnType<ReturnType<typeof useScreen>["versionsTab"]> | undefined;
+}) {
+  return (
+    <PageLeading value={props.toggle}>
+      <PageDoor value={() => <BackToEditor />}>
+        <div
+          class={cx(
+            "flex h-full min-w-0 flex-col",
+            // …on the panels layout's one white surface.
+            layout() === "panels" && "bg-surface-primary",
+          )}
+          // The panels layout: a gutter as wide as the floating panel
+          // button reaches into the page — measured, since its label
+          // changes with the screen and the language — so nothing runs
+          // under it; with the page's own 24px, 24px clear of it.
+          style={
+            layout() === "panels" && panelButtonOverlap() > 0
+              ? { "padding-inline-start": `${panelButtonOverlap()}px` }
+              : undefined
+          }
+        >
+          <Show when={props.tabs}>
+            {(active) => (
+              <div class="shrink-0 border-b border-surface-border px-4">
+                <VersionTabs active={active()} inline />
+              </div>
+            )}
+          </Show>
+          <div class="min-h-0 min-w-0 flex-1 overflow-y-auto">
+            <Outlet />
+          </div>
+        </div>
+      </PageDoor>
+    </PageLeading>
+  );
+}
 
 function Workspace() {
   const shell = useShell();
@@ -72,22 +70,12 @@ function Workspace() {
   // the open project's sidebar there was only lost width (Will, 2026-10-07).
   const showing = (): boolean =>
     shell.sidebarShowing() && path() !== "/projects" && path() !== "/" && path() !== "/migrate";
-  // Plain variables, not expressions in the props: `Resizable.Panel` reads its
-  // three sizes ONCE, during registration, and a JSX expression is a lazy memo
-  // Solid 2 warns about when it is read outside a tracking scope. The width is
-  // a one-time read by design — the persisted value seeds the split, and the
-  // split owns it from there (primitives/Resizable.tsx) — so it is untracked
-  // rather than merely read, which is the same statement said to the compiler.
+  // Plain values: Resizable.Panel reads its sizes once, at registration; the split owns the width after.
   const initialWidth = untrack(() => shell.sidebarWidth());
   const minWidth = SIDEBAR_WIDTH.min;
   const maxWidth = SIDEBAR_WIDTH.max;
   const panelToggle = usePanelToggleLeading();
   const screen = useScreen();
-  // Changes, History and Suggestions keep their tabs in the sidebar; with the
-  // sidebar hidden the tabs come above the page, so the three screens are
-  // still one click apart instead of reachable only through the palette.
-  // Only with a project open: its slug is in every tab's link, and an empty
-  // one generates `/project//review`, which the router cannot match.
   const pageTabs = () =>
     showing() || shell.project() === undefined ? undefined : screen.versionsTab();
   return (
@@ -102,7 +90,6 @@ function Workspace() {
         initialSize={initialWidth}
         minSize={minWidth}
         maxSize={maxWidth}
-        // Dragged well past its narrowest, the panel closes instead.
         onCollapse={() => shell.setSidebarOpen(false)}
         collapseHint={{
           title: t("Keep dragging to close the panel"),
@@ -110,62 +97,20 @@ function Workspace() {
         }}
         class={showing() ? undefined : "hidden"}
       >
-        {/* A screen of results may claim the panel for its own outline
-            (`sidebarSlot.ts`); otherwise it is the project's contents.
-            `keyed`: the next screen claims before the last one releases, so
-            the claim goes from one render straight to another, and an
-            unkeyed Show kept drawing the first — Findings' outline on Find. */}
         <Show when={sidebarClaim()} fallback={<ProjectSidebar />} keyed>
           {(render) => render()}
         </Show>
       </Resizable.Panel>
-      {/* On the panel's own edge: dragging its border resizes it. */}
       <Resizable.Handle
         edge
         label={t("Resize the project panel")}
         class={showing() ? undefined : "hidden"}
       />
-      {/* The `!` is load-bearing: `Resizable.Panel` writes its share as an
-          inline `flex-basis`, and with the sidebar hidden the routed content
-          has to take the whole row back. */}
       <Resizable.Panel
         class={showing() ? "relative min-w-0" : "relative min-w-0 [flex-basis:100%]!"}
       >
         <PanelGutter showing={showing()} />
-        {/* The panel toggle for project screens without the editor's
-            toolbar leads each screen's page header, inline with its title,
-            and the way back to the book ends it (`BackToEditor`). */}
-        <PageLeading value={panelToggle}>
-          <PageDoor value={() => <BackToEditor />}>
-            <div
-              class={cx(
-                "flex h-full min-w-0 flex-col",
-                // …on the panels layout's one white surface.
-                layout() === "panels" && "bg-surface-primary",
-              )}
-              // The panels layout: a gutter as wide as the floating panel
-              // button reaches into the page — measured, since its label
-              // changes with the screen and the language — so nothing runs
-              // under it; with the page's own 24px, 24px clear of it.
-              style={
-                layout() === "panels" && panelButtonOverlap() > 0
-                  ? { "padding-inline-start": `${panelButtonOverlap()}px` }
-                  : undefined
-              }
-            >
-              <Show when={pageTabs()}>
-                {(active) => (
-                  <div class="shrink-0 border-b border-surface-border px-4">
-                    <VersionTabs active={active()} inline />
-                  </div>
-                )}
-              </Show>
-              <div class="min-h-0 min-w-0 flex-1 overflow-y-auto">
-                <Outlet />
-              </div>
-            </div>
-          </PageDoor>
-        </PageLeading>
+        <WorkspacePage toggle={panelToggle} tabs={pageTabs()} />
       </Resizable.Panel>
     </Resizable.Root>
   );
@@ -174,9 +119,6 @@ function Workspace() {
 function Chrome() {
   const state = useShellState();
 
-  // The shell's chords, on the document. CodeMirror sees a keystroke inside the
-  // editor first, so nothing here competes with an editor binding. Guarded
-  // because the production build prerenders this shell under Node.
   if (typeof document !== "undefined") onCleanup(installCommandKeys(document));
 
   const shell = () => readyShell(state());

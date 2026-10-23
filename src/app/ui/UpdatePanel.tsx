@@ -1,20 +1,3 @@
-/**
- * The About block in Settings: which build this is, and how to replace it.
- *
- * Small on purpose. It is the surface that proves the `Updater` port is wired
- * end to end — version and channel read from the running bundle, a check that
- * reaches the updater worker, an install that verifies a minisign signature
- * and relaunches — and nothing more. The manual version picker
- * (`Updater.listVersions` / `installVersion`) exists in the port and is
- * deliberately not shown yet: installing an older build is a decision that
- * needs its own confirmation, not a click.
- *
- * On the Web host every install path answers "this build cannot update
- * itself". The panel still renders there, because the version and channel are
- * worth reading on every host — that is the whole reason `Updater` is a port
- * with a refusing implementation rather than a desktop-only import.
- */
-
 import { Show, createSignal } from "solid-js";
 
 import { UpdaterError, type AvailableUpdate } from "#core/host/updater";
@@ -23,11 +6,11 @@ import { t } from "../i18n";
 import { useServices } from "../ProjectContext";
 import { Button, Card, PanelHeader } from "./primitives";
 
-/** What the panel is waiting on; `""` means nothing. */
 type Busy = "" | "checking" | "installing";
 
-export function UpdatePanel() {
-  const services = useServices();
+type Services = ReturnType<typeof useServices>;
+
+function createUpdater(services: Services) {
   const [busy, setBusy] = createSignal<Busy>("", { name: "updateBusy" });
   const [available, setAvailable] = createSignal<AvailableUpdate | undefined>(undefined, {
     name: "updateAvailable",
@@ -42,9 +25,6 @@ export function UpdatePanel() {
       "update.channel": services.updater.channel(),
     });
     void services.run(services.updater.check()).then((result) => {
-      // `check` cannot fail by design, so "we could not find out" — no
-      // updater in this build, no endpoint, a worker that did not answer — is
-      // the world saying no. The reason is the host's sentence and stays out.
       operation.end(result._tag === "Unavailable" ? "unavailable" : "passed", {
         "update.result": result._tag,
       });
@@ -57,10 +37,6 @@ export function UpdatePanel() {
     });
   };
 
-  /**
-   * On success this never returns — the host installs and relaunches. So there
-   * is no "installed" state to render, only the failure someone has to see.
-   */
   const install = (): void => {
     setBusy("installing");
     setNote("");
@@ -69,15 +45,10 @@ export function UpdatePanel() {
     });
     void services
       .run(services.updater.installAndRelaunch())
-      // Only reached when there turned out to be nothing to install; a real
-      // install relaunches first and this record is never written.
       .then(() => {
         operation.end("passed");
       })
       .catch((cause: unknown) => {
-        // A build that cannot update and a manifest that cannot be reached are
-        // the world; a host that refused the install — a bad signature — is the
-        // alarm, because that one must be seen.
         const reason = cause instanceof UpdaterError ? cause.reason : undefined;
         operation.end(reason === "Unavailable" || reason === "Network" ? "unavailable" : "failed", {
           "update.reason": reason ?? "unknown",
@@ -87,12 +58,19 @@ export function UpdatePanel() {
       });
   };
 
-  const row = (label: string, value: string, mark?: Record<string, string>) => (
-    <div class="flex items-center gap-3 px-4 py-2 text-small" {...mark}>
-      <span class="text-on-surface-secondary">{label}</span>
-      <span class="ms-auto font-mono text-smallest text-on-surface-primary">{value}</span>
-    </div>
-  );
+  return { busy, available, note, check, install };
+}
+
+const row = (label: string, value: string, mark?: Record<string, string>) => (
+  <div class="flex items-center gap-3 px-4 py-2 text-small" {...mark}>
+    <span class="text-on-surface-secondary">{label}</span>
+    <span class="ms-auto font-mono text-smallest text-on-surface-primary">{value}</span>
+  </div>
+);
+
+export function UpdatePanel() {
+  const services = useServices();
+  const { busy, available, note, check, install } = createUpdater(services);
 
   return (
     <Card padded={false} class="divide-y divide-surface-border" data-update-panel>

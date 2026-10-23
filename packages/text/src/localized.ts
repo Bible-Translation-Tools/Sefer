@@ -1,4 +1,3 @@
-/** Text in several languages, keyed by locale (`en`, `es-419`). */
 export type LocalizedText = Readonly<Record<string, string>>;
 
 /**

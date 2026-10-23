@@ -26,9 +26,7 @@ const withRing = <A>(
 
 const burn = (ms: number): void => {
   const until = performance.now() + ms;
-  while (performance.now() < until) {
-    /* spin */
-  }
+  while (performance.now() < until) {}
 };
 
 const named = (events: readonly ObservabilityEvent[], name: string): ObservabilityEvent => {
@@ -155,7 +153,6 @@ describe("observability export", () => {
     const operation = named(events, "save");
     expect(note.detail).toBe("revision 7");
     expect(note.attrs?.["book.revision"]).toBe(7);
-    // The note happened inside the operation, and says so.
     expect(note.trace).toBe(operation.trace);
     expect(note.parent).toBe(operation.id);
     expect(operation.attrs?.["book.id"]).toBe("PHM");

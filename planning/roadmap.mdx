@@ -1,71 +1,42 @@
 # Roadmap
 
-From the sefer-next-features doc's status of 2026-10-13, and the items as they stand
-(updated 2026-10-15). Steps run in rough order within a phase.
+The order of work. What each step is lives in its item; what shipped is an item marked done.
 
 Sefer aims to be the organisation's best tool for reading and writing Bible-domain text, starting
-with scripture revision. Not a study tool like Logos or Accordance; publishing stays separate.
+with scripture revision: revision first, drafting later; USFM as a string; offline; AI explains,
+it does not translate; word-aligned USFM is aligned in its own interface, not edited.
 
-- **Revision first; drafting later.** Drafting is revision from zero; the gap is adding a new book.
-- **Beyond USFM, if wanted:** discussion, a Markdown glossary with its passages, notes. The primitives that carry it are book–chapter–verse addressing, versification and alignment.
-- **Move fast.** The data is not personal, and Sefer works fully offline: the bar is less tool friction and fewer handoffs.
-- **USFM as a string.** Offsets make find, alignment, diffs and the editor work; other formats are converted in, not edited as trees.
-- **AI explains; it does not translate.** The same typed tools serve tours, workflows, discussion cells and model tool calls.
-- **Word-aligned USFM is not an editing target.** Translate first, then align in a dedicated interface; IBM Model 2 can get part of the way.
-
-<Question id="order">Is this the order?</Question>
-
-<Phase id="shipped" title="Shipped, 2026-10-15" goal="On master and deployed to dev (fea64ef → 082c09c, then f10cfb5)">
-  <Step item="2026-10-14-land-the-oct-12-13-stack">The Oct 12–13 stack and the planning migration are on master.</Step>
-  <Step item="2026-10-14-embeddable-editor">Steps 1–3: `@sefer/text` and `@sefer/editor` as framework-free packages; no app code imports CodeMirror; an adversarial review's fixes; installable from git outside Sefer (checked with a hub-shaped app).</Step>
-  <Step item="2026-10-06-resource-kinds">Translation Notes leave the projects page; Reference material lists them from the Language API, with Remove.</Step>
-  <Step item="2026-09-14-scripture-kitchen-asks">scripture-kitchen v0.1.10: the engine fills `{aux}`, labels keyed by its unions.</Step>
-  <Step item="2026-10-14-editor-sharp-edges">Backspace in an open footnote deletes one character, not the note (f10cfb5).</Step>
+<Phase id="now" title="Now">
+  <Gate>Test-drive on dev: the reference pane following, footnote editing, the corresponding block on Bisa.</Gate>
+  <Step item="2026-10-06-project-state-and-suppressions">Suppressions, "Fine here" first, with the tutorial for the PO and the designer.</Step>
 </Phase>
 
-<Phase id="now" title="Now" goal="What shipped holds up, and the hub is on the package">
-  <Gate>Test-drive on dev: the reference pane following the editor, footnote editing, and the corresponding block on Bisa beside Cebuano.</Gate>
-  <Step item="2026-10-14-land-the-oct-12-13-stack">Close PR #1, prune the old worktrees and branches.</Step>
-  <Step item="2026-10-14-embeddable-editor">Step 5: the hub swaps its fork for the package (installs by sha; handoff written).</Step>
-  <Step item="2026-10-06-project-state-and-suppressions">Will still thinking: one mechanism, per device or committed.</Step>
-</Phase>
-
-<Phase id="next" title="Next" goal="Sharpen what is built">
-  <Step item="2026-10-14-editor-sharp-edges" with="tests">Step 4 of the package: the Enter decision, then copy, paste and Enter tests on the package's harness, a playground pass, the formatter.</Step>
+<Phase id="next" title="Next">
+  <Gate>Will picks: the form mode spike or the fallow pass.</Gate>
   <Together>
-    <Step item="2026-10-14-a-collaboration-tutorial" />
-    <Step item="2026-10-13-tour-depth">"See more" modals first.</Step>
+    <Step item="2026-10-14-form-mode" />
+    <Step item="2026-10-14-fallow-readability-pass" />
   </Together>
-  <Step item="2026-10-14-fallow-readability-pass">Report first, then the worst few.</Step>
-  <Step item="2026-10-14-form-mode">A spike with Will at the keyboard.</Step>
-  <Step item="2026-10-14-desktop-e2e-in-ci-linux-a-real-keychain-test">Once ready to pin as real tests.</Step>
-  <Step item="2026-10-15-desktop-deep-links-sefer-opens-a-share-link">`sefer://r/<owner>/<repo>` opens the desktop app at a share link, for an "Open in Sefer" on WACS.</Step>
 </Phase>
 
-<Phase id="waiting" title="Waiting on a decision or an account" goal="Not blocked on code">
-  <Step item="2026-10-06-cloud-git-followups">The reviewer's half of Decline (after test-driving the stack); cross-user review needs a second WACS account; far from settled with the PO.</Step>
-  <Step item="2026-10-06-resource-kinds">Translation Words and Macula: not before the PO asks.</Step>
-  <Step item="2026-10-01-terms-rendering-consistency">Expect on Key terms waits on the PO's playground.</Step>
+<Phase id="waiting" title="Waiting on a decision or an account">
+  <Step item="2026-10-06-cloud-git-followups">The PO; a second WACS account.</Step>
+  <Step item="2026-10-06-resource-kinds">Translation Notes built; TW and Macula when the PO asks.</Step>
+  <Step item="2026-10-01-terms-rendering-consistency">Shown with aligned texts first.</Step>
 </Phase>
 
-<Phase id="kitchen" title="Kitchen, in parallel" goal="Engine work with its own agent">
-  <Together>
-    <Step item="2026-10-01-terms-rendering-consistency">The pairing crate: IBM Model 2, feeding Expect.</Step>
-    <Step item="2026-09-14-scripture-kitchen-asks">Bump to 0.1.10 (asks 9 and 10); asks 2, 4, 6, 7 open.</Step>
-  </Together>
-  <Step>Versification (`scripture-kitchen/planning/ideas/candidates/versification.md`); also resource kinds §11.1.</Step>
+<Phase id="kitchen" title="Kitchen, in parallel">
+  <Step item="2026-09-14-scripture-kitchen-asks" />
+  <Step>Versification (`scripture-kitchen/planning/ideas/candidates/versification.md`).</Step>
 </Phase>
 
-<Phase id="then" title="Then" goal="Proposed">
-  <Step item="2026-10-14-workflows-routes-and-state-in-the-url">More workflows (empty verses, chapter labels); the route and deep-link questions.</Step>
-  <Step item="2026-10-14-hold-what-s-shown-and-editing-sessions">When one of Review, findings or decorations next gets jumpy.</Step>
+<Phase id="later" title="Later, low priority">
+  <Step item="2026-10-20-chapter-labels-a-sefer-rule-a-fix-and-a-workflow" />
+  <Step item="2026-10-15-desktop-deep-links-sefer-opens-a-share-link" />
+  <Step item="2026-10-14-a-collaboration-tutorial" />
+  <Step item="2026-10-14-desktop-e2e-in-ci-linux-a-real-keychain-test" />
   <Step item="2026-10-14-writer-migration-leftovers" />
-</Phase>
-
-<Phase id="later" title="Later" goal="Proposed">
   <Step item="2026-10-14-small-fixes-stress-testing-and-localization" />
-  <Step item="2026-09-23-one-liners">Lazy excerpt grouping, Find streamed per book, the Web transport env var.</Step>
-  <Step item="2026-09-21-commenting-and-discussion">Decide links to passages together with the route shape.</Step>
   <Step item="2026-10-01-release-draft-then-publish" />
-  <Step item="2026-10-14-an-llm-harness-in-the-app">Last: needs command schemas first.</Step>
+  <Step item="2026-10-14-an-llm-harness-in-the-app">Needs command schemas first.</Step>
 </Phase>

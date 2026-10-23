@@ -1,21 +1,5 @@
 import type { Tour, TourContext } from "../machine";
 
-/**
- * Expect, shown on a real translation: the Bisa Bible (`leb-x-bisa`),
- * searched through its English source text for "Jesus", expecting "Yesu".
- *
- * The point is the primitive, not the screen. Find gives places, alignment
- * gives the verse in both texts, and expect is the assertion "where the source
- * says A, my text says B", which narrows over a thousand verses to the few
- * dozen a person has to judge. Among those are real slips in that text:
- * "Yesa" at Matthew 27:58 and "Ysu" at John 14:6. No spell checker knows Bisa,
- * and none was needed.
- *
- * It starts from a share link (`start`), so it opens the Bisa project on any
- * device, downloading it first where it is not there yet. Strings are raw and
- * translated where they are drawn.
- */
-
 const find = (context: TourContext, expect: string | undefined): void => {
   void context.navigate({
     to: "/project/$slug/find",
@@ -24,7 +8,6 @@ const find = (context: TourContext, expect: string | undefined): void => {
   });
 };
 
-/** Clicks the first match of `selector` once it exists, for up to 3 s. */
 const clickWhen = (selector: string): void => {
   const started = Date.now();
   const attempt = (): void => {
@@ -35,7 +18,6 @@ const clickWhen = (selector: string): void => {
   attempt();
 };
 
-/** The results outline's chapter chip in one book, opening the book first. */
 const toChapter = (book: string, chapter: string): void => {
   const row = `[data-outline="${book}"]`;
   const chip = `li:has(> ${row}) [data-chapter-hits="${chapter}"]`;
@@ -43,7 +25,6 @@ const toChapter = (book: string, chapter: string): void => {
   clickWhen(chip);
 };
 
-/** Find's Expect toggle (hidden box by default), and whether it is on. */
 const EXPECT_TOGGLE = "[data-tour=find-expect-toggle] [role=switch]";
 const expectOn = (): boolean =>
   document.querySelector(EXPECT_TOGGLE)?.getAttribute("aria-checked") === "true";
@@ -56,20 +37,17 @@ const results = (): boolean => {
 export const expectTour: Tour = {
   id: "expect",
   kind: "tutorial",
+  audience: "internal",
   title: "Expect: catching spelling slips (Bisa demo)",
   summary:
     "Where the source says “Jesus”, a Bisa translation should say “Yesu”. Sefer shows the verses that do not.",
   needsProject: true,
-  // The host named, so the link works from any channel: the dev channel's
-  // own cloud is WACS dev, and the Bisa Bible lives on WACS.
   start:
     "/r/Will_Kelly/leb-x-bisa_reg/find?q=Jesus&scope=reference&host=content.bibletranslationtools.org",
   steps: [
     {
       go: (context) => find(context, undefined),
       ready: results,
-      // The first search waits on the English source text registering, and on
-      // a first visit on its download too.
       timeoutMs: 60_000,
       spotlight: {
         anchor: "[data-tour=find-search]",
@@ -87,7 +65,6 @@ export const expectTour: Tour = {
       advance: "user",
     },
     {
-      // Pressed, as a person would: the box it shows is still empty.
       go: () => {
         if (!expectOn()) clickWhen(EXPECT_TOGGLE);
       },

@@ -29,9 +29,7 @@
  * it matches both without regard to case.
  */
 
-/** A shared project, as a link names it. Lower case: Gitea ignores case. */
 export interface Source {
-  /** The host alone (`wacs.org`, `localhost:3000`): what a person is shown. */
   readonly host: string;
   /**
    * Where the server's repositories start: scheme, host and any path prefix
@@ -62,13 +60,6 @@ export const placeOf = (named: string): Pick<Source, "host" | "base"> | undefine
   return { host, base: `${parsed.protocol}//${host}${prefix}`.toLowerCase() };
 };
 
-/**
- * The source a remote URL points at, or undefined when it is not a
- * `<scheme>://host/[prefix/]owner/repo` address: the last two segments are
- * owner and repository, everything before them the prefix. Credentials, a
- * trailing slash and `.git` are ignored, so a clone URL and the browser
- * address of the same project agree.
- */
 export const sourceOf = (url: string): Source | undefined => {
   let parsed: URL;
   try {
@@ -96,11 +87,9 @@ export const sourceOf = (url: string): Source | undefined => {
   };
 };
 
-/** The same project, whatever the case or form of the two addresses. */
 export const sameSource = (left: Source, right: Source): boolean =>
   left.base === right.base && left.owner === right.owner && left.repo === right.repo;
 
-/** The clone address of a source. */
 export const sourceUrl = (source: Source): string =>
   `${source.base}/${source.owner}/${source.repo}`;
 
@@ -117,13 +106,6 @@ export const hostOfUrl = (url: string): string | undefined => {
   }
 };
 
-/**
- * The share link's path and query for a place in a project.
- *
- * `rest` starts with `/` or is empty. `search` is the place's own query
- * (Find's `q`, Review's `against`); `at` and `host` are added to it, and a
- * place that already used either name loses it, which no screen does today.
- */
 export const shareLinkPath = (
   source: Source,
   rest: string,
@@ -139,21 +121,6 @@ export const shareLinkPath = (
   return `/r/${source.owner}/${source.repo}${rest}${tail}`;
 };
 
-/**
- * How the receiver's copy stands against the version a link was made at,
- * from HEAD and the merge base of HEAD and `at` (undefined when git could not
- * find one: the copy lacks that commit, or shares no history with it).
- *
- * - `same`: HEAD is that commit.
- * - `ahead`: the copy holds that commit and has more on top of it.
- * - `behind`: the copy has received that commit but HEAD has not reached it.
- * - `other`: the copy does not hold it, or went its own way from it. Either
- *   the receiver has not checked for changes, or the sender's version was
- *   never sent.
- * - `unknown`: no merge base, and the copy holds only its newest history (a
- *   newest-only clone), so an older `at` is missing for that reason alone and
- *   nothing can be said about which is newer.
- */
 export type VersionStanding = "same" | "ahead" | "behind" | "other" | "unknown";
 
 export const versionStanding = (
@@ -161,13 +128,10 @@ export const versionStanding = (
   head: string | undefined,
   base: string | undefined,
   shallow: boolean,
-): VersionStanding =>
-  head === at
-    ? "same"
-    : base === at
-      ? "ahead"
-      : base !== undefined && base === head
-        ? "behind"
-        : base === undefined && shallow
-          ? "unknown"
-          : "other";
+): VersionStanding => {
+  if (head === at) return "same";
+  if (base === at) return "ahead";
+  if (base !== undefined && base === head) return "behind";
+  if (base === undefined && shallow) return "unknown";
+  return "other";
+};

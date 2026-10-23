@@ -1,21 +1,3 @@
-/**
- * The project's history: one recorded version's changes, with the timeline in
- * the sidebar's History tab (`ChangesHistorySidebar`) — what is not recorded
- * yet is the Changes tab, which is Review.
- *
- * The timeline is one `git.timeline` call — the log, every book's versions and
- * what the shared project has, which the Web answers from one read of its book
- * index. Each version answers "which commits touched this book" AND hands back
- * a `bytes()` thunk, so a commit row can name the books it changed without
- * reading a single blob, and reading one happens only when somebody selects
- * that commit.
- *
- * A version shows what IT changed: each book it touched, that book's previous
- * version against this one, as a log shows a commit. Nothing here writes a
- * file: Adopt puts one side's wording into the editor through `book.apply`, an
- * ordinary edit that Undo takes back and Record a version keeps.
- */
-
 import type { EditorBook } from "@sefer/editor";
 import type { Book, BookId } from "@sefer/text/book";
 import { decode, type Source } from "@sefer/text/source";
@@ -23,19 +5,29 @@ import { useNavigate, useSearch } from "@tanstack/solid-router";
 import { Effect, Option, Result } from "effect";
 import GitCommitVertical from "lucide-solid/icons/git-commit-vertical";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
+import {
+  For,
+  Show,
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+  untrack,
+  type Accessor,
+} from "solid-js";
 
 import { diffSkeleton } from "#core/diff/skeleton";
 import { revertUnits, type UnitChanges } from "#core/diff/units";
 import type { Analysis, DecisionUnit } from "#core/galley";
-import type { Commit, Version } from "#core/git/git";
+import type { Commit, Repo, Version } from "#core/git/git";
 import { Git, repositoryPath } from "#core/git/git";
+import type { Project } from "#core/project/project";
 import { Remote, type Deepen } from "#core/remote/remote";
 import { trackingRef } from "#core/sync";
 
 import { remoteReasonOf } from "../../describe";
 import { t } from "../../i18n";
-import { useShell } from "../../ProjectContext";
+import { useShell, type Shell } from "../../ProjectContext";
 import { syncStatus } from "../../syncStatus";
 import type { DiffSides } from "../diff/DiffCard";
 import { hunksOf, type Hunk, type Range } from "../diff/hunks";
@@ -64,7 +56,6 @@ import {
 import { ago, dated, exact } from "./format";
 import { YoursRow } from "./YoursRow";
 
-/** A timeline row's look. */
 const ROW = [
   "flex w-full cursor-pointer flex-col gap-1 px-3.5 py-3 text-start transition-colors",
   "hover:bg-surface-secondary",
@@ -72,36 +63,24 @@ const ROW = [
   "aria-[current=true]:shadow-[inset_0.1875rem_0_0_0_var(--brand-base)]",
 ].join(" ");
 
-/** Your text against both sides of a selected version, for one book. */
 interface Yours {
   readonly book: Book;
-  /** Your text against this version: `baselineText` is the version, `workingText` yours. */
   readonly version: UnitChanges | undefined;
-  /** Your text against the book's version before it. */
   readonly before: UnitChanges | undefined;
-  /** `version`'s two texts and their parses, for the third row. */
   readonly sides: DiffSides | undefined;
 }
 
 const point = (at: number): Range => ({ from: at, to: at });
 
-/**
- * Whether two stretches share text. Two verses that only meet at a boundary do
- * not; a point (a passage one side lacks) does when it falls inside or on the
- * edge of the other.
- */
 const overlaps = (a: Range, b: Range): boolean =>
   a.from === a.to || b.from === b.to
     ? a.from <= b.to && b.from <= a.to
     : a.from < b.to && b.from < a.to;
 
-/** How many commits further back one step of older history goes. */
 const HISTORY_STEP = 10;
 
-/** Projects whose older history this session has already gone to fetch. */
 const deepened = new Set<string>();
 
-/** One read of a project's timeline: what the panel draws, all of it derived from git. */
 interface Timeline {
   readonly kind: "read";
   readonly commits: readonly Commit[];
@@ -110,15 +89,633 @@ interface Timeline {
   readonly shared: ReadonlySet<string> | undefined;
 }
 
-/**
- * The last timeline read per project, and the two tips it was read at (HEAD
- * and the shared project's). Moving between the Changes and History tabs
- * remounts this panel; with both tips where they were, nothing the timeline
- * is made of can have moved, so it is drawn from here instead of walking the
- * log and every book's versions again. Reload, a deepen, or a moved tip reads
- * it afresh.
- */
 const timelines = new Map<string, { readonly tips: string; readonly timeline: Timeline }>();
+
+type Older = "whole" | "missing" | "loading" | "failed";
+
+type Answer = Timeline | { readonly kind: "absent"; readonly reason: string };
+
+interface HistoryState {
+  readonly setLog: (log: readonly Commit[]) => void;
+  readonly setVersions: (versions: ReadonlyMap<BookId, readonly Version[]>) => void;
+  readonly setProblem: (problem: string) => void;
+  readonly setShared: (shared: ReadonlySet<string> | undefined) => void;
+  readonly setOlder: (update: (now: Older) => Older) => void;
+}
+
+const none = () => Option.none<string>();
+
+const tipsOf = (project: Project, repo: Repo, branch: Option.Option<string>) =>
+  Effect.gen(function* () {
+    const git = yield* Git;
+    const tipOf = (ref: string) =>
+      Effect.map(Effect.orElseSucceed(git.resolve(repo, ref), none), (tip) =>
+        Option.getOrElse(tip, () => "-"),
+      );
+    return [
+      yield* tipOf("HEAD"),
+      Option.isSome(branch) ? yield* tipOf(trackingRef(branch.value)) : "-",
+      project.books.map((book) => book.id).join(","),
+    ].join("|");
+  });
+
+const readFresh = (project: Project, repo: Repo, branch: Option.Option<string>, tips: string) =>
+  Effect.gen(function* () {
+    const git = yield* Git;
+    const shallow = yield* Effect.orElseSucceed(git.shallow(repo), () => false);
+    const paths = new Map<string, BookId>();
+    for (const book of project.books) {
+      const inside = repositoryPath(project.root, book.path);
+      if (Option.isSome(inside)) paths.set(inside.value, book.id);
+    }
+    const read = yield* Effect.result(
+      git.timeline(
+        repo,
+        [...paths.keys()],
+        Option.isSome(branch) ? trackingRef(branch.value) : undefined,
+      ),
+    );
+    const perBook = new Map<BookId, readonly Version[]>();
+    if (Result.isSuccess(read))
+      for (const [path, list] of read.success.versions) {
+        const bookId = paths.get(path);
+        if (bookId !== undefined) perBook.set(bookId, list);
+      }
+    const timeline: Timeline = {
+      kind: "read",
+      commits: Result.isSuccess(read) ? read.success.commits : [],
+      perBook,
+      shallow,
+      shared: Result.isSuccess(read) ? read.success.shared : undefined,
+    };
+    timelines.set(project.root, { tips, timeline });
+    return timeline;
+  });
+
+const readTimeline = (project: Project, fresh: boolean) =>
+  Effect.gen(function* () {
+    const git = yield* Git;
+    const opened = yield* Effect.result(git.open(project.root));
+    if (Result.isFailure(opened)) return { kind: "absent", reason: opened.failure.reason } as const;
+    const repo = opened.success;
+    const branch = yield* Effect.orElseSucceed(git.branch(repo), none);
+    const tips = yield* tipsOf(project, repo, branch);
+    const known = timelines.get(project.root);
+    if (!fresh && known !== undefined && known.tips === tips) return known.timeline;
+    return yield* readFresh(project, repo, branch, tips);
+  });
+
+const settleTimeline = (
+  state: HistoryState,
+  project: Project,
+  answer: Answer,
+  loadOlder: (more: Deepen) => void,
+): void => {
+  if (answer.kind === "absent") {
+    state.setProblem(answer.reason);
+    state.setLog([]);
+    return;
+  }
+  state.setProblem("");
+  state.setLog(answer.commits);
+  state.setVersions(answer.perBook);
+  state.setShared(answer.shared);
+  state.setOlder((now) => {
+    if (!answer.shallow) return "whole";
+    return now === "loading" ? now : "missing";
+  });
+  if (answer.shallow && !deepened.has(project.root) && syncStatus.interfaceUp()) {
+    deepened.add(project.root);
+    loadOlder(HISTORY_STEP);
+  }
+};
+
+const deepen = (project: Project, more: Deepen) =>
+  Effect.gen(function* () {
+    const git = yield* Git;
+    const remote = yield* Remote;
+    return yield* remote.deepen(yield* git.open(project.root), more);
+  });
+
+const createTimelineLoader = (shell: Shell, state: HistoryState) => {
+  const load = (fresh = false): void => {
+    const project = shell.project();
+    if (project === undefined) return;
+    void shell.services
+      .run(readTimeline(project, fresh))
+      .then((answer) => settleTimeline(state, project, answer, loadOlder));
+  };
+
+  const loadOlder = (more: Deepen): void => {
+    const project = shell.project();
+    if (project === undefined) return;
+    state.setOlder(() => "loading");
+    const operation = shell.services.composition.observability.operation("history.deepen", {
+      "history.more": String(more),
+    });
+    void shell.services.run(deepen(project, more)).then(
+      (progress) => {
+        operation.end("passed", { "history.loaded": progress.loaded });
+        state.setOlder(() => "missing");
+        load(true);
+      },
+      (cause: unknown) => {
+        operation.end("failed", { "history.reason": remoteReasonOf(cause) ?? "unknown" });
+        state.setOlder(() => "failed");
+      },
+    );
+  };
+
+  return { load, loadOlder };
+};
+
+type VersionMap = ReadonlyMap<BookId, readonly Version[]>;
+
+const booksIn = (versions: VersionMap, id: string): readonly BookId[] => {
+  const out: BookId[] = [];
+  for (const [bookId, list] of versions)
+    if (list.some((version) => version.commit.id === id)) out.push(bookId);
+  return out;
+};
+
+const versionOf = (versions: VersionMap, bookId: BookId, id: string): Version | undefined =>
+  versions.get(bookId)?.find((version) => version.commit.id === id);
+
+const previousOf = (versions: VersionMap, bookId: BookId, id: string): Version | undefined => {
+  const list = versions.get(bookId) ?? [];
+  const at = list.findIndex((version) => version.commit.id === id);
+  return at < 0 ? undefined : list[at + 1];
+};
+
+const textOf = async (shell: Shell, version: Version): Promise<Source | undefined> => {
+  const bytes = await shell.services.run(Effect.result(version.bytes()));
+  if (Result.isFailure(bytes)) return undefined;
+  const decoded = decode(bytes.success);
+  return Result.isFailure(decoded) ? undefined : decoded.success;
+};
+
+const changesOfVersion = async (
+  shell: Shell,
+  project: Project,
+  versions: VersionMap,
+  bookId: BookId,
+  id: string,
+): Promise<BookChanges | undefined> => {
+  const book = project.book(bookId);
+  const version = versionOf(versions, bookId, id);
+  if (book === undefined || version === undefined) return undefined;
+  const after = await textOf(shell, version);
+  if (after === undefined) return undefined;
+  const previous = previousOf(versions, bookId, id);
+  const before = previous === undefined ? undefined : await textOf(shell, previous);
+  const changes = versionChanges(
+    shell.services.galley,
+    book,
+    before === undefined ? undefined : { bookId, stamp: before.stamp, text: before.text },
+    { bookId, stamp: after.stamp, text: after.text },
+  );
+  return changes.firstTime === true || changeCount(changes) > 0 ? changes : undefined;
+};
+
+const createShownChanges = (
+  shell: Shell,
+  selected: Accessor<string>,
+  versions: Accessor<VersionMap>,
+  setShown: (shown: readonly BookChanges[]) => void,
+): void => {
+  const recompute = async (): Promise<void> => {
+    const project = shell.project();
+    const id = selected();
+    if (project === undefined || id === "") {
+      setShown([]);
+      return;
+    }
+    const out: BookChanges[] = [];
+    for (const bookId of booksIn(versions(), id)) {
+      const changes = await changesOfVersion(shell, project, versions(), bookId, id);
+      if (changes !== undefined) out.push(changes);
+    }
+    setShown(out);
+  };
+
+  createEffect(
+    () => `${selected()}:${versions().size}`,
+    () => {
+      // Untracked on purpose: a one-time read, not a dependency (Solid 2: STRICT_READ_UNTRACKED).
+      untrack(() => {
+        void recompute();
+      });
+    },
+  );
+};
+
+const yoursFor = (
+  shell: Shell,
+  changes: BookChanges,
+  analysis: (role: "version" | "yours", bookId: BookId, text: string) => Analysis,
+): Yours | undefined => {
+  const galley = shell.services.galley;
+  const texts = changes.changes;
+  const book = shell.project()?.book(changes.bookId);
+  if (texts === undefined || book === undefined) return undefined;
+  const stamp = book.source().stamp;
+  const against = (text: string): UnitChanges | undefined =>
+    changesOf(galley, book, { bookId: changes.bookId, stamp, text }).changes;
+  const version = against(texts.workingText);
+  const before = against(texts.baselineText);
+  const sides: DiffSides | undefined =
+    version === undefined
+      ? undefined
+      : {
+          bookId: changes.bookId,
+          baselineText: version.baselineText,
+          currentText: version.workingText,
+          baseline: analysis("version", changes.bookId, version.baselineText),
+          current: analysis("yours", changes.bookId, version.workingText),
+        };
+  return { book, version, before, sides };
+};
+
+const createYours = (
+  shell: Shell,
+  selected: Accessor<string>,
+  shown: Accessor<readonly BookChanges[]>,
+) => {
+  const yoursAnalyzers = new Map<string, (text: string) => Analysis>();
+  const yoursAnalysis = (role: "version" | "yours", bookId: BookId, text: string): Analysis => {
+    const key = `${role}\0${bookId}`;
+    let analyze = yoursAnalyzers.get(key);
+    if (analyze === undefined) {
+      analyze = shell.services.galley.memoize();
+      yoursAnalyzers.set(key, analyze);
+    }
+    return analyze(text);
+  };
+
+  return createMemo(
+    (): ReadonlyMap<BookId, Yours> => {
+      const out = new Map<BookId, Yours>();
+      if (selected() === "") return out;
+      const held = shown().filter((changes) => changes.firstTime !== true);
+      for (const changes of held) void shell.stampOf(changes.bookId)?.revision;
+      return untrack(() => {
+        for (const changes of held) {
+          const mine = yoursFor(shell, changes, yoursAnalysis);
+          if (mine !== undefined) out.set(changes.bookId, mine);
+        }
+        return out;
+      });
+    },
+    { name: "historyYours" },
+  );
+};
+
+type YoursMap = ReadonlyMap<BookId, Yours>;
+
+const yoursAt = (
+  yours: YoursMap,
+  hunk: Hunk,
+  side: "baseline" | "current",
+): readonly DecisionUnit[] => {
+  const held = yours.get(hunk.bookId);
+  const changes = side === "current" ? held?.version : held?.before;
+  if (changes === undefined) return [];
+  const spans = hunk.units.map(
+    (unit) =>
+      (side === "current" ? unit.current : unit.baseline) ??
+      point(side === "current" ? unit.place.current : unit.place.baseline),
+  );
+  return changes.units.filter((mine) =>
+    spans.some((span) => overlaps(span, mine.baseline ?? point(mine.place.baseline))),
+  );
+};
+
+const adopt = (shell: Shell, yours: YoursMap, hunk: Hunk, side: "baseline" | "current"): void => {
+  const held = yours.get(hunk.bookId);
+  const changes = side === "current" ? held?.version : held?.before;
+  const picked = yoursAt(yours, hunk, side);
+  if (held === undefined || changes === undefined || picked.length === 0) {
+    toasts.success({ title: t("Already in your text") });
+    return;
+  }
+  const done = revertUnits(shell.services.galley, held.book, changes, picked);
+  if (Result.isFailure(done)) {
+    toasts.error({ title: t("Adopt refused"), message: t(done.failure.reason) });
+    return;
+  }
+  toasts.success({ title: t("Adopted into your text") });
+  shell.changed({ kind: "book.apply", books: [hunk.bookId] });
+};
+
+const adoptAction = (
+  shell: Shell,
+  yours: YoursMap,
+  hunk: Hunk,
+  side: "baseline" | "current",
+  id: string,
+  label: string,
+): CardAction => {
+  const off = yoursAt(yours, hunk, side).length === 0;
+  return {
+    kind: "button",
+    id,
+    emphasis: "tertiary",
+    label,
+    disabled: off,
+    title: off
+      ? t("Your text already reads this way here.")
+      : t("Write this wording into your text. Unsaved until you record a version."),
+    onPress: () => adopt(shell, yours, hunk, side),
+  };
+};
+
+const yoursBelow = (
+  shell: Shell,
+  hunk: Hunk,
+  differs: readonly DecisionUnit[],
+  sides: DiffSides,
+  markup: Accessor<boolean>,
+) => (
+  <YoursRow
+    sides={sides}
+    hunks={hunksOf({
+      bookId: hunk.bookId,
+      units: differs,
+      baseline: sides.baseline,
+      current: sides.current,
+      label: (address) => untrack(() => shell.location.label(address)),
+      steps: 0,
+    })}
+    usfm={markup()}
+    label={t("Your text against this version")}
+  />
+);
+
+const createSidesOf =
+  (
+    shell: Shell,
+    yours: Accessor<YoursMap>,
+    yoursOpen: Accessor<ReadonlySet<string>>,
+    setYoursOpen: (update: (was: ReadonlySet<string>) => ReadonlySet<string>) => void,
+    markup: Accessor<boolean>,
+  ) =>
+  (hunk: Hunk, split: boolean) => {
+    const adoptOf = (side: "baseline" | "current", id: string, label: string): CardAction =>
+      adoptAction(shell, yours(), hunk, side, id, label);
+    const differs = yoursAt(yours(), hunk, "current");
+    const open = differs.length > 0 && yoursOpen().has(hunk.key);
+    const sides = yours().get(hunk.bookId)?.sides;
+    return {
+      baseline: [adoptOf("baseline", "adopt-before", split ? t("Adopt") : t("Adopt before"))],
+      current: [
+        ...(differs.length === 0
+          ? []
+          : [
+              {
+                kind: "button",
+                id: "yours",
+                emphasis: "tertiary",
+                label: t("Yours differs"),
+                pressed: open,
+                title: t("Show your text against this version"),
+                onPress: () =>
+                  setYoursOpen((was) => {
+                    const next = new Set(was);
+                    if (!next.delete(hunk.key)) next.add(hunk.key);
+                    return next;
+                  }),
+              } satisfies CardAction,
+            ]),
+        adoptOf("current", "adopt-version", split ? t("Adopt") : t("Adopt this version")),
+      ],
+      below:
+        open && sides !== undefined ? yoursBelow(shell, hunk, differs, sides, markup) : undefined,
+    };
+  };
+
+function HistoryRow(props: {
+  readonly commit: Commit;
+  readonly selected: string;
+  readonly onChoose: (id: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      data-commit={props.commit.id}
+      aria-current={props.selected === props.commit.id ? "true" : undefined}
+      class={ROW}
+      onClick={() => props.onChoose(props.commit.id)}
+    >
+      <span class="w-full truncate text-small font-medium text-on-surface-primary">
+        {props.commit.message}
+      </span>
+      <span class="flex w-full flex-wrap items-center gap-x-2 gap-y-1 text-smallest text-on-surface-tertiary">
+        <span>{props.commit.author.name}</span>
+        <span aria-hidden="true">·</span>
+        <time datetime={new Date(props.commit.at).toISOString()} title={exact(props.commit.at)}>
+          {ago(props.commit.at)}
+        </time>
+        <span aria-hidden="true">·</span>
+        <span class="font-mono">{props.commit.id.slice(0, 7)}</span>
+      </span>
+    </button>
+  );
+}
+
+function TimelineList(props: {
+  readonly log: readonly Commit[] | undefined;
+  readonly problem: string;
+  readonly selected: string;
+  readonly onlyHere: (id: string) => boolean;
+  readonly onChoose: (id: string) => void;
+}) {
+  return (
+    <ul class="divide-y divide-sidebar-border" data-commits={props.log?.length ?? 0}>
+      <Show when={props.log === undefined && props.problem === ""}>
+        <li class="px-4 py-3">
+          <DelayedSpinner />
+        </li>
+      </Show>
+      <For each={props.log ?? []}>
+        {(commit, index) => (
+          <>
+            <Show when={index() === 0 && props.onlyHere(commit.id)}>
+              <li
+                data-history-divider="local"
+                class="px-5 py-1 text-smallest font-medium text-on-surface-warning"
+              >
+                {t("Only on this device")}
+              </li>
+            </Show>
+            <Show
+              when={
+                index() > 0 &&
+                !props.onlyHere(commit.id) &&
+                props.onlyHere((props.log ?? [])[index() - 1]?.id ?? "")
+              }
+            >
+              <li
+                data-history-divider="shared"
+                class="px-5 py-1 text-smallest font-medium text-on-surface-tertiary"
+              >
+                {t("On the shared project")}
+              </li>
+            </Show>
+            <li>
+              <HistoryRow commit={commit} selected={props.selected} onChoose={props.onChoose} />
+            </li>
+          </>
+        )}
+      </For>
+    </ul>
+  );
+}
+
+const olderNoteOf = (older: Older): string => {
+  if (older === "loading") return t("Bringing the older history to this device…");
+  if (older === "failed")
+    return t(
+      "The older history could not be brought to this device. What is here is recent history only.",
+    );
+  return t("Only recent history is on this device. The older history is on the shared project.");
+};
+
+function OlderHistory(props: { readonly older: Older; readonly onLoad: (more: Deepen) => void }) {
+  return (
+    <div class="space-y-2 px-5 pt-3" data-history-older={props.older}>
+      <p class="text-smallest text-on-surface-secondary">{olderNoteOf(props.older)}</p>
+      <Show when={props.older !== "loading"}>
+        <div class="flex gap-2">
+          <Button variant="secondary" size="sm" onClick={() => props.onLoad(HISTORY_STEP)}>
+            {t("Load {count} more", { count: HISTORY_STEP })}
+          </Button>
+          <Button variant="tertiary" size="sm" onClick={() => props.onLoad("all")}>
+            {t("Load all")}
+          </Button>
+        </div>
+      </Show>
+    </div>
+  );
+}
+
+function HistorySidebar(props: {
+  readonly changes: number;
+  readonly log: readonly Commit[] | undefined;
+  readonly problem: string;
+  readonly selected: string;
+  readonly older: Older;
+  readonly onlyHere: (id: string) => boolean;
+  readonly onChoose: (id: string) => void;
+  readonly onReload: () => void;
+  readonly onLoadOlder: (more: Deepen) => void;
+}) {
+  return (
+    <ChangesHistorySidebar active="history" changes={props.changes}>
+      <div class="flex items-center gap-2 px-4 pt-3 pb-2">
+        <p class="min-w-0 flex-1 px-2 text-small text-on-surface-secondary">
+          {t("{count} version(s)", { count: props.log?.length ?? 0 })}
+        </p>
+        <IconButton
+          size="sm"
+          variant="subtle"
+          label={t("Reload")}
+          icon={<RefreshCw />}
+          onClick={props.onReload}
+        />
+      </div>
+      <nav aria-label={t("Timeline")} class="min-h-0 flex-1 overflow-y-auto pb-4">
+        <TimelineList
+          log={props.log}
+          problem={props.problem}
+          selected={props.selected}
+          onlyHere={props.onlyHere}
+          onChoose={props.onChoose}
+        />
+        <Show when={props.older !== "whole"}>
+          <OlderHistory older={props.older} onLoad={props.onLoadOlder} />
+        </Show>
+      </nav>
+    </ChangesHistorySidebar>
+  );
+}
+
+function CommitSubtitle(props: { readonly commit: Commit }) {
+  return (
+    <span class="flex flex-wrap items-center gap-x-2">
+      <span>{props.commit.author.name}</span>
+      <span aria-hidden="true">·</span>
+      <time datetime={new Date(props.commit.at).toISOString()}>{dated(props.commit.at)}</time>
+      <span aria-hidden="true">·</span>
+      <span class="font-mono">{props.commit.id.slice(0, 7)}</span>
+    </span>
+  );
+}
+
+function HistoryProblem(props: { readonly problem: string; readonly onReview: () => void }) {
+  return (
+    <Show
+      when={props.problem === "NotARepository"}
+      fallback={
+        <EmptyState
+          title={t("Sefer could not read this project's history.")}
+          description={t("The repository refused the read: {reason}.", {
+            reason: props.problem,
+          })}
+        />
+      }
+    >
+      <EmptyState
+        icon={<GitCommitVertical size={22} />}
+        title={t("Nothing has been recorded for this project yet.")}
+        description={t(
+          "Your unsaved work is kept safe as you type, but your books are only written to disk when you Save & Review. That records a version you can come back to — the first one creates the repository.",
+        )}
+        action={
+          <Button variant="primary" size="sm" onClick={props.onReview}>
+            {t("Save & Review")}
+          </Button>
+        }
+      />
+    </Show>
+  );
+}
+
+function ChangedBooks(props: {
+  readonly shown: readonly BookChanges[];
+  readonly nameOf: (bookId: BookId) => string;
+}) {
+  return (
+    <div class="flex flex-wrap items-center gap-x-4 gap-y-2" data-history-books>
+      <For each={props.shown}>
+        {(changes) => (
+          <span class="flex items-center gap-2" data-diff-book={changes.bookId}>
+            <strong class="text-small font-semibold text-on-surface-primary">
+              {props.nameOf(changes.bookId)}
+            </strong>
+            <Show
+              when={changes.firstTime === true}
+              fallback={
+                <>
+                  <Badge tone="warning">
+                    {t("{count} change(s)", { count: changeCount(changes) })}
+                  </Badge>
+                  <Show when={changes.added > 0}>
+                    <Badge tone="success">{t("+{count} added", { count: changes.added })}</Badge>
+                  </Show>
+                  <Show when={changes.removed > 0}>
+                    <Badge tone="error">{t("−{count} removed", { count: changes.removed })}</Badge>
+                  </Show>
+                </>
+              }
+            >
+              <Badge tone="brand">{t("first version")}</Badge>
+            </Show>
+          </span>
+        )}
+      </For>
+    </div>
+  );
+}
 
 export function HistoryPanel() {
   const shell = useShell();
@@ -129,31 +726,18 @@ export function HistoryPanel() {
   });
   const [problem, setProblem] = createSignal("");
   const [shown, setShown] = createSignal<readonly BookChanges[]>([], { name: "shownDiff" });
-  /** Commit ids the shared project has; `undefined` when there is nothing to compare with. */
   const [shared, setShared] = createSignal<ReadonlySet<string> | undefined>(undefined, {
     name: "historyShared",
   });
-  /** Recorded here and not yet on the shared project. */
   const onlyHere = (id: string): boolean => {
     const known = shared();
     return known !== undefined && !known.has(id);
   };
-  /**
-   * The cards whose "your text against this version" row is open, by card
-   * key. A selected version shows what it changed, as a log shows a commit;
-   * where your text has moved on since, a card offers that third row.
-   */
   const [yoursOpen, setYoursOpen] = createSignal<ReadonlySet<string>>(new Set(), {
     name: "historyYoursOpen",
   });
-  // SAFETY: `strict: false` gives the union of every route's search; `commit`
-  // is read as `unknown` and narrowed (the route validated it already).
-  const search = useSearch({ strict: false }) as () => { readonly commit?: unknown };
-  /** The version shown: the URL's, else the newest. Empty while the log is read. */
-  const selected = (): string => {
-    const asked = search().commit;
-    return typeof asked === "string" ? asked : (log()?.[0]?.id ?? "");
-  };
+  const search = useSearch({ from: "/_app/project/$slug/history" });
+  const selected = (): string => search().commit ?? log()?.[0]?.id ?? "";
   const choose = (id: string): void => {
     setYoursOpen(new Set<string>());
     void navigate({
@@ -162,223 +746,29 @@ export function HistoryPanel() {
       search: { commit: id },
     });
   };
-  /**
-   * Whether older history is on this device. A project cloned with its
-   * newest version only (the Web's default) has a short past until it is
-   * deepened, and the list must not pass that off as the whole.
-   */
-  const [older, setOlder] = createSignal<"whole" | "missing" | "loading" | "failed">("whole", {
-    name: "historyOlder",
+  const [older, setOlder] = createSignal<Older>("whole", { name: "historyOlder" });
+  const emptyTitle = (): string => {
+    if (log()?.length === 0) return t("No versions yet.");
+    if (selected() === "") return t("Reading the history…");
+    return t("This version changed no book's text.");
+  };
+
+  const { load, loadOlder } = createTimelineLoader(shell, {
+    setLog,
+    setVersions,
+    setProblem,
+    setShared,
+    setOlder,
   });
-
-  /**
-   * One pass over the repository. Every git call goes through `Effect.result`
-   * so that a repository that does not exist — the ordinary case in a browser
-   * fixture, where nothing has ever run `git init` — reports itself once and
-   * leaves the top row working.
-   */
-  const load = (fresh = false): void => {
-    const project = shell.project();
-    if (project === undefined) return;
-    void shell.services
-      .run(
-        Effect.gen(function* () {
-          const git = yield* Git;
-          const opened = yield* Effect.result(git.open(project.root));
-          if (Result.isFailure(opened))
-            return { kind: "absent", reason: opened.failure.reason } as const;
-          const repo = opened.success;
-          // The tips the timeline is made from, and the books it is read for:
-          // with all of them where they were, the held timeline is this one.
-          const branch = yield* Effect.orElseSucceed(git.branch(repo), () => Option.none<string>());
-          const tipOf = (ref: string) =>
-            Effect.map(
-              Effect.orElseSucceed(git.resolve(repo, ref), () => Option.none<string>()),
-              (tip) => Option.getOrElse(tip, () => "-"),
-            );
-          const tips = [
-            yield* tipOf("HEAD"),
-            Option.isSome(branch) ? yield* tipOf(trackingRef(branch.value)) : "-",
-            project.books.map((book) => book.id).join(","),
-          ].join("|");
-          const known = timelines.get(project.root);
-          if (!fresh && known !== undefined && known.tips === tips) return known.timeline;
-          const shallow = yield* Effect.orElseSucceed(git.shallow(repo), () => false);
-          // The log, every book's versions, and what the shared project already
-          // has (every commit its remote-tracking ref reaches; `undefined` when
-          // there is none, and then the timeline marks nothing) — in one call,
-          // which the Web answers from one read of its book index.
-          const paths = new Map<string, BookId>();
-          for (const book of project.books) {
-            const inside = repositoryPath(project.root, book.path);
-            if (Option.isSome(inside)) paths.set(inside.value, book.id);
-          }
-          const read = yield* Effect.result(
-            git.timeline(
-              repo,
-              [...paths.keys()],
-              Option.isSome(branch) ? trackingRef(branch.value) : undefined,
-            ),
-          );
-          const perBook = new Map<BookId, readonly Version[]>();
-          if (Result.isSuccess(read))
-            for (const [path, list] of read.success.versions) {
-              const bookId = paths.get(path);
-              if (bookId !== undefined) perBook.set(bookId, list);
-            }
-          const timeline: Timeline = {
-            kind: "read",
-            commits: Result.isSuccess(read) ? read.success.commits : [],
-            perBook,
-            shallow,
-            shared: Result.isSuccess(read) ? read.success.shared : undefined,
-          };
-          timelines.set(project.root, { tips, timeline });
-          return timeline;
-        }),
-      )
-      .then((answer) => {
-        if (answer.kind === "absent") {
-          // The TAG, not a sentence: the card below decides what to say about
-          // it, and "NotARepository" is the ordinary state of a project nobody
-          // has recorded yet rather than an error to print at someone.
-          setProblem(answer.reason);
-          setLog([]);
-          return;
-        }
-        setProblem("");
-        setLog(answer.commits);
-        setVersions(answer.perBook);
-        setShared(answer.shared);
-        setOlder((now) => (answer.shallow ? (now === "loading" ? now : "missing") : "whole"));
-        // The first time History opens on a project with its newest version
-        // only, one step further back is fetched without being asked: opening
-        // History is the asking. Once per project per session, so a failure is not
-        // retried on every visit; the button below retries.
-        if (answer.shallow && !deepened.has(project.root) && syncStatus.interfaceUp()) {
-          deepened.add(project.root);
-          loadOlder(HISTORY_STEP);
-        }
-      });
-  };
-
-  /** Fetch older history a newest-version clone left on the server, then read again. */
-  const loadOlder = (more: Deepen): void => {
-    const project = shell.project();
-    if (project === undefined) return;
-    setOlder("loading");
-    const operation = shell.services.composition.observability.operation("history.deepen", {
-      "history.more": String(more),
-    });
-    void shell.services
-      .run(
-        Effect.gen(function* () {
-          const git = yield* Git;
-          const remote = yield* Remote;
-          return yield* remote.deepen(yield* git.open(project.root), more);
-        }),
-      )
-      .then(
-        (progress) => {
-          operation.end("passed", { "history.loaded": progress.loaded });
-          // `load` reads `shallow` again: a step that did not reach the
-          // beginning leaves the card offering more.
-          setOlder("missing");
-          load(true);
-        },
-        (cause: unknown) => {
-          operation.end("failed", { "history.reason": remoteReasonOf(cause) ?? "unknown" });
-          setOlder("failed");
-        },
-      );
-  };
-  // One read of the open project, at setup. `load` is not a derivation.
   untrack(load);
 
-  /** Which books a commit touched, from the per-book version lists. */
-  const booksIn = (id: string): readonly BookId[] => {
-    const out: BookId[] = [];
-    for (const [bookId, list] of versions())
-      if (list.some((version) => version.commit.id === id)) out.push(bookId);
-    return out;
-  };
+  createShownChanges(shell, selected, versions, setShown);
 
-  const versionOf = (bookId: BookId, id: string): Version | undefined =>
-    versions()
-      .get(bookId)
-      ?.find((version) => version.commit.id === id);
-
-  /** The book's version just older than `id`'s, from its own newest-first list. */
-  const previousOf = (bookId: BookId, id: string): Version | undefined => {
-    const list = versions().get(bookId) ?? [];
-    const at = list.findIndex((version) => version.commit.id === id);
-    return at < 0 ? undefined : list[at + 1];
-  };
-
-  /** One version's text of a book, decoded; `undefined` when it cannot be read. */
-  const textOf = async (version: Version): Promise<Source | undefined> => {
-    const bytes = await shell.services.run(Effect.result(version.bytes()));
-    if (Result.isFailure(bytes)) return undefined;
-    const decoded = decode(bytes.success);
-    return Result.isFailure(decoded) ? undefined : decoded.success;
-  };
-
-  /**
-   * The selected side's diff.
-   *
-   * What a version changed: each book it touched, its previous version
-   * against this one. Where your text stands against either is `yours`, below.
-   */
-  const recompute = async (): Promise<void> => {
-    const project = shell.project();
-    const id = selected();
-    if (project === undefined || id === "") {
-      setShown([]);
-      return;
-    }
-    const out: BookChanges[] = [];
-    for (const bookId of booksIn(id)) {
-      const book = project.book(bookId);
-      const version = versionOf(bookId, id);
-      if (book === undefined || version === undefined) continue;
-      const after = await textOf(version);
-      if (after === undefined) continue;
-      const previous = previousOf(bookId, id);
-      const before = previous === undefined ? undefined : await textOf(previous);
-      const changes = versionChanges(
-        shell.services.galley,
-        book,
-        before === undefined ? undefined : { bookId, stamp: before.stamp, text: before.text },
-        { bookId, stamp: after.stamp, text: after.text },
-      );
-      if (changes.firstTime === true || changeCount(changes) > 0) out.push(changes);
-    }
-    setShown(out);
-  };
-
-  // A version diffs two recorded texts, which no keystroke moves: where your
-  // text stands against them is `yours`, which follows the edits itself.
-  createEffect(
-    () => `${selected()}:${versions().size}`,
-    () => {
-      // The compute above IS the dependency list. Everything this reads is a
-      // one-time snapshot of the state that key already describes, so
-      // `untrack` says so — a read in an effect's effect-phase that is not a
-      // dependency is what STRICT_READ_UNTRACKED exists to catch, and it
-      // cannot tell a deliberate snapshot from a mistake without being told.
-      untrack(() => {
-        void recompute();
-      });
-    },
-  );
-
-  /** USFM or the reading, in the reader below; History's own, not Review's. */
   const [markup, setMarkup] = createSignal(false, { name: "historyMarkup" });
   const [focusBook, setFocusBook] = createSignal<BookId | undefined>(undefined, {
     name: "historyBook",
   });
 
-  /** The shown books as the reader takes them: both texts and their skeleton. */
   const reviewBooks = createMemo(
     (): readonly ReviewBook[] => {
       const out: ReviewBook[] = [];
@@ -413,297 +803,34 @@ export function HistoryPanel() {
     return shell.services.seated(bookId);
   };
 
-  /**
-   * Your text against each side of the selected version, per book it shows:
-   * what Adopt writes from, and whether it would change anything. Follows
-   * your edits to those books (`stampOf`), and nothing else.
-   */
-  const yours = createMemo(
-    (): ReadonlyMap<BookId, Yours> => {
-      const out = new Map<BookId, Yours>();
-      if (selected() === "") return out;
-      const held = shown().filter((changes) => changes.firstTime !== true);
-      for (const changes of held) void shell.stampOf(changes.bookId)?.revision;
-      // The reads above are the dependencies; the diffs below are snapshots of them.
-      return untrack(() => {
-        const galley = shell.services.galley;
-        for (const changes of held) {
-          const texts = changes.changes;
-          const book = shell.project()?.book(changes.bookId);
-          if (texts === undefined || book === undefined) continue;
-          const stamp = book.source().stamp;
-          const against = (text: string): UnitChanges | undefined =>
-            changesOf(galley, book, { bookId: changes.bookId, stamp, text }).changes;
-          const version = against(texts.workingText);
-          const before = against(texts.baselineText);
-          const sides: DiffSides | undefined =
-            version === undefined
-              ? undefined
-              : {
-                  bookId: changes.bookId,
-                  baselineText: version.baselineText,
-                  currentText: version.workingText,
-                  baseline: yoursAnalysis("version", changes.bookId, version.baselineText),
-                  current: yoursAnalysis("yours", changes.bookId, version.workingText),
-                };
-          out.set(changes.bookId, { book, version, before, sides });
-        }
-        return out;
-      });
-    },
-    { name: "historyYours" },
-  );
-
-  /** One parse per text per book, held while the text is the same — as the reader holds its own. */
-  const yoursAnalyzers = new Map<string, (text: string) => Analysis>();
-  const yoursAnalysis = (role: "version" | "yours", bookId: BookId, text: string): Analysis => {
-    const key = `${role}\0${bookId}`;
-    let analyze = yoursAnalyzers.get(key);
-    if (analyze === undefined) {
-      analyze = shell.services.galley.memoize();
-      yoursAnalyzers.set(key, analyze);
-    }
-    return analyze(text);
-  };
-
-  /**
-   * Your text's changes against one side that fall in this card's passage.
-   * Matched by place in THAT side's text, which both diffs share: a card's
-   * `current` ranges (before → this version) and a unit's `baseline` range in
-   * "your text against this version" are offsets into the same text; likewise
-   * `baseline` and "your text against before it". Empty: your text already
-   * reads as that side here.
-   */
-  const yoursAt = (hunk: Hunk, side: "baseline" | "current"): readonly DecisionUnit[] => {
-    const held = yours().get(hunk.bookId);
-    const changes = side === "current" ? held?.version : held?.before;
-    if (changes === undefined) return [];
-    const spans = hunk.units.map(
-      (unit) =>
-        (side === "current" ? unit.current : unit.baseline) ??
-        point(side === "current" ? unit.place.current : unit.place.baseline),
-    );
-    return changes.units.filter((mine) =>
-      spans.some((span) => overlaps(span, mine.baseline ?? point(mine.place.baseline))),
-    );
-  };
-
-  /**
-   * One side of a card, written into your text: for its passage, your text
-   * takes that side's wording. Never a revert of the version, never a
-   * checkout — one ordinary edit, unsaved until Record a version, and one
-   * Undo takes it back.
-   */
-  const adopt = (hunk: Hunk, side: "baseline" | "current"): void => {
-    const held = yours().get(hunk.bookId);
-    const changes = side === "current" ? held?.version : held?.before;
-    const picked = yoursAt(hunk, side);
-    if (held === undefined || changes === undefined || picked.length === 0) {
-      toasts.success({ title: t("Already in your text") });
-      return;
-    }
-    const done = revertUnits(shell.services.galley, held.book, changes, picked);
-    if (Result.isFailure(done)) {
-      toasts.error({ title: t("Adopt refused"), message: t(done.failure.reason) });
-      return;
-    }
-    toasts.success({ title: t("Adopted into your text") });
-    shell.changed({ kind: "book.apply", books: [hunk.bookId] });
-  };
-
-  /**
-   * A card's Adopt on either side, its "Yours differs", and the row that
-   * opens. In a split each sits under its side's caption; unified, both are
-   * in the header and say which side they take.
-   */
-  const sidesOf = (hunk: Hunk, split: boolean) => {
-    const already = t("Your text already reads this way here.");
-    const adoptOf = (side: "baseline" | "current", id: string, label: string): CardAction => {
-      const off = yoursAt(hunk, side).length === 0;
-      return {
-        kind: "button",
-        id,
-        emphasis: "tertiary",
-        label,
-        disabled: off,
-        title: off
-          ? already
-          : t("Write this wording into your text. Unsaved until you record a version."),
-        onPress: () => adopt(hunk, side),
-      };
-    };
-    const differs = yoursAt(hunk, "current");
-    const open = differs.length > 0 && yoursOpen().has(hunk.key);
-    const sides = yours().get(hunk.bookId)?.sides;
-    return {
-      baseline: [adoptOf("baseline", "adopt-before", split ? t("Adopt") : t("Adopt before"))],
-      current: [
-        ...(differs.length === 0
-          ? []
-          : [
-              {
-                kind: "button",
-                id: "yours",
-                emphasis: "tertiary",
-                label: t("Yours differs"),
-                pressed: open,
-                title: t("Show your text against this version"),
-                onPress: () =>
-                  setYoursOpen((was) => {
-                    const next = new Set(was);
-                    if (!next.delete(hunk.key)) next.add(hunk.key);
-                    return next;
-                  }),
-              } satisfies CardAction,
-            ]),
-        adoptOf("current", "adopt-version", split ? t("Adopt") : t("Adopt this version")),
-      ],
-      below:
-        open && sides !== undefined ? (
-          <YoursRow
-            sides={sides}
-            hunks={hunksOf({
-              bookId: hunk.bookId,
-              units: differs,
-              baseline: sides.baseline,
-              current: sides.current,
-              label: (address) => untrack(() => shell.location.label(address)),
-              steps: 0,
-            })}
-            usfm={markup()}
-            label={t("Your text against this version")}
-          />
-        ) : undefined,
-    };
-  };
+  const yours = createYours(shell, selected, shown);
+  const sidesOf = createSidesOf(shell, yours, yoursOpen, setYoursOpen, markup);
 
   const selectedCommit = (): Commit | undefined =>
     log()?.find((commit) => commit.id === selected());
 
-  /** Books not yet written to disk: the Changes tab's count. */
   const unsaved = (): number => unsavedChanges(shell).length;
 
-  /** Save & Review, from a project with nothing recorded yet. */
   const review = (): void => {
     void navigate({ to: "/project/$slug/review", params: { slug: shell.slug() } });
   };
 
-  /** What a person calls a book: the project's own name for it, else the canon's. */
   const nameOf = (bookId: BookId): string => bookName(bookId, metadataOf(shell.project()));
 
-  /** A version's row in the timeline: what it says, who, when, and the books it touched. */
-  const Row = (props: { readonly commit: Commit }) => (
-    <button
-      type="button"
-      data-commit={props.commit.id}
-      aria-current={selected() === props.commit.id ? "true" : undefined}
-      class={ROW}
-      onClick={() => choose(props.commit.id)}
-    >
-      <span class="w-full truncate text-small font-medium text-on-surface-primary">
-        {props.commit.message}
-      </span>
-      <span class="flex w-full flex-wrap items-center gap-x-2 gap-y-1 text-smallest text-on-surface-tertiary">
-        <span>{props.commit.author.name}</span>
-        <span aria-hidden="true">·</span>
-        <time datetime={new Date(props.commit.at).toISOString()} title={exact(props.commit.at)}>
-          {ago(props.commit.at)}
-        </time>
-        <span aria-hidden="true">·</span>
-        <span class="font-mono">{props.commit.id.slice(0, 7)}</span>
-      </span>
-    </button>
-  );
-
-  /**
-   * The timeline is the sidebar's History tab, as Review's changed books are
-   * its Changes tab: one panel, two tabs, the route says which.
-   */
   onCleanup(
     claimSidebar(
       () => (
-        <ChangesHistorySidebar active="history" changes={unsaved()}>
-          <div class="flex items-center gap-2 px-4 pt-3 pb-2">
-            <p class="min-w-0 flex-1 px-2 text-small text-on-surface-secondary">
-              {t("{count} version(s)", { count: log()?.length ?? 0 })}
-            </p>
-            <IconButton
-              size="sm"
-              variant="subtle"
-              label={t("Reload")}
-              icon={<RefreshCw />}
-              onClick={() => load(true)}
-            />
-          </div>
-          <nav aria-label={t("Timeline")} class="min-h-0 flex-1 overflow-y-auto pb-4">
-            <ul class="divide-y divide-sidebar-border" data-commits={log()?.length ?? 0}>
-              {/* The first read of the log: the shared short-wait spinner. */}
-              <Show when={log() === undefined && problem() === ""}>
-                <li class="px-4 py-3">
-                  <DelayedSpinner />
-                </li>
-              </Show>
-              <For each={log() ?? []}>
-                {(commit, index) => (
-                  <>
-                    {/* Only when some versions are not shared yet: a divider
-                      above them, and one where the shared ones begin. */}
-                    <Show when={index() === 0 && onlyHere(commit.id)}>
-                      <li
-                        data-history-divider="local"
-                        class="px-5 py-1 text-smallest font-medium text-on-surface-warning"
-                      >
-                        {t("Only on this device")}
-                      </li>
-                    </Show>
-                    <Show
-                      when={
-                        index() > 0 &&
-                        !onlyHere(commit.id) &&
-                        onlyHere((log() ?? [])[index() - 1]?.id ?? "")
-                      }
-                    >
-                      <li
-                        data-history-divider="shared"
-                        class="px-5 py-1 text-smallest font-medium text-on-surface-tertiary"
-                      >
-                        {t("On the shared project")}
-                      </li>
-                    </Show>
-                    <li>
-                      <Row commit={commit} />
-                    </li>
-                  </>
-                )}
-              </For>
-            </ul>
-            <Show when={older() !== "whole"}>
-              <div class="space-y-2 px-5 pt-3" data-history-older={older()}>
-                <p class="text-smallest text-on-surface-secondary">
-                  {older() === "loading"
-                    ? t("Bringing the older history to this device…")
-                    : older() === "failed"
-                      ? t(
-                          "The older history could not be brought to this device. What is here is recent history only.",
-                        )
-                      : t(
-                          "Only recent history is on this device. The older history is on the shared project.",
-                        )}
-                </p>
-                <Show when={older() !== "loading"}>
-                  <div class="flex gap-2">
-                    <Button variant="secondary" size="sm" onClick={() => loadOlder(HISTORY_STEP)}>
-                      {t("Load {count} more", { count: HISTORY_STEP })}
-                    </Button>
-                    <Button variant="tertiary" size="sm" onClick={() => loadOlder("all")}>
-                      {t("Load all")}
-                    </Button>
-                  </div>
-                </Show>
-              </div>
-            </Show>
-          </nav>
-        </ChangesHistorySidebar>
+        <HistorySidebar
+          changes={unsaved()}
+          log={log()}
+          problem={problem()}
+          selected={selected()}
+          older={older()}
+          onlyHere={onlyHere}
+          onChoose={choose}
+          onReload={() => load(true)}
+          onLoadOlder={loadOlder}
+        />
       ),
       { show: t("Show history"), hide: t("Hide history") },
     ),
@@ -714,17 +841,7 @@ export function HistoryPanel() {
       <PanelHeader
         title={selectedCommit()?.message ?? t("History")}
         subtitle={
-          <Show when={selectedCommit()}>
-            {(commit) => (
-              <span class="flex flex-wrap items-center gap-x-2">
-                <span>{commit().author.name}</span>
-                <span aria-hidden="true">·</span>
-                <time datetime={new Date(commit().at).toISOString()}>{dated(commit().at)}</time>
-                <span aria-hidden="true">·</span>
-                <span class="font-mono">{commit().id.slice(0, 7)}</span>
-              </span>
-            )}
-          </Show>
+          <Show when={selectedCommit()}>{(commit) => <CommitSubtitle commit={commit()} />}</Show>
         }
       />
 
@@ -740,85 +857,11 @@ export function HistoryPanel() {
       >
         <Show
           when={problem() === ""}
-          fallback={
-            <Show
-              when={problem() === "NotARepository"}
-              fallback={
-                <EmptyState
-                  title={t("Sefer could not read this project's history.")}
-                  description={t("The repository refused the read: {reason}.", {
-                    reason: problem(),
-                  })}
-                />
-              }
-            >
-              <EmptyState
-                icon={<GitCommitVertical size={22} />}
-                title={t("Nothing has been recorded for this project yet.")}
-                description={t(
-                  "Your unsaved work is kept safe as you type, but your books are only written to disk when you Save & Review. That records a version you can come back to — the first one creates the repository.",
-                )}
-                action={
-                  <Button variant="primary" size="sm" onClick={review}>
-                    {t("Save & Review")}
-                  </Button>
-                }
-              />
-            </Show>
-          }
+          fallback={<HistoryProblem problem={problem()} onReview={review} />}
         >
-          <Show
-            when={shown().length > 0}
-            fallback={
-              <EmptyState
-                title={
-                  log()?.length === 0
-                    ? t("No versions yet.")
-                    : selected() === ""
-                      ? t("Reading the history…")
-                      : t("This version changed no book's text.")
-                }
-              />
-            }
-          >
-            <div class="flex flex-wrap items-center gap-x-4 gap-y-2" data-history-books>
-              <For each={shown()}>
-                {(changes) => (
-                  <span class="flex items-center gap-2" data-diff-book={changes.bookId}>
-                    <strong class="text-small font-semibold text-on-surface-primary">
-                      {nameOf(changes.bookId)}
-                    </strong>
-                    <Show
-                      when={changes.firstTime === true}
-                      fallback={
-                        <>
-                          <Badge tone="warning">
-                            {t("{count} change(s)", { count: changeCount(changes) })}
-                          </Badge>
-                          <Show when={changes.added > 0}>
-                            <Badge tone="success">
-                              {t("+{count} added", { count: changes.added })}
-                            </Badge>
-                          </Show>
-                          <Show when={changes.removed > 0}>
-                            <Badge tone="error">
-                              {t("−{count} removed", { count: changes.removed })}
-                            </Badge>
-                          </Show>
-                        </>
-                      }
-                    >
-                      <Badge tone="brand">{t("first version")}</Badge>
-                    </Show>
-                  </span>
-                )}
-              </For>
-            </div>
-            {/* The changes themselves: the multibuffer Review reads with —
-                the same cards, steps, chapter and fold-back, Open in the
-                book. Adopt on either side (on hover) writes that side's
-                wording into your text, and "Yours differs" opens your text
-                against this version. Neither writes a file. */}
+          <Show when={shown().length > 0} fallback={<EmptyState title={emptyTitle()} />}>
+            <ChangedBooks shown={shown()} nameOf={nameOf} />
+
             <Show when={reviewBooks().length > 0}>
               <div class="flex min-h-0 flex-1 flex-col" data-history-reader>
                 <ReviewReader
@@ -834,7 +877,7 @@ export function HistoryPanel() {
                     when: dated(selectedCommit()?.at ?? Date.now()),
                   })}
                   baselineLabel={(bookId) => {
-                    const before = previousOf(bookId, selected());
+                    const before = previousOf(versions(), bookId, selected());
                     return before === undefined
                       ? t("Before it")
                       : t("Before it · {when}", { when: dated(before.commit.at) });

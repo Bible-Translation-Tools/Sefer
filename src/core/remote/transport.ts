@@ -16,7 +16,6 @@
  * browser origin and reaches the host itself.
  */
 
-/** Content-host origin → the origin a browser reaches it through. */
 export type Transport = ReadonlyMap<string, string>;
 
 export const NO_TRANSPORT: Transport = new Map();
@@ -31,13 +30,8 @@ const parsed = (url: string): URL | undefined => {
 
 const originOf = (url: string): string | undefined => parsed(url)?.origin;
 
-/** Everything after the origin, as the URL parser reads it. */
 const rest = (url: URL): string => `${url.pathname}${url.search}${url.hash}`;
 
-/**
- * `host=proxy,host=proxy`, as the build writes it. A malformed pair is
- * dropped rather than guessed at; a host with no pair is reached directly.
- */
 export const parseTransport = (spec: string | undefined): Transport => {
   const pairs = new Map<string, string>();
   for (const pair of (spec ?? "").split(",")) {
@@ -49,18 +43,12 @@ export const parseTransport = (spec: string | undefined): Transport => {
   return pairs;
 };
 
-/** `url` with its origin swapped for the one its host is reached through. */
 export const through = (transport: Transport, url: string): string => {
   const at = parsed(url);
   const proxy = at === undefined ? undefined : transport.get(at.origin);
   return proxy === undefined || at === undefined ? url : proxy + rest(at);
 };
 
-/**
- * The content-host URL a proxy URL stands for — the reverse of `through`.
- * For a URL somebody pastes from a proxy, so what `attach` stores is always
- * the server. Anything else is returned as it is.
- */
 export const identityOf = (transport: Transport, url: string): string => {
   const at = parsed(url);
   if (at === undefined) return url;

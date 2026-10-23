@@ -1,33 +1,3 @@
-/**
- * Reviewing a SUGGESTION, on Review's own reader: the same editor-backed cards
- * `/review` draws, with three changes to judge against real text.
- *
- * From the demo on 2026-10-07 (`planning/items/2026-10-06-cloud-git-followups.mdx`,
- * path item 5). A first pass redrew the cards as plain HTML — result first,
- * a Keep toggle — and read as a different editor rather than an adaptation of
- * this one. So this keeps the reader whole (one USFM string, painted) and
- * changes only:
- *
- *   1. NAMES. The sides are named by who wrote them — "will-kelly-test's
- *      suggestion" and "Your project" — in the captions and on the Take /
- *      Keep buttons, instead of "The suggested changes" and "In the editor".
- *   2. THE RESULT, BY BRIGHTNESS. Once a passage is decided, the side it will
- *      not read as is dimmed (`Controls.dimUnchosen`), so what stays bright is
- *      what the project will say.
- *   3. THE HEADER, AS ONE SENTENCE. Who, title, when. Today's line also lists
- *      the suggestion's version messages, which asks the reviewer to think in
- *      commits; the review is latest to latest.
- *
- * ## The data
- *
- * Real text, mock framing. The bench's BEFORE side (the synthetic earlier
- * draft) stands in for the suggestion and its AFTER side for your project,
- * the way Review holds a suggestion: the editor on the current side, theirs on
- * the baseline. The person, title, time and version messages are invented.
- * Decisions are held here and never written (`writesDecisions={false}`), and
- * the cards' Edit seats nothing, so the project is untouched.
- */
-
 import type { BookId } from "@sefer/text/book";
 import { For, Show, createMemo, createSignal } from "solid-js";
 
@@ -37,7 +7,6 @@ import type { DecisionUnit, MergeSide } from "#core/galley";
 
 import type { Experiment, ExperimentProps } from "../experiment";
 
-/** Who offered it, and what it says about itself — invented, see the module note. */
 const MOCK = {
   who: "will-kelly-test",
   title: "Changes suggested on 7 October 2026",
@@ -66,7 +35,6 @@ const TODAY: Names = {
   baselineShort: "the suggestion",
 };
 
-/** Today's suggestion line, roughly: the sentence, then the versions' messages. */
 const HeaderToday = () => (
   <div class="space-y-1 rounded-md border border-surface-border bg-surface-secondary px-3 py-2">
     <p class="text-small">
@@ -82,7 +50,6 @@ const HeaderToday = () => (
   </div>
 );
 
-/** The proposal: one sentence, the count, and Decline beside it. */
 const HeaderSentence = (props: { readonly passages: number; readonly decided: number }) => (
   <div class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-surface-border bg-surface-secondary px-3 py-2">
     <p class="min-w-0 flex-1 text-small">
@@ -114,8 +81,7 @@ function SuggestionReview(props: ExperimentProps) {
       if (bench?.skeleton === undefined) return [];
       return [
         {
-          // SAFETY: the bench's book id is one the playground picked from the
-          // open project's own books, so it is a BookId already.
+          // SAFETY: the bench's book id is one the playground picked from the open project's own books, so it is a BookId already.
           bookId: bench.bookId as BookId,
           name: bench.bookId,
           currentText: bench.currentText,

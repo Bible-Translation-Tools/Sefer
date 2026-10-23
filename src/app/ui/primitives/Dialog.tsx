@@ -1,15 +1,3 @@
-/**
- * The modal dialog, over `@corvu-next/dialog`.
- *
- * One of the four files allowed to import corvu. corvu owns what is hard —
- * the focus trap, the scroll lock, the Escape and outside-click handling, the
- * `aria-labelledby` wiring — and this file owns the look.
- *
- * `title` is required: a dialog with no accessible name is one a screen reader
- * announces as "dialog" and nothing else. `description` is optional and is
- * wired to `aria-describedby` when present.
- */
-
 import CorvuDialog from "@corvu-next/dialog";
 import type { JSX } from "@solidjs/web";
 
@@ -20,20 +8,13 @@ export interface DialogProps {
   readonly onOpenChange: (open: boolean) => void;
   readonly title: string;
   readonly description?: string;
-  /** Buttons, laid out at the end of a footer row. Omit for a bare panel. */
   readonly footer?: JSX.Element;
-  /** Classes for the panel — a width, usually. */
   readonly class?: ClassValue;
   readonly children: JSX.Element;
 }
 
 export function Dialog(props: DialogProps) {
   return (
-    // A modal traps focus, so focus "leaving" it is never the person
-    // dismissing it. corvu's outside-focus dismissal read the focus returning
-    // to the button that opened it last time as exactly that, so a dialog
-    // cancelled and opened again shut in the same click. Escape and a press
-    // outside still close it.
     <CorvuDialog open={props.open} onOpenChange={props.onOpenChange} closeOnOutsideFocus={false}>
       <CorvuDialog.Portal>
         <CorvuDialog.Overlay class="fixed inset-0 z-40 bg-surface-overlay" />

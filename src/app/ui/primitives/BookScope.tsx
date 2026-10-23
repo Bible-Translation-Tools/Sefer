@@ -1,14 +1,3 @@
-/**
- * Which books a screen looks at: This book | Whole project | OT | NT | Custom,
- * and with Custom, a searchable list of the project's books.
- *
- * One control for every screen that narrows by book — Find searches inside
- * the answer, Findings filters by it — so the two read and behave the same.
- * OT and NT are offered only when the project has books in both testaments:
- * otherwise one of them is the whole project. The caller owns the state and
- * turns it into books with `scopeBooks`.
- */
-
 import type { BookId } from "@sefer/text/book";
 import { testamentOf } from "@sefer/text/location/canon";
 import { Show } from "solid-js";
@@ -22,13 +11,10 @@ export type BookScopeKind = "book" | "project" | "ot" | "nt" | "custom";
 
 export interface BookScopeRow {
   readonly id: BookId;
-  /** What the project calls it. */
   readonly name: string;
-  /** Shown at the row's end when given (Findings' count per book). */
   readonly count?: number;
 }
 
-/** The books a scope means, or `undefined` for every book. */
 export const scopeBooks = (
   kind: BookScopeKind,
   books: readonly BookId[],
@@ -44,14 +30,10 @@ export const scopeBooks = (
 export interface BookScopeProps {
   readonly value: BookScopeKind;
   readonly onChange: (kind: BookScopeKind) => void;
-  /** The project's books, in its order. */
   readonly books: readonly BookScopeRow[];
-  /** Custom's choice. */
   readonly custom: readonly BookId[];
   readonly onCustom: (books: readonly BookId[]) => void;
-  /** Is there a book to mean by "This book"? */
   readonly hasFocused: boolean;
-  /** The whole control, while something else decides the scope (Find's source search). */
   readonly disabled?: boolean;
 }
 
@@ -99,7 +81,6 @@ export function BookScope(props: BookScopeProps) {
           selected={(row) => props.custom.includes(row.id)}
           onToggle={(row) => {
             const held = props.custom;
-            // Kept in the project's order, whatever order they were picked in.
             props.onCustom(
               held.includes(row.id)
                 ? held.filter((id) => id !== row.id)

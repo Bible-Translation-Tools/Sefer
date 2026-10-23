@@ -1,48 +1,3 @@
-/**
- * The findings panel: every finding in the project, in one shape, through the
- * reader's filter — as the SAME multibuffer Find shows.
- *
- * It is the component the reader already knows from searching. Identical
- * cards, identical chrome, the same expand-up/expand-down context arrows, the
- * same outline column, the same Edit-as-satellite. The purpose is that
- * someone scanning a place — a Sous finding about a comma, say — sees everything that
- * might be wrong there, in the verse it is wrong in, with the workflow they
- * already have. So this file draws no list of its own: `findingsFeed.ts` turns
- * findings into occurrences and hands them to `createExcerptFeed`, exactly as
- * `/find` hands it search hits, and what is left here is the toolbar, the
- * header of each card, and the two things that can be done about a finding.
- *
- * What did NOT change is everything the page is answerable for.
- *
- * `findings.list` does the ordering, `findings/filter` does the subtraction,
- * and the filter is subtractive and never authoritative: the header always
- * says "N of TOTAL shown", so a filtered panel can never read as a clean
- * project, and the census, the inline marks and the corpus
- * counts are untouched by anything on this screen.
- *
- * A card's reference is still DERIVED or not shown — an excerpt exists only
- * because a parse of the text the finding was measured in placed it, so
- * "Philemon 1:4" on a card is a fact and not a guess.
- *
- * A fix preview is still computed on DEMAND — a page of four hundred findings
- * pays for none of them until someone asks — `fixes.preview` refuses one
- * computed from text the book has since moved past, and `fixes.apply` goes
- * through `book.apply`, the one write path, so a fix from this page is the
- * same event a fix from the editor is.
- *
- * A run of identical findings inside one verse still folds to one line with
- * "× N", which expands on click. It is purely presentational: every count on
- * the page is over findings, never over lines.
- *
- * The keyboard cursor is LOCAL to this route, and deliberately so. The shell
- * has its own findings cursor over the unfiltered list (`editor.findings.next`
- * in the palette walks the whole project, which is what that command means);
- * a cursor here that honoured the filter but shared that state would make the
- * palette command jump according to a filter it never mentioned. It walks
- * CARDS now rather than rows, and the card it is on wears the ring Find puts
- * on the card holding the current match.
- */
-
 import type { BookId } from "@sefer/text/book";
 import { useNavigate, useSearch } from "@tanstack/solid-router";
 import { Option, Result } from "effect";
@@ -61,7 +16,7 @@ import * as Findings from "#core/findings/findings";
 import * as Fixes from "#core/fixes/fixes";
 
 import { t } from "../../i18n";
-import { useShell } from "../../ProjectContext";
+import { useShell, type Shell } from "../../ProjectContext";
 import { excerptCard, ExcerptList, type ExcerptCardSpec, type OutlineSpec } from "../excerpts";
 import type { CardAction } from "../multibuffer/CardAction";
 import {
@@ -84,116 +39,64 @@ import {
   foldRuns,
   inMarkup,
   type FindingRun,
+  type FindingsFeed,
   type FindingsRow,
 } from "./findingsFeed";
-import { createFindingsFilter, VIEWS, type FindingsView } from "./findingsFilter";
+import {
+  createFindingsFilter,
+  VIEWS,
+  type FindingsFilterState,
+  type FindingsView,
+} from "./findingsFilter";
 import { FindingsFilters } from "./FindingsFilters";
 import { SousSentence } from "./SousSentence";
+import { SuppressActions } from "./SuppressActions";
 
-/** One finding's line in a card header, before it has been measured. */
 const LINE_HEIGHT = 30;
 
-export function FindingsPanel() {
-  const shell = useShell();
-  const navigate = useNavigate();
-  const filters = createFindingsFilter(shell.services);
-  const [preview, setPreview] = createSignal<Fixes.FixPreview | undefined>(undefined, {
-    name: "fixPreview",
-  });
-  const [note, setNote] = createSignal("");
-  const [cursor, setCursor] = createSignal(0, { name: "findingsCursor" });
-  const [settingsOpen, setSettingsOpen] = createSignal(false, { name: "findingsSettingsOpen" });
-  /**
-   * The source text beside each finding's verse, as Find shows it: read-only,
-   * and optional. Choosing one (or none) binds the project's source, and the
-   * picker itself re-registers the corpus and re-judges.
-   */
-  const source = createFindSource(() => {});
-  /**
-   * Has the reader moved the cursor yet?
-   *
-   * Until they have, there IS no current card: the ring and the scroll belong
-   * to a gesture somebody made, and a page that scrolled itself to its first
-   * card on arrival would take the top of the list away from the reader before
-   * they had read it. Find behaves the same — its ring appears when the match
-   * arrows are used.
-   */
-  const [walking, setWalking] = createSignal(false, { name: "findingsWalking" });
-
-  /**
-   * `?code=` and `?pattern=`, from the inventory's "the other sites of this
-   * pattern" link. They were already being sent and were silently dropped —
-   * a route that does not validate a search param does not receive it — and
-   * `/findings` validates them now.
-   */
-  // SAFETY: `strict: false` gives the union of every route's search; both
-  // fields are read as `unknown` and each is narrowed before it is used.
-  const search = useSearch({ strict: false }) as () => {
-    readonly code?: unknown;
-    readonly pattern?: unknown;
-  };
-
-  /** The pattern the link named, when it named one this list could be about. */
-  const pattern = (): number | undefined => {
-    const held = search().pattern;
-    return typeof held === "number" && Number.isInteger(held) && held >= 0 ? held : undefined;
-  };
-
-  /**
-   * Seeds the code filter from the URL, once per distinct code.
-   *
-   * A seed and not a lock: the chips are still the reader's, and "All codes"
-   * clears it. In an effect rather than at construction because the filter is
-   * restored from Settings first, and a write on the same tick as that read
-   * would be lost.
-   */
-  createEffect(
-    () => search().code,
-    (code) => {
-      if (typeof code !== "string" || code === "") return;
-      // `untrack`: `update` reads the current filter to merge the patch onto
-      // it, and a read inside an effect callback is the one Solid warns about
-      // — it would not track, and here it must not.
-      untrack(() => {
-        filters.update({ codes: [code] });
-      });
-    },
+const severitiesOf = (row: FindingsRow): readonly Finding["severity"][] =>
+  Filter.SEVERITIES.filter((severity) =>
+    row.findings.some((finding) => finding.severity === severity),
   );
 
-  /**
-   * The findings this panel is about, in whatever order the shell published
-   * them.
-   *
-   * UNSORTED on purpose. Sorting is for the list, and the list is the half
-   * that waits a frame; the header needs counts, and counts do not care about
-   * order. When no pattern narrows it this is the store's own array, so the
-   * ordinary case allocates nothing at all.
-   */
+interface RunDisclosure {
+  readonly isOpen: (row: FindingsRow, finding: Finding) => boolean;
+  readonly toggleRun: (row: FindingsRow, finding: Finding) => void;
+  readonly isWhyOpen: (row: FindingsRow, finding: Finding) => boolean;
+  readonly toggleWhy: (row: FindingsRow, finding: Finding) => void;
+}
+
+const createRunDisclosure = (feed: FindingsFeed): RunDisclosure => {
+  const runId = (row: FindingsRow, finding: Finding): string => `${row.sectionKey}|${finding.id}`;
+  const isOpen = (row: FindingsRow, finding: Finding): boolean =>
+    feed.excerpts.views.view(row.excerpt.sid).open.has(runId(row, finding));
+  const toggleRun = (row: FindingsRow, finding: Finding): void =>
+    feed.excerpts.views.send(row.excerpt.sid, { kind: "open", id: runId(row, finding) });
+  const whyId = (row: FindingsRow, finding: Finding): string => `why|${runId(row, finding)}`;
+  const isWhyOpen = (row: FindingsRow, finding: Finding): boolean =>
+    feed.excerpts.views.view(row.excerpt.sid).open.has(whyId(row, finding));
+  const toggleWhy = (row: FindingsRow, finding: Finding): void =>
+    feed.excerpts.views.send(row.excerpt.sid, { kind: "open", id: whyId(row, finding) });
+  return { isOpen, toggleRun, isWhyOpen, toggleWhy };
+};
+
+const createFindingsPool = (
+  shell: Shell,
+  filters: FindingsFilterState,
+  pattern: () => number | undefined,
+  showingSuppressed: () => boolean,
+) => {
   const pool = createMemo(
     (): readonly Finding[] => {
       if (shell.project() === undefined) return [];
-      const listed = shell.findings();
+      const listed = showingSuppressed() ? shell.suppressedFindings() : shell.findings();
       const only = pattern();
-      // A pattern is not one of `FindingsFilter`'s fields and should not become
-      // one: it is an address another screen hands over for one visit, not a
-      // preference anybody sets. So it narrows the list this panel calls "all",
-      // which keeps the header's "N of TOTAL shown" honest about the question
-      // that was actually asked.
       return only === undefined ? listed : listed.filter((finding) => finding.pattern === only);
     },
     { name: "findingsPool" },
   );
 
-  /**
-   * Every book's current revision, as ONE plain object.
-   *
-   * Staleness is a revision comparison, and the revisions live in the shell's
-   * `books` store — so asking per finding meant twenty thousand store-proxy
-   * reads per pass, from inside a `<For>` where Solid cannot track them
-   * (STRICT_READ_UNTRACKED, and it was right to complain). Read once here, in
-   * a tracking scope, keyed by book: sixty-six reads when a book's text moves,
-   * and a plain lookup per finding.
-   */
+  // Untracked on purpose: a one-time read, not a dependency (Solid 2: STRICT_READ_UNTRACKED).
   const revisions = createMemo(
     (): Readonly<Record<BookId, number>> => {
       const out: Record<BookId, number> = {};
@@ -206,128 +109,32 @@ export function FindingsPanel() {
     { name: "bookRevisions" },
   );
 
-  /** Has the book moved on since the publication that measured this finding? */
   const isStale = (finding: Finding): boolean => {
     const revision = revisions()[finding.bookId];
     return revision === undefined || revision !== finding.stamp.revision;
   };
 
-  /**
-   * Everything the HEADER needs, in one walk and no sort.
-   *
-   * The counts and the filter chips as `list` (a sort), then `facets`, then
-   * `applyFilter` would be three more walks of twenty thousand findings, all
-   * of it before the panel could paint, because the header says "N of TOTAL
-   * shown". Measured on a 66-book project that was about a third of the first
-   * task, and none of it needs the findings in order.
-   *
-   * Facets are counted over the UNFILTERED pool: a chip's own count must not
-   * move as you click it.
-   */
   const summary = createMemo(() => Filter.summarise(pool(), filters.filter(), isStale), {
     name: "findingsSummary",
   });
 
-  /**
-   * The body's list: sorted, then filtered.
-   *
-   * Read by the feed and by nothing the header draws, so the sort happens in
-   * the task that builds the list rather than the one that paints the panel.
-   */
   const shown = createMemo(
     (): readonly Finding[] =>
       Filter.applyFilter(Findings.list({ findings: pool }), filters.filter(), isStale),
     { name: "findingsShown" },
   );
+  return { isStale, summary, shown };
+};
 
-  /** Every book in the project, so a clean book still offers its chip. */
-  const books = (): readonly BookId[] => shell.project()?.books.map((book) => book.id) ?? [];
-
-  const feed = createFindingsFeed({ findings: shown, view: filters.view });
-
-  /**
-   * The list waits for the shell to be on screen.
-   *
-   * Opening this panel was ONE synchronous task of ~114ms — the route
-   * transition, the feed's model over twenty thousand findings, the virtual
-   * list and its first layout, all before the browser painted anything. The
-   * click read as a freeze. Traced and profiled, that task had no hot spot to
-   * remove: the top sixteen costs were a long tail, none above 14%, so making
-   * any of it faster was never going to reach a hundred milliseconds.
-   *
-   * What reaches it is doing less BEFORE the paint. The header, the counts and
-   * the filters are cheap and they are what says the click landed; the list is
-   * the expensive half and nobody can read it in the first frame anyway. Solid
-   * makes the split almost free: memos are pull-based, so while this is false
-   * `feed`'s model is never read and therefore never computed.
-   *
-   * `requestAnimationFrame` runs BEFORE the paint, so the timeout it schedules
-   * is what runs after the frame is committed. That ordering is the whole
-   * mechanism — a bare rAF would build the list in the very frame it is meant
-   * to come after.
-   */
-  const [body, setBody] = createSignal(false, { name: "findingsBody" });
-  let after: ReturnType<typeof setTimeout> | undefined;
-  const frame = requestAnimationFrame(() => {
-    after = setTimeout(() => setBody(true), 0);
-  });
-  onCleanup(() => {
-    cancelAnimationFrame(frame);
-    if (after !== undefined) clearTimeout(after);
-  });
-
-  const at = (index: number): FindingsRow | undefined => feed.rows()[index];
-
-  /** Wraps, like the palette's own finding commands, over the cards on screen. */
-  const step = (delta: 1 | -1): void => {
-    // A snapshot on purpose: the wrap is over the list as it is when the key
-    // was pressed.
-    const staticCount = feed.rows().length;
-    if (staticCount === 0) return;
-    setWalking(true);
-    setCursor((held) => (held + delta + staticCount) % staticCount);
-  };
-
-  /**
-   * A folded run the reader has opened — the card's view, so it outlives the
-   * row. Keyed by section within the card: a verse in two sections folds in
-   * each on its own.
-   */
-  const runId = (row: FindingsRow, finding: Finding): string => `${row.sectionKey}|${finding.id}`;
-  const isOpen = (row: FindingsRow, finding: Finding): boolean =>
-    feed.excerpts.views.view(row.excerpt.sid).open.has(runId(row, finding));
-  const toggleRun = (row: FindingsRow, finding: Finding): void =>
-    feed.excerpts.views.send(row.excerpt.sid, { kind: "open", id: runId(row, finding) });
-  /** A Sous finding's "Why?" the reader has opened: the card's view, like a run. */
-  const whyId = (row: FindingsRow, finding: Finding): string => `why|${runId(row, finding)}`;
-  const isWhyOpen = (row: FindingsRow, finding: Finding): boolean =>
-    feed.excerpts.views.view(row.excerpt.sid).open.has(whyId(row, finding));
-  const toggleWhy = (row: FindingsRow, finding: Finding): void =>
-    feed.excerpts.views.send(row.excerpt.sid, { kind: "open", id: whyId(row, finding) });
-
-  const analysisFor = (finding: Finding) =>
-    Option.getOrUndefined(shell.services.projectAnalysis.analysis(finding.bookId));
-
-  /**
-   * Go: the main editor, aimed at this finding's own span.
-   *
-   * Through the feed, so it is the same navigation a card's "Open in editor"
-   * makes and the same span is measured — `openInEditor` leaves the aim before
-   * it navigates, because the book route reads it to decide the opening clip.
-   */
+const createFindingGo = (
+  shell: Shell,
+  feed: FindingsFeed,
+  isStale: (finding: Finding) => boolean,
+) => {
   const go = (finding: Finding, via: "go" | "key" = "go"): void => {
     navigateTo(finding.bookId, finding.from, finding.to, finding, via);
   };
 
-  /**
-   * Every jump from this panel to the editor, as one `findings.navigate`.
-   *
-   * It says what KIND of finding was followed — code, severity, producer, never
-   * its message, which quotes the document — and whether the target still
-   * resolves: the book is in the project and has not moved since the
-   * publication that measured the finding. A stale jump still lands; it lands
-   * where the finding WAS, and that is the thing worth being able to count.
-   */
   const navigateTo = (
     bookId: BookId,
     from: number,
@@ -355,6 +162,16 @@ export function FindingsPanel() {
       ...(stale === undefined ? {} : { "findings.stale": stale }),
     });
   };
+  return go;
+};
+
+const createFixOffer = (shell: Shell) => {
+  const [preview, setPreview] = createSignal<Fixes.FixPreview | undefined>(undefined, {
+    name: "fixPreview",
+  });
+  const [note, setNote] = createSignal("");
+  const analysisFor = (finding: Finding) =>
+    Option.getOrUndefined(shell.services.projectAnalysis.analysis(finding.bookId));
 
   const offer = (finding: Finding): void => {
     const book = shell.services.seated(finding.bookId);
@@ -390,16 +207,21 @@ export function FindingsPanel() {
     setPreview(undefined);
     shell.changed({ kind: "book.apply", books: [fix.finding.bookId] });
   };
+  return { preview, setPreview, note, offer, apply };
+};
 
-  /**
-   * The arrows move, Enter opens.
-   *
-   * Listened for on the document because the page has no single focusable
-   * body, and guarded on the target: the text filter and every other field is
-   * a place where a key means itself, and so is an open satellite and so is
-   * Enter on a button. Modified chords
-   * are left to `src/app/commands.ts`, which owns the `Mod-` keymap.
-   */
+const createWalk = (feed: FindingsFeed, go: (finding: Finding, via?: "go" | "key") => void) => {
+  const [cursor, setCursor] = createSignal(0, { name: "findingsCursor" });
+  const [walking, setWalking] = createSignal(false, { name: "findingsWalking" });
+  const at = (index: number): FindingsRow | undefined => feed.rows()[index];
+
+  const step = (delta: 1 | -1): void => {
+    const staticCount = feed.rows().length;
+    if (staticCount === 0) return;
+    setWalking(true);
+    setCursor((held) => (held + delta + staticCount) % staticCount);
+  };
+
   {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
@@ -408,16 +230,11 @@ export function FindingsPanel() {
         if (target.isContentEditable) return;
         const tag = target.tagName;
         if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-        // Enter (and Space) on a button or a link is that control's: a card's
-        // Edit, Fix or USFM switch pressed from the keyboard, not "open the
-        // current card".
         if (event.key === "Enter" && target.closest("button, a, [role=menuitem]") !== null) return;
       }
       if (event.key === "ArrowDown") step(1);
       else if (event.key === "ArrowUp") step(-1);
       else if (event.key === "Enter") {
-        // Enter before any movement takes the cursor rather than the reader:
-        // opening a book nobody pointed at is not what that key means here.
         if (!walking()) setWalking(true);
         else {
           const finding = at(cursor())?.findings[0];
@@ -426,30 +243,110 @@ export function FindingsPanel() {
       } else return;
       event.preventDefault();
     };
-    // Components run once in Solid, so the body is the mount: no `onMount`
-    // wrapper, and `onCleanup` takes the listener off with the route.
+    // onCleanup in the component body: one inside an effect callback never runs (NO_OWNER_CLEANUP).
     document.addEventListener("keydown", onKeyDown);
     onCleanup(() => {
       document.removeEventListener("keydown", onKeyDown);
     });
   }
 
-  /** The card the cursor is on, and the finding inside it that it names. */
   const focused = (): string | undefined => (walking() ? at(cursor())?.key : undefined);
   const focusedAt = (): number | undefined =>
     walking() ? at(cursor())?.findings[0]?.from : undefined;
+  return { focused, focusedAt };
+};
 
-  /** The severities a card's findings have, most severe first. */
-  const severitiesOf = (row: FindingsRow): readonly Finding["severity"][] =>
-    Filter.SEVERITIES.filter((severity) =>
-      row.findings.some((finding) => finding.severity === severity),
-    );
+const findingLine = (
+  disclosure: RunDisclosure,
+  row: FindingsRow,
+  finding: Finding,
+  run?: FindingRun,
+) => {
+  const { isOpen, toggleRun, isWhyOpen, toggleWhy } = disclosure;
+  const folded = (run?.members.length ?? 1) > 1;
+  const markup = inMarkup(row.excerpt, finding);
+  return (
+    <li
+      class="flex flex-col gap-0.5"
+      data-finding={finding.id}
+      data-code={finding.code}
+      data-severity={finding.severity}
+      data-markup={markup ? "true" : undefined}
+    >
+      <div class="flex flex-wrap items-center gap-2">
+        <Show when={severitiesOf(row).length > 1}>
+          <Badge tone={severityTone(finding.severity)}>{finding.severity}</Badge>
+        </Show>
+        <span class="text-smallest text-on-surface-tertiary" title={finding.code}>
+          {codeLabel(finding.code)}
+        </span>
+        <span class="min-w-0 flex-1 text-small text-on-surface-secondary">
+          <Show when={finding.described} fallback={finding.message}>
+            {(described) => <SousSentence message={described()} tier="headline" />}
+          </Show>
+        </span>
 
-  /**
-   * What a card IS, in its header: its severity, and whether a finding is
-   * stale. A card that mixes severities badges each, and its lines say which
-   * is which. A finding in markup is the card's code icon (the spec's `usfm`).
-   */
+        <Show when={finding.comparison}>
+          {(comparison) => <SearchDialog queries={comparison()} />}
+        </Show>
+        <div class="flex items-center gap-controls">
+          <SuppressActions finding={finding} />
+          <Show when={finding.details !== undefined}>
+            <Button
+              size="sm"
+              variant="tertiary"
+              aria-expanded={isWhyOpen(row, finding) ? "true" : "false"}
+              icon={isWhyOpen(row, finding) ? <ChevronDown /> : <ChevronRight />}
+              onClick={() => toggleWhy(row, finding)}
+            >
+              {t("Why?")}
+            </Button>
+          </Show>
+          <Show when={folded}>
+            <Button
+              size="sm"
+              variant="secondary"
+              aria-expanded={isOpen(row, finding) ? "true" : "false"}
+              aria-label={
+                isOpen(row, finding)
+                  ? t("Fold {count} identical findings", { count: run?.members.length ?? 0 })
+                  : t("Unfold {count} identical findings", { count: run?.members.length ?? 0 })
+              }
+              class="tabular-nums"
+              icon={isOpen(row, finding) ? <ChevronDown /> : <ChevronRight />}
+              onClick={() => toggleRun(row, finding)}
+            >
+              × {run?.members.length ?? 1}
+            </Button>
+          </Show>
+        </div>
+      </div>
+
+      <Show when={isWhyOpen(row, finding) ? finding.described : undefined}>
+        {(described) => (
+          <p class="text-small text-on-surface-tertiary" data-why={finding.id}>
+            <SousSentence message={described()} tier="details" />
+          </p>
+        )}
+      </Show>
+
+      <Show when={folded && isOpen(row, finding)}>
+        <ul class="ms-4 flex flex-col gap-0.5 border-s border-surface-border ps-2">
+          <For each={run?.members.slice(1) ?? []}>
+            {(member) => findingLine(disclosure, row, member)}
+          </For>
+        </ul>
+      </Show>
+    </li>
+  );
+};
+
+const createFindingsCard = (
+  feed: FindingsFeed,
+  offer: (finding: Finding) => void,
+  disclosure: RunDisclosure,
+  isStale: (finding: Finding) => boolean,
+): ExcerptCardSpec => {
   const badges = (_excerpt: Excerpt, key: string) => {
     const row = feed.row(key);
     if (row === undefined) return undefined;
@@ -465,7 +362,6 @@ export function FindingsPanel() {
     );
   };
 
-  /** What a reader can do about a card's findings, in its footer: fix them. */
   const actions = (_excerpt: Excerpt, key: string): readonly CardAction[] => {
     const row = feed.row(key);
     const fixable = foldRuns(row?.findings ?? [])
@@ -480,126 +376,23 @@ export function FindingsPanel() {
     }));
   };
 
-  /**
-   * One finding, as a line under a card's header: what it is and why. The
-   * severity is the header's; a line repeats it only when the card mixes them.
-   *
-   * `run` is present when this line stands for a fold; its members are drawn
-   * below it once the reader opens it. Everything on the line is the run's
-   * first member, which is what "identical" means here.
-   */
-  const line = (row: FindingsRow, finding: Finding, run?: FindingRun) => {
-    const folded = (run?.members.length ?? 1) > 1;
-    const markup = inMarkup(row.excerpt, finding);
-    return (
-      <li
-        class="flex flex-col gap-0.5"
-        data-finding={finding.id}
-        data-code={finding.code}
-        data-severity={finding.severity}
-        data-markup={markup ? "true" : undefined}
-      >
-        <div class="flex flex-wrap items-center gap-2">
-          <Show when={severitiesOf(row).length > 1}>
-            <Badge tone={severityTone(finding.severity)}>{finding.severity}</Badge>
-          </Show>
-          <span class="text-smallest text-on-surface-tertiary" title={finding.code}>
-            {codeLabel(finding.code)}
-          </span>
-          <span class="min-w-0 flex-1 text-small text-on-surface-secondary">
-            <Show when={finding.described} fallback={finding.message}>
-              {(described) => <SousSentence message={described()} tier="headline" />}
-            </Show>
-          </span>
-          {/* What a Sous sentence compares, as kitchen's queries: here, and what else it names. */}
-          <Show when={finding.comparison}>
-            {(comparison) => <SearchDialog queries={comparison()} />}
-          </Show>
-          <div class="flex items-center gap-controls">
-            <Show when={finding.details !== undefined}>
-              <Button
-                size="sm"
-                variant="tertiary"
-                aria-expanded={isWhyOpen(row, finding) ? "true" : "false"}
-                icon={isWhyOpen(row, finding) ? <ChevronDown /> : <ChevronRight />}
-                onClick={() => toggleWhy(row, finding)}
-              >
-                {t("Why?")}
-              </Button>
-            </Show>
-            <Show when={folded}>
-              <Button
-                size="sm"
-                variant="secondary"
-                aria-expanded={isOpen(row, finding) ? "true" : "false"}
-                aria-label={
-                  isOpen(row, finding)
-                    ? t("Fold {count} identical findings", { count: run?.members.length ?? 0 })
-                    : t("Unfold {count} identical findings", { count: run?.members.length ?? 0 })
-                }
-                class="tabular-nums"
-                icon={isOpen(row, finding) ? <ChevronDown /> : <ChevronRight />}
-                onClick={() => toggleRun(row, finding)}
-              >
-                × {run?.members.length ?? 1}
-              </Button>
-            </Show>
-          </div>
-        </div>
-
-        <Show when={isWhyOpen(row, finding) ? finding.described : undefined}>
-          {(described) => (
-            <p class="text-small text-on-surface-tertiary" data-why={finding.id}>
-              <SousSentence message={described()} tier="details" />
-            </p>
-          )}
-        </Show>
-
-        <Show when={folded && isOpen(row, finding)}>
-          <ul class="ms-4 flex flex-col gap-0.5 border-s border-surface-border ps-2">
-            <For each={run?.members.slice(1) ?? []}>{(member) => line(row, member)}</For>
-          </ul>
-        </Show>
-      </li>
-    );
-  };
-
-  /** The findings this card is answering for, folded. */
   const notes = (_excerpt: Excerpt, key: string) => {
     const row = feed.row(key);
     if (row === undefined) return undefined;
     return (
       <ul class="flex flex-col gap-1" data-findings-in={row.findings.length}>
-        <For each={foldRuns(row.findings)}>{(run) => line(row, run.head, run)}</For>
+        <For each={foldRuns(row.findings)}>
+          {(run) => findingLine(disclosure, row, run.head, run)}
+        </For>
       </ul>
     );
   };
 
-  /** The sections are not always books: by code, by severity, and a book's front matter. */
-  const sections: OutlineSpec = {
-    rowKey: (group, excerpt) => `${group.bookId}|${excerpt.sid}`,
-    title: t("Groups with findings"),
-    label: (row) => {
-      const head = feed.head(row.bookId);
-      if (head === undefined) return row.bookId;
-      return head.front ? t("{book} front", { book: head.label }) : head.label;
-    },
-  };
-
-  /**
-   * Findings' cards: Find's, marked by severity, with what each finding is in
-   * the header and Fix in the footer.
-   */
-  const card: ExcerptCardSpec = excerptCard(
+  return excerptCard(
     { kind: "steps", step: feed.excerpts.expand },
-    // No "Open in editor": the card's own context steps widen it to the
-    // chapter, and Enter on the current card opens the editor there.
     { kind: "none" },
     {
       marks: { kind: "toned", tone: (source, excerpt) => feed.toneOf(source, excerpt) },
-      // A span with no character in the reading — inside a marker name, an
-      // attribute, a control character — is shown by switching the card to
-      // USFM, where it is marked; the reading keeps the verse as the body.
       usfm: {
         kind: "when",
         offer: (_excerpt, key) => {
@@ -607,9 +400,6 @@ export function FindingsPanel() {
           return row?.findings.some((finding) => inMarkup(row.excerpt, finding)) === true;
         },
       },
-      // Chapter 0 is the matter before the first `\c` — an id line, a
-      // heading, a table of contents entry — and `core/excerpts` labels it
-      // "Genesis 0", which is a chapter nobody has.
       title: (_excerpt, key) => {
         const row = feed.row(key);
         return row?.front === true ? t("{book} · front matter", { book: row.bookName }) : undefined;
@@ -623,12 +413,135 @@ export function FindingsPanel() {
       },
     },
   );
+};
 
-  /**
-   * The shell's mode, as the card's two-way choice — the same reduction Find
-   * makes. In USFM mode a card shows the raw slice with the span marked, which
-   * is the one place raw USFM is the body rather than the footnote.
-   */
+function FixPreviewCard(props: {
+  readonly fix: Fixes.FixPreview;
+  readonly onApply: (fix: Fixes.FixPreview) => void;
+  readonly onDismiss: () => void;
+}) {
+  return (
+    <Card class="space-y-2.5 border-brand/40">
+      <div class="flex flex-wrap items-center gap-2">
+        <Wrench size={14} class="text-brand" aria-hidden="true" />
+        <strong class="text-small font-semibold">{props.fix.label}</strong>
+        <Button
+          variant="primary"
+          size="sm"
+          class="ms-auto"
+          onClick={() => props.onApply(props.fix)}
+        >
+          {t("Apply")}
+        </Button>
+        <Button size="sm" onClick={() => props.onDismiss()}>
+          {t("Dismiss")}
+        </Button>
+      </div>
+      <ul class="flex flex-col gap-1">
+        <For each={props.fix.changes}>
+          {(change) => (
+            <li class="flex gap-3 rounded-sm bg-surface-secondary px-2 py-1 font-mono text-smallest">
+              <code class="text-on-surface-tertiary">
+                {change.from}–{change.to}
+              </code>
+              <code class="min-w-0 break-all">
+                {change.insert === "" ? t("(delete)") : change.insert}
+              </code>
+            </li>
+          )}
+        </For>
+      </ul>
+    </Card>
+  );
+}
+
+function SettingsAside(props: { readonly onClose: () => void }) {
+  return (
+    <aside
+      aria-label={t("Proofreading settings")}
+      class="flex w-[26rem] shrink-0 flex-col gap-3 overflow-y-auto rounded-lg border border-surface-border bg-surface-primary p-4"
+    >
+      <div class="flex items-center justify-between gap-2">
+        <h3 class="text-small font-semibold text-on-surface-primary">
+          {t("Proofreading settings")}
+        </h3>
+        <IconButton
+          size="sm"
+          label={t("Close settings")}
+          icon={<X />}
+          onClick={() => props.onClose()}
+        />
+      </div>
+      <SousSettingsPanel bare />
+    </aside>
+  );
+}
+
+export function FindingsPanel() {
+  const shell = useShell();
+  const navigate = useNavigate();
+  const filters = createFindingsFilter(shell.services);
+  const [settingsOpen, setSettingsOpen] = createSignal(false, { name: "findingsSettingsOpen" });
+  const [showingSuppressed, setShowingSuppressed] = createSignal(false, {
+    name: "findingsShowingSuppressed",
+  });
+  const hiddenCount = createMemo(() => shell.suppressedFindings().length, {
+    name: "findingsHiddenCount",
+  });
+  const source = createFindSource(() => {});
+  const search = useSearch({ from: "/_app/project/$slug/findings" });
+
+  const pattern = (): number | undefined => search().pattern;
+
+  createEffect(
+    () => search().code,
+    (code) => {
+      if (code === undefined) return;
+      // Untracked on purpose: a one-time read, not a dependency (Solid 2: STRICT_READ_UNTRACKED).
+      untrack(() => {
+        filters.update({ codes: [code], books: null });
+      });
+    },
+  );
+
+  const { isStale, summary, shown } = createFindingsPool(
+    shell,
+    filters,
+    pattern,
+    showingSuppressed,
+  );
+
+  const books = (): readonly BookId[] => shell.project()?.books.map((book) => book.id) ?? [];
+
+  const feed = createFindingsFeed({ findings: shown, view: filters.view });
+
+  const [body, setBody] = createSignal(false, { name: "findingsBody" });
+  let after: ReturnType<typeof setTimeout> | undefined;
+  const frame = requestAnimationFrame(() => {
+    after = setTimeout(() => setBody(true), 0);
+  });
+  onCleanup(() => {
+    cancelAnimationFrame(frame);
+    if (after !== undefined) clearTimeout(after);
+  });
+
+  const go = createFindingGo(shell, feed, isStale);
+  const { preview, setPreview, note, offer, apply } = createFixOffer(shell);
+  const disclosure = createRunDisclosure(feed);
+  const { focused, focusedAt } = createWalk(feed, go);
+
+  const sections: OutlineSpec = {
+    rowKey: (group, excerpt) => `${group.bookId}|${excerpt.sid}`,
+    title: t("Groups with findings"),
+    label: (row) => {
+      const head = feed.head(row.bookId);
+      if (head === undefined) return row.bookId;
+      return head.front ? t("{book} front", { book: head.label }) : head.label;
+    },
+  };
+
+  const card = createFindingsCard(feed, offer, disclosure, isStale);
+
   const mode = (): "regular" | "usfm" => (shell.mode() === "usfm" ? "usfm" : "regular");
 
   return (
@@ -640,6 +553,20 @@ export function FindingsPanel() {
             <span class="text-small text-on-surface-tertiary" data-findings-count={summary().shown}>
               {t("{shown} of {total} shown", { shown: summary().shown, total: summary().total })}
             </span>
+
+            <Button
+              size="sm"
+              variant={showingSuppressed() ? "secondary" : "tertiary"}
+              aria-pressed={showingSuppressed() ? "true" : "false"}
+              data-findings-hidden={hiddenCount()}
+              disabled={hiddenCount() === 0 && !showingSuppressed()}
+              title={t("Findings you marked fine, on this device")}
+              onClick={() => setShowingSuppressed((on) => !on)}
+            >
+              {showingSuppressed()
+                ? t("Back to findings")
+                : t("{count} marked fine", { count: hiddenCount() })}
+            </Button>
             <SegmentedControl<FindingsView>
               label={t("Group findings by")}
               items={VIEWS.map((view) => ({ value: view.value, label: t(view.label) }))}
@@ -650,9 +577,6 @@ export function FindingsPanel() {
         }
       />
 
-      {/* One toolbar row, not a column: the filters are four questions asked
-          rarely, and on a project of sixty-six books the book chips alone used
-          to push the findings below the fold. */}
       <Card class="space-y-2" data-tour="findings-filters">
         <div class="flex items-start gap-2">
           <FindingsFilters
@@ -662,9 +586,7 @@ export function FindingsPanel() {
             books={books()}
           />
           <source.Picker />
-          {/* The checks' own settings, in a column beside the list (below),
-              so turning one off or moving a number is seen in the list and
-              the counts as it happens. */}
+
           <IconButton
             size="sm"
             label={t("Proofreading settings")}
@@ -700,39 +622,12 @@ export function FindingsPanel() {
 
       <Show when={preview()}>
         {(fix) => (
-          <Card class="space-y-2.5 border-brand/40">
-            <div class="flex flex-wrap items-center gap-2">
-              <Wrench size={14} class="text-brand" aria-hidden="true" />
-              <strong class="text-small font-semibold">{fix().label}</strong>
-              <Button variant="primary" size="sm" class="ms-auto" onClick={() => apply(fix())}>
-                {t("Apply")}
-              </Button>
-              <Button size="sm" onClick={() => setPreview(undefined)}>
-                {t("Dismiss")}
-              </Button>
-            </div>
-            <ul class="flex flex-col gap-1">
-              <For each={fix().changes}>
-                {(change) => (
-                  <li class="flex gap-3 rounded-sm bg-surface-secondary px-2 py-1 font-mono text-smallest">
-                    <code class="text-on-surface-tertiary">
-                      {change.from}–{change.to}
-                    </code>
-                    <code class="min-w-0 break-all">
-                      {change.insert === "" ? t("(delete)") : change.insert}
-                    </code>
-                  </li>
-                )}
-              </For>
-            </ul>
-          </Card>
+          <FixPreviewCard fix={fix()} onApply={apply} onDismiss={() => setPreview(undefined)} />
         )}
       </Show>
 
       <div class="flex min-h-0 min-w-0 flex-1 gap-4">
         <div
-          // While a re-judge is in flight the list stays and dims: the old
-          // findings until the new Publication replaces them, no teardown.
           class={cx(
             "flex min-h-0 min-w-0 flex-1 flex-col transition-opacity duration-150",
             shell.findingsPending() && "opacity-60",
@@ -790,23 +685,7 @@ export function FindingsPanel() {
           </Show>
         </div>
         <Show when={settingsOpen()}>
-          <aside
-            aria-label={t("Proofreading settings")}
-            class="flex w-[26rem] shrink-0 flex-col gap-3 overflow-y-auto rounded-lg border border-surface-border bg-surface-primary p-4"
-          >
-            <div class="flex items-center justify-between gap-2">
-              <h3 class="text-small font-semibold text-on-surface-primary">
-                {t("Proofreading settings")}
-              </h3>
-              <IconButton
-                size="sm"
-                label={t("Close settings")}
-                icon={<X />}
-                onClick={() => setSettingsOpen(false)}
-              />
-            </div>
-            <SousSettingsPanel bare />
-          </aside>
+          <SettingsAside onClose={() => setSettingsOpen(false)} />
         </Show>
       </div>
     </main>

@@ -1,15 +1,3 @@
-/**
- * Carrying a published range forward through edits made since it was measured.
- *
- * ONE rule, for every surface that draws a range somebody else computed — a
- * card's marks (`recipes/satellite.ts`) and the editor's proofreading
- * underlines (`recipes/lint.ts`): a range an edit did not touch is mapped
- * through the change and keeps describing the same text; a range the edit
- * touched (overlapped or abutted) no longer describes what the reader just
- * changed and is dropped. The next publication paints what is true, including
- * anything the edit introduced.
- */
-
 import type { ChangeDesc } from "@codemirror/state";
 
 /** Does `changes` touch `[from, to]`, in the AFTER document's coordinates? */

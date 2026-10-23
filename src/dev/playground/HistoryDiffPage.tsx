@@ -1,4 +1,3 @@
-/** Dev-only, read-only history multibuffer for a separately selected project. */
 import { getRouteApi, useNavigate } from "@tanstack/solid-router";
 import { Effect, Option, Result } from "effect";
 import { For, Show, createEffect, createMemo, createSignal, flush, untrack } from "solid-js";
@@ -32,12 +31,9 @@ import {
 import { ensureIndex } from "./history/indexStore";
 import { inOrder } from "./units";
 
-/** Decoded book texts by blob id; neighbouring slides share one string. */
 const TEXT_CACHE_LIMIT = 8;
 const TEXT_CACHE_CODE_UNIT_LIMIT = 4 * 1024 * 1024;
-/** Slides that keep their comparison; the rest show only their header. */
 const FRAME_LIMIT = 8;
-/** Book changes read from the walk each time the left edge comes near. */
 const PULL_BATCH = 8;
 
 interface LocalProject {
@@ -62,9 +58,7 @@ interface ReadyFrame {
   readonly chapters: readonly ChapterUnits[];
   readonly olderChapterCount: number;
   readonly newerChapterCount: number;
-  /** A side had CR line endings, which the engine refuses; compared as LF. */
   readonly lineEndingsNormalised: boolean;
-  /** Wall time of the Galley work for this pair, for the prototype's own measuring. */
   readonly compareMs: number;
 }
 interface FailedFrame {
@@ -80,7 +74,11 @@ const labelPath = (path: string): string => {
 const dateLabel = (at: number): string =>
   new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(at);
 const firstLine = (message: string): string => message.split("\n", 1)[0] ?? "(no commit message)";
-// By id, not by importing the route module: that module lazy-loads this page.
+const historySourceNote = (source: "index" | "walk" | ""): string => {
+  if (source === "index") return " · from the index";
+  if (source === "walk") return " · walking";
+  return "";
+};
 const Route = getRouteApi("/_app/playground/history-diff");
 
 interface Place {
@@ -90,7 +88,6 @@ interface Place {
   readonly remote?: string;
 }
 
-/** Distinct chapter occurrences on one side of a diff; chapter 0 is the book's opening. */
 const chaptersOn = (
   units: readonly DecisionUnit[],
   side: "baselineAddr" | "currentAddr",
@@ -103,10 +100,8 @@ const chaptersOn = (
   return seen.size;
 };
 
-/** How long opening a project waits for a STORED index before going on without it. */
 const STORED_INDEX_WAIT_MS = 400;
 
-/** An index entry in the walker's shape: the book's blob after the change. */
 const asPathCommit = (commit: IndexedCommit, book: string): PathCommit => {
   const list = commit.changes.find((changes) => changes.some(([name]) => name === book));
   return {
@@ -117,24 +112,15 @@ const asPathCommit = (commit: IndexedCommit, book: string): PathCommit => {
   };
 };
 
-/**
- * A merge, read as two lines of work joined (plan primitives 6a and 6b): the
- * common ancestor of its parents, the books each side changed since it, and —
- * for the book on screen, when both sides changed it — the passages both
- * changed. Facts only: what needs review and what may be taken without asking
- * is policy over these (`documentation/architecture/sync.md`).
- */
 interface MergeFacts {
   readonly base: IndexedCommit;
   readonly ours: readonly BookChange[];
   readonly theirs: readonly BookChange[];
   readonly both: readonly string[];
-  /** Passages of this book changed on both sides, by reference; absent when only one side touched it. */
   readonly passages?: readonly string[];
   readonly ms: number;
 }
 
-/** A merge's facts in words, for the slide header. */
 const describeMerge = (value: MergeFacts | "working" | string): string => {
   if (value === "working") return "A merge: finding what each side changed…";
   if (typeof value === "string") return value;
@@ -151,12 +137,6 @@ const describeMerge = (value: MergeFacts | "working" | string): string => {
 
 const shortBook = (name: string): string => name.replace(/^\d+-/u, "").replace(/\.usfm$/iu, "");
 
-/**
- * A string that exists here and nowhere else, so `pnpm verify:design` can ask
- * a real build whether this page got into it (see `SURFACES` in
- * `tools/verify/designBundle.ts`). Rendered as an attribute, not kept as a
- * dead constant, so no minifier can decide it is unused. Do not tidy it away.
- */
 const SENTINEL = "__sefer_history_diff_surface__";
 
 export function HistoryDiffPage() {
@@ -169,19 +149,12 @@ function ReadyHistoryDiffPage() {
   const search = Route.useSearch();
   const observability = services.composition.observability;
   const baseFs = nodeFsView(services.fileSystem, Effect.runPromise);
-  /**
-   * Every Git read goes through the pack view (plan primitive 1): the pack
-   * files held in memory and loose-object probes answered from one listing,
-   * so a walk is ~2 s of compute rather than ~37 s of OPFS round trips. One
-   * per project; this route never writes, so nothing invalidates it.
-   */
   let pack: PackView = packView(baseFs, "");
   const texts = new BoundedLru<string, string>(
     TEXT_CACHE_LIMIT,
     (text) => text.length,
     TEXT_CACHE_CODE_UNIT_LIMIT,
   );
-  // Keyed by the newer commit's id. Not reactive itself: `frameTick` says when it moved.
   const frames = new BoundedLru<string, Frame>(FRAME_LIMIT);
 
   const [projects, setProjects] = createSignal<readonly LocalProject[]>([], {
@@ -203,31 +176,20 @@ function ReadyHistoryDiffPage() {
   const [projectBusy, setProjectBusy] = createSignal(false, { name: "historyProjectBusy" });
   const [error, setError] = createSignal("", { name: "historyError" });
   const [remote, setRemote] = createSignal<string>();
-  /** The project's book-change index, once `ensureIndex` has it; the walker serves until then. */
   const [index, setIndex] = createSignal<BookIndex>();
   const [indexState, setIndexState] = createSignal("", { name: "historyIndexState" });
-  /** Where the open book's history came from, for the header. */
   const [historySource, setHistorySource] = createSignal<"index" | "walk" | "">("", {
     name: "historySource",
   });
-  /** Merge facts by merge commit id; `mergeTick` says when one arrived. */
   const merges = new Map<string, MergeFacts | "working" | string>();
   const [mergeTick, setMergeTick] = createSignal(0, { name: "historyMergeTick" });
-  // Until the link's own place is reached, the URL is the link's, not ours.
   let restored = false;
   let projectRequest = 0;
   let bookRequest = 0;
   let history: AsyncGenerator<PathCommit, PathHistoryEnd> | undefined;
-  // One pull at a time: the generator is not re-entrant.
   let pulling: Promise<void> = Promise.resolve();
-  // One comparison at a time: each is a Galley diff on the main thread.
   let comparing: Promise<void> = Promise.resolve();
   const inFlight = new Set<string>();
-  // Every change the walk has yielded, whether or not the strip shows it yet:
-  // slides appended while the strip animates make Chrome re-snap mid-scroll,
-  // several slides off, so `commits` catches up once scrolling has been
-  // quiet for a moment. A quiet spell, not `scrollend`, which a re-snap does
-  // not always send.
   let found: PathCommit[] = [];
   let lastScroll = 0;
   let publishTimer: ReturnType<typeof setTimeout> | undefined;
@@ -268,7 +230,6 @@ function ReadyHistoryDiffPage() {
     }
   };
 
-  /** The origin, when it is a web URL; credentials are never put in a link. */
   const originOf = async (root: string): Promise<string | undefined> => {
     const config = await services
       .run(services.fileSystem.readFileString(joinPath(root, ".git/config")))
@@ -282,9 +243,7 @@ function ReadyHistoryDiffPage() {
     return parsed.toString().replace(/\.git$/u, "");
   };
 
-  /** Open the place the link names: project, then book, then walk back to `at`. */
   const restore = async (): Promise<void> => {
-    // One-time reads: a restore acts on the link as it was opened.
     const wanted: Place = untrack(search);
     try {
       if (wanted.project === undefined) return;
@@ -314,7 +273,6 @@ function ReadyHistoryDiffPage() {
       }),
   );
 
-  // The URL follows the page: the slide in the middle names the change.
   createEffect(
     () => ({
       project: projectRoot() === "" ? undefined : lastSegment(projectRoot()),
@@ -363,9 +321,6 @@ function ReadyHistoryDiffPage() {
     if (root === "") return;
     pack = packView(baseFs, root);
     setProjectBusy(true);
-    // The index, in the background: a stored one is a few milliseconds and is
-    // waited for (so a link opens from it), a build is seconds in a worker and
-    // is not — the walker serves the book until it lands.
     const indexing = ensureIndex({
       fs: pack.fs,
       root,
@@ -411,12 +366,10 @@ function ReadyHistoryDiffPage() {
     }
   };
 
-  /** Walk back until `want` book changes are held, the history ends, or it fails. */
   const pull = (want: number, generation: number): Promise<void> => {
     pulling = pulling.then(async () => {
       const source = history;
       if (source === undefined || generation !== bookRequest) return;
-      // Read at the moment the pull runs, not tracked: the pull is a queued continuation.
       if (
         untrack(historyEnd) !== undefined ||
         untrack(historyFailure) !== "" ||
@@ -434,8 +387,6 @@ function ReadyHistoryDiffPage() {
             break;
           }
           held.push(step.value);
-          // Published one at a time: a long walk to the end must not hold back
-          // a change it has already found.
           publish();
         }
       } catch (cause) {
@@ -461,7 +412,6 @@ function ReadyHistoryDiffPage() {
     }
     const held = index();
     if (held !== undefined && !relative.includes("/")) {
-      // From the index: the whole history at once, as a graph walk in memory.
       const op = observability.operation("history.book.open", {
         "history.book": relative,
         "history.source": "index",
@@ -474,7 +424,6 @@ function ReadyHistoryDiffPage() {
       op.end("passed", { "history.changes": list.length });
       return;
     }
-    // No index yet: walk, streamed, through the pack view.
     const op = observability.operation("history.book.open", {
       "history.book": relative,
       "history.source": "walk",
@@ -483,7 +432,6 @@ function ReadyHistoryDiffPage() {
     history = pathHistory(pack.fs, heldRepo.root, relative, "HEAD", (count) => {
       if (request === bookRequest) setWalked(count);
     });
-    // Two changes make the first slide; the rest arrive as the left edge nears.
     await pull(2, request);
     op.end("passed", { "history.first_changes": found.length });
     void pull(PULL_BATCH, request);
@@ -498,10 +446,6 @@ function ReadyHistoryDiffPage() {
     return text;
   };
 
-  /**
-   * A merge's facts, worked out once and on demand: the slide asks when it is
-   * drawn, and a merge nobody scrolls to costs nothing.
-   */
   const mergeFactsFor = (commit: PathCommit): MergeFacts | "working" | string | undefined => {
     mergeTick();
     const held = index();
@@ -544,8 +488,6 @@ function ReadyHistoryDiffPage() {
         });
         let passages: readonly string[] | undefined;
         if (both.includes(book)) {
-          // For the book on screen: Galley from the ancestor to each side, and
-          // the passages whose units changed in both.
           const diffing = op.span("history.merge.passages");
           const textAt = async (id: string | null | undefined) =>
             id === null || id === undefined
@@ -592,7 +534,6 @@ function ReadyHistoryDiffPage() {
     return "working";
   };
 
-  /** The other books this commit changed, from the index. */
   const alsoChanged = (commit: PathCommit): readonly string[] => {
     const held = index();
     const entry = held === undefined ? undefined : commitsById(held).get(commit.id);
@@ -604,15 +545,9 @@ function ReadyHistoryDiffPage() {
   };
 
   const compare = (olderRaw: string, newerRaw: string): ReadyFrame => {
-    // Canonical text is LF and Galley refuses a CR. Old commits often carry
-    // CRLF; compare them as LF and say so, rather than show nothing.
     const lineEndingsNormalised = olderRaw.includes("\r") || newerRaw.includes("\r");
     const olderText = lineEndingsNormalised ? olderRaw.replace(/\r\n?/gu, "\n") : olderRaw;
     const newerText = lineEndingsNormalised ? newerRaw.replace(/\r\n?/gu, "\n") : newerRaw;
-    // One engine call per pair. `diff` is stateless: historical text never
-    // gets registered as, or replaces, a project book in the shared Galley.
-    // Its units cover the whole book with both sides' addresses, so the
-    // chapter counts come from them rather than from two more parses.
     const diff = services.galley.diff(olderText, newerText, { unchanged: true });
     if (Result.isFailure(diff)) throw diff.failure;
     const olderChapterCount = chaptersOn(diff.success.units, "baselineAddr");
@@ -645,7 +580,6 @@ function ReadyHistoryDiffPage() {
     };
   };
 
-  /** Compare slide `index` (a change) with the book as it was just before it. */
   const ensureFrame = (index: number): void => {
     const generation = bookRequest;
     const newer = commits()[index];
@@ -653,7 +587,7 @@ function ReadyHistoryDiffPage() {
     const heldRepo = repo();
     if (newer === undefined || older === undefined || heldRepo === undefined) return;
     if (inFlight.has(newer.id)) return;
-    if (frames.get(newer.id) !== undefined) return; // `get` marks it recent.
+    if (frames.get(newer.id) !== undefined) return;
     inFlight.add(newer.id);
     comparing = comparing.then(async () => {
       let frame: Frame;
@@ -677,11 +611,6 @@ function ReadyHistoryDiffPage() {
     });
   };
 
-  // One pair of observers on the strip. A slide within a slide-width of view
-  // asks for its comparison; the sentinel past the oldest slide asks the walk
-  // for more; the slide across the middle is the one the counter names.
-  // Re-observed when the slides change; the cleanup is the effect's return
-  // value, as Solid 2 runs `onCleanup` here unowned.
   createEffect(
     () => ({ box: scroller(), count: commits().length }),
     ({ box }) => {
@@ -725,22 +654,15 @@ function ReadyHistoryDiffPage() {
     frameTick();
     return frames.peek(commit.id);
   };
-  /** Slide indexes, newest first; the row is reversed so the latest sits on the right. */
   const slides = createMemo(() =>
     Array.from({ length: Math.max(0, commits().length - 1) }, (_, index) => index),
   );
-  // Read ahead of the slide in view, so the left edge is rarely reached at all.
-  // The sentinel is not a snap point: if it were, a batch arriving while it
-  // was snapped would carry the view to the new far left.
   createEffect(
     () => ({ at: shown(), count: commits().length }),
     ({ at, count }) => {
       if (count >= 2 && at + PULL_BATCH >= count - 1) void pull(at + 2 * PULL_BATCH, bookRequest);
     },
   );
-  // Where the buttons are heading. Clicks during a smooth scroll count from
-  // here, not from wherever the animation has reached; a finished scroll,
-  // including one by hand, clears it.
   let aim: number | undefined;
   createEffect(
     () => scroller(),
@@ -760,7 +682,6 @@ function ReadyHistoryDiffPage() {
       };
     },
   );
-  /** Walk back until the change `prefix` names is loaded, then put its slide in the middle. */
   const seek = async (prefix: string): Promise<void> => {
     const generation = bookRequest;
     const indexOf = (): number => found.findIndex((commit) => commit.id.startsWith(prefix));
@@ -775,7 +696,6 @@ function ReadyHistoryDiffPage() {
       setError(`The change ${prefix} is not in this book's local history.`);
       return;
     }
-    // A slide needs the change before it; the first recorded version has none.
     await pull(index + 2, generation);
     const slide = Math.min(index, found.length - 2);
     publishNow();
@@ -787,11 +707,8 @@ function ReadyHistoryDiffPage() {
   const step = async (direction: -1 | 1): Promise<void> => {
     const next = (aim ?? shown()) - direction;
     if (next < 0) return;
-    // Earlier from the oldest loaded slide waits for the walk rather than
-    // scrolling onto the sentinel.
     if (next + 1 >= found.length) await pull(next + 2, bookRequest);
     if (next + 1 >= found.length) return;
-    // At the loaded edge the view is on the last slide, not mid-animation.
     if (next + 1 >= commits().length) publishNow();
     aim = next;
     scroller()
@@ -800,7 +717,6 @@ function ReadyHistoryDiffPage() {
   };
   const more = (): string => (historyEnd() === undefined && historyFailure() === "" ? "+" : "");
 
-  /** The change in the middle of the strip, and it as the reader's one book. */
   const shownFrame = (): Frame | undefined => {
     const commit = commits()[shown()];
     return commit === undefined ? undefined : frameOf(commit);
@@ -901,11 +817,7 @@ function ReadyHistoryDiffPage() {
           <span class="text-smallest text-on-surface-tertiary">
             {commits().length}
             {more()} book-changing commits
-            {historySource() === "index"
-              ? " · from the index"
-              : historySource() === "walk"
-                ? " · walking"
-                : ""}
+            {historySourceNote(historySource())}
             {historyReading()
               ? ` · reading earlier history (${walked().toLocaleString()} commits walked)…`
               : ""}
@@ -1082,9 +994,7 @@ function ReadyHistoryDiffPage() {
               </Show>
             </div>
           </div>
-          {/* The change in the middle of the strip, read as Review reads a
-              difference: cards or the whole book, side by side when there is
-              room (before on the left), or one text. Reading only. */}
+          {}
           <Show
             when={ready(shownFrame())}
             fallback={
@@ -1093,9 +1003,7 @@ function ReadyHistoryDiffPage() {
               </p>
             }
           >
-            {/* Keyed by the change: each commit is its own comparison, so the
-                reader starts at its first change rather than carrying the last
-                commit's place over. Layout and scope are preferences and stay. */}
+            {}
             <Show when={commits()[shown()]?.id} keyed>
               {(commitId) => (
                 <div

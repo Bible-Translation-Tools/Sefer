@@ -12,3 +12,20 @@
 \v 2 The duplicate.
 \v This verse marker carries no number at all.
 \v 4 The last verse skips a number and ends the book.
+\c 2
+\s1 Line by line: verses run together
+\p
+\v 1 Several verses \v 2 run together \v 3 on one line, as some files have them.
+\v 4
+\v 5
+\s1 Poetry inside verses
+\q1
+\v 6 A verse that is a poem,
+\q2 its second line indented,
+\q1 and a third line back out.
+\m \v 7 A verse that starts flush \q2 and breaks into poetry halfway through the line.
+\p
+\v 8 A long verse that goes on for a while so that it wraps onto a second line in the editor, to show where the wrapped text sits under the verse number and its first word.
+\v 9
+\v 10 The last verse, after an empty one.
+\v 11 A verse with a paragraph break \p in the middle of it.

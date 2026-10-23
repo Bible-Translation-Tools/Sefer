@@ -75,66 +75,34 @@ export interface Meter {
   open(): void;
 }
 
-/** Milliseconds, one decimal — the precision a person reads at. */
 const ms = (value: number): string => value.toFixed(1);
 
-/** Below this, a bucket is noise and printing it only lengthens the line. */
 const FLOOR = 0.05;
 
-/**
- * The note: the two wall numbers, the parse count, then every span that cost
- * something and the unattributed remainder. Ordered biggest-first after the
- * fixed head, so the first thing past `analyzes=` is where the time went.
- */
-const noteOf = (m: Omit<Measured, "note">): string => {
-  const parts = [`gesture=${ms(m.gesture)}ms`];
-  // Named for the instrument, because the two are not interchangeable: the
-  // browser's number is the input's real cost and the frame trick's reads a
-  // frame high. A line that called both `render=` would invite comparing them.
-  if (m.render !== null)
-    parts.push(`${m.renderSource === "event" ? "input" : "render"}=${ms(m.render)}ms`);
-  parts.push(`analyzes=${m.analyzes}`);
-  if (m.browser >= FLOOR) parts.push(`browser=${ms(m.browser)}`);
-  const spans = [...m.totals]
+const noteOf = (measured: Omit<Measured, "note">): string => {
+  const parts = [`gesture=${ms(measured.gesture)}ms`];
+  if (measured.render !== null)
+    parts.push(
+      `${measured.renderSource === "event" ? "input" : "render"}=${ms(measured.render)}ms`,
+    );
+  parts.push(`analyzes=${measured.analyzes}`);
+  if (measured.browser >= FLOOR) parts.push(`browser=${ms(measured.browser)}`);
+  const spans = [...measured.totals]
     .filter(([, total]) => total.ms >= FLOOR)
     .sort((a, b) => b[1].ms - a[1].ms);
   for (const [name, total] of spans) parts.push(`${name}=${ms(total.ms)}`);
-  if (m.other >= FLOOR) parts.push(`other=${ms(m.other)}`);
+  if (measured.other >= FLOOR) parts.push(`other=${ms(measured.other)}`);
   return parts.join(" ");
 };
 
-/**
- * Whether the browser will tell us what an input actually cost.
- *
- * The Event Timing API measures from the hardware timestamp of the input to
- * the paint that followed processing it — the same window the frame trick
- * below tries to approximate, except measured by the engine rather than
- * inferred from task ordering. Feature-gated because it is the browser's to
- * offer, and because the headless states this runs in may have neither.
- */
 const EVENT_TIMING =
   typeof PerformanceObserver === "function" &&
   (PerformanceObserver.supportedEntryTypes ?? []).includes("event");
 
-/**
- * The gestures waiting for the browser to report what they cost, by the
- * `performance.now()` at which each opened.
- *
- * At most a handful, and each is resolved or dropped within
- * `EVENT_TIMING_GRACE`. Entries arrive after the paint, so a gesture cannot be
- * answered synchronously and cannot wait for ever either.
- */
 const pending: { at: number; settle: (entry: PerformanceEntry) => void }[] = [];
 
-/** How long an Event Timing entry has to arrive before the frame trick wins. */
 const EVENT_TIMING_GRACE = 400;
 
-/**
- * An entry belongs to a gesture when the input that produced it happened at
- * about the moment the gesture opened. `startTime` is the hardware timestamp
- * and the meter opens in the listener a fraction later, so the entry's start
- * is at or slightly BEFORE the gesture's.
- */
 const NEAR = 60;
 
 let observer: PerformanceObserver | undefined;
@@ -151,15 +119,7 @@ const observeInputs = (): void => {
       want?.settle(entry);
     }
   });
-  // 16ms is the smallest threshold the specification allows, so an input that
-  // was answered inside one frame is reported by NOBODY — which is the reason
-  // the frame trick below is kept rather than deleted. A keystroke fast enough
-  // not to be reported is also a keystroke nobody is asking about.
-  // SAFETY: `durationThreshold` IS Event Timing's own option on
-  // `PerformanceObserverInit` and is simply absent from the DOM lib's
-  // declaration of it. The type is widened, never narrowed, so nothing is
-  // claimed that the runtime will not accept; observing without it takes the
-  // default 104ms threshold, which reports nothing a keystroke ever does.
+  // SAFETY: `durationThreshold` is Event Timing's own option, absent from the DOM lib's `PerformanceObserverInit`; the type is only widened.
   const options: PerformanceObserverInit & { durationThreshold: number } = {
     type: "event",
     buffered: false,
@@ -221,12 +181,69 @@ const afterPaint = (
   });
 };
 
-export function keystrokeMeter(sink: (m: Measured) => void): Meter {
+function reportAfterPaint(
+  sink: (measured: Measured) => void,
+  began: number,
+  parts: Pick<Measured, "gesture" | "analyzes" | "browser" | "totals" | "other">,
+): void {
+  afterPaint(began, (cost, source) => {
+    const render = cost === null ? null : +cost.toFixed(3);
+    const measured = { ...parts, render, renderSource: source };
+    sink({ ...measured, note: noteOf(measured) });
+  });
+}
+
+function attribute(
+  totals: NonNullable<ReturnType<typeof closeGesture>>,
+  gesture: number,
+  first: number,
+  began: number,
+): { browser: number; other: number } {
+  const browser = first === 0 ? 0 : +Math.max(0, Math.min(gesture, first - began)).toFixed(3);
+  let attributed = browser;
+  for (const total of totals.values()) attributed += total.ms;
+  const other = +Math.max(0, gesture - attributed).toFixed(3);
+  return { browser, other };
+}
+
+function meterExtension(
+  on: () => boolean,
+  shut: (update: { docChanged: boolean; transactions: readonly unknown[] }) => void,
+  firstTransaction: () => void,
+): Extension[] {
+  return [
+    Prec.highest(
+      EditorView.domEventHandlers({
+        keydown: on,
+        beforeinput: on,
+        paste: on,
+        cut: on,
+        drop: on,
+        mousedown: on,
+        compositionstart: on,
+      }),
+    ),
+    Prec.highest(EditorView.updateListener.of(shut)),
+    Prec.highest(
+      EditorState.changeFilter.of(() => {
+        firstTransaction();
+        return true;
+      }),
+    ),
+    Prec.highest(
+      EditorState.transactionExtender.of(() => {
+        firstTransaction();
+        return null;
+      }),
+    ),
+  ];
+}
+
+export function keystrokeMeter(sink: (measured: Measured) => void): Meter {
   let live = false;
   let analyzed = 0;
   let began = 0;
   let last = 0;
-  // When the first transaction of the gesture was created; 0 until one is.
   let first = 0;
   let updates = 0;
   let docChanged = false;
@@ -236,29 +253,12 @@ export function keystrokeMeter(sink: (m: Measured) => void): Meter {
     if (!live) return;
     live = false;
     const totals = closeGesture();
-    // The span ring's gesture bucket is one module-level slot, so if two views
-    // are metered at once the second to settle finds it already taken. A meter
-    // that did not own the bucket cannot attribute anything, and a second line
-    // reading `other=<the whole gesture>` would be a worse answer than none —
-    // so it says nothing and lets the meter that DID own it report.
     if (totals === null) return;
     if (!(updates && (fromEvent || docChanged))) return;
-    // Everything the paint callback needs is read HERE: a second gesture may
-    // open before the frame lands, and it resets every one of these.
     const gesture = +(last - began).toFixed(3);
     const analyzes = analyzeCount() - analyzed;
-    const startedAt = began;
-    // A gesture with no transaction (a click that only focused) has no
-    // input half: all of it is what the spans say, or other.
-    const browser = first === 0 ? 0 : +Math.max(0, Math.min(gesture, first - began)).toFixed(3);
-    let attributed = browser;
-    for (const total of totals.values()) attributed += total.ms;
-    const other = +Math.max(0, gesture - attributed).toFixed(3);
-    afterPaint(startedAt, (cost, source) => {
-      const render = cost === null ? null : +cost.toFixed(3);
-      const measured = { gesture, render, renderSource: source, analyzes, browser, totals, other };
-      sink({ ...measured, note: noteOf(measured) });
-    });
+    const { browser, other } = attribute(totals, gesture, first, began);
+    reportAfterPaint(sink, began, { gesture, analyzes, browser, totals, other });
   };
 
   const open = (byEvent = false) => {
@@ -278,18 +278,14 @@ export function keystrokeMeter(sink: (m: Measured) => void): Meter {
     setTimeout(settle, 0);
   };
 
-  const shut = (u: { docChanged: boolean; transactions: readonly unknown[] }) => {
+  const shut = (update: { docChanged: boolean; transactions: readonly unknown[] }) => {
     if (!live) return;
-    // CodeMirror's measure pass updates the view with no transaction when a
-    // line's height changed — in the frame AFTER the key. It is not this
-    // gesture's work, and letting it move `last` billed the frame wait here.
-    if (u.transactions.length === 0) return;
+    if (update.transactions.length === 0) return;
     updates++;
-    docChanged ||= u.docChanged;
+    docChanged ||= update.docChanged;
     last = performance.now();
   };
 
-  /** The first transaction of a live gesture: where the browser's half ends. */
   const firstTransaction = (): void => {
     if (live && first === 0) first = performance.now();
   };
@@ -301,37 +297,6 @@ export function keystrokeMeter(sink: (m: Measured) => void): Meter {
 
   return {
     open: () => open(false),
-    extension: [
-      Prec.highest(
-        EditorView.domEventHandlers({
-          keydown: on,
-          beforeinput: on,
-          paste: on,
-          cut: on,
-          drop: on,
-          mousedown: on,
-          compositionstart: on,
-        }),
-      ),
-      Prec.highest(EditorView.updateListener.of(shut)),
-      // The first thing CodeMirror runs as a transaction is created: change
-      // filters go in precedence order (transaction filters and extenders go
-      // in reverse), so this sees the transaction before any phase rule does,
-      // and its first call is the end of the input's browser half. The
-      // extender catches a transaction created with `filter: false`, which
-      // skips change filters, at the cost of arriving after its rules.
-      Prec.highest(
-        EditorState.changeFilter.of(() => {
-          firstTransaction();
-          return true;
-        }),
-      ),
-      Prec.highest(
-        EditorState.transactionExtender.of(() => {
-          firstTransaction();
-          return null;
-        }),
-      ),
-    ],
+    extension: meterExtension(on, shut, firstTransaction),
   };
 }

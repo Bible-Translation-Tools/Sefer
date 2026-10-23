@@ -1,51 +1,3 @@
-/**
- * Point and prompt: a floating panel that drives a prototype's variants and
- * tweaks, and turns "this padding is wrong" into something an agent can act on.
- *
- * ```ts
- * const annotator = mountAnnotator({
- *   namespace: "onboarding",
- *   variants: [{ id: "a", label: "Cards", tweaks: [...] }, { id: "b", label: "Table" }],
- *   tweaks: [{ key: "density", label: "Density", kind: "choice", options: ["cosy", "tight"] }],
- *   state: { read: () => search(), write: (next) => navigate({ search: next }) },
- *   context: () => ({ build: buildId }),
- * });
- * ```
- *
- * Everything about it is a corner of the screen and a `StateAdapter`. It knows
- * nothing about Solid, about the router, or about Sefer — `pnpm boundaries`
- * runs `src/core`'s rule set over this folder, so an accidental `solid-js`
- * import fails the build rather than quietly welding the tool to one app.
- *
- * ## The two modes
- *
- * `interact` is the application, untouched. `comment` takes every event in the
- * CAPTURE phase, so while it is on the application cannot be operated at all —
- * a click selects the element under the pointer instead of pressing it. A
- * half-mode where some clicks fall through is how somebody ends up filing a
- * bug about the app being broken, so the mode is total, loudly signposted (a
- * crosshair and a tinted viewport edge), and `Escape` always leaves it.
- *
- * ## What a comment carries
- *
- * The `data-loc` stamp from the JSX-location transform, when one is running —
- * that is the difference between a note an agent can act on and a note it has
- * to grep for. Without it, a short selector and the nearby words, so this
- * module is still useful dropped into a project that has not set that up.
- *
- * ## One sentence, several places
- *
- * A plain click comments on what is under it. SHIFT+click collects the element
- * and waits, so the next plain click opens one composer holding all of them.
- * "These two should swap" and "move 1 to where 2 is" are among the most natural
- * things to say about a layout, and before this they cost two comments that
- * each described half a thought.
- *
- * Every collected place gets a number, painted on a pin over the element and
- * printed as `[2]` in the paste. The same number in both is the whole point:
- * it is what lets the sentence refer to them.
- */
-
 import {
   addComment,
   archiveComments,
@@ -92,20 +44,6 @@ import {
 const HOST_ATTRIBUTE = "data-sefer-annotate";
 const MODE_ATTRIBUTE = "data-sefer-annotate-mode";
 
-/**
- * Is somebody typing right now? Asked of `composedPath()[0]`, not of
- * `event.target`, and that distinction is the whole function.
- *
- * A keydown that starts inside a shadow root is RETARGETED on its way out: by
- * the time a listener on `document` sees it, `event.target` is the shadow
- * HOST, not the field being typed into. The annotator's own composer lives in
- * its shadow root, so a guard written against `event.target` cannot ever see
- * it — and the single-letter hotkey fires on the first `c` somebody types into
- * a comment. `composedPath()[0]` is the real element, inside or outside.
- *
- * The same applies to any host that puts an editor in a shadow root, which is
- * why this checks the path rather than special-casing our own panel.
- */
 const isTyping = (event: KeyboardEvent): boolean => {
   const actual = event.composedPath()[0] ?? event.target;
   if (!(actual instanceof HTMLElement)) return false;
@@ -117,7 +55,6 @@ const isTyping = (event: KeyboardEvent): boolean => {
   );
 };
 
-/** A described place and the element it was described from. */
 interface Placed {
   readonly target: Target;
   readonly element: Element;
@@ -142,26 +79,12 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
   let minimised = options.minimised ?? false;
   let menuOpen = false;
   let comments = readComments();
-  /** Shift-clicked places waiting for the sentence that will be about them. */
   let pending: Placed[] = [];
   let composing: readonly Placed[] | null = null;
   let recording = false;
   let status = "";
 
-  /**
-   * Where a pin goes: the live element, kept in memory beside the serialisable
-   * target.
-   *
-   * Deliberately NOT stored coordinates. A click point goes stale the moment
-   * anything scrolls, and a pin three inches from the thing it marks is worse
-   * than no pin. Holding the element means the pin is recomputed from its rect
-   * and therefore tracks reflow, a scrolling container, a resize, everything.
-   * The cost is that pins do not survive a reload — the comments do, the pins
-   * do not, which is the honest trade and the one that never lies.
-   */
   const placed = new Map<string, Element>();
-
-  // ---- the tool's own DOM, sealed off from the page ------------------------
 
   const host = el("div", { [HOST_ATTRIBUTE]: "" });
   host.style.position = "fixed";
@@ -187,8 +110,6 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
   edge.style.display = "none";
   document.body.append(edge);
 
-  // ---- state helpers -------------------------------------------------------
-
   const namespace = (): string => settings.namespace ?? "";
   const variants = (): readonly Variant[] => settings.variants ?? [];
   const sharedTweaks = (): readonly Tweak[] => settings.tweaks ?? [];
@@ -200,12 +121,9 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
     render();
   };
 
-  /** Is this event ours? Anything inside the panel must keep working in comment mode. */
   const isOurs = (target: EventTarget | null): boolean =>
     target instanceof Node &&
     (host.contains(target) || target === host || host.shadowRoot?.contains(target) === true);
-
-  // ---- comment mode --------------------------------------------------------
 
   const hideOutline = (): void => {
     outline.style.display = "none";
@@ -221,8 +139,6 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
   };
 
   const elementAt = (event: MouseEvent): Element | null => {
-    // `composedPath` first so a click inside somebody else's shadow tree still
-    // resolves to the real element rather than to its host.
     const first = event.composedPath()[0];
     if (first instanceof Element && !isOurs(first)) return first;
     const found = document.elementFromPoint(event.clientX, event.clientY);
@@ -236,12 +152,6 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
     else drawOutline(element);
   };
 
-  /**
-   * One handler for every interactive event, in the capture phase. Swallowing
-   * `pointerdown`/`mousedown` as well as `click` matters: CodeMirror and most
-   * drag handles act on the former and would otherwise run before the click
-   * they never see.
-   */
   const swallow = (event: Event): void => {
     if (mode !== "comment" || isOurs(event.target)) return;
     event.preventDefault();
@@ -252,10 +162,6 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
       const chosen = place(element);
       placed.set(chosen.target.id, element);
 
-      // Shift collects instead of composing. Holding a modifier to mean "and
-      // this one too" is how every list in every file manager works, so it
-      // needs no explaining — and it keeps the plain click meaning exactly what
-      // it meant before.
       if (event.shiftKey) {
         pending = [...pending, chosen];
         drawOutline(element);
@@ -265,10 +171,6 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
 
       composing = [...pending, chosen];
       pending = [];
-      // Opening the composer un-minimises, because the composer IS part of the
-      // panel: a puck has nowhere to put a textarea, so a click in comment mode
-      // while minimised would swallow the click and then show nothing at all.
-      // Somebody who has just pointed at something is about to type.
       minimised = false;
       drawOutline(element);
       render();
@@ -285,14 +187,6 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
     "submit",
   ] as const;
 
-  /**
-   * What actually toggles comment mode here and now.
-   *
-   * A recorded chord outranks whatever the host passed, INCLUDING a recorded
-   * "none" — otherwise turning the shortcut off would last until the next
-   * render. `undefined` from storage means nothing was recorded, which is the
-   * only case where the host's own setting is consulted.
-   */
   const hotkey = (): Hotkey | null => {
     const saved = readSavedHotkey();
     if (saved !== undefined) return saved;
@@ -300,10 +194,6 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
   };
 
   const onKey = (event: KeyboardEvent): void => {
-    // Recording takes every keystroke, because the chord being recorded might
-    // be anything — Escape cancels and Backspace clears, so those two are the
-    // only keys that cannot be recorded, which is a price worth paying for an
-    // exit that always works.
     if (recording) {
       event.preventDefault();
       event.stopPropagation();
@@ -319,7 +209,6 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
         return;
       }
       const chord = hotkeyFrom(event);
-      // A modifier on its own is somebody part-way through a chord, not a chord.
       if (chord === null) return;
       saveHotkey(chord);
       recording = false;
@@ -327,9 +216,6 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
       return;
     }
 
-    // The menu first, and in ANY mode: it is the thing most recently opened,
-    // and it is the one surface here with no click-away (a click away in
-    // comment mode is a comment).
     if (event.key === "Escape" && menuOpen) {
       event.preventDefault();
       menuOpen = false;
@@ -356,7 +242,6 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
 
     const chord = hotkey();
     if (chord === null || !hotkeyMatches(event, chord)) return;
-    // A chord with a modifier is safe in a text field; a bare letter is not.
     const bare = !chord.alt && !chord.ctrl && !chord.meta;
     if (bare && isTyping(event)) return;
     event.preventDefault();
@@ -366,8 +251,6 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
   const setMode = (next: Mode): void => {
     mode = next;
     composing = null;
-    // Places collected but never spoken about are not notes; leaving them to
-    // reappear on the next visit to comment mode would be a small haunting.
     pending = [];
     if (next === "comment") {
       document.documentElement.setAttribute(MODE_ATTRIBUTE, "comment");
@@ -397,20 +280,6 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
     render();
   };
 
-  /**
-   * The one-comment path: write it, press Enter, it is on the clipboard.
-   *
-   * Worth its own function because the ordinary flow — "Add comment", then find
-   * and press "Copy" — is two deliberate actions for what is usually one
-   * thought. Enter is a genuine user gesture, so the clipboard write is allowed
-   * to ride on it, and the whole round trip becomes: click the thing, say what
-   * is wrong, Enter, paste.
-   *
-   * Batching is still there and still deliberate: "Add comment" adds without
-   * copying, so a sweep of eight notes is eight Enters' worth of typing and one
-   * Copy at the end. Shift+Enter is a newline, because some comments are two
-   * sentences.
-   */
   const saveAndCopy = (text: string): void => {
     saveComment(text);
     copyBatch();
@@ -418,7 +287,6 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
 
   let statusTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
 
-  /** A line under the panel that says what just happened, and then stops saying it. */
   const flash = (message: string): void => {
     status = message;
     globalThis.clearTimeout(statusTimer);
@@ -441,8 +309,6 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
       flash(ok ? "Copied. Paste into Claude." : "Could not reach the clipboard.");
     });
   };
-
-  // ---- rendering -----------------------------------------------------------
 
   const segmented = (
     items: readonly { readonly value: string; readonly label: string; readonly title?: string }[],
@@ -491,10 +357,6 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
 
   const cornerMenu = (): HTMLElement => {
     const menu = el("div", { class: "menu" });
-    // A way out that is visible. Escape closes it too, but a menu whose only
-    // exit is a key you have to guess is a menu people get stuck in — and
-    // clicking away is not an option here, because in comment mode a click
-    // anywhere else is a comment.
     const close = el("button", { type: "button", class: "ghost icon", title: "Close" }, ["×"]);
     on(close, "click", () => {
       menuOpen = false;
@@ -553,16 +415,11 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
     });
     on(area, "keydown", (event) => {
       if (event.key !== "Enter") return;
-      // Shift is the newline; everything else finishes the comment. The plain
-      // Enter is the point — it is a user gesture, so the clipboard write is
-      // permitted to ride on it and the whole loop is click, type, Enter, paste.
       if (event.shiftKey) return;
       event.preventDefault();
       event.stopPropagation();
       saveAndCopy(area.value);
     });
-    // Every place this sentence is about, numbered to match the pins on the
-    // screen, so "1 should go where 2 is" has something to refer to.
     const held = composing ?? [];
     const numbers = numbering();
     const where = el("div", { class: "hint" });
@@ -587,15 +444,6 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
     return section;
   };
 
-  /**
-   * Every place in play, in the order it was pointed at: the saved comments'
-   * targets first, then whatever is collected but not yet written about.
-   *
-   * One sequence for the panel, the pins and the paste, computed once. Three
-   * places deriving their own numbering is three chances for the number on the
-   * screen to disagree with the number in the text, which would make the
-   * numbering worse than useless.
-   */
   const rows = (): { target: Target; n: number; text: string | null }[] => {
     const all: { target: Target; n: number; text: string | null }[] = [];
     let n = 0;
@@ -614,14 +462,6 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
 
   const numbering = (): Map<string, number> => new Map(rows().map((row) => [row.target.id, row.n]));
 
-  /**
-   * The pins, drawn from the live elements rather than from stored coordinates.
-   *
-   * Only in comment mode, and that restraint is the point of the whole tool:
-   * the panel floats in a corner and the pins appear over the design precisely
-   * when somebody is pointing at it. Leaving eight numbered dots on top of a
-   * screen that is being JUDGED would obstruct the one thing being looked at.
-   */
   const renderPins = (): void => {
     pins.replaceChildren();
     if (mode !== "comment") return;
@@ -791,11 +631,6 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
         `Copy ${String(comments.length)} comment${comments.length === 1 ? "" : "s"}`,
       ]);
       on(copy, "click", copyBatch);
-      // Verbosity sits HERE, beside Copy, rather than in the kebab menu. It
-      // changes what the next paste says, so it belongs next to the button
-      // that does the pasting and it has to show which one is selected — as a
-      // menu row reading "verbosity: brief" it was both hidden and ambiguous
-      // about whether it named the current state or the action.
       const detail = segmented(
         [
           { value: "brief", label: "Brief", title: "Location and words" },
@@ -834,13 +669,6 @@ export const mountAnnotator = (options: AnnotatorOptions): Annotator => {
     if (menuOpen) root.append(cornerMenu());
   }
 
-  // ---- wiring --------------------------------------------------------------
-
-  /**
-   * Pins are positioned from live rects, so anything that moves an element
-   * moves its pin. Capture-phase `scroll` because a scrolling container does
-   * not bubble one, and a frame gate because both of these fire in floods.
-   */
   let frame = 0;
   const repaint = (): void => {
     if (frame !== 0) return;

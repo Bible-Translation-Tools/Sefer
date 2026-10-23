@@ -1,14 +1,3 @@
-/**
- * Policy as data: for each `ClassKey`, how it paints and how mutable it is —
- * the class table, as a record.
- *
- * `PROJECTIONS` are deltas over the default registry, so a mode ("usfm",
- * "hide-notes", "lock-structure") is a small patch and not a code path. No rule
- * anywhere branches on a projection name; they read `rowAt(state, cls)`. The
- * struck combinations are listed rather than merely unused, so an assignment
- * that reaches an unlawful cell is a caught error and not a strange screen.
- */
-
 import { Facet, type EditorState } from "@codemirror/state";
 
 export type PaintReach = "point" | "boundary" | "ambient" | "none";
@@ -27,6 +16,13 @@ export interface Cell {
    * locked designators are (Will, 2026-09-30).
    */
   stop?: boolean;
+  /**
+   * For an immortal cell: a Backspace or Delete that meets it moves the caret
+   * over it and takes nothing. Line by line's markup inside a verse (a `\p`, a
+   * poetry break), so the caret can still be walked back through a verse with
+   * Backspace (Will, 2026-10-22).
+   */
+  step?: boolean;
 }
 
 export type OwnershipBit = "JOIN" | "REFUSE" | "DISSOLVE";
@@ -47,12 +43,15 @@ export type ClassKey =
   | "optbreak"
   | "blank"
   | "milestone"
+  | "figure"
+  | "unruled"
   | "note.caller"
   | "note.markup"
   | "note.body"
   | "standalone"
   | "clamp.replaced"
   | "table"
+  | "cell"
   | "sidebar";
 
 export const CLASS_KEYS: readonly ClassKey[] = [
@@ -71,16 +70,19 @@ export const CLASS_KEYS: readonly ClassKey[] = [
   "optbreak",
   "blank",
   "milestone",
+  "figure",
+  "unruled",
   "note.caller",
   "note.markup",
   "note.body",
   "standalone",
   "clamp.replaced",
   "table",
+  "cell",
   "sidebar",
 ];
 
-const cellKey = (c: Cell) => `${c.paint}×${c.mutability}`;
+const cellKey = (cell: Cell) => `${cell.paint}×${cell.mutability}`;
 
 const STRUCK: Record<string, string> = {
   "none×direct":
@@ -91,7 +93,7 @@ const STRUCK: Record<string, string> = {
   "ambient×trusted-only": "unused",
 };
 
-const isLawful = (c: Cell) => !(cellKey(c) in STRUCK);
+const isLawful = (cell: Cell) => !(cellKey(cell) in STRUCK);
 
 export type WidgetKey = "versePip" | "join" | "joinSigil";
 
@@ -174,6 +176,14 @@ const DEFAULT_REGISTRY: Registry = {
     note: "\\b — its blank line IS its paint; no interior stop, C2-empty consumes it whole",
   },
   milestone: { cell: { paint: "point", mutability: "via-anchor" }, note: "pips" },
+  unruled: {
+    cell: { paint: "point", mutability: "via-anchor" },
+    note: "markup with no class of its own yet (a table's cell markers, \\pb, \\cat, a stray closer or attribute list): one point, a chip, deleted whole; edited in USFM mode",
+  },
+  figure: {
+    cell: { paint: "point", mutability: "via-anchor" },
+    note: "\\fig's marker as one point, the picture; its caption is content, its attributes and closer hidden chrome. The anchor of the whole figure, as a note's caller is of its note",
+  },
   "note.caller": {
     cell: { paint: "point", mutability: "via-anchor" },
     note: "the anchor of the whole note",
@@ -202,11 +212,20 @@ const DEFAULT_REGISTRY: Registry = {
     elided: true,
     note: "region override, not a class",
   },
-  table: { cell: { paint: "point", mutability: "direct" }, undecided: true, note: "out of scope" },
+  table: {
+    cell: { paint: "ambient", mutability: "via-anchor" },
+    ownership: "JOIN",
+    note: "a table row (\\tr): a block that opens its own line, its marker hidden chrome",
+  },
+  cell: {
+    cell: { paint: "point", mutability: "immortal", step: true },
+    note: "a cell's marker (\\th1 \\tc2 \\tcr3): a column separator. Immortal and a step: Backspace or Delete at it moves the caret into the neighbouring cell and takes nothing, so two cells never merge; a table's shape is changed by its commands or in USFM mode. Its words are content",
+  },
+
   sidebar: {
-    cell: { paint: "point", mutability: "direct" },
-    undecided: true,
-    note: "out of scope",
+    cell: { paint: "ambient", mutability: "via-anchor" },
+    ownership: "JOIN",
+    note: "\\esb … \\esbe: a container whose blocks keep their own classes; its paint is the box around them, its markers hidden chrome",
   },
 };
 
@@ -226,24 +245,24 @@ export const OWNED_SETS = {
   char: { painting: ["char"], hidden: ["chrome"] },
   note: { painting: ["note.caller"], hidden: ["note.markup", "note.body"] },
   standalone: { painting: ["standalone"], hidden: [] },
-  // The one newline a paragraph shows as a space where it flows through blank
-  // lines and passthrough lines (`plan.ts`'s held gap). The set is the space
-  // the reader sees, so it owns the lines it holds: taking the space takes them.
   join: { painting: ["newline.inside"], hidden: ["standalone"] },
   milestone: { painting: ["milestone"], hidden: [] },
+  figure: { painting: ["figure"], hidden: ["chrome"] },
+  unruled: { painting: ["unruled"], hidden: [] },
+  sidebar: { painting: ["sidebar"], hidden: ["chrome"] },
+  table: { painting: ["table"], hidden: ["chrome"] },
+  cell: { painting: ["cell"], hidden: [] },
   optbreak: { painting: ["optbreak"], hidden: [] },
 } satisfies Record<string, OwnedSet>;
 
 export type OwnedSetName = keyof typeof OWNED_SETS;
 
-// SAFETY: `OwnedSetName` is `keyof typeof OWNED_SETS`, so the object's own
-// keys are exactly that type; `Object.keys` only widens it to string.
+// SAFETY: `OwnedSetName` is `keyof typeof OWNED_SETS`, so the object's own keys are exactly that type; `Object.keys` only widens it to string.
 const OWNED_SET_NAMES = Object.keys(OWNED_SETS) as OwnedSetName[];
 
-export function setsPaintedBy(cls: ClassKey): OwnedSetName[] {
-  // SAFETY: every value of OWNED_SETS is an OwnedSet; the assertion only
-  // recovers the shared shape the literal's inferred type split per key.
-  return OWNED_SET_NAMES.filter((k) => (OWNED_SETS[k] as OwnedSet).painting.includes(cls));
+export function setsPaintedBy(classKey: ClassKey): OwnedSetName[] {
+  // SAFETY: every value of OWNED_SETS is an OwnedSet; the assertion only recovers the shared shape the literal's inferred type split per key.
+  return OWNED_SET_NAMES.filter((k) => (OWNED_SETS[k] as OwnedSet).painting.includes(classKey));
 }
 
 export type AssignmentDelta = Partial<Record<ClassKey, Partial<Cell>>>;
@@ -257,14 +276,28 @@ export interface Assignment {
    * under the same projection by installing the same deltas.
    */
   deltas: readonly AssignmentDelta[];
+  /** One verse per visual line (`line-by-line`): a layout the decorations read, not a cell. */
+  verseLines: boolean;
 }
+
+const LINE_BY_LINE: AssignmentDelta = {
+  chrome: { mutability: "immortal", step: true },
+  "newline.between": { mutability: "immortal", step: true },
+  "newline.inside": { mutability: "immortal", step: true },
+  "block.para": { mutability: "immortal", step: true },
+  "block.heading": { mutability: "immortal", stop: true },
+  "block.front": { mutability: "immortal", stop: true },
+  "block.meta": { mutability: "immortal", stop: true },
+  blank: { mutability: "immortal", step: true },
+  standalone: { step: true },
+  "slot.c": { mutability: "immortal", stop: true },
+  "slot.v": { mutability: "immortal", stop: true },
+};
 
 class UnclampableDelta extends Error {}
 
 const clone = (r: Registry): Registry => {
-  // SAFETY: the loop immediately below assigns every CLASS_KEYS entry, and
-  // `Registry` is `Record<ClassKey, RegistryRow>` — so the record is total
-  // before it is read.
+  // SAFETY: the loop immediately below assigns every CLASS_KEYS entry, and `Registry` is `Record<ClassKey, RegistryRow>` — so the record is total before it is read.
   const out = {} as Registry;
   for (const k of CLASS_KEYS) out[k] = { ...r[k], cell: { ...r[k].cell } };
   return out;
@@ -276,8 +309,7 @@ function resolve(base: Registry, deltas: readonly AssignmentDelta[]): Assignment
 
   const hidden = new Set<ClassKey>();
   for (const d of deltas)
-    // SAFETY: `AssignmentDelta` is `Partial<Record<ClassKey, …>>`, so its own
-    // keys are ClassKeys; `d[k]` below is checked for undefined anyway.
+    // SAFETY: `AssignmentDelta` is `Partial<Record<ClassKey, …>>`, so its own keys are ClassKeys; `d[k]` below is checked for undefined anyway.
     for (const k of Object.keys(d) as ClassKey[]) {
       const patch = d[k];
       if (!patch) continue;
@@ -321,13 +353,12 @@ function resolve(base: Registry, deltas: readonly AssignmentDelta[]): Assignment
       `"${k}" would land at the struck cell ${cellKey(c)} — ${STRUCK[cellKey(c)]}`,
     );
   }
-  return { rows, clamped, deltas };
+  return { rows, clamped, deltas, verseLines: deltas.includes(LINE_BY_LINE) };
 }
 
 export const PROJECTIONS: Record<string, AssignmentDelta> = {
   default: {},
-  // SAFETY: built from CLASS_KEYS with a `Partial<Cell>` value per key, which
-  // is what AssignmentDelta is; `Object.fromEntries` loses only the key type.
+  // SAFETY: built from CLASS_KEYS with a `Partial<Cell>` value per key, which is what AssignmentDelta is; `Object.fromEntries` loses only the key type.
   usfm: Object.fromEntries(
     CLASS_KEYS.map((k) => [k, { paint: "point", mutability: "direct" }]),
   ) as AssignmentDelta,
@@ -350,12 +381,8 @@ export const PROJECTIONS: Record<string, AssignmentDelta> = {
   },
   "hide-notes": { "note.caller": { paint: "none" } },
   "hide-verse-numbers": { "slot.v": { paint: "none" } },
-  // A verse number as a pip no key takes: hidden and immortal, which the pip
-  // clamp draws as the verse pip and keeps immortal. For a surface whose place
-  // IS its verse — a card — where renumbering or deleting a verse would leave
-  // the card pointing at nothing. A press stops at it rather than going past
-  // into the verse beside: on a card that is context, not the card's text.
   "lock-verse-numbers": { "slot.v": { paint: "none", mutability: "immortal", stop: true } },
+  "line-by-line": LINE_BY_LINE,
 };
 
 export const assignment = Facet.define<AssignmentDelta, Assignment>({
@@ -373,17 +400,24 @@ export function assignmentAt(state: EditorState): Assignment {
   return a;
 }
 
-export const rowAt = (state: EditorState, cls: ClassKey): RegistryRow =>
-  assignmentAt(state).rows[cls];
+export const rowAt = (state: EditorState, classKey: ClassKey): RegistryRow =>
+  assignmentAt(state).rows[classKey];
 
 export const keyboardMutable = (row: RegistryRow) =>
   row.cell.mutability === "direct" || row.typable === true;
 
-export const pipActive = (state: EditorState, cls: ClassKey) =>
-  assignmentAt(state).clamped.some((c) => c.cls === cls && c.to === "pip");
+export const pipActive = (state: EditorState, classKey: ClassKey) =>
+  assignmentAt(state).clamped.some((c) => c.cls === classKey && c.to === "pip");
 
 export const ownershipOf = (row: RegistryRow): OwnershipBit | undefined =>
   row.ownership === "DISSOLVE" && row.cell.mutability === "immortal" ? undefined : row.ownership;
 
-export const paintsItsOwnLineAmbient = (cls: ClassKey): boolean =>
-  cls === "block.heading" || cls === "block.front" || cls === "block.meta";
+/**
+ * A class whose block holds other blocks (`\\esb … \\esbe`): it resolves none of
+ * their lines, and a key acting on "the block at the caret" means the one
+ * inside it, never the container.
+ */
+export const isContainerClass = (classKey: ClassKey): boolean => classKey === "sidebar";
+
+export const paintsItsOwnLineAmbient = (classKey: ClassKey): boolean =>
+  classKey === "block.heading" || classKey === "block.front" || classKey === "block.meta";

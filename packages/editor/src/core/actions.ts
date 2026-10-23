@@ -1,15 +1,4 @@
-/**
- * The named editor gestures, as one lookup.
- *
- * The shell has a `Book`, not an `EditorView` — nothing above `@sefer/editor`
- * imports CodeMirror — so a command in `src/app/commands.ts` asks for a gesture
- * BY NAME and `EditorBook.perform` runs it against whichever seat is canonical
- * (the bound view when there is one, the held state when there is not). That is
- * the same door `undo`/`redo` already go through, which is why an insertion is
- * one Undo step whether it came from the palette, a key, or a toolbar button.
- */
-
-import type { StateCommand } from "@codemirror/state";
+import type { EditorState, StateCommand, TransactionSpec } from "@codemirror/state";
 
 import { structureAt } from "./editorState";
 import { focusFrontMatter } from "./frontmatter";
@@ -20,13 +9,21 @@ import {
   insertVerse,
   type EditorAction,
 } from "./insert";
+import { deleteColumn, deleteRow, insertColumn, insertRow } from "./tableCommands";
 
 export type { EditorAction } from "./insert";
 
-/**
- * Focusing the card is not a document change, so it dispatches an effect and
- * reports true; a state with no card (headless, USFM mode) simply drops it.
- */
+/** A table command at the caret: false (nothing done) where the caret is in no table. */
+const atCaret =
+  (command: (state: EditorState, pos: number) => TransactionSpec | null): StateCommand =>
+  ({ state, dispatch }) => {
+    if (state.readOnly) return false;
+    const spec = command(state, state.selection.main.head);
+    if (spec === null) return false;
+    dispatch(state.update(spec));
+    return true;
+  };
+
 const editFrontMatter: StateCommand = ({ state, dispatch }) => {
   dispatch(state.update({ effects: focusFrontMatter.of(null) }));
   return true;
@@ -40,6 +37,12 @@ const COMMANDS: Record<EditorAction, () => StateCommand> = {
   "insert.poetry2": () => insertPoetry(structureAt, 2),
   "insert.footnote": () => insertFootnote(),
   "frontmatter.edit": () => editFrontMatter,
+  "table.rowAbove": () => atCaret((state, pos) => insertRow(state, pos, "above")),
+  "table.rowBelow": () => atCaret((state, pos) => insertRow(state, pos, "below")),
+  "table.deleteRow": () => atCaret(deleteRow),
+  "table.columnBefore": () => atCaret((state, pos) => insertColumn(state, pos, "before")),
+  "table.columnAfter": () => atCaret((state, pos) => insertColumn(state, pos, "after")),
+  "table.deleteColumn": () => atCaret(deleteColumn),
 };
 
 export const actionCommand = (action: EditorAction): StateCommand => COMMANDS[action]();

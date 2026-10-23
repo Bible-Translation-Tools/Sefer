@@ -78,13 +78,13 @@ const hasByteOrderMark = (bytes: Uint8Array): boolean =>
  */
 export const dominantEol = (text: string): SourceForm["eol"] => {
   let crlf = 0;
-  let lf = 0;
+  let lineFeeds = 0;
   for (let index = 0; index < text.length; index += 1) {
     if (text.charCodeAt(index) !== 0x0a) continue;
     if (text.charCodeAt(index - 1) === 0x0d) crlf += 1;
-    else lf += 1;
+    else lineFeeds += 1;
   }
-  return crlf > lf ? "crlf" : "lf";
+  return crlf > lineFeeds ? "crlf" : "lf";
 };
 
 /**
@@ -131,11 +131,9 @@ export interface OffsetMap {
 }
 
 export const offsetMap = (raw: string): OffsetMap => {
-  // Where each dropped character sits in the raw text, in order.
   const dropped: number[] = [];
   if (raw.charCodeAt(0) === 0xfeff) dropped.push(0);
   for (let at = raw.indexOf("\r\n"); at !== -1; at = raw.indexOf("\r\n", at + 2)) dropped.push(at);
-  /** How many dropped characters sit before `raw`. */
   const before = (offset: number): number => {
     let lo = 0;
     let hi = dropped.length;
@@ -149,8 +147,6 @@ export const offsetMap = (raw: string): OffsetMap => {
   return {
     toCanonical: (offset) => offset - before(offset),
     toRaw: (offset) => {
-      // The k-th dropped character shifts every canonical offset at or past
-      // `dropped[k] - k` by one more; that sequence never decreases.
       let lo = 0;
       let hi = dropped.length;
       while (lo < hi) {

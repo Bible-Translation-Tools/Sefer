@@ -144,10 +144,14 @@
   font-size: var(--text-small);
   line-height: 1.6;
 }
+/* 1.5rem each side is the findings layer's gutter: its marks sit 6–16px in
+   from the edge (recipes/findingMarks.ts), so a pane narrower than the 40rem
+   column must not run the text under them. Symmetric, so the column stays
+   centred. */
 .cm-mode-regular .cm-content {
   max-width: 40rem;
   margin: 0 auto;
-  padding: 56px 0 30vh;
+  padding: 56px 1.5rem 30vh;
   font-family: var(--font-scripture);
   /* The reader's own size (`editor.fontSize`, written onto <html> by
      `src/app/ui/theme.ts`). The fallback is the value this was hardcoded to,
@@ -174,41 +178,110 @@
   padding: 0;
 }
 
+/* The reading's indents, in one unit (unitless, so the small verse number and
+   the text it sits in measure alike). A paragraph's first line, a poetry level,
+   a poetry wrap and a hung verse number are all multiples of it. */
+.cm-mode-regular .cm-content {
+  --usfm-indent: 1.5;
+  --usfm-hang: 1.6;
+  --usfm-poetry-gap: 0.25;
+}
+
 .cm-mode-regular .usfm-block {
   padding-bottom: 0.5em;
 }
 .cm-mode-regular .usfm-p,
 .cm-mode-regular .usfm-pi {
-  text-indent: 1.5em;
+  text-indent: calc(var(--usfm-indent) * 1em);
 }
 .cm-mode-regular .usfm-m,
 .cm-mode-regular .usfm-nb {
   text-indent: 0;
 }
 
-/* Poetry, on the prototype's ladder (16 / 32 / 64 / 96px), with a hanging
-   indent so a wrapped line sits under the one it continues rather than under
-   its verse number. */
+/* Poetry: \q1 at the edge, each level one unit in, and a wrapped line under
+   its own words. On screen an indent only ever means a marker, never a wrap:
+   the width moves, and a printed turnover two units in read as a \q3 (Will,
+   2026-10-22). A verse number opening a line hangs in the margin, so the
+   words of one level always start in one place, and a small gap above each
+   poetry line tells a new line from a wrap, which gets none. No italics: in
+   scripture they mean supplied words (\add) or emphasis. */
 .cm-mode-regular .usfm-q,
 .cm-mode-regular .usfm-q1,
 .cm-mode-regular .usfm-q2,
 .cm-mode-regular .usfm-q3,
 .cm-mode-regular .usfm-q4 {
+  --usfm-level: 0;
+  padding-top: calc(var(--usfm-poetry-gap) * 1em);
   padding-bottom: 0;
-  text-indent: -0.9em;
-}
-.cm-mode-regular .usfm-q,
-.cm-mode-regular .usfm-q1 {
-  padding-inline-start: calc(16px + 0.9em);
+  padding-inline-start: calc(var(--usfm-level) * var(--usfm-indent) * 1em);
 }
 .cm-mode-regular .usfm-q2 {
-  padding-inline-start: calc(32px + 0.9em);
+  --usfm-level: 1;
 }
 .cm-mode-regular .usfm-q3 {
-  padding-inline-start: calc(64px + 0.9em);
+  --usfm-level: 2;
 }
 .cm-mode-regular .usfm-q4 {
-  padding-inline-start: calc(96px + 0.9em);
+  --usfm-level: 3;
+}
+
+/* Lists: \li# and \lim# a level each, like poetry, with a hanging indent so a
+   wrapped item sits under its own words; \lh and \lf at the edge. */
+.cm-mode-regular .usfm-li,
+.cm-mode-regular .usfm-li1,
+.cm-mode-regular .usfm-li2,
+.cm-mode-regular .usfm-li3,
+.cm-mode-regular .usfm-li4,
+.cm-mode-regular .usfm-lim,
+.cm-mode-regular .usfm-lim1,
+.cm-mode-regular .usfm-lim2,
+.cm-mode-regular .usfm-lim3,
+.cm-mode-regular .usfm-lim4 {
+  --usfm-level: 1;
+  padding-bottom: 0.15em;
+  padding-inline-start: calc(var(--usfm-level) * var(--usfm-indent) * 1em);
+  text-indent: calc(var(--usfm-indent) * -1em);
+}
+.cm-mode-regular .usfm-li2,
+.cm-mode-regular .usfm-lim2 {
+  --usfm-level: 2;
+}
+.cm-mode-regular .usfm-li3,
+.cm-mode-regular .usfm-lim3 {
+  --usfm-level: 3;
+}
+.cm-mode-regular .usfm-li4,
+.cm-mode-regular .usfm-lim4 {
+  --usfm-level: 4;
+}
+.cm-mode-regular .usfm-lh,
+.cm-mode-regular .usfm-lf {
+  text-indent: 0;
+}
+
+/* A hung verse number: a slot of --usfm-hang to the left of the words, the
+   number set to its right edge. Its own font is 0.66em, hence the division. */
+.cm-mode-regular .usfm-num-hung {
+  display: inline-block;
+  box-sizing: border-box;
+  width: calc(var(--usfm-hang) / 0.66 * 1em);
+  margin-inline-start: calc(var(--usfm-hang) / -0.66 * 1em);
+  padding-inline-end: 0.5em;
+  text-align: end;
+  text-indent: 0;
+}
+/* The space after a hung number stays full size (a zero-size glyph gave
+   CodeMirror a zero-height box at the row's start, and every click and
+   Cmd+Arrow on the line landed on the number); the words are pulled back
+   over it instead. */
+.cm-mode-regular .usfm-delim-hung {
+  margin-inline-end: -0.25em;
+}
+/* Line by line hangs every number: each verse's text, wrapped lines too, starts
+   one hang in from the edge. */
+.cm-mode-regular.cm-line-by-line .usfm-verse-line {
+  padding-inline-start: calc(var(--usfm-hang) * 1em);
 }
 .cm-mode-regular .usfm-b {
   /*min-height: 0.8em;*/
@@ -270,7 +343,7 @@
   font-size: 13px;
   line-height: 1.6;
   color: #d6d3d1;
-  padding: 14px 18px 30vh;
+  padding: 14px 1.5rem 30vh;
   caret-color: #38bdf8;
 }
 .cm-mode-usfm .cm-cursor {
@@ -343,6 +416,177 @@
 }
 .cm-mode-usfm .usfm-notes {
   display: none;
+}
+
+/* A figure (`recipes/figures.ts`): the picture on its own row, as wide as its
+   `size` (col: half the text's width, span: all of it), the caption under it. */
+.cm-mode-regular .usfm-fig {
+  display: block;
+  margin: 0.4em 0 0.2em;
+  text-indent: 0;
+  cursor: pointer;
+  user-select: none;
+}
+.cm-mode-regular .usfm-fig img,
+.cm-mode-regular .usfm-fig-frame {
+  display: block;
+  box-sizing: border-box;
+  width: 50%;
+  border-radius: 4px;
+}
+.cm-mode-regular .usfm-fig[data-size="span"] img,
+.cm-mode-regular .usfm-fig[data-size="span"] .usfm-fig-frame {
+  width: 100%;
+}
+.cm-mode-regular .usfm-fig-frame {
+  padding: 2em 0;
+  border: 1px dashed var(--surface-border);
+  font: 500 0.7em/1 var(--font-ui);
+  color: var(--on-surface-tertiary);
+  text-align: center;
+}
+/* Muted, not italic: in scripture italics mean supplied words (\add). */
+.cm-mode-regular .usfm-fig-caption {
+  font-size: 0.85em;
+  color: var(--on-surface-secondary);
+}
+
+/* A sidebar (\esb … \esbe): a box around its own blocks, which keep their classes. */
+/* Translucent: CodeMirror draws the selection on a layer behind the lines, and an opaque
+   line background would hide it. */
+.cm-mode-regular .usfm-sidebar {
+  background: color-mix(in srgb, var(--surface-secondary) 55%, transparent);
+  border-inline: 1px solid var(--surface-border);
+  padding-inline: 0.8em;
+}
+.cm-mode-regular .usfm-sidebar-first {
+  border-top: 1px solid var(--surface-border);
+  border-start-start-radius: 6px;
+  border-start-end-radius: 6px;
+  padding-top: 0.5em;
+  margin-top: 0.6em;
+}
+.cm-mode-regular .usfm-sidebar-last {
+  border-bottom: 1px solid var(--surface-border);
+  border-end-start-radius: 6px;
+  border-end-end-radius: 6px;
+  padding-bottom: 0.5em;
+  margin-bottom: 0.6em;
+}
+
+/* A category (\cat): a small tag, not underlined as a word with attributes is. */
+.cm-mode-regular .usfm-c-cat {
+  border-bottom: none;
+  cursor: text;
+  font: 600 0.62em/1 var(--font-ui);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--on-surface-tertiary);
+  border: 1px solid var(--surface-border);
+  border-radius: 3px;
+  padding: 1px 4px;
+  vertical-align: 0.2em;
+}
+.cm-mode-regular .usfm-c-cat:hover {
+  background: none;
+}
+
+/* A table (\tr, \th#, \tc#): a row a line, its cells separated by a thin rule;
+   headers bold, \t?r# and \t?c# aligned. Columns line up once the table layout
+   measures them; until then a cell is as wide as its words. */
+.cm-mode-regular .usfm-tr {
+  text-indent: 0;
+  padding: 0.15em 0;
+  border-bottom: 1px solid var(--surface-border);
+}
+.cm-mode-regular .usfm-cell {
+  display: inline-block;
+  padding: 0 0.5em;
+}
+/* A column's width, measured by the table layout (`recipes/tableLayout.ts`) and set
+   on its rows' lines, plus the cell's padding (the box is border-box); without it a
+   cell is as wide as its words. */
+.cm-mode-regular .usfm-cell[data-col="1"] {
+  min-width: calc(var(--usfm-col-1, 0px) + 1em);
+}
+.cm-mode-regular .usfm-cell[data-col="2"] {
+  min-width: calc(var(--usfm-col-2, 0px) + 1em);
+}
+.cm-mode-regular .usfm-cell[data-col="3"] {
+  min-width: calc(var(--usfm-col-3, 0px) + 1em);
+}
+.cm-mode-regular .usfm-cell[data-col="4"] {
+  min-width: calc(var(--usfm-col-4, 0px) + 1em);
+}
+.cm-mode-regular .usfm-cell[data-col="5"] {
+  min-width: calc(var(--usfm-col-5, 0px) + 1em);
+}
+.cm-mode-regular .usfm-cell[data-col="6"] {
+  min-width: calc(var(--usfm-col-6, 0px) + 1em);
+}
+.cm-mode-regular .usfm-cell[data-col="7"] {
+  min-width: calc(var(--usfm-col-7, 0px) + 1em);
+}
+.cm-mode-regular .usfm-cell[data-col="8"] {
+  min-width: calc(var(--usfm-col-8, 0px) + 1em);
+}
+.cm-mode-regular .usfm-cell-head {
+  font-weight: 700;
+}
+.cm-mode-regular .usfm-cell-center {
+  text-align: center;
+}
+.cm-mode-regular .usfm-cell-end {
+  text-align: end;
+}
+.cm-mode-regular .usfm-cell-sep {
+  display: inline-block;
+  width: 1px;
+  height: 1.1em;
+  vertical-align: text-bottom;
+  background: var(--surface-border);
+}
+.cm-mode-regular .usfm-cell-sep-first {
+  width: 0;
+}
+
+/* A page break: a thin rule across the line, its label on it. */
+.cm-mode-regular .usfm-chip-pb {
+  display: inline-block;
+  width: 100%;
+  text-indent: 0;
+  border-top: 1px dashed var(--surface-border);
+  margin: 0.4em 0;
+  font: 500 0.6em/1.4 var(--font-ui);
+  color: var(--on-surface-tertiary);
+  text-align: center;
+  user-select: none;
+}
+/* A published chapter (\cp): a muted caption under the chapter number. */
+.cm-mode-regular .usfm-cp {
+  text-indent: 0;
+  color: var(--on-surface-tertiary);
+  font-size: 0.85em;
+  padding-bottom: 0.4em;
+}
+.cm-mode-regular .usfm-chip-cp {
+  font: 500 0.75em/1 var(--font-ui);
+  margin-inline-end: 0.35em;
+  user-select: none;
+}
+
+/* Markup Reading has no drawing for yet (`recipes/markupChips.ts`): a label, not a backslash. */
+.cm-mode-regular .usfm-chip {
+  display: inline-block;
+  text-indent: 0;
+  font: 500 0.62em/1.2 var(--font-ui);
+  color: var(--on-surface-tertiary);
+  border: 1px dashed var(--surface-border);
+  border-radius: 3px;
+  padding: 0 3px;
+  margin: 0 0.15em;
+  vertical-align: 0.15em;
+  user-select: none;
 }
 
 .cm-mode-regular .usfm-num,
@@ -578,13 +822,15 @@
 
 .cm-mode-regular .usfm-pip {
   display: inline-block;
-  font: 600 0.7em/1 var(--font-ui);
+  /* An inline block inherits its paragraph's first-line indent and indents its own glyph. */
+  text-indent: 0;
+  font: 600 0.58em/1 var(--font-ui);
   color: var(--editor-link-x);
   background: var(--editor-pip-bg);
-  border-radius: 3px;
-  padding: 1px 3px;
-  margin: 0 0.12em;
-  vertical-align: 0.08em;
+  border-radius: 2px;
+  padding: 0 2px;
+  margin: 0 0.06em;
+  vertical-align: 0.2em;
   user-select: none;
 }
 
@@ -632,6 +878,94 @@
 .cm-mode-regular .usfm-brk {
   display: block;
   height: 0;
+}
+
+.cm-mode-regular .usfm-verse-line {
+  padding-top: 0.5em;
+}
+
+.cm-mode-regular .usfm-verse-heading {
+  padding-top: 1em;
+  font-size: 0.8em;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+
+.cm-host .cm-editor .usfm-verse-menu {
+  display: flex;
+  flex-direction: column;
+  min-width: 13rem;
+  max-width: 22rem;
+  padding: 4px;
+}
+.cm-host .cm-editor .usfm-verse-finding {
+  padding: 6px 8px 4px;
+  font: 500 12px/1.45 var(--font-ui);
+}
+.cm-host .cm-editor .usfm-verse-finding-warning {
+  color: var(--on-surface-warning);
+}
+.cm-host .cm-editor .usfm-verse-finding-error {
+  color: var(--on-surface-error);
+}
+.cm-host .cm-editor .usfm-verse-menu button,
+.cm-host .cm-editor .usfm-verse-menu label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 8px;
+  font: 400 12px/1.5 var(--font-ui);
+  color: var(--on-surface-primary);
+  text-align: start;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.cm-host .cm-editor .usfm-verse-menu button:hover,
+.cm-host .cm-editor .usfm-verse-menu label:hover {
+  background: var(--surface-secondary);
+}
+.cm-host .cm-editor .usfm-verse-finding + button {
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+.cm-host .cm-editor .usfm-verse-finding ~ form {
+  margin-top: 0;
+  padding-top: 4px;
+  border-top: 1px solid var(--surface-border);
+}
+.cm-host .cm-editor .usfm-verse-menu input {
+  width: 4.5em;
+  padding: 1px 6px;
+  font: 500 12px/1.5 var(--font-ui);
+  color: var(--on-surface-primary);
+  background: var(--surface-secondary);
+  border: 1px solid var(--surface-border);
+  border-radius: 6px;
+}
+.cm-host .cm-editor .usfm-verse-menu input[aria-invalid="true"] {
+  border-color: var(--on-surface-error);
+}
+.cm-host .cm-editor .usfm-caller.usfm-caller-error {
+  color: var(--on-surface-error);
+}
+.cm-host .cm-editor .usfm-caller.usfm-caller-warning {
+  color: var(--on-surface-warning);
+}
+.cm-host .cm-editor.cm-number-menus .usfm-num-v,
+.cm-host .cm-editor.cm-number-menus .usfm-slot-v {
+  cursor: pointer;
+}
+
+.cm-mode-regular .usfm-brk.usfm-verse-break {
+  height: 0.5em;
+}
+
+.cm-mode-regular .usfm-verse-sep-poetry {
+  opacity: 0.45;
 }
 
 .cm-mode-regular .usfm-inblk.usfm-p,
@@ -872,6 +1206,21 @@
 .cm-host .cm-editor .cm-lintRange.usfm-lint-slot {
   text-decoration: none;
 }
+.cm-host .cm-editor .cm-lintPoint:has(~ .usfm-slot) {
+  display: none;
+}
+/* A finding on a verse number: no fill or underline; the number itself takes the severity's colour. */
+.cm-host .cm-editor .cm-lintRange:has(> .usfm-num) {
+  background: none;
+  box-shadow: none;
+  text-decoration: none;
+}
+.cm-host .cm-editor .cm-lintRange-warning > .usfm-num {
+  color: var(--on-surface-warning);
+}
+.cm-host .cm-editor .cm-lintRange-error > .usfm-num {
+  color: var(--on-surface-error);
+}
 .cm-host .cm-editor .cm-lintRange-error {
   text-decoration-color: var(--on-surface-error);
 }
@@ -887,30 +1236,26 @@
   border-radius: 2px;
 }
 
-/* The gutter marker. The default is `content: url(<svg with a baked colour>)`;
-   restoring normal content and masking a shape lets the fill be a token. */
-.cm-host .cm-editor .cm-lint-marker {
-  content: normal;
-  width: 0.85em;
-  height: 0.85em;
-  cursor: pointer;
+/* A finding's mark at the left edge, level with its row (recipes/findingMarks):
+   colour and shape (circle, triangle, square) for scanning; a finding is acted
+   on where it is drawn. */
+.cm-host .cm-editor .cm-finding-dots {
+  pointer-events: none;
+}
+.cm-host .cm-editor .cm-finding-dot {
   mask-position: center;
   mask-repeat: no-repeat;
   mask-size: contain;
-  background-color: var(--on-surface-tertiary);
+  background-color: var(--brand-base);
+  mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect x="5" y="5" width="30" height="30" rx="6" fill="black"/></svg>');
 }
-.cm-host .cm-editor .cm-lint-marker-error {
+.cm-host .cm-editor .cm-finding-dot-error {
   background-color: var(--on-surface-error);
   mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><circle cx="20" cy="20" r="16" fill="black"/></svg>');
 }
-.cm-host .cm-editor .cm-lint-marker-warning {
+.cm-host .cm-editor .cm-finding-dot-warning {
   background-color: var(--on-surface-warning);
   mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><path d="M20 3 L38 36 L2 36 Z" fill="black"/></svg>');
-}
-.cm-host .cm-editor .cm-lint-marker-info,
-.cm-host .cm-editor .cm-lint-marker-hint {
-  background-color: var(--brand-base);
-  mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect x="5" y="5" width="30" height="30" rx="6" fill="black"/></svg>');
 }
 
 /* The lint panel (the `F8`/"open diagnostics" list at the bottom). */

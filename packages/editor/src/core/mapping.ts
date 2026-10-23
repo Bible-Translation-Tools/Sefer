@@ -1,13 +1,3 @@
-/**
- * One projection-free classification table: token or node shape → `ClassKey`.
- *
- * First match wins, rows are bucketed by token kind, and NOTHING here knows
- * about presentation. That separation is the point: `registry.ts` decides how a
- * class paints and whether it may be edited, and it can be re-decided per mode
- * without touching a single classification. A shape this table cannot rule on
- * becomes a named `unmapped` row rather than a guess.
- */
-
 import {
   Category,
   ClosingBehavior,
@@ -99,14 +89,6 @@ const MARKER_KINDS: readonly number[] = [
   TokenKind.Milestone,
 ];
 
-/**
- * The engine's `standalone` extension category, read off the marker row: a
- * milestone that takes no closer. No spec milestone is bare (`\ts`, `\qt` and
- * the rest close with `\*`), so this is exactly the template a registered
- * standalone marker resolves to — the same test onion's own walker makes. The
- * editor never names the marker; which markers are registered is the
- * application's policy (`src/app/legacyMarkers.ts`).
- */
 const standaloneRow = (idx: number): boolean => {
   const row = MARKERS[idx];
   return (
@@ -128,10 +110,8 @@ const TOKEN_ROWS: readonly Row<TokenShape>[] = [
   {
     id: "designator.unruled",
     kinds: [TokenKind.Designator],
-    verdict: unmapped(
-      "needs-ruling",
-      "\\ca \\cp \\va \\vp carry a Designator no toc row points at; and a Designator whose payload is not a number",
-    ),
+    // \ca \cp \va \vp: an alternate or published number is text a reader sees (2026-10-22).
+    verdict: cls("content"),
   },
   { id: "note.caller", kinds: [TokenKind.NoteCaller], verdict: cls("note.caller"), set: "note" },
   {
@@ -198,24 +178,25 @@ const TOKEN_ROWS: readonly Row<TokenShape>[] = [
     verdict: cls("char"),
   },
   {
+    id: "attrs.figure",
+    kinds: [TokenKind.AttrList],
+    when: (t) => t.parentMarkerKind === MarkerKind.Figure,
+    verdict: cls("chrome"),
+    set: "figure",
+  },
+  {
     id: "attrs.unruled",
     kinds: [TokenKind.AttrList],
-    verdict: unmapped("needs-ruling", "an AttrList on a Milestone or a \\periph has no class"),
+    verdict: cls("unruled"),
+    set: "unruled",
   },
   {
     id: "closer.orphan",
     kinds: [TokenKind.ClosingMarker],
     when: (t) => !t.closesNode,
-    verdict: unmapped(
-      "needs-ruling",
-      "a ClosingMarker that closes no node prints raw; a P5 leak with no row",
-    ),
+    verdict: cls("unruled"),
+    set: "unruled",
   },
-  // An unknown marker is PASSTHROUGH, like a standalone one (Will,
-  // 2026-09-25): invisible, immutable, the caret goes around it and the
-  // paragraph flows through it. The engine still reports it as a finding, and
-  // USFM mode shows it as written. A marker the project registered is not
-  // unknown: it has its category's row (a legacy \\s5 is standalone).
   {
     id: "unknown.line",
     kinds: MARKER_KINDS,
@@ -234,14 +215,30 @@ const TOKEN_ROWS: readonly Row<TokenShape>[] = [
   {
     id: "table",
     kinds: MARKER_KINDS,
-    when: (t) => t.markerKind === MarkerKind.TableRow || t.markerKind === MarkerKind.TableCell,
-    verdict: unmapped("table", "PROPERTIES §8.6 — no ownership bit"),
+    when: (t) => t.markerKind === MarkerKind.TableRow,
+    verdict: cls("chrome"),
+    set: "table",
+  },
+  {
+    id: "table.cell.marker",
+    kinds: MARKER_KINDS,
+    when: (t) => t.markerKind === MarkerKind.TableCell,
+    verdict: cls("cell"),
+    set: "cell",
   },
   {
     id: "sidebar",
     kinds: MARKER_KINDS,
-    when: (t) => t.markerKind === MarkerKind.Sidebar || t.markerKind === MarkerKind.Periph,
-    verdict: unmapped("sidebar", "PROPERTIES §8.6"),
+    when: (t) => t.markerKind === MarkerKind.Sidebar,
+    verdict: cls("chrome"),
+    set: "sidebar",
+  },
+  {
+    id: "periph.marker",
+    kinds: MARKER_KINDS,
+    when: (t) => t.markerKind === MarkerKind.Periph,
+    verdict: cls("unruled"),
+    set: "unruled",
   },
   {
     id: "chrome.char",
@@ -254,10 +251,8 @@ const TOKEN_ROWS: readonly Row<TokenShape>[] = [
     id: "char.unclosed",
     kinds: MARKER_KINDS,
     when: (t) => t.markerKind === MarkerKind.Character,
-    verdict: unmapped(
-      "needs-ruling",
-      "a wrapper that never closed; DISSOLVE is defined over a wrapper with a closer",
-    ),
+    verdict: cls("unruled"),
+    set: "unruled",
   },
   {
     id: "chrome.designator.v",
@@ -280,25 +275,39 @@ const TOKEN_ROWS: readonly Row<TokenShape>[] = [
     verdict: cls("chrome"),
   },
   {
+    id: "published.chapter",
+    kinds: MARKER_KINDS,
+    when: (t) => t.markerKind === MarkerKind.Paragraph && t.category === Category.ChapterVerse,
+    verdict: cls("unruled"),
+    set: "unruled",
+  },
+  {
     id: "chrome.block",
     kinds: MARKER_KINDS,
     when: (t) => t.markerKind === MarkerKind.Paragraph || t.markerKind === MarkerKind.Header,
     verdict: cls("chrome"),
   },
   {
+    id: "figure.closer",
+    kinds: [TokenKind.ClosingMarker],
+    when: (t) => t.markerKind === MarkerKind.Figure,
+    verdict: cls("chrome"),
+    set: "figure",
+  },
+  {
     id: "figure",
     kinds: MARKER_KINDS,
     when: (t) => t.markerKind === MarkerKind.Figure,
-    verdict: unmapped(
-      "needs-ruling",
-      "a \\fig is a Character-shaped node with no class; it renders raw today",
-    ),
+    verdict: cls("figure"),
+    set: "figure",
   },
   {
     id: "meta.marker",
     kinds: MARKER_KINDS,
     when: (t) => t.markerKind === MarkerKind.Meta,
-    verdict: unmapped("needs-ruling", "\\cat and friends carry no class today"),
+    // \cat … \cat*: a run around words, as a character marker is (2026-10-22).
+    verdict: cls("chrome"),
+    set: "char",
   },
   { id: "content.bookcode", kinds: [TokenKind.BookCode], verdict: cls("content") },
   { id: "content", kinds: [TokenKind.Text], verdict: cls("content") },
@@ -375,29 +384,23 @@ const NODE_ROWS: readonly Row<NodeShape>[] = [
   {
     id: "table.row",
     when: (n) => n.markerKind === MarkerKind.TableRow,
-    verdict: unmapped(
-      "table",
-      "PROPERTIES §8.6 — no ownership bit; the row is a block extent and paints as one",
-    ),
+    verdict: cls("table"),
+    set: "table",
     line: true,
     block: true,
   },
   {
     id: "table.cell",
     when: (n) => n.markerKind === MarkerKind.TableCell,
-    verdict: unmapped(
-      "table",
-      "PROPERTIES §8.6 — no ownership bit; a cell nests inside its row and opens no block",
-    ),
+    verdict: cls("cell"),
+    set: "cell",
     line: true,
   },
   {
     id: "sidebar",
     when: (n) => n.markerKind === MarkerKind.Sidebar,
-    verdict: unmapped(
-      "sidebar",
-      "PROPERTIES §8.6 — a container whose extent holds other block extents",
-    ),
+    verdict: cls("sidebar"),
+    set: "sidebar",
     line: true,
     block: true,
     contains: true,
@@ -471,12 +474,14 @@ const NODE_ROWS: readonly Row<NodeShape>[] = [
   {
     id: "figure",
     when: (n) => n.markerKind === MarkerKind.Figure,
-    verdict: unmapped("needs-ruling", "a \\fig node has no class; it renders raw today"),
+    verdict: cls("figure"),
+    set: "figure",
   },
   {
     id: "meta",
     when: (n) => n.markerKind === MarkerKind.Meta,
-    verdict: unmapped("needs-ruling", "\\cat and friends carry no class today"),
+    verdict: cls("char"),
+    set: "char",
   },
 ];
 
@@ -517,33 +522,39 @@ export function rowForToken(t: TokenShape): Row<TokenShape> {
   return TOKEN_FALLBACK;
 }
 
-function rowForNodeLinear(n: NodeShape): Row<NodeShape> {
-  for (const r of NODE_ROWS) if (!r.when || r.when(n)) return r;
+function rowForNodeLinear(node: NodeShape): Row<NodeShape> {
+  for (const r of NODE_ROWS) if (!r.when || r.when(node)) return r;
   return NODE_FALLBACK;
 }
 
 const NODE_ROW_MEMO = new Map<number, Row<NodeShape>>();
 
-function nodeShapeKey(n: NodeShape): number {
-  if (n.markerKind >>> 4 || n.category >>> 5 || n.ctx >>> 5 || n.close >>> 2 || n.ws >>> 3)
+function nodeShapeKey(node: NodeShape): number {
+  if (
+    node.markerKind >>> 4 ||
+    node.category >>> 5 ||
+    node.ctx >>> 5 ||
+    node.close >>> 2 ||
+    node.ws >>> 3
+  )
     return -1;
   return (
-    n.markerKind |
-    (n.category << 4) |
-    (n.ctx << 9) |
-    (n.close << 14) |
-    (n.unknown ? 1 << 16 : 0) |
-    (n.crossesLine ? 1 << 17 : 0) |
-    (n.ws << 18)
+    node.markerKind |
+    (node.category << 4) |
+    (node.ctx << 9) |
+    (node.close << 14) |
+    (node.unknown ? 1 << 16 : 0) |
+    (node.crossesLine ? 1 << 17 : 0) |
+    (node.ws << 18)
   );
 }
 
-export function rowForNode(n: NodeShape): Row<NodeShape> {
-  const key = nodeShapeKey(n);
-  if (key < 0) return rowForNodeLinear(n);
+export function rowForNode(node: NodeShape): Row<NodeShape> {
+  const key = nodeShapeKey(node);
+  if (key < 0) return rowForNodeLinear(node);
   const held = NODE_ROW_MEMO.get(key);
   if (held !== undefined) return held;
-  const row = rowForNodeLinear(n);
+  const row = rowForNodeLinear(node);
   NODE_ROW_MEMO.set(key, row);
   return row;
 }
@@ -579,12 +590,5 @@ export const containsBlocks = (row: AnyRow): boolean => row.contains === true;
 
 export const isPoetryBlock = (row: AnyRow): boolean => row.poetry === true;
 
-export const chromeEndsAtMarkerToken = (cls: ClassKey): boolean =>
-  cls === "slot.v" || cls === "slot.c";
-
-export const MARKUP_TOKEN_KINDS: ReadonlySet<number> = new Set<number>([
-  TokenKind.Marker,
-  TokenKind.ClosingMarker,
-  TokenKind.Milestone,
-  TokenKind.MilestoneTerminator,
-]);
+export const chromeEndsAtMarkerToken = (classKey: ClassKey): boolean =>
+  classKey === "slot.v" || classKey === "slot.c";

@@ -1,18 +1,3 @@
-/**
- * Where the index lives, and how the page gets a fresh one.
- *
- * Stored in the app's own storage, `/sefer/history/<root>.json` — beside the
- * project, never inside it: a file in the project folder is a file Git sees,
- * and inside `.git` it would be ours in a directory that is not. It is derived
- * data, so a missing, old-format or unreadable file costs a rebuild, never a
- * wrong answer.
- *
- * `ensureIndex` is one OPERATION in the app's observability ring,
- * `history.index.ensure`, with a span per step — load, tip, build (with the
- * worker's own timings as attributes), save — so what an open costs reads in
- * `__sefer.observability.traces` like any screen's work.
- */
-
 import git from "isomorphic-git";
 
 import type { IsomorphicFs } from "#core/fileSystem/nodeView";
@@ -21,14 +6,12 @@ import type { ObservabilityService } from "#core/observability";
 import { decodeIndex, encodeIndex, type BookIndex } from "./bookIndex";
 import type { BuildRequest, WorkerMessage } from "./indexWorker";
 
-// Its own folder: the app keeps its index (a newer format) in /sefer/history.
 const INDEX_DIR = "/sefer/history-playground";
 
 const pathOf = (root: string): string => `${INDEX_DIR}/${encodeURIComponent(root)}.json`;
 
 const encoder = new TextEncoder();
 
-/** Build or extend in the worker; resolves with what it posted. */
 const buildInWorker = (
   request: BuildRequest,
   onProgress: (seen: number) => void,
@@ -53,7 +36,6 @@ const buildInWorker = (
 
 export interface EnsuredIndex {
   readonly index: BookIndex;
-  /** What was done to get it — the answer to "why did opening take that long". */
   readonly how: "stored" | "extended" | "built";
 }
 

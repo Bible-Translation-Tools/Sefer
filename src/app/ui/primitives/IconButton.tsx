@@ -1,12 +1,3 @@
-/**
- * A button whose whole content is an icon.
- *
- * `label` is REQUIRED and is used twice: as the `aria-label`, which is the
- * button's only accessible name, and as the tooltip a sighted reader hovers
- * for. That is the point of having the primitive at all — an icon-only button
- * that forgot its name is not something a caller can build here.
- */
-
 import type { ComponentProps, JSX } from "@solidjs/web";
 import { merge, omit } from "solid-js";
 
@@ -24,29 +15,18 @@ const classes = variants({
   ].join(" "),
   variants: {
     variant: {
-      // Icons in the text colour, not a muted one: an icon button is an
-      // action, and a grey glyph reads as disabled beside black text.
       subtle:
         "border-transparent bg-transparent text-on-surface-primary hover:not-disabled:bg-button-tertiary-surface-hover",
       filled:
         "border-button-primary-surface bg-button-primary-surface text-button-primary-on-surface hover:not-disabled:bg-button-primary-surface-hover",
       outlined:
         "border-surface-border bg-surface-primary text-on-surface-primary hover:not-disabled:bg-surface-secondary",
-      // No fill at rest: the glyph is quieter and, hovered, comes up to the
-      // text colour on the card surface — the fill a verse card has — as the
-      // Spiritual terms "Show more" row does.
       quiet:
         "border-transparent bg-transparent text-on-surface-secondary hover:not-disabled:bg-surface-primary hover:not-disabled:text-on-surface-primary",
-      // The glyph alone: no fill at rest or hovered, only darker on hover —
-      // for a control set into text (the Spiritual terms gutter).
       bare: "border-transparent bg-transparent text-on-surface-secondary hover:not-disabled:text-on-surface-primary",
     },
     size: {
-      // Radius lives with the size, as in `Button`: the 56px one matches
-      // `Button size="lg"` beside it.
-      // Compact: 28px round a 16px icon.
       sm: "size-7 rounded-md [&>svg]:size-4",
-      // The default: a 48px touch target round a 20px icon, 12px radius.
       md: "size-12 rounded-lg [&>svg]:size-5",
       lg: "size-14 rounded-xl",
     },
@@ -55,7 +35,6 @@ const classes = variants({
 });
 
 export interface IconButtonProps extends ComponentProps<"button"> {
-  /** The accessible name AND the tooltip. Not optional. */
   readonly label: string;
   readonly icon: JSX.Element;
   readonly variant?: IconButtonVariant;

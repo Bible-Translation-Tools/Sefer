@@ -1,40 +1,3 @@
-/**
- * One excerpt in the multibuffer: a small piece of a book, read as the editor
- * reads it, and a way in.
- *
- * Every list of places in Sefer is a list of these — Find, Key terms,
- * Findings — and it is one compound component built from three primitives:
- * an Address (where), the clip (how much of the book this card is), and the
- * TOC (what "more" means). Anything a screen needs that those cannot express is
- * a missing primitive, not a special case here
- * (`git log -- planning/00-ideas/excerpt-compound-component.md`).
- *
- * ## The parts
- *
- *  - **Header.** The place the match is — one small title row, never the
- *    book's name set into the text, which the editor does not do either.
- *  - **Body.** The TARGET: `ExcerptReader`, the editor's reading of the range,
- *    read-only. Double-click or Edit swaps it for `ExcerptEditor`, a satellite
- *    over the same range whose edits go through the Book's funnel. Regular or
- *    USFM follows the shell, as in the editor.
- *  - **Paired resource.** Optional: another text of the same place, never
- *    editable. A parsed one (`kind: "text"`) is a reader too, locked to the
- *    target's range by Address; a frozen one (`kind: "static"`, a guide's
- *    reading) has no markup to show and no context to widen, so those two
- *    controls simply do not apply to it.
- *  - **Footer.** The context control — one TOC step up, the whole chapter,
- *    one step down — and the ACTIONS slot, which is the screen's: review
- *    progress for Key terms, a quick filter for proofreading.
- *
- * ## Width
- *
- * With room, the paired resource sits beside the target, locked to the same
- * range. Narrow, it stacks above, and collapses to the unit the match is in:
- * a whole chapter of somebody else's text above your own, stacked, is a page
- * of scrolling to reach the part you came to edit. Either default can be
- * flipped per card. The width is the CARD's (a ResizeObserver), not the
- * window's, because the same card lives in a full-width list and a side panel.
- */
 import {
   type CardMount,
   type EditorBook,
@@ -75,16 +38,6 @@ import { ExcerptReader } from "./ExcerptReader";
 
 export type { ContextStep } from "../multibuffer/cardState";
 
-/**
- * The text read beside the target.
- *
- *  - `text`: a parsed resource. Same reader, same mode, same context — locked
- *    to the target's range by Address. `hits` are ITS occurrences when the
- *    match is on this side (Find over a reference).
- *  - `static`: a frozen reading (a guide's). Shown as it was baked, with its
- *    own highlight offsets; no mode and no context, because there is no parse.
- *  - `none`: nothing to show for this place, and the words that say why.
- */
 export type Paired =
   | {
       readonly kind: "text";
@@ -102,65 +55,27 @@ export type Paired =
 
 export interface ExcerptCardProps {
   readonly excerpt: Excerpt;
-  /** Is this the one live editor? At most one excerpt is, by construction. */
   readonly editing: boolean;
   readonly onEdit: () => void;
   readonly onDone: () => void;
-  /** What this screen's cards do — marks, editing, the USFM switch, the steps, the way out. */
   readonly spec: ExcerptCardSpec;
-  /** The card's row key, for the spec's slots. */
   readonly rowKey: string;
-  /**
-   * Plain → Instantiated for this book, on demand. Editing needs the
-   * editor-backed Book, and a results list must not seat every book it lists.
-   */
   readonly seat: () => Promise<EditorBook | undefined>;
   readonly analyze: (text: string) => Analysis;
-  /** This book's seat while one is open, which the read-only view follows live. */
   readonly follow?: Following | undefined;
   readonly paired?: Paired | undefined;
-  /**
-   * The SOURCE offset of the match the find bar's cursor is on, when it is one
-   * of THIS excerpt's. That one highlight is painted stronger and the card
-   * takes a ring, so "3 of 62" names something the reader can see.
-   */
   readonly active?: number;
-  /** The shell's mode. `usfm` shows the markup; anything else, the reading. */
   readonly mode?: "regular" | "usfm";
-  /**
-   * Set while the card is held on screen for editing though the results no
-   * longer include it — the finding resolved, the term no longer matches.
-   * What to call that is the screen's ("Resolved", "No longer matches").
-   */
   readonly gone?: string | undefined;
-  /**
-   * The reader's view of this card — its USFM switch, its paired side's
-   * width — held by the screen, so it outlives the row (`cardViews.ts`).
-   */
   readonly view: CardView;
   readonly onView: (event: CardEvent) => void;
-  /**
-   * The book's OTHER results inside this card's stretch — a match in the verse
-   * before, a finding in the context. Painted like the card's own: the text
-   * says the same thing wherever the card happens to begin.
-   */
   readonly nearby?: readonly Occurrence[];
 }
 
-/**
- * The three ways a mark can read — the semantic severity surfaces, painted by
- * `editor.css`'s `.cm-excerpt-error` and its two siblings.
- */
 export type MarkTone = "error" | "warning" | "info";
 
-/** Wide enough for two texts side by side at a readable measure. */
 const SIDE_BY_SIDE = 720;
 
-/**
- * Everything the target view paints: each match (by meaning, and the current
- * one stronger), and the context either side of the own unit, dimmed — so the
- * reader sees which sentence the header names without a second reference.
- */
 const marksOf = (
   excerpt: Excerpt,
   hits: readonly Occurrence[],
@@ -172,8 +87,6 @@ const marksOf = (
   if (own.from > span.from)
     out.push({ from: span.from, to: own.from, class: "cm-excerpt-context" });
   if (span.to > own.to) out.push({ from: own.to, to: span.to, class: "cm-excerpt-context" });
-  // The own unit, marked so a card can find where it is drawn (a chapter
-  // opening keeps it in place). Unstyled.
   if (own.to > own.from) out.push({ from: own.from, to: own.to, class: "cm-excerpt-own" });
   for (const hit of hits) {
     const tone = markTone?.(hit.from, excerpt);
@@ -187,7 +100,6 @@ const marksOf = (
   return out;
 };
 
-/** A frozen reading with its baked highlights. */
 const highlighted = (
   text: string,
   spans: readonly { readonly from: number; readonly to: number }[],
@@ -217,12 +129,8 @@ export function ExcerptCard(props: ExcerptCardProps) {
   const [book, setBook] = createSignal<EditorBook | undefined>(undefined, {
     name: "excerptBook",
   });
-  // Pressed the moment the click lands, not when the route answers: opening a
-  // big book takes long enough to look like nothing happened, and the button
-  // is the only thing on screen that can say otherwise.
   const [opening, setOpening] = createSignal(false, { name: "excerptOpening" });
   const [refused, setRefused] = createSignal(false, { name: "excerptRefused" });
-  /** Where a double-click asked the caret to start. */
   const [at, setAt] = createSignal<number | undefined>(undefined, { name: "excerptCaret" });
   const [point, setPoint] = createSignal<{ x: number; y: number } | undefined>(undefined, {
     name: "excerptPoint",
@@ -231,7 +139,10 @@ export function ExcerptCard(props: ExcerptCardProps) {
     name: "excerptBody",
   });
   const [wide, setWide] = createSignal(true, { name: "excerptWide" });
-  /** The reader's: this card alone in USFM, and the paired side's width flipped. */
+  const layout = (): "single" | "side" | "stacked" => {
+    if (props.paired === undefined) return "single";
+    return wide() ? "side" : "stacked";
+  };
   const usfm = (): boolean => props.view.usfm;
   const mode = (): "regular" | "usfm" => (props.mode === "usfm" || usfm() ? "usfm" : "regular");
 
@@ -271,13 +182,11 @@ export function ExcerptCard(props: ExcerptCardProps) {
     { name: "excerptPaired" },
   );
 
-  /** Does the current match live here? Drives the card's ring. */
   const current = (): boolean =>
     props.active !== undefined && props.excerpt.hits.some((hit) => hit.from === props.active);
 
   const direct = (): boolean => props.spec.edit.kind === "direct";
   const chapterOpen = (): boolean => props.excerpt.extent.chapter === true;
-  /** The screen's matrix in the card's mode; reader, satellite and paired side share it. */
   const policy = (): EditorPolicy => props.spec.policy?.(mode()) ?? cardPolicy(mode());
 
   const edit = (caret?: number, where?: { x: number; y: number }): void => {
@@ -292,8 +201,6 @@ export function ExcerptCard(props: ExcerptCardProps) {
   };
 
   const done = (): void => {
-    // The reverse swap holds too: the editor's height until the reading has
-    // drawn in its place, then the box is free again.
     if (targetBox !== undefined) {
       setHold(targetBox.offsetHeight);
       requestAnimationFrame(() => requestAnimationFrame(() => setHold(undefined)));
@@ -303,13 +210,6 @@ export function ExcerptCard(props: ExcerptCardProps) {
     props.onDone();
   };
 
-  /**
-   * A direct card's edit is a SESSION with a way back (`CardMount.session`).
-   * Everything typed lands in the book as it is typed (that is how the editor
-   * works); the session holds the inverse of this card's own changes, so
-   * Cancel hands the book exactly that and Save only has to stop. `dirty`
-   * turns the buttons into Save changes / Cancel.
-   */
   const [dirty, setDirty] = createSignal(false, { name: "excerptDirty" });
   let editCard: CardMount | undefined;
   const save = (): void => {
@@ -338,41 +238,23 @@ export function ExcerptCard(props: ExcerptCardProps) {
     />
   );
 
-  /**
-   * The target's height, held from the click until the editor has drawn: the
-   * reading stays on screen while the book is seated, and the box keeps its
-   * size through the swap, so the card does not shrink and regrow.
-   */
   const [hold, setHold] = createSignal<number | undefined>(undefined, { name: "excerptHold" });
   let targetBox: HTMLDivElement | undefined;
   createEffect(
     () => props.editing && book() !== undefined,
     (drawn) => {
       if (!drawn) return;
-      // Two frames: one for the editor to mount, one for it to lay out.
       requestAnimationFrame(() => requestAnimationFrame(() => setHold(undefined)));
     },
   );
 
-  /**
-   * The text box's gutter (Spiritual terms): shown on an open direct card,
-   * chapter or not, with an equal empty one on the right. `doubled` once two verses of context have
-   * been added, either side or both — then each arrow doubles and opens the
-   * chapter.
-   */
   const gutter = (): boolean => direct() && spec().context.kind === "chapter" && !condensed();
-  /** Counted from where the card started (the context setting), not from its own verse. */
   const doubled = (): boolean => {
     const held = spec().context;
     const from = held.kind === "chapter" ? held.from : { up: 0, down: 0 };
     const { up, down } = props.excerpt.extent;
     return up - from.up + (down - from.down) >= 2;
   };
-  /**
-   * "Show Verse 20": the TOC unit an arrow would add — the one before what is
-   * showing, or the one after — so a bridge reads "Show Verse 3-4". Anything
-   * that is not a verse of this chapter keeps the plain label.
-   */
   const verseLabel = (side: "up" | "down"): string => {
     const all = tocUnits(tocViewOf(props.excerpt.analysis));
     const { span, own } = props.excerpt;
@@ -384,24 +266,26 @@ export function ExcerptCard(props: ExcerptCardProps) {
     const label = verse.last > verse.first ? `${verse.first}-${verse.last}` : `${verse.first}`;
     return t("Show Verse {verse}", { verse: label });
   };
+  const stepLabel = (side: "up" | "down"): string => {
+    if (chapterOpen()) return t("Show fewer verses");
+    if (doubled()) return t("Show the whole chapter");
+    return verseLabel(side);
+  };
+  const stepIcon = (side: "up" | "down") => {
+    if (chapterOpen()) return side === "up" ? <ChevronsDownIcon /> : <ChevronsUpIcon />;
+    if (doubled()) return side === "up" ? <ChevronsUpIcon /> : <ChevronsDownIcon />;
+    return side === "up" ? <ChevronUpIcon /> : <ChevronDownIcon />;
+  };
   const contextStep = (which: ContextStep): void => {
     const held = spec().context;
     if (held.kind === "chapter") held.step(props.excerpt.sid, which);
   };
 
-  /**
-   * Show more opens the whole chapter, which puts text above the verse. When
-   * the card's animation has ended, the reading is scrolled back to the verse
-   * the card is for — its Address, already resolved through the TOC to
-   * `own.from` — with the editor's own scroll-to, as the book editor lands on
-   * a verse (`BookEditor`'s reveal).
-   */
   let reveal: ((at: number) => void) | undefined;
   createEffect(
     () => chapterOpen(),
     (open) => {
       if (!open) return;
-      // Whichever is showing: the reading, or — opened mid-edit — the editor.
       const timer = setTimeout(() => {
         const at = props.excerpt.own.from;
         if (props.editing && editCard !== undefined)
@@ -412,21 +296,12 @@ export function ExcerptCard(props: ExcerptCardProps) {
     },
   );
 
-  /**
-   * A direct card's session ends on Cancel, Save changes, Escape — or a press
-   * into ANOTHER card, which is a Cancel: one session at a time, and
-   * the one being left does not keep its edits by accident (Will,
-   * 2026-10-08). A press anywhere else (the page, the sidebar, a scrollbar)
-   * leaves the session open, so nothing typed is lost to a stray click.
-   */
   createEffect(
     () => (direct() && props.editing ? targetBox : undefined),
     (element) => {
       if (element === undefined) return;
       const press = (event: PointerEvent): void => {
         if (!props.editing || !(event.target instanceof Element)) return;
-        // Anywhere in another card, not only its text: a folded card's teaser
-        // is outside its text box, and the press that opens it ends this edit.
         const card = event.target.closest("[data-sid]");
         if (card !== null && card.getAttribute("data-sid") !== props.excerpt.sid) cancel();
       };
@@ -461,8 +336,6 @@ export function ExcerptCard(props: ExcerptCardProps) {
             session={direct()}
             onEditor={(card) => {
               editCard = card;
-              // Seeded from the session, not carried over from the last one:
-              // a card closed without Save or Cancel left the flag as it was.
               setDirty(card?.session?.dirty() ?? false);
               card?.session?.onDirty(setDirty);
             }}
@@ -479,8 +352,6 @@ export function ExcerptCard(props: ExcerptCardProps) {
 
   const pairedSide = (
     <section data-paired={props.paired?.kind} aria-label={props.paired?.name} class="min-w-0">
-      {/* No box and no name: the reading sits on the card itself; the name
-          stays the section's label for a screen reader. */}
       <Show when={pairedText()}>
         {(text) => (
           <Show
@@ -519,12 +390,9 @@ export function ExcerptCard(props: ExcerptCardProps) {
   );
 
   const spec = (): ExcerptCardSpec => props.spec;
-  /** Does this screen condense cards at all (Key terms)? Then every card carries its line. */
   const condensable = (): boolean => props.spec.condensed !== undefined;
   const condensed = (): boolean => props.spec.condensed?.(props.excerpt, props.rowKey) === true;
   const status = (): JSX.Element | undefined => props.spec.status?.(props.excerpt, props.rowKey);
-  // A card condensed while it was being edited hands the edit back, so the
-  // list does not keep a seat open for a card with no editor showing.
   createEffect(
     () => condensed() && props.editing,
     (stale) => {
@@ -541,7 +409,6 @@ export function ExcerptCard(props: ExcerptCardProps) {
   };
   const notes = () => spec().notes?.(props.excerpt, props.rowKey, props.view);
 
-  /** The card's own switch to USFM, where the spec offers one. */
   const usfmAction = (): CardAction[] =>
     offerUsfm()
       ? [
@@ -570,17 +437,11 @@ export function ExcerptCard(props: ExcerptCardProps) {
         const hit = props.excerpt.hits[0];
         if (open.kind === "editor")
           open.to(props.excerpt.bookId, hit?.from ?? props.excerpt.span.from, hit?.to);
-        // The card may still be here — the same book, already focused — so
-        // the pressed state is released rather than left on.
         setTimeout(() => setOpening(false), 600);
       },
     };
   };
 
-  /**
-   * The condensed line: what the editor shows of the card's own verse, in the
-   * engine's reading (`verseTextOf`), not a projection of Sefer's own.
-   */
   const teaser = createMemo(
     () =>
       condensable()
@@ -593,7 +454,11 @@ export function ExcerptCard(props: ExcerptCardProps) {
     <div>
       {props.spec.before?.(props.excerpt, props.rowKey)}
       <CardFrame
-        data={{ "data-sid": props.excerpt.sid, "data-mode": mode() }}
+        data={{
+          "data-sid": props.excerpt.sid,
+          "data-mode": mode(),
+          "data-condensed": condensed() ? "" : undefined,
+        }}
         current={current()}
         condensed={condensed()}
         onActivate={() => props.spec.onActivate?.(props.excerpt, props.rowKey)}
@@ -601,12 +466,9 @@ export function ExcerptCard(props: ExcerptCardProps) {
         gone={props.gone}
         info={
           <>
-            {/* The status sits right after the heading, open or condensed. */}
             <Show when={status()}>{(mark) => <span class="flex shrink-0">{mark()}</span>}</Show>
             {spec().info?.(props.excerpt, props.rowKey, props.view)}
-            {/* Not when the card carries notes: findings list themselves line
-                by line under the header, and "2 matches" above them would be
-                the same count said twice in another vocabulary. */}
+
             <Show when={notes() === undefined && props.excerpt.hits.length > 1}>
               <span class="text-small text-on-surface-primary">
                 {t("{count} matches", { count: props.excerpt.hits.length })}
@@ -623,8 +485,6 @@ export function ExcerptCard(props: ExcerptCardProps) {
         open={openAction()}
         notes={notes()}
         context={
-          // Only the stepped control lives in the footer; a card with none, or
-          // with the one expand control under its target, draws no footer.
           spec().context.kind !== "steps" ? undefined : (
             <Show when={spec().context.kind === "steps" ? spec().context : undefined}>
               {(context) => (
@@ -644,21 +504,14 @@ export function ExcerptCard(props: ExcerptCardProps) {
         flush={direct()}
         actions={direct() ? undefined : spec().actions?.(props.excerpt, props.rowKey, props.view)}
       >
-        {/* Open and condensed are the SAME frame with two regions, and the
-              switch is a CSS row transition: no node is replaced, and the
-              card closing and the card opening move in the same frames. The
-              closed region is inert, so its controls leave the tab order. */}
         <div
           class={cx(collapsible, condensed() ? "grid-rows-[0fr]" : "grid-rows-[1fr]")}
           inert={condensed()}
         >
-          {/* Open, 8px of room below the content and the same pulled back:
-              inside this clip, so the primary button's drop shadow is not
-              cut off at the card's last line, and nothing below moves. */}
           <div class={cx("min-h-0 overflow-hidden", !condensed() && "-mb-2 pb-2")}>
             <div
               ref={setBody}
-              data-layout={props.paired === undefined ? "single" : wide() ? "side" : "stacked"}
+              data-layout={layout()}
               class={cx(
                 props.paired !== undefined && "grid gap-2",
                 props.paired !== undefined && !direct() && "p-2",
@@ -666,18 +519,8 @@ export function ExcerptCard(props: ExcerptCardProps) {
               )}
             >
               <Show when={props.paired !== undefined}>{pairedSide}</Show>
-              {/* The whole chapter is a long read: the target scrolls inside the
-              card past 60% of the screen, so one card cannot become the list. */}
-              {/* A direct card's target is drawn as the input it is: one outline,
-              grey at rest and the editor's own brand one while editing
-              (`editor.css`, `[data-direct-target]`). Its controls
-              sit under it, in its column, so they start at its left edge. */}
-              {/* 12px between the text box and its buttons on a direct card. */}
+
               <div class={cx("flex min-w-0 flex-col", direct() ? "gap-3" : "gap-2")}>
-                {/* Two boxes: the FRAME, which never scrolls and draws the
-                    outline, and inside it the part that scrolls once the whole
-                    chapter is showing — so the outline stays round the box
-                    rather than scrolling away with the text. */}
                 <div
                   ref={(element: HTMLDivElement) => {
                     targetBox = element;
@@ -693,52 +536,20 @@ export function ExcerptCard(props: ExcerptCardProps) {
                   )}
                 >
                   <Show when={gutter()}>
-                    {/* The gutter, 48px — one icon button, near the top and bottom corners
-                        (deliberately not on a line of text): one more verse before, one more
-                        after; once two have been added, either way, the whole
-                        chapter; and from the chapter, back (inward arrows). */}
                     <div class="flex w-12 shrink-0 flex-col justify-between py-1">
                       <IconButton
                         variant="bare"
                         data-step={chapterOpen() || doubled() ? "chapter" : "up"}
-                        label={
-                          chapterOpen()
-                            ? t("Show fewer verses")
-                            : doubled()
-                              ? t("Show the whole chapter")
-                              : verseLabel("up")
-                        }
-                        icon={
-                          chapterOpen() ? (
-                            <ChevronsDownIcon />
-                          ) : doubled() ? (
-                            <ChevronsUpIcon />
-                          ) : (
-                            <ChevronUpIcon />
-                          )
-                        }
+                        label={stepLabel("up")}
+                        icon={stepIcon("up")}
                         disabled={!chapterOpen() && !doubled() && !props.excerpt.more.up}
                         onClick={() => contextStep(chapterOpen() || doubled() ? "chapter" : "up")}
                       />
                       <IconButton
                         variant="bare"
                         data-step={chapterOpen() || doubled() ? "chapter" : "down"}
-                        label={
-                          chapterOpen()
-                            ? t("Show fewer verses")
-                            : doubled()
-                              ? t("Show the whole chapter")
-                              : verseLabel("down")
-                        }
-                        icon={
-                          chapterOpen() ? (
-                            <ChevronsUpIcon />
-                          ) : doubled() ? (
-                            <ChevronsDownIcon />
-                          ) : (
-                            <ChevronDownIcon />
-                          )
-                        }
+                        label={stepLabel("down")}
+                        icon={stepIcon("down")}
                         disabled={!chapterOpen() && !doubled() && !props.excerpt.more.down}
                         onClick={() => contextStep(chapterOpen() || doubled() ? "chapter" : "down")}
                       />
@@ -749,18 +560,12 @@ export function ExcerptCard(props: ExcerptCardProps) {
                       "min-w-0 flex-1",
                       chapterOpen() &&
                         "scrollbar-padded max-h-[var(--card-room,60vh)] overflow-y-auto",
-                      // Inside the outline (2px in, 1.5px thick) and as round,
-                      // so scrolled text is cut off at the border, not past it.
-                      // With the gutters either side, the text starts where
-                      // they end: no side margin here, no side padding inside.
                       direct() && !gutter() && "m-[3.5px] rounded-[8.5px]",
                     )}
                   >
                     {target}
                   </div>
                   <Show when={gutter()}>
-                    {/* The right gutter, as wide as the left: 48px, or 32px
-                        beside the chapter's own 16px scrollbar track. */}
                     <div
                       aria-hidden="true"
                       class={cx("shrink-0", chapterOpen() ? "w-8" : "w-12")}
@@ -769,8 +574,6 @@ export function ExcerptCard(props: ExcerptCardProps) {
                 </div>
                 <Show when={direct()}>
                   <div data-card-actions class="flex items-center gap-controls">
-                    {/* Changed while editing: the only two things to do are
-                        keep it or drop it. */}
                     <Show
                       when={props.editing && dirty()}
                       fallback={

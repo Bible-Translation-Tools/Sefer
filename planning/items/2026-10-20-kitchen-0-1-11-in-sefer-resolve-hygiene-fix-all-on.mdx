@@ -1,0 +1,148 @@
+---
+id: f85e976b-5b2a-4239-bda8-1b2a8bab1ff2
+title: "Kitchen 0.1.11 in Sefer: resolve, hygiene fix-all, onion identities, and the two place bugs"
+kind: plan
+status: idea
+created: 2026-10-20
+updated: 2026-10-21
+sha: b8c5d48
+priority: 1
+tags: [kitchen]
+related: [e988eca5-4365-4514-8687-cbbd1f034083, 6c8936de-cbb7-450c-a5cc-ae6d62d13f65, 57bf1686-0cd3-4546-bd5c-eda576c1ac5d]
+---
+
+
+Sefer is on scripture-kitchen v0.1.11 (master, 2026-10-20) but calls none of its three new doors.
+This plan wires them, and folds in the two place bugs found while driving the readability pass,
+because one of them is a resolve bug in disguise.
+
+> Actually pause, need to think since Sefer can resolve an address in scripture kitchen now. Put in same plan doc.
+> — Will, 2026-10-20
+
+## Order
+
+1. **`galley.resolve` replaces Sefer's resolvers** (it unblocks 2).
+2. **Reopening lands on the remembered chapter**, through the same door.
+3. **Findings honours `?code=` on a direct load** (independent, small; can go first).
+4. **Onion identities: Fine here and Always allow for lint findings.**
+5. **Hygiene "fix all"**, after a design ruling.
+
+<Question id="order">Is this order right? 3 is a ten-minute fix and could ship tonight on its own.</Question>
+
+## 1. One resolver: `galley.resolve`
+
+`galley.resolve(id, address, { utf16: true })` answers an address in one held text as found
+(with the span, and whether it is coarser than asked), missing, or ambiguous. Its 31 cases came
+from `locate.ts`, so the rules are ours, now pinned in the engine.
+
+Sefer resolves an address in three hand-rolled ways today:
+
+<Files id="resolvers">
+```
+~ packages/text/src/location/locate.ts -- resolve(toc, address), 418 lines; keep types + tocUnits/addressAt, drop resolve and its helpers
+~ packages/editor/src/bookEditor.ts -- revealAddress calls resolve; placeOf is a second resolver (chapter label + verse num, by hand)
+~ packages/editor/src/recipes/align.ts -- three resolve calls
+~ src/app/shell/reader.ts -- arriveAt: resolve, then showChapter + aim
+~ src/core/excerpts/excerpts.ts -- two resolve calls
+~ src/core/search/expect.ts
+~ src/app/workflows/stet.ts
+~ src/core/galley/ -- the wrapper does not expose resolve yet; add it beside analyzeText/analyzeBook
+```
+</Files>
+
+The calls hand over a `TocView`; `galley.resolve` takes the held text's id. So every caller needs
+the id of the text it means, which the editor and analysis already hold. A caller that has only a
+TOC (excerpts over a unit list?) is the one to check first.
+
+<Question id="generic" answer="Coming in the next onion release; step 1 (and 2, which rides on it) waits for that bump (Will, 2026-10-21).">Is there a form that does not need the text resident? Checked v0.1.11's
+typings (2026-10-20): no. The only export is `Galley.resolve(id, address, opts)` on a registered
+book; onion-wasm has none. A book registered without `keepText` answers a book, an intro or a
+chapter from its TOC, but refuses a verse by name (segment letters and the opening walk need the
+text). Sefer's resolvers today take a bare `TocView` (excerpts, align, search expectations), so
+either every caller goes through a registered id, or we ask kitchen for a pure
+`resolve(text_or_toc, address)` export. Leaning: ask for the pure export; the rules live in
+`onion/src/resolve.md`, so it should already exist on the Rust side.</Question>
+
+**Unblocked by v0.1.12 (on master 2026-10-21):** onion-wasm's free
+`resolve(text, address, { utf16 })` (galley re-exports it) answers over text the host holds,
+every kind including verses, with no registration; `Galley.resolveOf` does the same and
+`Galley.resolve(id)` stays for a registered book. So every caller that holds the text can drop
+`locate.ts`'s `resolve`. v0.1.12 also changes the word rule (words/1: only apostrophes,
+hyphens, the maqaf and a few others join letters into one word), which can move Sous findings.
+
+<Question id="coarser">`galley.resolve` says when a hit is coarser than asked (a bridge for verse 2,
+a whole verse for 3a). Today we silently take the coarser span. Show it ("1–2", "verse 3") in the
+location bar, or keep silent?</Question>
+
+<Tradeoff id="sync-call" chose="call the engine synchronously wherever resolve runs today" cost="a wasm call per resolve instead of a JS walk; 47× cheaper locate in 0.1.11 suggests it is fine, but measure the excerpt list and align, which resolve per card">
+The callers are synchronous (render, reveal, align). The engine call is too, so nothing changes shape.
+</Tradeoff>
+
+Test: kitchen's 31 cases are the acceptance tests; Sefer adds none (resolve is no longer ours).
+Drive: a link to a bridged verse, a segment, a missing verse, an excerpt list, the aligned columns.
+
+## 2. Reopening a project forgets the chapter
+
+Reopen lands on the remembered book but chapter 1 (John 3 → John 1). The same happens on the code
+before the readability pass.
+
+The place is remembered as `workspace.lastLocation` (`src/app/settings.ts`): book, chapter
+ordinal, and a `place` of chapter label, verse number, offset, source hash, length.
+`BookEditor` hands `place` to `editor.resume` (`packages/editor/src/bookEditor.ts`, `placeOf`):
+the caret and scroll move, but nothing tells the reader which chapter to show. `arriveAt`
+(`src/app/shell/reader.ts`) does both, `showChapter` then `aim`, for a link.
+
+**Change:** remember an `Address` (book, chapter, verse) plus the offset/hash for the
+unmoved-text fast path, and reopen through `arriveAt`: one arrival for a link, a reveal and a
+reopen, resolved by `galley.resolve`. `placeOf` goes.
+
+<Question id="place-shape">Remember the place as an `Address` (survives edits, reads as "John 3:16")
+and drop the label-matching `place`? The old shape stays readable for one release, mapped to an Address.</Question>
+
+## 3. Findings ignores `?code=` on a direct load
+
+`/project/<slug>/findings?code=sous.convention.Casing` shows every finding when loaded directly;
+following an in-app link works. `FindingsPanel` seeds the code filter in an effect
+(`src/app/ui/panels/FindingsPanel.tsx`, `search().code` → `filters.update({ codes: [code] })`);
+on a direct load the saved filter arrives after it through `settings.changes`
+(`src/app/ui/panels/findingsFilter.ts`) and the merge loses the code. Not yet confirmed which write wins.
+
+**Change:** start the filter from the search: `createFindingsFilter(services, { codes })`, so the
+code is in the first value and nothing races. Keep the effect for in-app changes of `?code=`.
+
+## 4. Onion identities for lint findings
+
+`diagnosticIdentityOf` (`v1:o`, by code and place) and `diagnosticSubjectIdentity` (`v1:os`, an
+unknown or deprecated marker or attribute) are in `sous-identity`. They give lint findings the
+same answers as Sous ([suppressions](/items/2026-10-06-project-state-and-suppressions)):
+
+- **Fine here** keyed by `v1:o`, on the card and in the editor popup.
+- **Always allow** keyed by `v1:os`, only where a subject exists (an unknown `\zqq`), behind More.
+- **Turn off** is already per-code.
+
+<Files id="onion">
+```
++ src/core/findings/onionSuppressions.ts -- .sefer/onion-suppressions.json; same shape and prune as suppressions.ts
+~ src/core/findings/finding.ts -- Finding.suppression for producer "onion"; the shown/suppressed split takes both files
+~ src/app/suppressions.ts -- one store, two files (or a second store)
+~ src/app/suppressAnswers.ts -- the answers already shared by panel and popup
+~ src/core/galley/ -- expose the two identity functions
+~ src/app/tour/tours/suppressions.ts -- one step on a lint finding
+```
+</Files>
+
+<Question id="one-file">One file per producer, as planned (`onion-suppressions.json`), or one
+`.sefer/suppressions.json` with both? The identities never collide (`v1:s` vs `v1:o`).</Question>
+
+## 5. Hygiene "fix all"
+
+`snapshot.hygieneGroups({ scope: "book" | "project" })` groups hygiene rows; a group's `.fix()`
+returns the certain deletions (fa_opv: 235,434 ZWNJs with no letter). Today each finding is fixed
+one at a time.
+
+This is Replace-all-shaped, and the ruling there was: no bulk rewrite by default, Advanced may.
+Proposed: on a hygiene group's header in Findings, "Fix all N in this book", behind Advanced,
+applied as one edit per book (one Undo), never saved until Record a version, as every edit.
+
+<Question id="fix-all-ui">Fix all: behind Advanced, per book only (project scope touches books not
+open), one Undo per book? Or preview first in the diff playground?</Question>

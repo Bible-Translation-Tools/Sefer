@@ -1,22 +1,3 @@
-/**
- * Pick several from a list: a trigger that says what is chosen, and a panel of
- * rows that toggle without closing it.
- *
- * Give it `match` and it is a combobox — a filter box sits above the rows and
- * takes focus on open, for lists too long to scan (sixty-six books, every
- * finding code). Without it, a plain checklist for a handful of rows.
- *
- * The trigger carries a summary ("2 of 5", "all") because a folded filter that
- * does not say it is filtering is how a reader comes to believe a list is
- * complete; `narrowed` paints it in brand when something is held back.
- *
- * Rows are `role="option"` in an `aria-multiselectable` listbox; arrows move
- * the highlight, Enter and Space toggle it, the same as `FilterList`.
- *
- * `single` makes it a pick-one combobox: choosing a row closes the panel, and
- * the listbox is not multiselectable (Find's source text).
- */
-
 import type { JSX } from "@solidjs/web";
 import Check from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
@@ -31,28 +12,19 @@ import { Popover } from "./Popover";
 export interface MultiSelectProps<T> {
   readonly items: readonly T[];
   readonly key: (item: T) => string;
-  /** The row's content after its check mark. */
   readonly children: (item: T) => JSX.Element;
   readonly selected: (item: T) => boolean;
   readonly onToggle: (item: T) => void;
-  /** Names the trigger and the panel. */
   readonly label: string;
   readonly summary: string;
   readonly narrowed: boolean;
-  /** Present → searchable. `query` arrives trimmed. */
   readonly match?: (item: T, query: string) => boolean;
   readonly placeholder?: string;
-  /** A "show everything again" action under the rows, while narrowed. */
   readonly clear?: { readonly label: string; readonly onClear: () => void };
-  /** Lands on the trigger as `data-filter-group`. */
   readonly id?: string;
-  /** Pick one: a choice closes the panel. */
   readonly single?: boolean;
-  /** In place of the summary chip: a control of the caller's (Refine's "Add source…"). */
   readonly trigger?: JSX.Element;
-  /** Said when there are no rows at all, before anything is typed. */
   readonly empty?: string;
-  /** Told when the panel opens, so a caller can fetch its rows then. */
   readonly onOpen?: () => void;
 }
 

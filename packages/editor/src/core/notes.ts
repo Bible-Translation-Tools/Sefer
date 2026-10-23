@@ -1,12 +1,3 @@
-/**
- * One lazy note row: caller, origin, body and markup spans of a footnote or
- * cross reference, resolved from the CST on first read.
- *
- * Notes are the one structure whose parts a reader addresses separately (the
- * caller is a widget, the body is a satellite's whole content), which is why
- * they get a row class of their own rather than a span pair.
- */
-
 import type { NodeView, NotePart } from "@sefer/text/engine/analysis";
 
 import { notePartsOf } from "./cst";

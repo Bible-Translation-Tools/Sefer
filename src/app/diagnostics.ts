@@ -1,15 +1,3 @@
-// diagnostics.ts
-//
-// The two things done with the evidence beyond the ring: writing it to disk
-// as it happens, and handing it to someone as one file. The formats and the
-// safety rules are core's (`src/core/diagnostics/`); this is where they meet
-// the services — the FileSystem, the idle scheduler, the open project.
-//
-// Writing starts when the services exist, because that is when there is a
-// FileSystem; the queue has held every event since boot. It is skipped over
-// the seeded fixture, whose FileSystem is memory: a log there would be kept
-// nowhere and cost a copy of every event.
-
 import { Effect, Option } from "effect";
 
 import { renderExport, type ProjectSnapshot } from "#core/diagnostics/export";
@@ -27,7 +15,6 @@ import { shellKeys } from "./settings";
 import { downloadBytes } from "./ui/landing/download";
 import { toasts } from "./ui/primitives";
 
-/** What writing and the header need: the services, before the log files are among them. */
 type Grounds = Pick<
   Services,
   | "composition"
@@ -40,10 +27,8 @@ type Grounds = Pick<
   | "run"
 >;
 
-/** The least time between two drains: a batch per burst of work, not per event. */
 const FLUSH_INTERVAL_MS = 2000;
 
-/** What the header says about the endpoints, and whether a preference moved them. */
 const endpointsOf = (services: Grounds): SessionHeader["endpoints"] => {
   const keys = shellKeys(services.settings);
   const resolved = resolveEndpoints(services.settings);
@@ -75,10 +60,8 @@ const sessionHeader = (services: Grounds): SessionHeader => {
 };
 
 export interface LogFiles {
-  /** Writes whatever is pending now, and resolves when it is on disk. */
   readonly flush: () => Promise<void>;
   readonly stop: () => void;
-  /** Whether the writer is running, and why it stopped if it did — for the export's header. */
   readonly status: () => {
     readonly state: "writing" | "stopped" | "off";
     readonly reason?: string;
@@ -91,17 +74,6 @@ const NO_FILES: LogFiles = {
   status: () => ({ state: "off" }),
 };
 
-/**
- * Starts writing the queue to `HostInfo.paths().logs`: prune first, then
- * drain on idle at most every `FLUSH_INTERVAL_MS`, and at once when the page
- * is hidden or closed. One write is in flight at a time, and a batch is taken
- * from the queue only when a write STARTS — so a disk that falls behind leaves
- * events in the queue, where its 5,000-event bound and its dropped count
- * apply, instead of piling taken batches up behind a promise. The first write
- * that fails stops the writer for the session and says so once, as
- * `unavailable` — a full disk or a revoked permission is the world saying no,
- * and the ring still holds the recent past.
- */
 export const startLogFiles = (services: Grounds): LogFiles => {
   if (services.storage === "fixture") return NO_FILES;
   const observability = services.composition.observability;
@@ -114,7 +86,6 @@ export const startLogFiles = (services: Grounds): LogFiles => {
   let reason: string | undefined;
   let armed = false;
   let last = 0;
-  // The write in flight, if any; `again` is a flush asked for meanwhile.
   let writing: Promise<void> = services
     .run(pruneLogs(services.fileSystem, directory, Date.now(), header))
     .then(
@@ -150,14 +121,11 @@ export const startLogFiles = (services: Grounds): LogFiles => {
     last = Date.now();
     if (busy) {
       again = true;
-      // Resolves once the write in flight, and the one this asked for, land.
       return writing.then(() => (busy ? writing : undefined));
     }
     busy = true;
     writing = write().finally(() => {
       busy = false;
-      // The queue wakes the writer only on empty → not empty, so anything
-      // left behind here would never wake it again.
       if (queue.size() > 0) wake();
     });
     return writing;
@@ -198,23 +166,12 @@ export const startLogFiles = (services: Grounds): LogFiles => {
 
 type ObservedSync = Exclude<ProjectSnapshot["sync"], typeof UNKNOWN>;
 
-/**
- * The last sync state observed for each project, by root, with when. Kept
- * here rather than read back out of the ring: the ring forgets a survey
- * within a minute of typing, and does not say which project it was about.
- */
 const observed = new Map<string, ObservedSync>();
 
-/** Every sync survey reports here as it finishes (`syncWatch`). */
 export const rememberSync = (root: string, sync: ObservedSync): void => {
   observed.set(root, sync);
 };
 
-/**
- * Where the open project stands, from local reads only. `sync` is the newest
- * `sync.survey` in the ring: the last state the app observed, never a fresh
- * fetch — an export must not wait on the network.
- */
 const snapshotOf = async (
   services: Services,
   project: Project | undefined,
@@ -267,8 +224,6 @@ const snapshotOf = async (
     open: true,
     project: project.root.slice(project.root.lastIndexOf("/") + 1),
     ...local,
-    // The shell's own rule (`shellStores.ts`): a book with no baseline was
-    // never read from disk as saved, so "dirty" there is not "unsaved".
     unsavedBooks: project.books.filter(
       (book) => Option.isSome(services.save.baseline(book)) && services.save.dirty(book),
     ).length,
@@ -277,11 +232,6 @@ const snapshotOf = async (
   };
 };
 
-/**
- * The whole export, as text: header and snapshot, the failure ring, the main
- * ring, and every part on disk (this session's too, flushed first, because
- * the disk has what the ring has already let go of).
- */
 const diagnosticsText = async (
   services: Services,
   project: Project | undefined,
@@ -309,14 +259,11 @@ const diagnosticsText = async (
             }),
           );
   const persist = services.logFiles.status();
-  // What the file lacks, in a sentence, so success does not look whole when
-  // the disk half is absent.
-  const missing =
-    read.status.state === "unavailable"
-      ? t("The log files could not be read: {reason}", { reason: read.status.reason })
-      : persist.state === "stopped"
-        ? t("Writing the log stopped this session: {reason}", { reason: persist.reason ?? "" })
-        : undefined;
+  let missing: string | undefined;
+  if (read.status.state === "unavailable")
+    missing = t("The log files could not be read: {reason}", { reason: read.status.reason });
+  else if (persist.state === "stopped")
+    missing = t("Writing the log stopped this session: {reason}", { reason: persist.reason ?? "" });
   const text = renderExport({
     header: sessionHeader(services),
     exported: Date.now(),
@@ -331,7 +278,6 @@ const diagnosticsText = async (
   return { text, missing };
 };
 
-/** `sefer-diagnostics-20260924T111500Z.jsonl`. */
 const diagnosticsFileName = (now: number): string => {
   const at = new Date(now)
     .toISOString()
@@ -342,13 +288,6 @@ const diagnosticsFileName = (now: number): string => {
 
 const JSONL_FILTERS = [{ name: "JSON Lines", extensions: ["jsonl"] }] as const;
 
-/**
- * Settings → Advanced → "Export diagnostics": the file, handed over.
- *
- * The same two endings as saving a project copy: a named file on a host with
- * real disk, a download in a browser. One `diagnostics.export` operation
- * records that it happened and how big it was — never what was in it.
- */
 export const exportDiagnostics = async (
   services: Services,
   project: Project | undefined,

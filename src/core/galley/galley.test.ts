@@ -1,13 +1,3 @@
-/**
- * The one test this module gets: does the real wasm artifact load, parse a real
- * book, and publish a real corpus snapshot?
- *
- * This is the riskiest seam in the app — a pinned wasm binary, two generated
- * readers, and a wire handshake — and every one of those failures is silent or
- * catastrophic rather than gradual. Everything else about Galley is a pure
- * function over the value this proves we can get.
- */
-
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -29,7 +19,6 @@ const fixture = (name: string): string =>
 
 const PHILEMON = fixture("58-PHM.usfm");
 
-/** One built engine, reused: `Effect.provide` shares a layer across calls. */
 const withGalley = <A>(use: (galley: GalleyService) => A): Promise<A> =>
   Effect.runPromise(Effect.provide(Galley.useSync(use), NodeGalleyLive));
 
@@ -42,7 +31,7 @@ describe("Galley", () => {
   });
 
   it("analyzes a real book into a dish that describes exactly that text", async () => {
-    const analysis = await withGalley((galley) => galley.analyze(PHILEMON));
+    const analysis = await withGalley((galley) => galley.analyzeText(PHILEMON));
     expect(analysis.dish.tokens.length).toBeGreaterThan(0);
     expect(analysis.docLen).toBe(PHILEMON.length);
     expect(describesExactly(analysis, PHILEMON)).toBe(true);
@@ -51,7 +40,7 @@ describe("Galley", () => {
 
   it("agrees with itself across two analyses of one text", async () => {
     const [first, second] = await withGalley(
-      (galley) => [galley.analyze(PHILEMON), galley.analyze(PHILEMON)] as const,
+      (galley) => [galley.analyzeText(PHILEMON), galley.analyzeText(PHILEMON)] as const,
     );
     expect(sameSource(first, second)).toBe(true);
     expect(second.revision).toBeGreaterThan(first.revision);
@@ -68,7 +57,7 @@ describe("Galley", () => {
   it("refuses text that is not canonical LF", async () => {
     const thrown = await withGalley((galley) => {
       try {
-        galley.analyze("\\id PHM\r\n");
+        galley.analyzeText("\\id PHM\r\n");
         return null;
       } catch (cause) {
         return cause;

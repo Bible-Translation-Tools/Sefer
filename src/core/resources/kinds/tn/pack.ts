@@ -1,25 +1,3 @@
-/**
- * The derived store for Translation Notes: one JSON file per book, rebuilt
- * from upstream's files and stamped — the notes' counterpart of the engine's
- * table of contents for USFM.
- *
- * Three things stay apart (plan §5, "The 27k-file wrinkle"):
- *
- *  - the ON-DISK LAYOUT is upstream's — chapter directories of chunk files —
- *    and is never reshaped, so git, export and a pull keep working;
- *  - the PACK is an index of it at `<root>/.sefer/packs/tn/<BOOK>.json`
- *    (`.sefer/` is already in a clone's git exclude, `remote/clone.ts`);
- *  - a pull or an edit moves the book's files, the stamp no longer matches,
- *    and that book's pack is rebuilt the next time it is read.
- *
- * Two kinds of root. One holding the raw tree (desktop's clone, a picked
- * folder) checks each pack against a fingerprint of the book's directory
- * listing. One holding only packs — the Web, where writing 29,300 files to
- * OPFS took 22.6 s against 0.14 s for 73 packs (`storage.md`, "The OPFS
- * tax") — treats the packs as the resource: they were built in memory from
- * the tree at import (`packHelp`) and the tree was never written.
- */
-
 import { decode } from "@sefer/text/source";
 import { Effect, FileSystem, Result, Schema } from "effect";
 
@@ -30,7 +8,6 @@ import { Unavailable } from "../handle";
 import { filesBelow, treeInFolder, type PackProgress, type UpstreamTree } from "../tree";
 import { readHelpBook, type BookFile } from "./rcHelpMarkdown";
 
-/** Bumped when the pack's shape or the reader's output changes: an older pack is rebuilt. */
 const PACK_VERSION = 1;
 
 const PACK_DIR = ".sefer/packs/tn";
@@ -47,9 +24,7 @@ const SpanSchema = Schema.Union([
 ]);
 
 const StampSchema = Schema.Union([
-  /** Built from a raw tree that is still there: valid while its listing is unchanged. */
   Schema.Struct({ kind: Schema.Literal("tree"), fingerprint: Schema.String }),
-  /** Built at import from a tree that was not kept: the pack IS the resource. */
   Schema.Struct({
     kind: Schema.Literal("import"),
     at: Schema.String,
@@ -60,7 +35,6 @@ const StampSchema = Schema.Union([
 const PackSchema = Schema.Struct({
   format: Schema.Literal("sefer.tn.pack"),
   version: Schema.Literal(PACK_VERSION),
-  /** Upper-case book id: `GEN`. */
   book: Schema.String,
   stamp: StampSchema,
   notes: Schema.Array(
@@ -72,7 +46,6 @@ const PackSchema = Schema.Struct({
       body: Schema.String,
     }),
   ),
-  /** What the reader did not make notes of, and why. */
   skipped: Schema.Array(Schema.String),
 });
 
@@ -81,7 +54,6 @@ type Stamp = typeof StampSchema.Type;
 
 const decodePack = Schema.decodeUnknownResult(PackSchema);
 
-/** One book of the manifest: its id and where its directory is, relative to the root. */
 export interface HelpBook {
   readonly book: string;
   readonly path: string;
@@ -93,7 +65,6 @@ const unavailable = (reason: Unavailable["reason"], description: string): Unavai
 const packPath = (root: string, book: string): string =>
   joinPath(root, `${PACK_DIR}/${book.toUpperCase()}.json`);
 
-/** The books a help's manifest declares. A path that leaves the root is refused, never followed. */
 const booksIn = (text: string): Result.Result<readonly HelpBook[], Unavailable> => {
   const manifest = readResourceContainerManifest(text);
   if (Result.isFailure(manifest))
@@ -122,21 +93,14 @@ const manifestOf = (tree: UpstreamTree): Effect.Effect<readonly HelpBook[], Unav
     return Result.isSuccess(books) ? books.success : yield* Effect.fail(books.failure);
   });
 
-/** The books a help on a `FileSystem` declares, from its `manifest.yaml`'s `projects[]`. */
 export const helpBooks = (
   fileSystem: FileSystem.FileSystem,
   root: string,
 ): Effect.Effect<readonly HelpBook[], Unavailable> => manifestOf(treeInFolder(fileSystem, root));
 
-/**
- * A book directory's LISTING, folded to one string: each file's path, size
- * and modification time. Not a content hash — Sefer keeps none in core — but
- * enough to see that a pull or an edit moved the book.
- */
 const fingerprint = (
   files: readonly { readonly path: string; readonly size: number; readonly mtime: number }[],
 ): string => {
-  // FNV-1a, 32 bits: a change detector over a few kilobytes of listing.
   let hash = 0x811c9dc5;
   for (const file of files) {
     const line = `${file.path}\u0000${file.size}\u0000${file.mtime}\n`;
@@ -148,7 +112,6 @@ const fingerprint = (
   return `${files.length}:${hash.toString(16)}`;
 };
 
-/** Reads one book's files and runs the reader over them. */
 const buildPack = (
   tree: UpstreamTree,
   help: HelpBook,
@@ -184,11 +147,6 @@ const buildPack = (
     return pack;
   });
 
-/**
- * One book's pack, `absent` when there is none, or `undecodable` when the
- * file is there and is not a pack this build reads: corrupt, or written by a
- * build with another `PACK_VERSION`.
- */
 const readPack = (
   fileSystem: FileSystem.FileSystem,
   root: string,
@@ -206,13 +164,6 @@ const readPack = (
     return Result.isSuccess(decoded) ? decoded.success : "undecodable";
   });
 
-/**
- * That a pack just written is on disk whole: its bytes read back, parse, and
- * name the same book and the same number of notes. Not the full schema
- * decode every later read makes — that was most of a pack step's time
- * (2.4 s of en_tn's, 2026-10-12) for data this module had just encoded from
- * typed values.
- */
 const readsBack = (
   fileSystem: FileSystem.FileSystem,
   root: string,
@@ -254,14 +205,6 @@ const writePack = (
     (error) => unavailable("Unreadable", `${pack.book} pack: ${error.message}`),
   );
 
-/**
- * One book's notes, from its pack — rebuilt first when the book's raw tree is
- * there and has moved since the pack was made. With no raw tree the pack is
- * the resource; with neither, the book is `Missing`.
- *
- * A pack that cannot be written back (a read-only folder) is still answered
- * from memory: the index is a convenience, never a reason to fail a read.
- */
 export const bookPack = (
   fileSystem: FileSystem.FileSystem,
   root: string,
@@ -273,9 +216,6 @@ export const bookPack = (
     const read = yield* readPack(fileSystem, root, help.book);
     if (!raw) {
       if (typeof read === "object") return read;
-      // The packs are the resource here, so one this build cannot read is
-      // not "no notes": it is a copy to download again (every pack, after a
-      // `PACK_VERSION` change).
       if (read === "undecodable")
         return yield* Effect.fail(
           unavailable(
@@ -299,14 +239,6 @@ export const bookPack = (
     return built;
   });
 
-/**
- * Every book's pack, built in place beside a raw tree that is kept (desktop's
- * clone), so the first read of a book, or the first search over a Bible, is
- * not the moment it is built: that was 66 books packed one by one while Find
- * said "0 results" (about seven minutes for the Bisa Bible's first search of
- * the notes, display awake, 2026-10-13). A book already packed and unchanged
- * costs one listing. Returns how many books and notes are packed.
- */
 export const indexHelp = (
   fileSystem: FileSystem.FileSystem,
   root: string,
@@ -317,8 +249,6 @@ export const indexHelp = (
     let notes = 0;
     for (const [done, help] of books.entries()) {
       onBook?.({ done, of: books.length, book: help.book });
-      // A book the manifest lists and the tree lacks answers `Missing` on
-      // read, as it would have; it is no reason to stop indexing the rest.
       const pack = yield* Effect.option(bookPack(fileSystem, root, help));
       if (pack._tag === "Some") notes += pack.value.notes.length;
     }
@@ -326,17 +256,8 @@ export const indexHelp = (
     return { books: books.length, notes };
   });
 
-/** The small files a packed root keeps beside its packs: what it is, and its licence. */
 const KEPT = ["manifest.yaml", "LICENSE.md", "README.md", "media.yaml"] as const;
 
-/**
- * A raw help tree, packed into a root that will hold ONLY packs: the Web's
- * import, from a clone's objects (`treeOfCommit`) or a staged folder
- * (`treeInFolder`) to OPFS. Every book is built from `from` and written to
- * `to`, each written pack is read back and must decode, and the manifest and
- * licence are copied — 29,300 files in, about seventy out. On any failure
- * `to.root` is removed: nothing half-packed is ever left to be registered.
- */
 export const packHelp = (
   from: UpstreamTree,
   to: { readonly fileSystem: FileSystem.FileSystem; readonly root: string },
@@ -371,8 +292,6 @@ export const packHelp = (
           Effect.gen(function* () {
             onBook?.({ done, of: books.length, book: help.book });
             const files = yield* from.below(help.path);
-            // A manifest may list a book its tree does not hold; the pack
-            // simply is not there, and that book answers `Missing`.
             if (files.length === 0) return 0;
             const pack = yield* buildPack(from, help, stamp, files);
             yield* writePack(to.fileSystem, to.root, pack);

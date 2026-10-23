@@ -1,34 +1,3 @@
-/**
- * The workspace toolbar: what you are looking at, how it is projected, and the
- * handful of things you do to it without leaving it.
- *
- * Every action is a `runCommand` — the toolbar is one of the three callers
- * every command in `src/app/commands.ts` is required to have, alongside the
- * keystroke and the palette, and it holds no logic of its own.
- *
- * The kebab's items are NOT gated on `findCommand(id)`. `runCommand` already
- * answers for an id it does not hold — an unknown command, or one whose
- * `when()` refuses, is a documented no-op — so the menu names the intention
- * and the registry decides whether it happens. That matters while the
- * registry is being filled in by other work: a menu that hid or disabled
- * every id it could not yet see would be the toolbar guessing at the
- * registry's answer instead of asking for it. The one exception is Save,
- * whose `can()` is a real "there is nothing to save right now".
- *
- * The mode control has two segments. Form is not a projection — it is a
- * data-entry SURFACE beside the editor, so it gets a route and not a segment;
- * Key terms is a NAVIGATION dressed as a mode, because that is what the mockup
- * shows and what the reader means — the same corpus seen as a term list, on
- * `/terms`.
- *
- * The one piece of state the toolbar holds is whether a SOURCE is bound, and
- * it holds it because the answer is an Effect and a `disabled` attribute is
- * not. `library.resolve` is asked once per project, and again on a shell tick
- * so that binding a source in the reference column lights the button up
- * without a reload. The command itself re-resolves and reports when there is
- * none: the signal decides what the button LOOKS like, never what happens.
- */
-
 import { useNavigate } from "@tanstack/solid-router";
 import ArrowLeftRight from "lucide-solid/icons/arrow-left-right";
 import Bell from "lucide-solid/icons/bell";
@@ -46,7 +15,176 @@ import { bookName } from "./books";
 import { PanelToggle } from "./PanelToggle";
 import { metadataOf, projectName } from "./project";
 
-/** The two segments, as literal strings so Tailwind and the reader agree. */
+const can = (id: string): boolean => findCommand(id)?.available() === true;
+
+const kebabItem =
+  "flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-lg px-3 text-start text-small text-on-surface-primary transition-colors hover:bg-surface-secondary disabled:cursor-not-allowed disabled:text-on-surface-tertiary disabled:hover:bg-transparent [&>svg]:size-5";
+
+function toolbarTitle(shell: ReturnType<typeof useShell>): string {
+  const book = shell.focused();
+  if (book === undefined) return "";
+  const project = shell.project();
+  const clipped = shell.chapter();
+  const label = clipped === null ? undefined : book.structure().chapters[clipped]?.label;
+  const named = bookName(book.id, metadataOf(project));
+  const of = projectName(project);
+  if (clipped === null) return t("{book} ({project})", { book: named, project: of });
+  const where = label === undefined || label === "" ? t("front") : label;
+  return t("{book} {where} ({project})", { book: named, where, project: of });
+}
+
+function ToolbarSearch(props: { query: string; onQuery: (value: string) => void }) {
+  const navigate = useNavigate();
+  const shell = useShell();
+  return (
+    <Input
+      type="search"
+      data-testid="toolbar-search"
+      wrapperClass="w-44"
+      icon={<SearchIcon />}
+      aria-label={t("Find in project")}
+      placeholder={t("Search…")}
+      value={props.query}
+      onInput={(event) => props.onQuery(event.currentTarget.value)}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        void navigate({
+          to: "/project/$slug/find",
+          params: { slug: shell.slug() },
+          search: { q: props.query },
+        });
+      }}
+    />
+  );
+}
+
+function KebabItem(props: {
+  testId: string;
+  label: string;
+  disabled?: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      data-testid={props.testId}
+      type="button"
+      class={kebabItem}
+      disabled={props.disabled}
+      onClick={() => props.onSelect()}
+    >
+      {props.label}
+    </button>
+  );
+}
+
+function KebabMenu(props: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const navigate = useNavigate();
+  const shell = useShell();
+  return (
+    <Popover
+      label={t("Book actions")}
+      side="bottom"
+      align="end"
+      class="w-64 p-1"
+      open={props.open}
+      onOpenChange={props.onOpenChange}
+      trigger={<IconButton data-testid="toolbar-kebab" label={t("More")} icon={<MoreVertical />} />}
+    >
+      <KebabItem
+        testId="kebab-save-review"
+        label={t("Save & Review")}
+        disabled={!can("book.save")}
+        onSelect={() => {
+          props.onOpenChange(false);
+          runCommand("book.save");
+        }}
+      />
+      <KebabItem
+        testId="kebab-inventory"
+        label={t("Character inventory")}
+        onSelect={() => {
+          props.onOpenChange(false);
+          void navigate({
+            to: "/project/$slug/inventory",
+            params: { slug: shell.slug() },
+            search: {},
+          });
+        }}
+      />
+
+      <span aria-hidden="true" class="my-1 block h-px bg-surface-border" />
+
+      <KebabItem
+        testId="kebab-format-book"
+        label={t("Format book")}
+        onSelect={() => {
+          props.onOpenChange(false);
+          runCommand("format.book");
+        }}
+      />
+      <KebabItem
+        testId="kebab-format-project"
+        label={t("Format project")}
+        onSelect={() => {
+          props.onOpenChange(false);
+          runCommand("format.project");
+        }}
+      />
+
+      <span aria-hidden="true" class="my-1 block h-px bg-surface-border" />
+
+      <KebabItem
+        testId="kebab-export-zip"
+        label={t("Export as zip")}
+        onSelect={() => {
+          props.onOpenChange(false);
+          runCommand("project.export");
+        }}
+      />
+      <KebabItem
+        testId="kebab-rename-project"
+        label={t("Rename project")}
+        onSelect={() => {
+          props.onOpenChange(false);
+          runCommand("project.rename");
+        }}
+      />
+    </Popover>
+  );
+}
+
+function FindingsBell() {
+  const navigate = useNavigate();
+  const shell = useShell();
+  const findings = () => shell.findingCounts();
+  const attention = () => findings().errors + findings().warnings;
+  return (
+    <span class="relative inline-flex">
+      <IconButton
+        data-testid="toolbar-findings"
+        label={t("Findings")}
+        icon={<Bell />}
+        onClick={() =>
+          void navigate({
+            to: "/project/$slug/findings",
+            params: { slug: shell.slug() },
+            search: {},
+          })
+        }
+      />
+      <Show when={attention() > 0}>
+        <span
+          aria-hidden="true"
+          data-findings={attention()}
+          class="pointer-events-none absolute -end-1 -top-1 min-w-4 rounded-full bg-on-surface-error px-1 text-center text-smallest leading-4 font-semibold text-surface-error"
+        >
+          {attention() > 99 ? "99+" : attention()}
+        </span>
+      </Show>
+    </span>
+  );
+}
 
 export function Toolbar(props: {
   /**
@@ -60,62 +198,12 @@ export function Toolbar(props: {
    */
   readonly panelToggle?: boolean;
 }) {
-  const navigate = useNavigate();
   const [query, setQuery] = createSignal("", { name: "toolbarQuery" });
   const [menuOpen, setMenuOpen] = createSignal(false, { name: "toolbarMenu" });
   const shell = useShell();
 
-  /**
-   * "Mark 5 (Shila)" — book, where in it, project.
-   *
-   * The clip is an INDEX into the engine's chapter table, whose first row is
-   * the front matter and carries no label. So an empty label is named rather
-   * than printed as a blank: it is a place the reader can actually be.
-   */
-  const title = (): string => {
-    const book = shell.focused();
-    if (book === undefined) return "";
-    const project = shell.project();
-    const clipped = shell.chapter();
-    const label = clipped === null ? undefined : book.structure().chapters[clipped]?.label;
-    const named = bookName(book.id, metadataOf(project));
-    const of = projectName(project);
-    // A whole book is the ordinary case, so it says nothing: "Philemon
-    // (small-nt)". A clip names where you are — "Philemon 1 (small-nt)" — and
-    // an empty label is the front matter, which is a place, not a blank.
-    if (clipped === null) return t("{book} ({project})", { book: named, project: of });
-    const where = label === undefined || label === "" ? t("front") : label;
-    return t("{book} {where} ({project})", { book: named, where, project: of });
-  };
+  const title = () => toolbarTitle(shell);
 
-  const findings = () => shell.findingCounts();
-  const attention = () => findings().errors + findings().warnings;
-
-  /**
-   * Is this command possible right now?
-   *
-   * No change counter, and no store either: the predicate IS the dependency
-   * declaration. Every `when()` these buttons ask reads signals — the
-   * focused book, the open project, and the undo/redo depth the `books` store
-   * carries — so calling `available()` inside JSX subscribes to exactly what
-   * that command depends on and nothing else.
-   *
-   * Undo's input is the one that is not naturally reactive: CodeMirror's
-   * history knows its depth and publishes to nobody. So the depth lives on the
-   * book's row, written on the same receipt that already fans out, and the
-   * predicate stays honest.
-   */
-  const can = (id: string): boolean => findCommand(id)?.available() === true;
-
-  /**
-   * Is there a source text to match formatting FROM?
-   *
-   * Re-asked when the project or the book changes. The shell has no signal for
-   * a BINDING — the reference column raises its own local one — so binding a
-   * source while the same book is open does not light this up until the next
-   * book change. The command re-resolves and reports either way, so the gap
-   * costs a hidden button and never a wrong answer.
-   */
   const [hasSource, setHasSource] = createSignal(false, { name: "toolbarHasSource" });
   createEffect(
     () => ({ project: shell.project()?.root, book: shell.focused()?.id }),
@@ -132,14 +220,8 @@ export function Toolbar(props: {
     },
   );
 
-  const item =
-    // md: 48px rows, 12px padding and radius, 14px, 20px icons.
-    "flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-lg px-3 text-start text-small text-on-surface-primary transition-colors hover:bg-surface-secondary disabled:cursor-not-allowed disabled:text-on-surface-tertiary disabled:hover:bg-transparent [&>svg]:size-5";
-
   return (
     <div class="flex flex-wrap items-center gap-3" data-testid="toolbar">
-      {/* The project panel's show/hide, then the title: the toggle sits on
-          the side nearest the panel it opens and closes. */}
       <div class="flex min-w-0 shrink items-center gap-2">
         <Show when={props.panelToggle !== false}>
           <PanelToggle />
@@ -161,25 +243,7 @@ export function Toolbar(props: {
             onChange={(on) => shell.setMode(on ? "usfm" : "default")}
           />
         </Show>
-        <Input
-          type="search"
-          data-testid="toolbar-search"
-          wrapperClass="w-44"
-          icon={<SearchIcon />}
-          aria-label={t("Find in project")}
-          placeholder={t("Search…")}
-          value={query()}
-          onInput={(event) => setQuery(event.currentTarget.value)}
-          onKeyDown={(event) => {
-            if (event.key !== "Enter") return;
-            event.preventDefault();
-            void navigate({
-              to: "/project/$slug/find",
-              params: { slug: shell.slug() },
-              search: { q: query() },
-            });
-          }}
-        />
+        <ToolbarSearch query={query()} onQuery={setQuery} />
 
         <IconButton
           data-testid="toolbar-undo"
@@ -196,10 +260,6 @@ export function Toolbar(props: {
           onClick={() => runCommand("book.redo")}
         />
 
-        {/* Match formatting. Shown only when a source is bound, because a
-            button that is always there and never works teaches people to stop
-            looking at it. It writes straight to the open book — Undo is the
-            preview, and it is one step. */}
         <Show when={hasSource()}>
           <IconButton
             data-testid="toolbar-overlay"
@@ -210,127 +270,9 @@ export function Toolbar(props: {
           />
         </Show>
 
-        <span class="relative inline-flex">
-          <IconButton
-            data-testid="toolbar-findings"
-            label={t("Findings")}
-            icon={<Bell />}
-            onClick={() =>
-              void navigate({
-                to: "/project/$slug/findings",
-                params: { slug: shell.slug() },
-                search: {},
-              })
-            }
-          />
-          <Show when={attention() > 0}>
-            <span
-              aria-hidden="true"
-              data-findings={attention()}
-              class="pointer-events-none absolute -end-1 -top-1 min-w-4 rounded-full bg-on-surface-error px-1 text-center text-smallest leading-4 font-semibold text-surface-error"
-            >
-              {attention() > 99 ? "99+" : attention()}
-            </span>
-          </Show>
-        </span>
+        <FindingsBell />
 
-        <Popover
-          label={t("Book actions")}
-          side="bottom"
-          align="end"
-          class="w-64 p-1"
-          open={menuOpen()}
-          onOpenChange={setMenuOpen}
-          trigger={
-            <IconButton data-testid="toolbar-kebab" label={t("More")} icon={<MoreVertical />} />
-          }
-        >
-          <button
-            data-testid="kebab-save-review"
-            type="button"
-            class={item}
-            disabled={!can("book.save")}
-            onClick={() => {
-              setMenuOpen(false);
-              // The one way to save: it opens Review, where the files are
-              // written and the version kept together.
-              runCommand("book.save");
-            }}
-          >
-            {t("Save & Review")}
-          </button>
-          <button
-            data-testid="kebab-inventory"
-            type="button"
-            class={item}
-            onClick={() => {
-              setMenuOpen(false);
-              void navigate({
-                to: "/project/$slug/inventory",
-                params: { slug: shell.slug() },
-                search: {},
-              });
-            }}
-          >
-            {t("Character inventory")}
-          </button>
-
-          <span aria-hidden="true" class="my-1 block h-px bg-surface-border" />
-
-          {/* Format, for a book or the whole project: the engine's formatter.
-              Matching formatting from a source is the toolbar's Match
-              formatting button (the Overlay), not this. */}
-          <button
-            data-testid="kebab-format-book"
-            type="button"
-            class={item}
-            onClick={() => {
-              setMenuOpen(false);
-              runCommand("format.book");
-            }}
-          >
-            {t("Format book")}
-          </button>
-          <button
-            data-testid="kebab-format-project"
-            type="button"
-            class={item}
-            onClick={() => {
-              setMenuOpen(false);
-              runCommand("format.project");
-            }}
-          >
-            {t("Format project")}
-          </button>
-
-          <span aria-hidden="true" class="my-1 block h-px bg-surface-border" />
-
-          {/* Project-wide, and here rather than on `/project/$id` because the
-              editor is where someone is when they decide to hand the work on
-              or rename it. */}
-          <button
-            data-testid="kebab-export-zip"
-            type="button"
-            class={item}
-            onClick={() => {
-              setMenuOpen(false);
-              runCommand("project.export");
-            }}
-          >
-            {t("Export as zip")}
-          </button>
-          <button
-            data-testid="kebab-rename-project"
-            type="button"
-            class={item}
-            onClick={() => {
-              setMenuOpen(false);
-              runCommand("project.rename");
-            }}
-          >
-            {t("Rename project")}
-          </button>
-        </Popover>
+        <KebabMenu open={menuOpen()} onOpenChange={setMenuOpen} />
       </Card>
     </div>
   );

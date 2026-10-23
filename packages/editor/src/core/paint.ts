@@ -1,14 +1,3 @@
-/**
- * The positional paint index: `hidden(from, to)`, `draws(pos)`, `joined(pos)`,
- * `joinOver(pos)`, `atomic(line)`.
- *
- * A plan says what each row draws; this answers the same questions BY POSITION,
- * which is what the caret, the deletion rules and the linter actually ask. Built
- * over one structure and plan, cached per state (`paintAt`), and deliberately
- * independent of the decoration set — a rule that consulted the decorations
- * would be reading the screen instead of the model.
- */
-
 import { lineIndexAt, type DocStructure } from "./docStructure";
 import type { DocPlan, PlanSpan } from "./plan";
 
@@ -25,14 +14,14 @@ export interface PaintIndex {
 
 type Gather = (out: number[], from: number, t: number) => void;
 
-export function paintOver(s: DocStructure, plan: DocPlan): PaintIndex {
-  if (plan.revision !== s.revision)
-    throw new Error(`stale plan: revision ${plan.revision} over a fold at ${s.revision}`);
-  const lines = s.lines;
-  const blocks = s.blocks;
-  const verses = s.verses;
+export function paintOver(structure: DocStructure, plan: DocPlan): PaintIndex {
+  if (plan.revision !== structure.revision)
+    throw new Error(`stale plan: revision ${plan.revision} over a fold at ${structure.revision}`);
+  const lines = structure.lines;
+  const blocks = structure.blocks;
+  const verses = structure.verses;
 
-  const lineAt = (pos: number): number => lineIndexAt(s, pos);
+  const lineAt = (pos: number): number => lineIndexAt(structure, pos);
 
   const emit = (out: number[], a: number, b: number, from: number, t: number) => {
     if (b > a && b > from && a < t) out.push(a, b);
@@ -74,19 +63,14 @@ export function paintOver(s: DocStructure, plan: DocPlan): PaintIndex {
 
   const NONE: readonly { from: number; to: number }[] = [];
   const heads = overLines((n) => plan.line(n).hidden);
-  // What a line hides that is not its opener's chrome: a standalone marker
-  // that opens it, and any point mark (milestone, optional break, standalone)
-  // the assignment does not draw.
   const marks = overLines((n) => {
-    const rl = plan.line(n);
-    const c = rl.standalone;
+    const resolvedLine = plan.line(n);
+    const c = resolvedLine.standalone;
     const own = c && c.form === "hidden" ? [c] : NONE;
-    const hiddenMarks = rl.marks.filter((m) => m.form === "hidden");
+    const hiddenMarks = resolvedLine.marks.filter((m) => m.form === "hidden");
     return hiddenMarks.length ? [...own, ...hiddenMarks] : own;
   });
 
-  // Triples: a join's newline `from, to`, and where the lines it holds end —
-  // the hide span `closeGap` pushes right after it, or the join's own end.
   const joinMemo: (number[] | null)[] = Array.from({ length: blocks.length }, () => null);
   const blockJoins = (i: number): number[] => {
     let g = joinMemo[i];
@@ -118,9 +102,10 @@ export function paintOver(s: DocStructure, plan: DocPlan): PaintIndex {
     let g = blockMemo[i];
     if (g) return g;
     g = [];
-    const rb = plan.block(i);
-    for (const r of rb.reflow) if (r.kind === "hide") g.push(r.from, r.to);
-    if (rb.headHidden) g.push(rb.headHidden.from, rb.headHidden.to);
+    const resolvedBlock = plan.block(i);
+    for (const r of resolvedBlock.reflow) if (r.kind === "hide") g.push(r.from, r.to);
+    if (resolvedBlock.headHidden)
+      g.push(resolvedBlock.headHidden.from, resolvedBlock.headHidden.to);
     blockMemo[i] = g;
     return g;
   };
@@ -154,8 +139,8 @@ export function paintOver(s: DocStructure, plan: DocPlan): PaintIndex {
 
   const blockGroup: Gather = (out, qf, qt) => {
     if (!blocks.length) return;
-    const r = reachOf();
-    for (let i = lastBlockOnLineOf(qt); i >= 0 && r[i] > qf; i--) {
+    const reach = reachOf();
+    for (let i = lastBlockOnLineOf(qt); i >= 0 && reach[i] > qf; i--) {
       const g = blockHides(i);
       for (let k = 0; k < g.length; k += 2) emit(out, g[k], g[k + 1], qf, qt);
     }

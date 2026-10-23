@@ -1,24 +1,3 @@
-/**
- * What the landing screen needs to know about a project root without opening it.
- *
- * Opening a project parses every book, seats it in the editor and attaches an
- * analysis. A list of projects must not do that once per row, so this reads the
- * two cheap things instead: the Burrito metadata (a name and a language) and a
- * directory listing (a book count). Both degrade — a folder with no
- * `metadata.json` is still a project, it is just one whose name is its folder.
- *
- * Those two cheap things are still two reads per project per visit, which is
- * why the answers are written down: `src/core/project/projectIndex.ts` holds
- * one row per project and `listProjects` below reads THAT, calling `summarize`
- * only for a folder the index has never heard of. The index is the list; this
- * file is how a row is first learned and how the fixture — which is in memory
- * and belongs in no index — joins it.
- *
- * `lastOpened` is the one field the filesystem cannot answer. It lives in the
- * index, written as a project is opened, and falls back to the
- * `shell.recentProjects` preference for a row written before this build.
- */
-
 import { Effect, FileSystem, Option, Result } from "effect";
 import { createSignal } from "solid-js";
 
@@ -34,37 +13,23 @@ import {
 import { firstArrival, type ProjectOrigin } from "#core/project/provenance";
 
 import { languageName, languageTag, projectDisplayName } from "../../language";
+import { uiLocale } from "../../locale";
 import type { Domain } from "../../services";
 
 export interface ProjectSummary {
   readonly root: string;
-  /** The folder's own name — the identity when metadata has none. */
   readonly folder: string;
   readonly name: string;
-  /**
-   * The language's NAME — "English", not "en" and never the folder. Empty when
-   * the project's metadata declares no language at all.
-   */
   readonly language: string;
-  /** The BCP-47 tag beside it, for the muted second line. Empty with the name. */
   readonly languageTag: string;
-  /** `.usfm` files under the root, at any depth. */
   readonly books: number;
-  /** ISO-8601, or undefined when this root has never been opened here. */
   readonly lastOpened: string | undefined;
-  /** How it first arrived — a zip, a folder, or which remote — or undefined for one made here. */
   readonly from: ProjectOrigin | undefined;
-  /** Dev only: the seeded in-memory fixture, which has no metadata at all. */
   readonly fixture: boolean;
 }
 
 const isUsfm = (path: string): boolean => path.toLowerCase().endsWith(".usfm");
 
-/**
- * One row. Never fails: a root that cannot be read at all still lists, with a
- * zero book count, because a project that has become unreadable is exactly the
- * thing someone needs to see on this screen.
- */
 const summarize = (
   root: string,
   lastOpened: string | undefined,
@@ -82,8 +47,6 @@ const summarize = (
     const metadata = yield* Effect.map(Effect.result(admin.metadata(root)), (result) =>
       Result.isSuccess(result) ? Option.getOrUndefined(result.success) : undefined,
     );
-    // The first answer for a name: what `ProjectAdmin.rename` wrote into this
-    // device's `.sefer/project.json`, ahead of what the metadata declares.
     const recorded = yield* Effect.map(admin.recordedName(root), Option.getOrUndefined);
     const from = yield* Effect.map(firstArrival(fileSystem, root), Option.getOrUndefined);
 
@@ -102,7 +65,6 @@ const summarize = (
     };
   });
 
-/** A summary as the index stores it: the four facts, minus how we drew them. */
 const asRow = (summary: ProjectSummary): ProjectRow => ({
   root: summary.root,
   name: summary.name,
@@ -113,7 +75,6 @@ const asRow = (summary: ProjectSummary): ProjectRow => ({
   ...(summary.from === undefined ? {} : { from: summary.from }),
 });
 
-/** A row as the table draws it. `folder` is derived; the index need not store it. */
 const asSummary = (row: ProjectRow, lastOpened: string | undefined): ProjectSummary => ({
   root: row.root,
   folder: lastSegment(row.root),
@@ -126,14 +87,6 @@ const asSummary = (row: ProjectRow, lastOpened: string | undefined): ProjectSumm
   fixture: false,
 });
 
-/**
- * The projects list, from the index — one file read — repaired against the
- * folder names actually present, and with the seeded fixture in front of it.
- *
- * `recent` is `shell.recentProjects`, used only where the index has no
- * `lastOpened` of its own: an index row written before this build knows the
- * project but not when it was last visited, and the preference still does.
- */
 export const listProjects = (
   projectsRoot: string,
   fixtureRoot: string | undefined,
@@ -142,40 +95,20 @@ export const listProjects = (
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const rows = yield* repairProjectIndex(fileSystem, projectsRoot, (root) =>
-      // Only ever called for a folder with no row: the first sight of a
-      // project Sefer did not import (a sync client, a copy, an older build).
       Effect.map(summarize(root, recent[root], false), asRow),
     );
     const listed = rows.map((row) => asSummary(row, recent[row.root]));
     if (fixtureRoot === undefined) return listed;
-    // The fixture lives in memory, per page. It belongs in no index — writing
-    // it down would leave a row for a project that vanishes on reload.
     const fixture = yield* summarize(fixtureRoot, recent[fixtureRoot], true);
     return [fixture, ...listed];
   });
 
-/**
- * How many times this session has added a project to the index or taken one
- * out of it. The projects list re-reads on it, so a project arriving from
- * anywhere — the app bar's Import while the list is on screen, the list's own
- * buttons, a WACS download — shows up without its caller knowing the list
- * exists.
- *
- * Bumped by the two functions below and by nothing else. `listProjects`'
- * own repair writes the index too, and deliberately does not bump: the list
- * re-reading itself because it read would never stop.
- */
 const [indexRevision, setIndexRevision] = createSignal(0, { name: "projectIndexRevision" });
 export const projectIndexRevision = indexRevision;
 const indexChanged = Effect.sync(() => {
   setIndexRevision((held) => held + 1);
 });
 
-/**
- * Adds or refreshes one project's row — every arrival (a zip, a folder, a
- * clone from the import hub or from Find), create and rename all end here, so
- * the list shows a new project the moment its files and history are on disk.
- */
 export const rememberProject = (
   projectsRoot: string,
   root: string,
@@ -188,7 +121,6 @@ export const rememberProject = (
     yield* indexChanged;
   });
 
-/** Takes a deleted project's row out, the other end of `rememberProject`. */
 export const forgetRemembered = (
   projectsRoot: string,
   root: string,
@@ -199,10 +131,9 @@ export const forgetRemembered = (
     yield* indexChanged;
   });
 
-/** Human date for the table; an absent value is the caller's em dash. */
-export const formatDate = (iso: string | undefined): string => {
-  if (iso === undefined) return "";
-  const at = new Date(iso);
+export const formatDate = (isoDate: string | undefined): string => {
+  if (isoDate === undefined) return "";
+  const at = new Date(isoDate);
   if (Number.isNaN(at.getTime())) return "";
-  return at.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  return at.toLocaleDateString(uiLocale(), { year: "numeric", month: "short", day: "numeric" });
 };

@@ -2,21 +2,19 @@
 id: b2f80548-2cab-4c61-b4c7-8fda5840aa2b
 title: "Land the Oct 12–13 stack"
 kind: plan
-status: in-progress
+status: done
 created: 2026-10-14
-updated: 2026-10-15
+updated: 2026-10-20
 sha: 50aa9cd
 priority: 0
 tags: [merge]
 source: sefer-next-features doc, 2026-10-07 to 13
 ---
 
-The Oct 12–13 work is one stack of branches, reviewed, fixed and green: 75 commits on
-`worktree-agent-a17ed3f46486c3e91` (worktree `.claude/worktrees/agent-a17ed3f46486c3e91`, tip
-95fedfd) that fast-forward local master cleanly (checked 2026-10-14). It carries r-links (merged in
-10d5f49). Nothing is merged yet; the hackathon branch `r-links` is deployed as its own preview.
+Landed and pushed 2026-10-15: the Oct 12–13 stack (95fedfd), the re-lint fix (1436b03), the
+planning migration (3ef17e2), then `.fallowrc` skipping `planning/` (fea64ef). History stays linear.
 
-## What it carries
+## What it carried
 
 | Area | What | Where it lives |
 |---|---|---|
@@ -34,27 +32,5 @@ The Oct 12–13 work is one stack of branches, reviewed, fixed and green: 75 com
 | Journals | Backup journals live in `appData/journals`, read only from there (no migration) | recovery.md |
 | Reviews | Three adversarial code reviews (Translation Notes, r-links, desktop); every proved finding fixed, including a security one (two Rust commands could read any folder) | commit history |
 
-## Steps
-
-Master moved on again on 2026-10-15: the editor packages, Translation Notes and
-scripture-kitchen v0.1.10 (`fea64ef..082c09c`, pushed and on dev). Still open
-here: PR #1 and pruning. Also prune the worktrees from 2026-10-15:
-
-- `editor-package`
-- `agent-a828af960693d7047` (Translation Notes)
-- `bisect-fea64ef` and `bisect-214164e`
-
-**Landed 2026-10-15.** Master is the stack (95fedfd), then the re-lint fix
-(1436b03), then the planning migration replayed on top (3ef17e2). The
-migration was a rebase, not a fast-forward, so history stays linear. Then
-`.fallowrc` skips `planning/` (fea64ef). Pushed `7f2684c..fea64ef`. The old
-planning folders are gone, and the stack's paths into them are repointed to
-`items/`.
-
-<Followup id="ff" done>`git merge --ff-only worktree-agent-a17ed3f46486c3e91`, then push (Will's biometric).</Followup>
-
-<Followup id="planning-paths" done>The stack still edits five files under the old planning folders, which master's uncommitted migration deletes, so a fast-forward refuses over the dirty tree. Stash or commit the migration first; afterwards delete `planning/00-ideas/`, `01-discussing/` and `02-inProgress/` again. Their content is already in `items/` (resource kinds §14–16, cloud and git, tour depth, the diverged-copy guide).</Followup>
-
-<Followup id="pr1">Close PR #1 on the sandbox (`Will_Kelly/x-en-ulb`), the diverged-copy proof.</Followup>
-
-<Followup id="prune">Prune old worktrees and branches: r-links, the agent worktrees, hotfix-preview, history-spike, once each is merged or abandoned.</Followup>
+PR #1 on the sandbox is now a [cloud and git follow-up](/items/2026-10-06-cloud-git-followups);
+pruning the worktrees is in [small fixes](/items/2026-10-14-small-fixes-stress-testing-and-localization).

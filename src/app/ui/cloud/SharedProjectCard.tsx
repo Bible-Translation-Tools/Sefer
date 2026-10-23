@@ -1,19 +1,4 @@
-/**
- * The "Shared project" card: choosing WHICH shared project a project on this
- * device is, and creating one when there is none.
- *
- * In Settings' Cloud section (`CloudPanel`), beside the account. The cloud
- * popover publishes a project only on this device by itself; choosing one
- * that already exists is here. Once a project is attached the card names its
- * shared project, and choosing another sits behind "Change shared project…":
- * it moves where this project receives from and sends to, so it is never the
- * first button on the card.
- *
- * It holds no domain state. The session lives in `Credentials` (through
- * `Gitea`), the attachment in the repository's own `origin`, and the progress
- * line is a subscription to `Remote.progress()`.
- */
-
+import type { JSX } from "@solidjs/web";
 import { Effect, Fiber, Stream } from "effect";
 import { Show, createEffect, createSignal, onCleanup } from "solid-js";
 
@@ -24,49 +9,42 @@ import { Remote } from "#core/remote/remote";
 import { collaboration } from "../../collaboration";
 import { describeTransfer } from "../../describe";
 import { t } from "../../i18n";
-import { useShell } from "../../ProjectContext";
+import { useShell, type Shell } from "../../ProjectContext";
 import { syncWatch } from "../../syncWatch";
 import { Button, Card, FilterList, Input, PanelHeader, Popover } from "../primitives";
 import type { Account } from "./account";
 
-/**
- * `root` is the project this card attaches and publishes; optional because
- * `/settings` shows it with no project open, and then it says what is missing
- * rather than offering a button that would `git.init` whatever folder was at
- * hand. An attach or publish reads the sync state and the collaboration facts
- * again, so every surface shows the new shared project.
- */
-export function SharedProjectCard(props: {
-  readonly account: Account;
-  readonly root?: string | undefined;
-}) {
-  const shell = useShell();
-  const { services } = shell;
-  // The account is the caller's, so the two cards on one screen share one.
-  // oxlint-disable-next-line solid/reactivity -- a handle, not a value: the same Account for the card's life
-  const account = props.account;
-  /** After an attach or publish: every surface reads the new shared project. */
-  const reread = (): void => {
-    const project = shell.project();
-    if (project === undefined) return;
-    void syncWatch.refresh(services, project).catch(() => undefined);
-    void collaboration.refresh(services, project);
-  };
+type Services = Shell["services"];
 
-  const [repos, setRepos] = createSignal<readonly RemoteRepo[]>([], { name: "cloudRepos" });
-  const [choosing, setChoosing] = createSignal(false, { name: "cloudChoosing" });
-  const [newName, setNewName] = createSignal("", { name: "cloudNewName" });
-  const [phase, setPhase] = createSignal("", { name: "cloudPhase" });
+const initAndAttach = (root: string, cloneUrl: string) =>
+  Effect.gen(function* () {
+    const git = yield* Git;
+    const remote = yield* Remote;
+    const opened = yield* git.init(root);
+    yield* remote.attach(opened, cloneUrl);
+  });
 
-  // The progress line. A forked fiber rather than an awaited effect, because
-  // the stream never completes; it is interrupted when the panel unmounts.
-  //
-  // The interrupt is registered in the COMPONENT body, not inside the effect
-  // callback: Solid 2 runs that callback unowned, so an `onCleanup` in there is
-  // never honoured (`NO_OWNER_CLEANUP`) and the fiber would outlive the panel,
-  // still writing into a signal nothing renders. The held fiber is interrupted
-  // both here and at the top of each re-run, so a root change replaces the
-  // subscription rather than stacking a second one on it.
+const initAndPublish = (root: string, name: string) =>
+  Effect.gen(function* () {
+    const git = yield* Git;
+    const remote = yield* Remote;
+    const opened = yield* git.init(root);
+    yield* remote.publish(opened, name);
+  });
+
+const shortOrigin = (origin: string): string =>
+  origin
+    .replace(/\.git$/u, "")
+    .split("/")
+    .slice(-2)
+    .join("/");
+
+const createTransferPhase = (
+  services: Services,
+  root: () => string | undefined,
+  setPhase: (phase: string) => void,
+): void => {
+  // onCleanup in the component body: one inside an effect callback never runs (NO_OWNER_CLEANUP).
   let progressFiber: Fiber.Fiber<void, unknown> | undefined;
   const stopProgress = (): void => {
     if (progressFiber === undefined) return;
@@ -75,41 +53,38 @@ export function SharedProjectCard(props: {
   };
   onCleanup(stopProgress);
 
-  createEffect(
-    () => props.root,
-    () => {
-      stopProgress();
-      progressFiber = services.runtime.runFork(
-        Effect.flatMap(Remote, (remote) =>
-          Stream.runForEach(remote.progress(), (progress) =>
-            Effect.sync(() => setPhase(describeTransfer(progress))),
-          ),
+  createEffect(root, () => {
+    stopProgress();
+    progressFiber = services.runtime.runFork(
+      Effect.flatMap(Remote, (remote) =>
+        Stream.runForEach(remote.progress(), (progress) =>
+          Effect.sync(() => setPhase(describeTransfer(progress))),
         ),
-      );
-    },
-  );
+      ),
+    );
+  });
+};
 
+const createRepoSearch = (
+  services: Services,
+  host: string | null,
+  setRepos: (update: (held: readonly RemoteRepo[]) => readonly RemoteRepo[]) => void,
+) => {
   const [searching, setSearching] = createSignal(false, { name: "cloudRepoSearching" });
   let searchTimer: ReturnType<typeof setTimeout> | undefined;
   let searchTicket = 0;
-  /**
-   * What was typed, asked of Gitea: the first list is one page, and an
-   * organisation holds more than a page. What comes back joins the list, so
-   * the filter finds it.
-   */
   const searchRepos = (text: string): void => {
     clearTimeout(searchTimer);
-    const base = account.host;
     searchTicket += 1;
     const ticket = searchTicket;
-    if (base === null || text === "") {
+    if (host === null || text === "") {
       setSearching(false);
       return;
     }
     setSearching(true);
     searchTimer = setTimeout(() => {
       void services
-        .run(Effect.flatMap(Gitea, (gitea) => gitea.listWritableRepos(base, text)))
+        .run(Effect.flatMap(Gitea, (gitea) => gitea.listWritableRepos(host, text)))
         .then((found) => {
           if (ticket !== searchTicket) return;
           setRepos((held) => {
@@ -124,148 +99,188 @@ export function SharedProjectCard(props: {
     }, 300);
   };
   onCleanup(() => clearTimeout(searchTimer));
+  return { searching, searchRepos };
+};
 
-  const listRepos = (): void => {
-    const base = account.host;
-    if (base === null) return;
-    account.attempt(async () => {
-      setRepos(await services.run(Effect.flatMap(Gitea, (gitea) => gitea.listWritableRepos(base))));
-    });
+const rereadProject = (shell: Shell): void => {
+  const project = shell.project();
+  if (project === undefined) return;
+  void syncWatch.refresh(shell.services, project).catch(() => undefined);
+  void collaboration.refresh(shell.services, project);
+};
+
+const createSharedProject = (account: Account, root: () => string | undefined) => {
+  const shell = useShell();
+  const { services } = shell;
+  const reread = (): void => rereadProject(shell);
+
+  const [repos, setRepos] = createSignal<readonly RemoteRepo[]>([], { name: "cloudRepos" });
+  const [choosing, setChoosing] = createSignal(false, { name: "cloudChoosing" });
+  const [newName, setNewName] = createSignal("", { name: "cloudNewName" });
+  const [phase, setPhase] = createSignal("", { name: "cloudPhase" });
+
+  createTransferPhase(services, root, setPhase);
+  const { searching, searchRepos } = createRepoSearch(services, account.host, setRepos);
+
+  return {
+    repos,
+    choosing,
+    setChoosing,
+    newName,
+    setNewName,
+    phase,
+    searching,
+    searchRepos,
+    listRepos: (): void => {
+      const base = account.host;
+      if (base === null) return;
+      account.attempt(async () => {
+        setRepos(
+          await services.run(Effect.flatMap(Gitea, (gitea) => gitea.listWritableRepos(base))),
+        );
+      });
+    },
+    attach: (repo: RemoteRepo): void => {
+      const at = root();
+      if (at === undefined) return;
+      account.attempt(async () => {
+        await services.run(initAndAttach(at, repo.cloneUrl));
+        shell.report(t("attached {name}", { name: repo.fullName }));
+        reread();
+      });
+    },
+    publish: (): void => {
+      const at = root();
+      if (at === undefined) return;
+      // oxlint-disable-next-line solid/reactivity
+      account.attempt(async () => {
+        const staticName = newName().trim();
+        if (staticName === "") return;
+        await services.run(initAndPublish(at, staticName));
+        setNewName("");
+        shell.report(t("published {name}", { name: staticName }));
+        reread();
+      });
+    },
+    attachedTo: (): string | undefined => {
+      const origin = syncWatch.sync(shell.project()?.root)?.reading.origin;
+      return origin === undefined ? undefined : shortOrigin(origin);
+    },
   };
+};
 
-  /** Attach an existing repository as this project's `origin`. */
-  const attach = (repo: RemoteRepo): void => {
-    const root = props.root;
-    if (root === undefined) return;
-    account.attempt(async () => {
-      await services.run(
-        Effect.gen(function* () {
-          const git = yield* Git;
-          const remote = yield* Remote;
-          const opened = yield* git.init(root);
-          yield* remote.attach(opened, repo.cloneUrl);
-        }),
-      );
-      shell.report(t("attached {name}", { name: repo.fullName }));
-      reread();
-    });
-  };
+type SharedProject = ReturnType<typeof createSharedProject>;
 
-  /**
-   * First publish: create the repository if it is not there, attach it, push.
-   * `Remote.publish` owns that order — see `src/platform/web/remote.ts`.
-   */
-  const publish = (): void => {
-    const root = props.root;
-    if (root === undefined) return;
-    // oxlint-disable-next-line solid/reactivity -- the account's work: runs once per press, reading the field at the moment of the ask
-    account.attempt(async () => {
-      // Read inside the work, not at setup: the field may have changed between
-      // the render that made this handler and the submit that ran it. The
-      // `static` prefix says so to the Solid reactivity rule — one snapshot,
-      // taken deliberately, at the moment of the ask.
-      const staticName = newName().trim();
-      if (staticName === "") return;
-      await services.run(
-        Effect.gen(function* () {
-          const git = yield* Git;
-          const remote = yield* Remote;
-          const opened = yield* git.init(root);
-          yield* remote.publish(opened, staticName);
-        }),
-      );
-      setNewName("");
-      shell.report(t("published {name}", { name: staticName }));
-      reread();
-    });
-  };
-
-  /** The shared project this one is attached to, as a person reads it, when it is. */
-  const attachedTo = (): string | undefined => {
-    const origin = syncWatch.sync(shell.project()?.root)?.reading.origin;
-    return origin === undefined
-      ? undefined
-      : origin
-          .replace(/\.git$/u, "")
-          .split("/")
-          .slice(-2)
-          .join("/");
-  };
-
-  // Choosing or creating a shared project. Up front when there is none;
-  // behind "Change shared project…" when there is, because a click here moves
-  // where this project sends — not something to offer as a first button.
-  const controls = () => (
-    <>
-      {/* A list you type at, not every repository the account can write
-          to drawn as a card each: an organisation holds hundreds. */}
-      <div class="flex flex-wrap items-center gap-2">
-        <Popover
-          label={t("Shared projects")}
-          side="bottom"
-          align="start"
-          class="flex max-h-[60vh] w-96 flex-col p-2"
-          open={choosing()}
-          onOpenChange={(open) => {
-            setChoosing(open);
-            if (open && repos().length === 0) listRepos();
-          }}
-          trigger={
-            <Button disabled={account.busy()} data-testid="choose-shared-project">
-              {t("Choose a shared project…")}
-            </Button>
-          }
-        >
-          <Show
-            when={repos().length > 0}
-            fallback={
-              <p class="p-2 text-small text-on-surface-tertiary">
-                {account.host === null
-                  ? t("Sign in to choose a shared project.")
-                  : account.busy()
-                    ? t("Listing your projects…")
-                    : t("No projects to choose from.")}
-              </p>
-            }
-          >
-            <FilterList
-              label={t("Filter shared projects")}
-              placeholder={t("Name or owner…")}
-              items={repos()}
-              key={(repo) => repo.fullName}
-              match={(repo, query) => repo.fullName.toLowerCase().includes(query.toLowerCase())}
-              onQuery={searchRepos}
-              searching={searching()}
-              onPick={(repo) => {
-                setChoosing(false);
-                attach(repo);
-              }}
-            >
-              {(repo) => <span class="truncate">{repo.fullName}</span>}
-            </FilterList>
-          </Show>
-        </Popover>
-      </div>
-
-      <form
-        class="flex flex-wrap items-center gap-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          publish();
-        }}
-      >
-        <Input
-          type="text"
-          wrapperClass="w-64"
-          placeholder={t("new shared project name")}
-          value={newName()}
-          onInput={(event) => setNewName(event.currentTarget.value)}
-        />
-        <Button type="submit" disabled={account.busy()}>
-          {t("Create and publish")}
+const RepoChooser = (props: {
+  readonly account: Account;
+  readonly shared: SharedProject;
+  readonly emptyNote: string;
+}) => (
+  <div class="flex flex-wrap items-center gap-2">
+    <Popover
+      label={t("Shared projects")}
+      side="bottom"
+      align="start"
+      class="flex max-h-[60vh] w-96 flex-col p-2"
+      open={props.shared.choosing()}
+      onOpenChange={(open) => {
+        props.shared.setChoosing(open);
+        if (open && props.shared.repos().length === 0) props.shared.listRepos();
+      }}
+      trigger={
+        <Button disabled={props.account.busy()} data-testid="choose-shared-project">
+          {t("Choose a shared project…")}
         </Button>
-      </form>
-    </>
+      }
+    >
+      <Show
+        when={props.shared.repos().length > 0}
+        fallback={<p class="p-2 text-small text-on-surface-tertiary">{props.emptyNote}</p>}
+      >
+        <FilterList
+          label={t("Filter shared projects")}
+          placeholder={t("Name or owner…")}
+          items={props.shared.repos()}
+          key={(repo) => repo.fullName}
+          match={(repo, query) => repo.fullName.toLowerCase().includes(query.toLowerCase())}
+          onQuery={props.shared.searchRepos}
+          searching={props.shared.searching()}
+          onPick={(repo) => {
+            props.shared.setChoosing(false);
+            props.shared.attach(repo);
+          }}
+        >
+          {(repo) => <span class="truncate">{repo.fullName}</span>}
+        </FilterList>
+      </Show>
+    </Popover>
+  </div>
+);
+
+const CreateForm = (props: { readonly account: Account; readonly shared: SharedProject }) => (
+  <form
+    class="flex flex-wrap items-center gap-2"
+    onSubmit={(event) => {
+      event.preventDefault();
+      props.shared.publish();
+    }}
+  >
+    <Input
+      type="text"
+      wrapperClass="w-64"
+      placeholder={t("new shared project name")}
+      value={props.shared.newName()}
+      onInput={(event) => props.shared.setNewName(event.currentTarget.value)}
+    />
+    <Button type="submit" disabled={props.account.busy()}>
+      {t("Create and publish")}
+    </Button>
+  </form>
+);
+
+const SharedControls = (props: {
+  readonly account: Account;
+  readonly shared: SharedProject;
+  readonly emptyNote: string;
+}) => (
+  <>
+    <RepoChooser account={props.account} shared={props.shared} emptyNote={props.emptyNote} />
+    <CreateForm account={props.account} shared={props.shared} />
+  </>
+);
+
+const AttachedBlock = (props: { readonly origin: string; readonly children: JSX.Element }) => (
+  <div class="space-y-3">
+    <p class="text-small text-on-surface-secondary" data-cloud="attached-to">
+      {t("This project is shared at {name}.", { name: props.origin })}
+    </p>
+    <details class="space-y-3" data-cloud="change-shared">
+      <summary class="cursor-pointer text-small text-on-surface-tertiary">
+        {t("Change shared project…")}
+      </summary>
+      <p class="pt-2 text-smallest text-on-surface-tertiary">
+        {t(
+          "Your work stays on this device. Another shared project changes where this one receives from and sends to.",
+        )}
+      </p>
+      {props.children}
+    </details>
+  </div>
+);
+
+export function SharedProjectCard(props: {
+  readonly account: Account;
+  readonly root?: string | undefined;
+}) {
+  // oxlint-disable-next-line solid/reactivity
+  const account = props.account;
+  const shared = createSharedProject(account, () => props.root);
+  const emptyNote = (): string => {
+    if (account.host === null) return t("Sign in to choose a shared project.");
+    return account.busy() ? t("Listing your projects…") : t("No projects to choose from.");
+  };
+  const controls = () => (
+    <SharedControls account={account} shared={shared} emptyNote={emptyNote()} />
   );
 
   return (
@@ -288,32 +303,15 @@ export function SharedProjectCard(props: {
             </p>
           }
         >
-          <Show when={attachedTo()} fallback={<div class="space-y-3">{controls()}</div>}>
-            {(origin) => (
-              <div class="space-y-3">
-                <p class="text-small text-on-surface-secondary" data-cloud="attached-to">
-                  {t("This project is shared at {name}.", { name: origin() })}
-                </p>
-                <details class="space-y-3" data-cloud="change-shared">
-                  <summary class="cursor-pointer text-small text-on-surface-tertiary">
-                    {t("Change shared project…")}
-                  </summary>
-                  <p class="pt-2 text-smallest text-on-surface-tertiary">
-                    {t(
-                      "Your work stays on this device. Another shared project changes where this one receives from and sends to.",
-                    )}
-                  </p>
-                  {controls()}
-                </details>
-              </div>
-            )}
+          <Show when={shared.attachedTo()} fallback={<div class="space-y-3">{controls()}</div>}>
+            {(origin) => <AttachedBlock origin={origin()}>{controls()}</AttachedBlock>}
           </Show>
         </Show>
       </Show>
 
-      <Show when={phase() !== ""}>
+      <Show when={shared.phase() !== ""}>
         <p class="text-small text-on-surface-tertiary" data-cloud="progress">
-          {phase()}
+          {shared.phase()}
         </p>
       </Show>
     </Card>

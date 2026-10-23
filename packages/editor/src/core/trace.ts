@@ -1,17 +1,3 @@
-/**
- * The legacy per-event view of the trace: a flat `TraceSink`, for the test
- * harness.
- *
- * `core/instrument.ts` is the instrument now — one `Trace` per transaction,
- * with the stages in order. This file is the adapter that keeps the flat
- * "one event per decision" shape working for the harness, so adopting the
- * tracer cost no call site.
- *
- * `note`, `noteTr` and `tracing` are re-exported from the instrument rather
- * than reimplemented: the rules import them from here today, and there is only
- * one implementation to import.
- */
-
 import { type Extension } from "@codemirror/state";
 
 import {
@@ -41,7 +27,6 @@ export interface TraceEvent extends TraceStep {
 
 export type TraceSink = (e: TraceEvent) => void;
 
-/** A flat sink as a `Tracer`. The adapter, and the only one. */
 const sinkTracer = (sink: TraceSink): Tracer => {
   const emit: Emitter = (trace) => {
     const one = (e: TraceEntry): void => {
@@ -55,7 +40,6 @@ const sinkTracer = (sink: TraceSink): Tracer => {
         head: trace.head,
       });
     };
-    // A flat sink has no gesture record to put fields on.
     return { frame: () => one, step: one, annotate: () => {}, end: () => {} };
   };
   return makeTracer(emit);

@@ -39,8 +39,6 @@ describe("decode", () => {
 
   test("refuses invalid UTF-8, and nothing else", () => {
     expect(refusal(new Uint8Array([0x61, 0xc3, 0x28]))).toBe("InvalidUtf8");
-    // A mark and a mixed file are read and remembered, not refused: the only
-    // thing Sefer cannot do with bytes is fail to read them.
     expect(decoded(new Uint8Array([0xef, 0xbb, 0xbf, 0x61])).text).toBe("a");
     expect(decoded(bytes("one\r\ntwo\nthree")).text).toBe("one\ntwo\nthree");
   });
@@ -56,8 +54,6 @@ describe("the disk form", () => {
   });
 
   test("reads a mixed file as its majority, either way", () => {
-    // Two CRLF against one LF, and the reverse: the majority decides, and the
-    // file becomes uniform in that form the first time it is written.
     expect(dominantEol("a\r\nb\r\nc\nd")).toBe("crlf");
     expect(dominantEol("a\r\nb\nc\nd")).toBe("lf");
     expect(decoded(bytes("a\r\nb\r\nc\nd")).form.eol).toBe("crlf");
@@ -110,7 +106,6 @@ describe("encode writes back the form it read", () => {
     });
 
     expect(new TextDecoder().decode(encode(source))).toBe("\\id PHM\r\nTimothy\r\n");
-    // The text itself never carries the carriage returns: only the bytes do.
     expect(source.text).toBe("\\id PHM\nTimothy\n");
   });
 });
@@ -145,7 +140,6 @@ describe("apply admission", () => {
     expect(changeRefusal(source, { from: 0, to: source.text.length + 1, insert: "" })).toBe(
       "RangeOutOfBounds",
     );
-    // "a" then the two units of the emoji: offset 2 sits between them.
     expect(changeRefusal(emoji, { from: 2, to: 2, insert: "!" })).toBe("SplitsSurrogatePair");
     expect(changeRefusal(source, { from: 0, to: 0, insert: "\r\n" })).toBe("CarriageReturn");
   });

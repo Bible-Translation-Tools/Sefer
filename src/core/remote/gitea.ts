@@ -1,41 +1,7 @@
-/**
- * Gitea — the account half of remote sync, separated from transfer.
- *
- * `Remote` moves objects; this service is everything that happens over Gitea's
- * REST API *before* a transfer is possible: signing in, and answering "which
- * repositories may I push to, and does this one exist yet?". WACS (Wycliffe
- * Associates Content Service) is a Gitea instance, so the v1 app's flow is the
- * one translators already have accounts for and this is a faithful port of it:
- *   POST /api/v1/users/{user}/tokens with HTTP Basic auth (plus `X-Gitea-OTP`
- *   when the account has two-factor on) mints a *scoped* token, and the
- *   password is never held past that one call.
- *
- * Two deliberate constraints:
- *
- * - Core may not touch the `fetch` global, so the transport arrives as the
- *   `HttpFetch` port and `GiteaLive` is the only thing that needs a host. The
- *   port is spelled structurally rather than with the DOM's `Request`/`Response`
- *   so this file stays free of host lib types; `globalThis.fetch.bind(globalThis)`
- *   satisfies it as-is.
- * - The session lives in the host `Credentials` service and nowhere else. A
- *   token is a secret: it never reaches a project file, and the extra
- *   bookkeeping (`tokenName`, `tokenId`) rides on the same `Credential` record
- *   so a host that persists one persists all of it, atomically, or none.
- *
- * The base URL is the caller's — the content host `src/app/env.ts` reads from
- * `VITE_SEFER_CONTENT_HOST`, the same host transfers name. On the Web the
- * `HttpFetch` it is handed applies the transport. No hostname appears in this
- * file, and none should.
- */
 import { Context, Data, Effect, Layer, Option, Schema } from "effect";
 
 import { Credentials, type Credential, type CredentialsService } from "../host/credentials";
 
-/**
- * A signed-in Gitea account. `host` is the base URL the token belongs to, and
- * is also the `Credentials` key — one session per instance, because a token
- * minted on one Gitea means nothing on another.
- */
 export interface Session {
   readonly host: string;
   readonly username: string;
@@ -44,32 +10,17 @@ export interface Session {
   readonly tokenId: string;
 }
 
-/**
- * One repository as this service reports it. Narrower than Gitea's record on
- * purpose: these are the fields an attach/publish flow decides with.
- *
- * `canWrite` is computed from the permissions Gitea returns, not guessed from
- * ownership — a translator's usual repository is one they collaborate on.
- */
 export interface RemoteRepo {
   readonly owner: string;
   readonly name: string;
   readonly fullName: string;
-  /** The smart-HTTP URL to attach as `origin`. */
   readonly cloneUrl: string;
   readonly defaultBranch: string;
   readonly private: boolean;
   readonly canWrite: boolean;
-  /**
-   * The repository this one is a fork of, or `undefined` when it is not one.
-   * How Sefer tells a person's own copy from a shared project: someone who
-   * cloned their fork is offered to suggest to its parent, and someone whose
-   * fork already exists is not forked twice (Gitea answers 409).
-   */
   readonly parent: ForkParent | undefined;
 }
 
-/** The repository a fork was made from: enough to attach it and to ask about it. */
 export interface ForkParent {
   readonly owner: string;
   readonly name: string;
@@ -80,21 +31,9 @@ export interface ForkParent {
 export interface CreateRepoRequest {
   readonly name: string;
   readonly description?: string | undefined;
-  /**
-   * Public unless asked: a shared project is one others clone and copy, and
-   * a copy of it (a fork) is public already.
-   */
   readonly private?: boolean | undefined;
 }
 
-/**
- * `Unauthorized` — the password, or the token, was rejected.
- * `OtpRequired` — the credentials were right and the account wants its
- * second factor; the only reason worth re-showing the form for.
- * `Network` — the request never got an answer: offline, DNS, CORS, dead proxy.
- * `Refused` — Gitea answered and said no (a name already taken, no access).
- * `Io` — Gitea answered with something this reader cannot decode.
- */
 export type GiteaFailureReason = "Unauthorized" | "OtpRequired" | "Network" | "Refused" | "Io";
 
 export class GiteaError extends Data.TaggedError("GiteaError")<{
@@ -102,14 +41,12 @@ export class GiteaError extends Data.TaggedError("GiteaError")<{
   readonly description?: string | undefined;
 }> {}
 
-/** The subset of `RequestInit` this service sends. */
 export interface HttpRequest {
   readonly method?: string;
   readonly headers?: Readonly<Record<string, string>>;
   readonly body?: string;
 }
 
-/** The subset of `Response` this service reads. */
 export interface HttpResponse {
   readonly ok: boolean;
   readonly status: number;
@@ -118,74 +55,37 @@ export interface HttpResponse {
   readonly json: () => Promise<unknown>;
 }
 
-/**
- * The transport, as a port. Core cannot reach `fetch`; the platform passes
- * `globalThis.fetch.bind(globalThis)`, and a test passes a function.
- */
 export type HttpFetch = (input: string, init?: HttpRequest) => Promise<HttpResponse>;
 
 export interface GiteaService {
-  /**
-   * Exchanges a password for a scoped API token and records the session.
-   *
-   * The password is used for exactly one request and never stored. Fails
-   * `OtpRequired` when the account has two-factor enabled and `otp` was absent
-   * or wrong — the caller shows the OTP field and calls again.
-   */
   readonly login: (args: {
     readonly host: string;
     readonly username: string;
     readonly password: string;
     readonly otp?: string | undefined;
   }) => Effect.Effect<Session, GiteaError>;
-  /**
-   * Forgets the session for `host`. The token itself is left alive on the
-   * server: revoking it needs the password again (Gitea's token endpoints
-   * refuse token auth), and prompting for a password in order to log *out*
-   * is worse than a named token the user can see and delete in Gitea.
-   */
+  /** The token is left alive: Gitea's token endpoints refuse token auth, so revoking needs the password. */
   readonly logout: (host: string) => Effect.Effect<void>;
   readonly session: (host: string) => Effect.Effect<Option.Option<Session>>;
-  /**
-   * Repositories the signed-in user can push to, owned or collaborated on:
-   * one page of them, or, with `search`, the page whose names match it
-   * (Gitea's own `q`). An organisation holds more than a page.
-   */
   readonly listWritableRepos: (
     host: string,
     search?: string,
   ) => Effect.Effect<readonly RemoteRepo[], GiteaError>;
-  /** Repositories the signed-in user owns, writable or not. */
   readonly listOwnedRepos: (host: string) => Effect.Effect<readonly RemoteRepo[], GiteaError>;
-  /** Creates the repository under the signed-in user. `Refused` if it exists. */
   readonly createRepo: (
     host: string,
     request: CreateRepoRequest,
   ) => Effect.Effect<RemoteRepo, GiteaError>;
-  /** `None` when there is no such repository — not an error. */
   readonly getRepo: (
     host: string,
     owner: string,
     name: string,
   ) => Effect.Effect<Option.Option<RemoteRepo>, GiteaError>;
-  /**
-   * The direct forks of `owner/name`, every page of them. How a caller finds
-   * the signed-in user's own copy whatever it is called: looking up
-   * `<me>/<same name>` finds the wrong repository when the person already
-   * owns one of that name from another project (a sibling fork, say).
-   */
   readonly listForks: (
     host: string,
     owner: string,
     name: string,
   ) => Effect.Effect<readonly RemoteRepo[], GiteaError>;
-  /**
-   * Forks `owner/name` into the signed-in user's account, under `as` when
-   * given and the upstream name otherwise. Gitea refuses a second fork of the
-   * same repository, and a name the user already holds (409), so a caller
-   * looks for their fork first (`listForks`) and names a new one when the
-   * upstream name is taken.
-   */
   readonly forkRepo: (
     host: string,
     owner: string,
@@ -196,16 +96,6 @@ export interface GiteaService {
 
 export class Gitea extends Context.Service<Gitea, GiteaService>()("Gitea") {}
 
-/**
- * The scopes the token is minted with, first copied from v1 so an account
- * signed in from either app carries the same authority. `write:repository` is
- * the one that matters for sync — forks and pull requests included;
- * `write:issue` is suggested changes' note (a declined suggestion's reason is
- * an issue comment, and Gitea answers 403 without it); the reads are what the
- * project and account screens need. A token is never minted with more than
- * this — notably not `write:admin`. A token minted before a scope was added
- * lacks it until its person signs in again.
- */
 const SESSION_TOKEN_SCOPES: readonly string[] = [
   "read:activitypub",
   "write:issue",
@@ -217,18 +107,10 @@ const SESSION_TOKEN_SCOPES: readonly string[] = [
   "write:user",
 ];
 
-/** How many repositories one page of a listing asks for. */
 const PAGE_SIZE = 50;
-/** Pages of forks read before giving up: 500 forks. */
 const FORK_PAGES = 10;
 
-// ---------------------------------------------------------------------------
-// Wire shapes
-// ---------------------------------------------------------------------------
-
-// Every field is optional because Gitea's records vary by version and by
-// endpoint, and a missing `topics` array must not cost the user their repo
-// list. `Schema` rather than hand-written narrowing so no assertion is needed.
+// Every field is optional because Gitea's records vary by version and by endpoint.
 const NumberOrString = Schema.Union([Schema.Number, Schema.String]);
 
 const CreatedToken = Schema.Struct({
@@ -247,7 +129,6 @@ const RepoPermissions = Schema.Struct({
   push: Schema.optionalKey(Schema.Boolean),
 });
 
-// A fork's parent arrives as a whole repository record; only its address is read.
 const ParentRecord = Schema.Struct({
   name: Schema.optionalKey(Schema.String),
   full_name: Schema.optionalKey(Schema.String),
@@ -268,10 +149,6 @@ const RepoRecord = Schema.Struct({
   parent: Schema.optionalKey(Schema.NullOr(ParentRecord)),
 });
 
-// `/api/v1/repos/search` wraps its rows in `{ data }`; `/api/v1/user/repos`
-// returns a bare array. Two decoders tried in turn rather than one union,
-// because a union of "array or struct" narrows badly on the way out and the
-// callers must not have to know which endpoint they came from.
 const RepoArray = Schema.Array(RepoRecord);
 const RepoSearch = Schema.Struct({ data: Schema.optionalKey(Schema.Array(RepoRecord)) });
 
@@ -285,14 +162,9 @@ const decodeCurrentUser = Schema.decodeUnknownResult(CurrentUser);
 
 type RepoRecordValue = typeof RepoRecord.Type;
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 const failed = (reason: GiteaFailureReason, description: string): GiteaError =>
   new GiteaError({ reason, description });
 
-/** Trailing slashes off, so `host` is a stable `Credentials` key. */
 const normaliseHost = (host: string): string => host.trim().replace(/\/+$/u, "");
 
 const url = (host: string, path: string, query?: Readonly<Record<string, string>>): string => {
@@ -305,26 +177,20 @@ const url = (host: string, path: string, query?: Readonly<Record<string, string>
   return `${normaliseHost(host)}${path}${search}`;
 };
 
-/**
- * Base64 without a host global, because core has neither `btoa` nor `Buffer`
- * it may name. Credentials are ASCII in the overwhelming case but a UTF-8
- * password must still encode correctly, so the string is encoded to bytes
- * first and the bytes are what get grouped.
- */
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 const base64 = (value: string): string => {
   const bytes = new TextEncoder().encode(value);
   let out = "";
   for (let index = 0; index < bytes.length; index += 3) {
-    const a = bytes[index] ?? 0;
-    const b = bytes[index + 1] ?? 0;
-    const c = bytes[index + 2] ?? 0;
+    const firstByte = bytes[index] ?? 0;
+    const secondByte = bytes[index + 1] ?? 0;
+    const thirdByte = bytes[index + 2] ?? 0;
     const remaining = bytes.length - index;
-    out += ALPHABET[a >> 2] ?? "";
-    out += ALPHABET[((a & 0x03) << 4) | (b >> 4)] ?? "";
-    out += remaining > 1 ? (ALPHABET[((b & 0x0f) << 2) | (c >> 6)] ?? "") : "=";
-    out += remaining > 2 ? (ALPHABET[c & 0x3f] ?? "") : "=";
+    out += ALPHABET[firstByte >> 2] ?? "";
+    out += ALPHABET[((firstByte & 0x03) << 4) | (secondByte >> 4)] ?? "";
+    out += remaining > 1 ? (ALPHABET[((secondByte & 0x0f) << 2) | (thirdByte >> 6)] ?? "") : "=";
+    out += remaining > 2 ? (ALPHABET[thirdByte & 0x3f] ?? "") : "=";
   }
   return out;
 };
@@ -339,17 +205,9 @@ const otpWanted = (response: HttpResponse, body: string): boolean =>
   response.headers.get("x-gitea-otp") !== null || /otp|one[- ]time|two[- ]factor/iu.test(body);
 
 /**
- * `20260915T124233` — the moment the token was minted, to the second.
- *
- * Gitea refuses a token whose NAME already exists (`400 access token name has
- * been used already`), so this granularity is not cosmetic: a name good only
- * to the day meant that signing in twice from one device on one day — after a
- * page reload, most obviously — failed with a message about a token the person
- * had never heard of and could not act on.
- *
- * Built by hand rather than with a locale formatter: core has no `Intl`
- * contract and the string must be identical on every host, since a person
- * comparing two devices' token lists is reading it as an identifier.
+ * `20260915T124233` — the moment the token was minted, to the second. Gitea
+ * refuses a token whose NAME already exists (`400 access token name has been
+ * used already`).
  */
 const stamp = (at: Date = new Date()): string => {
   const pad = (value: number, width = 2): string => String(value).padStart(width, "0");
@@ -364,7 +222,6 @@ const stamp = (at: Date = new Date()): string => {
   ].join("");
 };
 
-/** Four characters that make a name nothing can already hold. Not a secret. */
 const suffix = (): string =>
   Math.floor(Math.random() * 0x10000)
     .toString(36)
@@ -390,7 +247,6 @@ const makeGitea = (options: {
       catch: (error) => failed("Network", error instanceof Error ? error.message : String(error)),
     });
 
-  /** Non-ok becomes the right reason, with Gitea's own message as detail. */
   const refuse = (response: HttpResponse): Effect.Effect<never, GiteaError> =>
     Effect.gen(function* () {
       const body = yield* bodyOf(response);
@@ -409,7 +265,6 @@ const makeGitea = (options: {
       catch: () => failed("Io", "Gitea's answer was not JSON"),
     });
 
-  /** The token for `host`, or `Unauthorized` — every read needs one. */
   const authorised = (host: string): Effect.Effect<Session, GiteaError> =>
     Effect.gen(function* () {
       const held = yield* readSession(host);
@@ -425,10 +280,7 @@ const makeGitea = (options: {
       const held = yield* options.credentials.get(key);
       return Option.flatMap(held, (credential: Credential) =>
         credential.tokenName === undefined || credential.tokenId === undefined
-          ? // A credential without the token bookkeeping did not come from
-            // `login`, so it is not a Gitea session and must not be reported
-            // as one.
-            Option.none()
+          ? Option.none()
           : Option.some({
               host: key,
               username: credential.username,
@@ -552,35 +404,21 @@ const makeGitea = (options: {
             body: JSON.stringify({ name, scopes: [...SESSION_TOKEN_SCOPES] }),
           });
 
-        // The token name carries where it was minted and when, so a user
-        // looking at their Gitea token list can tell one device from another
-        // and revoke just that one. To the SECOND, not to the day: Gitea
-        // refuses a duplicate name with `400 access token name has been used
-        // already`, and a day-granular name meant the second sign-in from one
-        // device — after a reload, say — could not sign in at all.
-        const tokenName = `sefer-${options.platform}-${stamp()}`;
-        let response = yield* mint(tokenName);
-
-        // The recovery, for a name that somehow collides anyway (two windows
-        // in the same second, or a stale token from a build that used the old
-        // day-granular name). We hold the password for exactly this call,
-        // which is the only moment Gitea's token endpoints — which refuse
-        // token auth — can be reached at all: delete the token wearing OUR
-        // name and try once more, and if the instance will not allow that,
-        // mint under a name nothing can already hold.
-        //
-        // The body is read ONCE and carried, because a response body can only
-        // be consumed once and `refuse` below needs it to say what went wrong.
-        if (response.status === 400) {
-          const body = yield* bodyOf(response);
-          if (!/used already/iu.test(body))
-            return yield* Effect.fail(failed("Refused", `400 ${body}`.trim()));
-          const removed = yield* request(`${tokensUrl}/${encodeURIComponent(tokenName)}`, {
-            method: "DELETE",
-            headers: { Authorization: basic, Accept: "application/json" },
+        const mintWithRecovery = (tokenName: string): Effect.Effect<HttpResponse, GiteaError> =>
+          Effect.gen(function* () {
+            const response = yield* mint(tokenName);
+            if (response.status !== 400) return response;
+            const body = yield* bodyOf(response);
+            if (!/used already/iu.test(body))
+              return yield* Effect.fail(failed("Refused", `400 ${body}`.trim()));
+            const removed = yield* request(`${tokensUrl}/${encodeURIComponent(tokenName)}`, {
+              method: "DELETE",
+              headers: { Authorization: basic, Accept: "application/json" },
+            });
+            return yield* mint(removed.ok ? tokenName : `${tokenName}-${suffix()}`);
           });
-          response = yield* mint(removed.ok ? tokenName : `${tokenName}-${suffix()}`);
-        }
+
+        const response = yield* mintWithRecovery(`sefer-${options.platform}-${stamp()}`);
 
         if (!response.ok) return yield* refuse(response);
         const decoded = decodeCreatedToken(yield* json(response));
@@ -595,8 +433,6 @@ const makeGitea = (options: {
           tokenName: created.name,
           tokenId: String(created.id),
         };
-        // The password is out of scope from here; only the token is kept, and
-        // only where the host decided credentials may live.
         yield* options.credentials.set(key, {
           username: session.username,
           token: session.token,
@@ -628,8 +464,6 @@ const makeGitea = (options: {
             name: create.name,
             description: create.description ?? "",
             private: create.private ?? false,
-            // Sefer pushes an existing project's history; an auto-initialised
-            // repository would give the first push a commit to conflict with.
             auto_init: false,
           }),
         });
@@ -656,8 +490,6 @@ const makeGitea = (options: {
       Effect.gen(function* () {
         const session = yield* authorised(host);
         const found: RemoteRepo[] = [];
-        // Bounded: a repository with more forks than this is not one a
-        // translator's copy is hiding in, and an unbounded loop is a hang.
         for (let page = 1; page <= FORK_PAGES; page += 1) {
           const response = yield* request(
             url(
@@ -686,8 +518,6 @@ const makeGitea = (options: {
           {
             method: "POST",
             headers: { ...tokenHeaders(session), "Content-Type": "application/json" },
-            // Into the authenticated user's account; without a name Gitea
-            // keeps the upstream one.
             body: JSON.stringify(as === undefined ? {} : { name: as }),
           },
         );
@@ -697,19 +527,11 @@ const makeGitea = (options: {
   };
 };
 
-/**
- * The one Layer. `fetch` is the host's transport and `platform` names this
- * build in the token it mints (`sefer-web-2026-09-08`), which is the only
- * string a translator will ever see from Sefer inside Gitea.
- */
 export const GiteaLive = (options: {
   readonly fetch: HttpFetch;
   readonly platform: string;
 }): Layer.Layer<Gitea, never, Credentials> =>
   Layer.effect(
     Gitea,
-    // The credential store is read once, as a value: every method of the port
-    // is `Effect<_, _>` with no requirements, so nothing downstream of Gitea
-    // has to know a `Credentials` service was involved at all.
     Effect.map(Credentials, (credentials) => makeGitea({ ...options, credentials })),
   );
