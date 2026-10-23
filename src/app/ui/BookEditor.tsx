@@ -4,6 +4,7 @@ import {
   editorFeatures,
   editorPolicy,
   mountBookEditor,
+  revealEditorInBand,
   type BookEditorMount,
   type CorpusAction,
   type CorpusFinding,
@@ -206,11 +207,9 @@ export function BookEditor(props: BookEditorProps) {
     ({ editor, aimed }) => {
       if (editor === undefined || aimed === undefined || aimed.bookId !== bookId) return;
       if (aimed.caret === "keep") {
-        // Only into view: the caret, and so the reference's pair, stay put.
-        editor.reveal(
-          { from: aimed.from, ...(aimed.to === undefined ? {} : { to: aimed.to }) },
-          { scroll: aimed.at === "top" ? "start" : "center" },
-        );
+        // Only into view, and only when it is not already in the middle band:
+        // the caret, and so the reference's pair, stay put.
+        revealEditorInBand(editor, aimed.from);
         return;
       }
       const cancel = editor.jump(

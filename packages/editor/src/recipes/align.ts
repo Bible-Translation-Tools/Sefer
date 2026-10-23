@@ -54,6 +54,10 @@ export const revealInBand = (view: EditorView, at: number): boolean => {
   return true;
 };
 
+/** `revealInBand` on a handle: the same rule for a host that holds an editor, not a view. */
+export const revealEditorInBand = (editor: EditorHandle, at: number): boolean =>
+  revealInBand(viewOf(editor), at);
+
 const anchorAt = (view: EditorView, book: BookId): Anchor | undefined => {
   const toc = tocOf(view);
   if (toc === undefined) return undefined;

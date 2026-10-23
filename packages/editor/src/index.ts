@@ -54,7 +54,7 @@ export { mountReference, type ReferenceMount } from "./recipes/reference";
 export { type PairedRange } from "./recipes/pairing";
 export { type MarkedRange } from "./recipes/satellite";
 
-export { createAlignedGroup, type AlignedGroup } from "./recipes/align";
+export { createAlignedGroup, revealEditorInBand, type AlignedGroup } from "./recipes/align";
 
 export { editorPolicy, policyKey, type EditorPolicy, type ProjectionName } from "./views";
 
