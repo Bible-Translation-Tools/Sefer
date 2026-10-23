@@ -82,7 +82,7 @@ function EditorPanel(props: { readonly book: EditorBook; readonly split?: boolea
       class={cx(
         // The page's own white, outlined: the border goes brand while the
         // text has focus. Split, its left edge is also the resize handle's line.
-        "flex min-h-0 flex-1 flex-col rounded-[12px] border-2 border-surface-border bg-surface-primary transition-colors focus-within:border-brand",
+        "flex min-h-0 flex-1 flex-col rounded-lg border-2 border-surface-border bg-surface-primary transition-colors focus-within:border-brand",
       )}
     >
       {/* 12px top and bottom; each side lines up with the text's own edge:
@@ -138,12 +138,18 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
   const panels = (): boolean => layout() === "panels";
   /**
    * The panels layout's measure, shared by the toolbar and the panels under it
-   * so their edges line up: one 800px column joined; split, 1624px for the two
-   * panels and the 24px handle between them, shared as the handle sets.
+   * so their edges line up: joined, one panel, the editor's text measure
+   * (`--editor-measure`, 40rem) and 10rem round it — 50rem; split, two of
+   * those and the 1.5rem handle between them, shared as the handle sets.
    */
   const measure = (): string | undefined =>
     panels()
-      ? cx("mx-auto w-full", shell.referenceSplit() ? "max-w-[1624px]" : "max-w-[800px]")
+      ? cx(
+          "mx-auto w-full",
+          shell.referenceSplit()
+            ? "max-w-[calc(2_*_(var(--editor-measure)_+_10rem)_+_1.5rem)]"
+            : "max-w-[calc(var(--editor-measure)_+_10rem)]",
+        )
       : undefined;
 
   return (

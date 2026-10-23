@@ -1039,11 +1039,12 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     return held === undefined ? undefined : languageOf(held.entry.resource);
   };
   /**
-   * One half of the split dropdown: md — 48px with the 1px border above and
-   * below, 14px, a 20px chevron, 24px sides — level with the editor's action bar.
+   * One half of the split dropdown: md — 3rem (48px) with the 1px border
+   * above and below, 14px, a 20px chevron, 24px sides — level with the
+   * editor's action bar.
    */
   const HALF =
-    "flex h-[46px] min-w-0 cursor-pointer items-center gap-3 px-6 text-start text-small font-semibold text-on-surface-primary transition-colors hover:bg-surface-secondary";
+    "flex h-11.5 min-w-0 cursor-pointer items-center gap-3 px-6 text-start text-small font-semibold text-on-surface-primary transition-colors hover:bg-surface-secondary";
 
   /**
    * The split view's one control: | English ⌄ | ULB ⌄ |. The left half picks
