@@ -173,13 +173,12 @@ the application's Mod-K for an application it is not part of.
   application's one sync reading (`syncWatch`), quiet until something waits on
   a person and with a popover where sync is done ([sync](sync.md), "One
   reading for every surface").
-- **The project panel's show/hide** is not on the app bar. It is one button that
-  stays put and flips (`PanelToggle`, `panel-toggle`): left of the book's title
-  in the editor toolbar, and on project screens without that toolbar at the
-  start of the screen's page header, inline with its title: the workspace
-  provides it as `PageLeading` (`usePanelToggleLeading`), and a page-level
-  `PanelHeader`, or Review's own header, draws it.
-  Being outside the panel, it is also the way back. `Mod-b` does the same, and
+- **The project panel's show/hide** is not on the app bar. It is one button at
+  the top of the panel itself (`SidebarButton`, `panel-toggle`, `book-fab`
+  while hidden), on every project screen, named for what the panel holds
+  (`claimSidebar`'s `show`/`hide`, else "books"). Hidden, the panel folds to a
+  rail as wide as the button rather than going, so nothing floats over the page.
+  Because the rail stays, it is also the way back. `Mod-b` does the same, and
   dragging the panel's edge well past its minimum closes it
   (`Resizable.Panel`'s `onCollapse`), keeping the width it had.
 

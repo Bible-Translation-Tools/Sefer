@@ -15,9 +15,8 @@ import { tocViewOf } from "#core/galley";
 import { t } from "../../i18n";
 import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
-import { Badge, Button, IconButton, Input, SegmentedControl } from "../primitives";
+import { Badge, Button, Input } from "../primitives";
 import { bookName, testamentOf, type Testament } from "./books";
-import { layout } from "./layoutTweak";
 import { metadataOf, projectLanguage, projectName } from "./project";
 import { chapterOf, typedChapter } from "./typedPlace";
 
@@ -34,32 +33,6 @@ interface Chapter {
 }
 
 type Shell = ReturnType<typeof useShell>;
-
-function createSearchBox() {
-  const [query, setQuery] = createSignal("", { name: "sidebarQuery" });
-  const [searchOpen, setSearchOpen] = createSignal(false, { name: "sidebarSearchOpen" });
-  const closeSearch = () => {
-    setQuery("");
-    setSearchOpen(false);
-  };
-  return { query, setQuery, searchOpen, setSearchOpen, closeSearch };
-}
-
-function createTestamentPick(shell: Shell) {
-  const [picked, setPicked] = createSignal<
-    { readonly testament: Testament; readonly during: string | undefined } | undefined
-  >(undefined, { name: "sidebarTestament" });
-  const testament = (): Testament => {
-    const focused = shell.focused()?.id;
-    const choice = picked();
-    if (choice !== undefined && choice.during === focused) return choice.testament;
-    return testamentOf(focused ?? "MAT");
-  };
-  const pickTestament = (next: Testament): void => {
-    setPicked({ testament: next, during: shell.focused()?.id });
-  };
-  return { testament, pickTestament };
-}
 
 function chaptersOf(shell: Shell, id: string): readonly Chapter[] {
   if (shell.focused()?.id === id) {
@@ -108,12 +81,9 @@ function BookRow(props: {
   const chapters = createMemo(
     (): readonly Chapter[] => {
       if (!props.open) return [];
-      // The panels layout (a design tweak) starts the grid at chapter 1: no
-      // Intro tile. Open question for the developer — see
-      // planning/items/2026-10-19-intro-tile-in-the-chapter-grid.mdx.
-      const all = chaptersOf(shell, props.row.id).filter(
-        (chapter) => !(layout() === "panels" && chapter.intro),
-      );
+      // The grid starts at chapter 1: no Intro tile. Open question for the
+      // developer — see planning/items/2026-10-19-intro-tile-in-the-chapter-grid.mdx.
+      const all = chaptersOf(shell, props.row.id).filter((chapter) => !chapter.intro);
       const wanted = props.wanted;
       return wanted === "" ? all : all.filter((chapter) => chapter.label.startsWith(wanted));
     },
@@ -165,14 +135,9 @@ function BookRow(props: {
 
 export function ProjectSidebar() {
   const shell = useShell();
-  /**
-   * The `panels` layout (a design tweak): the project is in the app bar, both
-   * testaments are listed under their headings, and the search is always open.
-   */
-  const panels = (): boolean => layout() === "panels";
+  // Both testaments are listed under their headings, and the search is always open.
   const navigate = useNavigate();
-  const { query, setQuery, searchOpen, setSearchOpen, closeSearch } = createSearchBox();
-  const { testament, pickTestament } = createTestamentPick(shell);
+  const [query, setQuery] = createSignal("", { name: "sidebarQuery" });
   const [opened, setOpened] = createSignal<string | null | undefined>(undefined, {
     name: "sidebarOpened",
   });
@@ -214,8 +179,7 @@ export function ProjectSidebar() {
   const shown = createMemo(
     (): readonly Row[] => {
       const found = search();
-      if (found === undefined)
-        return panels() ? rows() : rows().filter((row) => row.testament === testament());
+      if (found === undefined) return rows();
       return rows().filter((row) => found.books.has(row.id));
     },
     { name: "sidebarShown" },
@@ -231,7 +195,7 @@ export function ProjectSidebar() {
         params: { slug: shell.slug(), book: encodeURIComponent(first.id) },
       });
     else return;
-    closeSearch();
+    setQuery("");
   };
 
   const isOpen = (id: string): boolean => {
@@ -263,7 +227,6 @@ export function ProjectSidebar() {
       book: shell.focused()?.id,
       chapter: currentChapter(shell),
       showing: shell.sidebarShowing(),
-      all: panels(),
     }),
     ({ nav, book, showing }) => {
       if (nav === undefined || book === undefined || !showing) {
@@ -318,67 +281,22 @@ export function ProjectSidebar() {
           </div>
         }
       >
-        <Show when={panels()}>
-          {/* Always open, pinned above the list: the list scrolls under it. */}
-          <div class="flex items-center gap-controls px-4 py-2">
-            <Input
-              wrapperClass="min-w-0 flex-1"
-              type="search"
-              data-testid="sidebar-search"
-              icon={<SearchIcon />}
-              aria-label={m.sidebar_search_label()}
-              placeholder={m.sidebar_search_placeholder()}
-              value={query()}
-              onInput={(event) => setQuery(event.currentTarget.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Escape") setQuery("");
-                if (event.key === "Enter") takeSearch();
-              }}
-            />
-          </div>
-        </Show>
-        <div class={panels() ? "hidden" : "flex flex-col gap-2 px-4 pb-2"}>
-          <div class="flex items-center gap-controls">
-            <SegmentedControl
-              label={t("Testament")}
-              class="min-w-0 flex-1"
-              items={[
-                { value: "ot", label: t("Old Testament"), shortLabel: t("Old") },
-                { value: "nt", label: t("New Testament"), shortLabel: t("New") },
-              ]}
-              value={testament()}
-              onChange={pickTestament}
-            />
-            <IconButton
-              label={t("Search for book and chapter")}
-              data-testid="sidebar-search-toggle"
-              aria-pressed={searchOpen() ? "true" : "false"}
-              icon={<SearchIcon />}
-              onClick={() => {
-                if (searchOpen()) closeSearch();
-                else setSearchOpen(true);
-              }}
-            />
-          </div>
-          <Show when={searchOpen()}>
-            <Input
-              ref={(el: HTMLInputElement) => queueMicrotask(() => el.focus())}
-              type="search"
-              data-testid="sidebar-search"
-              icon={<SearchIcon />}
-              aria-label={t("Search for book and chapter")}
-              placeholder={t("Mark 5")}
-              value={query()}
-              onInput={(event) => setQuery(event.currentTarget.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Escape") closeSearch();
-                if (event.key === "Enter") takeSearch();
-              }}
-              onBlur={() => {
-                if (query().trim() === "") setSearchOpen(false);
-              }}
-            />
-          </Show>
+        {/* Always open, pinned above the list: the list scrolls under it. */}
+        <div class="flex items-center gap-controls px-4 py-2">
+          <Input
+            wrapperClass="min-w-0 flex-1"
+            type="search"
+            data-testid="sidebar-search"
+            icon={<SearchIcon />}
+            aria-label={m.sidebar_search_label()}
+            placeholder={m.sidebar_search_placeholder()}
+            value={query()}
+            onInput={(event) => setQuery(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setQuery("");
+              if (event.key === "Enter") takeSearch();
+            }}
+          />
         </div>
 
         <nav ref={setList} aria-label={t("Books")} class="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
@@ -386,41 +304,32 @@ export function ProjectSidebar() {
             when={shown().length > 0}
             fallback={<p class="px-2 py-4 text-small text-on-surface-tertiary">{emptyNote()}</p>}
           >
-            <Show
-              when={panels()}
-              fallback={
-                <ul>
-                  <For each={shown()}>{(row) => bookRow(row)}</For>
-                </ul>
-              }
-            >
-              {/* Both testaments, each under its heading, 24px apart. */}
-              <div class="flex flex-col gap-6">
-                <For
-                  each={
-                    [
-                      { testament: "ot", label: m.sidebar_old_testament() },
-                      { testament: "nt", label: m.sidebar_new_testament() },
-                    ] as const
-                  }
-                >
-                  {(section) => (
-                    <Show when={shown().some((row) => row.testament === section.testament)}>
-                      <section data-testid={`sidebar-testament-${section.testament}`}>
-                        <h3 class="flex h-12 items-center px-3 text-small font-semibold text-on-surface-secondary">
-                          {section.label}
-                        </h3>
-                        <ul>
-                          <For each={shown().filter((row) => row.testament === section.testament)}>
-                            {(row) => bookRow(row)}
-                          </For>
-                        </ul>
-                      </section>
-                    </Show>
-                  )}
-                </For>
-              </div>
-            </Show>
+            {/* Both testaments, each under its heading, 24px apart. */}
+            <div class="flex flex-col gap-6">
+              <For
+                each={
+                  [
+                    { testament: "ot", label: m.sidebar_old_testament() },
+                    { testament: "nt", label: m.sidebar_new_testament() },
+                  ] as const
+                }
+              >
+                {(section) => (
+                  <Show when={shown().some((row) => row.testament === section.testament)}>
+                    <section data-testid={`sidebar-testament-${section.testament}`}>
+                      <h3 class="flex h-12 items-center px-3 text-small font-semibold text-on-surface-secondary">
+                        {section.label}
+                      </h3>
+                      <ul>
+                        <For each={shown().filter((row) => row.testament === section.testament)}>
+                          {(row) => bookRow(row)}
+                        </For>
+                      </ul>
+                    </section>
+                  </Show>
+                )}
+              </For>
+            </div>
           </Show>
 
           <Button
@@ -484,32 +393,15 @@ export function ProjectControl() {
           class="flex h-16 w-full cursor-pointer items-center gap-2 rounded-2xl border bg-surface-primary px-4 text-start transition-colors hover:bg-sidebar-surface-hover data-current:border-brand data-current:bg-brand-light not-data-current:border-surface-border"
           onClick={() => void navigate({ to: "/projects" })}
         >
-          <Show
-            when={layout() === "panels"}
-            fallback={
-              <span class="min-w-0 flex-1">
-                <span class="block truncate text-small font-bold text-on-surface-primary">
-                  {projectName(shell.project())}
-                </span>
-                <Show when={projectLanguage(shell.project()) !== ""}>
-                  <span class="block truncate text-small text-on-surface-primary">
-                    {projectLanguage(shell.project())}
-                  </span>
-                </Show>
-              </span>
-            }
-          >
-            {/* The panels layout (a design tweak): "Project:" over the
-                project's language and tag. */}
-            <span class="min-w-0 flex-1">
-              <span class="block truncate text-smallest text-on-surface-secondary">
-                {m.sidebar_project_label()}
-              </span>
-              <span class="block truncate text-small font-semibold text-on-surface-primary">
-                {projectLanguage(shell.project()) || projectName(shell.project())}
-              </span>
+          {/* "Project:" over the project's language and tag. */}
+          <span class="min-w-0 flex-1">
+            <span class="block truncate text-smallest text-on-surface-secondary">
+              {m.sidebar_project_label()}
             </span>
-          </Show>
+            <span class="block truncate text-small font-semibold text-on-surface-primary">
+              {projectLanguage(shell.project()) || projectName(shell.project())}
+            </span>
+          </span>
           <ChevronDown aria-hidden="true" class="size-5 shrink-0 text-on-surface-primary" />
         </button>
       </Show>
