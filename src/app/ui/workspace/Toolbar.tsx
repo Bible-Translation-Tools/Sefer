@@ -10,7 +10,7 @@ import { Show, createEffect, createSignal } from "solid-js";
 import { findCommand, runCommand } from "../../commands";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import { Card, IconButton, Input, Popover, Switch } from "../primitives";
+import { Card, IconButton, Input, Popover } from "../primitives";
 import { bookName } from "./books";
 import { PanelToggle } from "./PanelToggle";
 import { metadataOf, projectName } from "./project";
@@ -188,11 +188,6 @@ function FindingsBell() {
 
 export function Toolbar(props: {
   /**
-   * The USFM switch, here rather than in the editor's location bar: Refine's
-   * language panels draw no location bar (a design tweak).
-   */
-  readonly usfm?: boolean;
-  /**
    * `false`: no show/hide here — the panels layout (a design tweak) keeps it
    * in the workspace's own gutter (`PanelGutter`).
    */
@@ -235,14 +230,6 @@ export function Toolbar(props: {
       </div>
 
       <Card class="ms-auto flex items-center gap-controls p-1.5" padded={false}>
-        <Show when={props.usfm === true}>
-          <Switch
-            class="px-3"
-            label={t("USFM")}
-            checked={shell.mode() === "usfm"}
-            onChange={(on) => shell.setMode(on ? "usfm" : "default")}
-          />
-        </Show>
         <ToolbarSearch query={query()} onQuery={setQuery} />
 
         <IconButton

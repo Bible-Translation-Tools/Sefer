@@ -40,17 +40,12 @@
  * is an editor over one book's text, and a new text is a new document.
  */
 
-import type { JSX } from "@solidjs/web";
 import { Effect, Option, Result } from "effect";
 import BookMarked from "lucide-solid/icons/book-marked";
 import Check from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronUp from "lucide-solid/icons/chevron-up";
 import Download from "lucide-solid/icons/download";
-import MoreHorizontal from "lucide-solid/icons/ellipsis";
-import Globe from "lucide-solid/icons/globe";
-import Heart from "lucide-solid/icons/heart";
-import Plus from "lucide-solid/icons/plus";
 import Search from "lucide-solid/icons/search";
 import Trash from "lucide-solid/icons/trash-2";
 import X from "lucide-solid/icons/x";
@@ -63,7 +58,6 @@ import {
   createMemo,
   createSignal,
   onCleanup,
-  untrack,
 } from "solid-js";
 
 import { Observability } from "#core/observability";
@@ -86,12 +80,10 @@ import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
 import { ResourcePane } from "../kinds/registry";
-import { flyCard } from "../landing/downloads";
 import { listProjects, type ProjectSummary } from "../landing/summaries";
 import {
   Button,
   EmptyState,
-  IconButton,
   Input,
   Menu,
   MenuItem,
@@ -518,134 +510,11 @@ const readLibraryState = (
 export interface ReferenceColumnProps {
   readonly onBound?: (count: number) => void;
   /**
-   * `panel`: Refine's language panels, a design tweak. Every text the project
-   * shows is a TAB, one on show at a time, and "+" is the language menu; no
-   * fold, no column padding. `gateway`: the split view's reference panel —
-   * no tabs, one split dropdown, language then text, over the text on show.
-   * `column` otherwise.
+   * `gateway`: the panels layout's reference panel — one split dropdown,
+   * language then text, over the text on show, no column padding. `column`
+   * otherwise.
    */
-  readonly variant?: "column" | "panel" | "gateway";
-  /**
-   * The heart language, as one more tab after the gateways (the joined panel).
-   * The column does not draw the editor; it shows `editor` under the strip
-   * while this tab is the active one, and its own pane otherwise.
-   */
-  readonly heart?: {
-    readonly name: string;
-    readonly code: string;
-    readonly active: boolean;
-    /** `true`: the heart tab was chosen; `false`: a gateway tab was. */
-    readonly onActivate: (heart: boolean) => void;
-  };
-  readonly editor?: JSX.Element;
-  /** Drawn at the end of the tab strip: the panel's split or join button. */
-  readonly trailing?: JSX.Element;
-}
-
-/**
- * One language tab: the full name, and the bare code only when the name would
- * not fit — shortening is how a tab truncates. Measured, not a breakpoint: the
- * name's own width (an invisible copy of it) against the room the tab has
- * after its padding and badge, re-checked whenever the tab is resized.
- */
-export function LanguageTab(props: {
-  readonly name: string;
-  readonly code: string;
-  readonly active: boolean;
-  /** The heart language: the one being refined, and the one that is editable. */
-  readonly refining?: boolean;
-  readonly testId?: string;
-  readonly onSelect?: () => void;
-  /** Takes it off the tabs: an × on the tab while it is the active one. */
-  readonly onClose?: () => void;
-  /** The language it stands for, for the add list's flight to it. */
-  readonly languageKey?: string;
-  /** `false` when the strip is short of room: the icons go before the names do. */
-  readonly showIcon?: boolean;
-}) {
-  // The × only on the tab on show.
-  const closable = (): boolean => props.active && props.onClose !== undefined;
-  // The label is two layers in one grid cell: an invisible copy of the full
-  // name, which gives the tab its natural width and shrinks when the strip is
-  // short of room, and the visible text over it. The name shows while the copy
-  // has room for all of it (`scrollWidth` is its whole width, `clientWidth`
-  // what it was given); otherwise the code.
-  const [ghost, setGhost] = createSignal<HTMLSpanElement>();
-  const [fits, setFits] = createSignal(true, { name: "languageTabFits" });
-  createEffect(
-    () => ({ copy: ghost(), name: props.name }),
-    ({ copy }) => {
-      if (copy === undefined) return;
-      const measure = (): void => {
-        setFits(copy.scrollWidth <= copy.clientWidth);
-      };
-      const observer = new ResizeObserver(measure);
-      observer.observe(copy);
-      measure();
-      return () => observer.disconnect();
-    },
-  );
-  return (
-    <div
-      data-current={props.active ? "" : undefined}
-      data-tab-language={props.languageKey}
-      data-short={fits() ? undefined : ""}
-      class="-mb-px flex h-12 min-w-0 shrink items-center rounded-t-[12px] border-b-2 text-small font-semibold transition-colors data-current:border-brand data-current:text-brand not-data-current:border-transparent not-data-current:text-on-surface-primary not-data-current:hover:bg-surface-secondary"
-    >
-      <button
-        type="button"
-        role="tab"
-        aria-selected={props.active ? "true" : "false"}
-        data-testid={props.testId}
-        title={props.name}
-        class={cx(
-          "flex h-full min-w-0 cursor-pointer items-center gap-2 text-start",
-          closable() ? "ps-4 pe-2" : "px-4",
-        )}
-        onClick={() => props.onSelect?.()}
-      >
-        {/* What kind of language it is: a gateway to read beside, or the
-            heart language being refined. */}
-        <Show when={props.showIcon !== false}>
-          <Show
-            when={props.refining === true}
-            fallback={<Globe aria-hidden="true" class="size-5 shrink-0" />}
-          >
-            <Heart aria-hidden="true" class="size-5 shrink-0" />
-          </Show>
-        </Show>
-        <span class="grid min-w-0">
-          <span
-            ref={setGhost}
-            aria-hidden="true"
-            class="invisible col-start-1 row-start-1 min-w-0 overflow-hidden whitespace-nowrap"
-          >
-            {props.name}
-          </span>
-          <span class="col-start-1 row-start-1 truncate text-start">
-            {fits() ? props.name : props.code}
-          </span>
-        </span>
-        <Show when={props.refining === true}>
-          <span class="shrink-0 rounded-full bg-brand-light px-2 py-0.5 text-smallest font-medium text-brand">
-            {t("Refinement")}
-          </span>
-        </Show>
-      </button>
-      <Show when={closable()}>
-        <button
-          type="button"
-          data-testid={props.testId === undefined ? undefined : `${props.testId}-close`}
-          aria-label={t("Remove {name} from the tabs", { name: props.name })}
-          title={t("Remove {name} from the tabs", { name: props.name })}
-          class="me-3 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md hover:bg-surface-secondary"
-          onClick={() => props.onClose?.()}
-        >
-          <X aria-hidden="true" class="size-5" />
-        </button>
-      </Show>
-    </div>
-  );
+  readonly variant?: "column" | "gateway";
 }
 
 export function ReferenceColumn(props: ReferenceColumnProps) {
@@ -783,18 +652,18 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
   };
 
   /**
-   * A text's LANGUAGE, as the panel variant groups by it: one tab, and one
-   * row in the Add dropdown, per language, however many texts it has (ULB,
-   * UDB, Notes…). Lower-cased tag; the id when a text names no language.
+   * A text's LANGUAGE, as the split dropdown groups by it: one row per
+   * language, however many texts it has (ULB, UDB, Notes…). Lower-cased tag;
+   * the id when a text names no language.
    */
   const languageOf = (resource: Resource): string =>
     (resource.language ?? resource.id).toLowerCase();
-  /** The text last on show in each language, so returning to its tab returns to it. */
+  /** The text last on show in each language, so returning to it returns to that text. */
   const [lastIn, setLastIn] = createSignal<Readonly<Record<string, string>>>(
     {},
     { name: "referenceLastIn" },
   );
-  /** The tabs: the bound texts grouped by language, in the order they are bound. */
+  /** The bound texts grouped by language, in the order they are bound. */
   const languageTabs = createMemo(
     (): readonly { readonly key: string; readonly entries: readonly Entry[] }[] => {
       const groups = new Map<string, Entry[]>();
@@ -808,17 +677,11 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     },
     { name: "referenceLanguageTabs" },
   );
-  /** The text a language's tab opens on: the last one shown in it, else its scripture. */
+  /** The text a language opens on: the last one shown in it, else its scripture. */
   const openingOf = (group: readonly Entry[], key: string): Entry | undefined =>
     group.find((entry) => entry.resource.id === lastIn()[key]) ??
     group.find((entry) => isBible(entry.resource)) ??
     group[0];
-  /** Takes every picked text in a language off the tabs; declared ones stay. */
-  const unpickLanguage = (key: string): void => {
-    for (const entry of entries())
-      if (languageOf(entry.resource) === key && !entry.declared) unpick(entry);
-  };
-
   const [chosen, setChosen] = createSignal<string | undefined>(undefined, {
     name: "referenceShown",
   });
@@ -828,8 +691,6 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     if (project === undefined) return;
     setChosen(resource.id);
     setLastIn((held) => ({ ...held, [languageOf(resource)]: resource.id }));
-    // The joined panel: what was just chosen is what goes on show.
-    props.heart?.onActivate(false);
     if (entries().some((entry) => entry.resource.id === resource.id)) return;
     void services
       .run(services.library.pick(project.root, roleFor(resource), resource.id))
@@ -856,7 +717,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       });
   };
 
-  /** Downloads in flight from the panel's language list, by repository. */
+  /** Downloads in flight from the split dropdown's language list, by repository. */
   const [pulling, setPulling] = createSignal<ReadonlySet<string>>(new Set(), {
     name: "referencePulling",
   });
@@ -869,7 +730,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     });
   };
 
-  /** From the panel's language list (`keep`), a download stays there to Add rather than going on show. */
+  /** From the split dropdown's language list (`keep`), a download stays there rather than going on show. */
   const fetchBible = (text: ListedText, keep = false): void => {
     const name = text.languageName || text.language;
     const operation = services.composition.observability.operation("import.remote", {
@@ -1020,58 +881,22 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     setQuery,
   };
 
-  /**
-   * The panel variant's "+": the panel shows its language list in place of
-   * the text — what is on this device, to add as a tab or take off the tabs,
-   * then what can be downloaded.
-   */
+  /** The split dropdown's language list, open or shut. */
   const [managing, setManaging] = createSignal(false, { name: "referenceManaging" });
   const manage = (open: boolean): void => {
     setManaging(open);
     if (open) offer();
   };
-  /** The entry a resource is a tab as, if it is one. */
-  // The joined panel: with no gateway tabs left, the heart language is the one
-  // on show — not an empty pane behind a tab that no longer exists.
-  createEffect(
-    () => !loading() && entries().length === 0,
-    (none) => {
-      if (none) props.heart?.onActivate(true);
-    },
-  );
-
-  /** Takes a picked text off the tabs. It stays on this device, and in every other project. */
-  const unpick = (entry: Entry): void => {
-    const project = shell.project();
-    if (project === undefined) return;
-    if (chosen() === entry.resource.id) setChosen(undefined);
-    void services
-      .run(services.library.unpick(project.root, entry.role, entry.resource.id))
-      .then(() => setBound((held) => held + 1));
-  };
-
   /** A listing still on its way: nothing read yet, or the read in flight. */
   const listing = (read: Listing | undefined): boolean =>
     read === undefined || read.state === "loading";
-  /** Why a list could not be read, while that is the last word. */
-  const notesFailure = () => {
-    const read = notes()?.state === "failed" ? notes() : bibles();
-    return read?.state === "failed" ? read : undefined;
-  };
-
   /** A row of the add list: what it is called, how to sort it, and what its button does. */
   type Offer =
     | {
         readonly kind: "held";
         readonly key: string;
         readonly name: string;
-        readonly added: () => boolean;
-        /** `from`: where the row's name is, for the flight to its tab. */
-        readonly add: (from: DOMRect) => void;
-        /** Takes it off the tabs again; absent where that cannot be done. */
-        readonly remove?: () => void;
-        /** `false` while every text it has on the tabs is one the project declares. */
-        readonly removable?: () => boolean;
+        readonly add: () => void;
       }
     | {
         readonly kind: "download";
@@ -1082,41 +907,14 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       };
   const byName = (a: Offer, b: Offer): number => a.name.localeCompare(b.name);
 
-  const [aside, setAside] = createSignal<HTMLElement>();
-  const tabIds = (): ReadonlySet<string> =>
-    new Set(
-      [...(aside()?.querySelectorAll<HTMLElement>("[data-tab-language]") ?? [])].map(
-        (tab) => tab.dataset.tabLanguage ?? "",
-      ),
-    );
   /**
-   * Flies the added row's name up to its new tab: a ghost from the row to the
-   * tab once the tab is drawn (looked for every 50ms, for up to 3s, since a
-   * pick re-resolves the bindings first). `which` picks the tab; for another
-   * project, whose resource id is not known until it is registered, it is the
-   * tab that was not there before.
-   */
-  const flyToTab = (from: DOMRect, label: string, which: (id: string) => boolean): void => {
-    if (globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true) return;
-    let tries = 0;
-    const look = (): void => {
-      const tab = [...(aside()?.querySelectorAll<HTMLElement>("[data-tab-language]") ?? [])].find(
-        (each) => which(each.dataset.tabLanguage ?? ""),
-      );
-      if (tab !== undefined) flyCard(from, tab, label);
-      else if ((tries += 1) < 60) setTimeout(look, 50);
-    };
-    look();
-  };
-
-  /**
-   * What the add list offers: everything on this device (and the reader's
-   * other projects), A–Z — those already a tab say Added — then everything to
-   * download, A–Z. A download stays in the list once it lands, now with Add.
+   * What the language list offers: everything on this device (and the
+   * reader's other projects), A–Z, then everything to download, A–Z. A
+   * download stays in the list once it lands.
    */
   const offers = (): readonly Offer[] => {
     // One row per LANGUAGE on this device, whatever texts it holds; it opens
-    // on its scripture. Removing takes all of its texts off the tabs.
+    // on its scripture.
     const languages = new Map<string, Resource[]>();
     for (const resource of installed()) {
       const key = languageOf(resource);
@@ -1127,39 +925,25 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     const labelOf = (key: string, fallback: string): string =>
       `${languageName(key) ?? fallback} (${key})`;
     const held: Offer[] = [...languages].map(([key, texts]): Offer => {
-      const name = labelOf(key, texts[0]?.title ?? key);
-      const inTabs = (): readonly Entry[] =>
-        entries().filter((entry) => languageOf(entry.resource) === key);
       return {
         kind: "held",
         key,
-        name,
-        added: () => inTabs().length > 0,
-        add: (from) => {
+        name: labelOf(key, texts[0]?.title ?? key),
+        add: () => {
           const opening = texts.find(isBible) ?? texts[0];
-          if (opening === undefined) return;
-          show(opening);
-          flyToTab(from, name, (id) => id === key);
+          if (opening !== undefined) show(opening);
         },
-        remove: () => unpickLanguage(key),
-        removable: () => !inTabs().every((entry) => entry.declared),
       };
     });
     for (const row of otherProjects()) {
       const key = (row.languageTag || row.root).toLowerCase();
       if (languages.has(key)) continue;
       languages.set(key, []);
-      const name = row.languageTag === "" ? row.name : labelOf(key, row.language || row.name);
       held.push({
         kind: "held",
         key,
-        name,
-        added: () => false,
-        add: (from) => {
-          const before = tabIds();
-          showProject(row);
-          flyToTab(from, name, (id) => !before.has(id));
-        },
+        name: row.languageTag === "" ? row.name : labelOf(key, row.language || row.name),
+        add: () => showProject(row),
       });
     }
     // Languages to download: one row each, never one already on this device.
@@ -1180,28 +964,14 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     });
     return [...held.sort(byName), ...toGet.sort(byName)];
   };
-  const downloaded = (): readonly Offer[] => offers().filter((offer) => offer.kind === "held");
-  const available = (): readonly Offer[] => offers().filter((offer) => offer.kind === "download");
-
   /**
-   * The panel's add list (the panel variant's "+"): one list under one title,
-   * what is on this device first, then what can be downloaded — each A–Z.
-   * Add makes it a tab, flies it up there, and the row then says Added; Download turns into a
-   * progress bar and leaves the row, now with Add, when it lands. Taking a
-   * text off the tabs is the × on its tab.
+   * The split dropdown's right half, the choice of text WITHIN a language:
+   * every text on this device in that language — its scriptures, its
+   * Translation Notes… — and, to download, the notes this language has and
+   * the device does not. Named by its shorthand (`ULB`, `REG`) where it has
+   * one, not its full title.
    */
-  /**
-   * The panel variant's choice of text WITHIN a language tab: every text on
-   * this device in that language — its scriptures, its Translation Notes… —
-   * and, to download, the notes this language has and the device does not.
-   */
-  const ResourcePicker = (pickerProps: {
-    readonly resource: Resource;
-    /** The trigger's own look, for the split dropdown's right half. */
-    readonly triggerClass?: string;
-    /** Name the text by its shorthand (`ULB`, `REG`) where it has one, not its full title. */
-    readonly short?: boolean;
-  }) => {
+  const ResourcePicker = (pickerProps: { readonly resource: Resource }) => {
     const key = (): string => languageOf(pickerProps.resource);
     const texts = (): readonly Resource[] =>
       installed().filter((each) => languageOf(each) === key());
@@ -1215,24 +985,15 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
           if (open) offer();
         }}
         side="bottom"
-        // The split dropdown's right half: its menu ends where the control
-        // does, flush with the panel's right edge, not hanging past it.
-        align={pickerProps.short === true ? "end" : "start"}
+        // Its menu ends where the control does, flush with the panel's
+        // right edge, not hanging past it.
+        align="end"
         class="w-80"
         fitViewport
         trigger={
-          <button
-            type="button"
-            data-testid="resource-picker"
-            class={
-              pickerProps.triggerClass ??
-              "flex min-h-12 w-full max-w-sm cursor-pointer items-center gap-3 rounded-lg px-3 text-start text-small font-semibold text-on-surface-primary transition-colors hover:bg-surface-secondary"
-            }
-          >
+          <button type="button" data-testid="resource-picker" class={HALF}>
             <span class="min-w-0 flex-1 truncate" title={pickerProps.resource.title}>
-              {pickerProps.short === true
-                ? (pickerProps.resource.identifier?.toUpperCase() ?? pickerProps.resource.title)
-                : pickerProps.resource.title}
+              {pickerProps.resource.identifier?.toUpperCase() ?? pickerProps.resource.title}
             </span>
             <ChevronDown aria-hidden="true" class="size-5 shrink-0" />
           </button>
@@ -1269,186 +1030,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
     );
   };
 
-  /**
-   * How tight the tab strip is, so it gives up room in order: 0, everything;
-   * 1, + Add and Split/Join fold into a "…" menu; 2, the language icons go
-   * too. Past that, names shorten to codes (each tab's own measure). It
-   * steps up while any tab has fallen back to its code, and back down once
-   * the strip is clearly wider than where it stepped up.
-   */
-  const [tight, setTight] = createSignal<0 | 1 | 2>(0, { name: "referenceStripTight" });
-  const [strip, setStrip] = createSignal<HTMLElement>();
-  // Cramped: the strip overflows, or some tab has had to fall back to its code.
-  const cramped = (element: HTMLElement): boolean =>
-    element.scrollWidth > element.clientWidth + 1 || element.querySelector("[data-short]") !== null;
-  createEffect(
-    () => ({ element: strip(), tabs: languageTabs().length }),
-    ({ element }) => {
-      if (element === undefined) return;
-      // The width each step was taken at. A step is only undone once the
-      // strip is clearly wider than that, so a strip on the edge does not
-      // fold and unfold on every frame; and only WIDTH changes count, since
-      // folding changes the strip's own height.
-      const takenAt: number[] = [];
-      let width = -1;
-      let frame = 0;
-      // Two frames: one to draw a step, one for each tab's own measure (a
-      // ResizeObserver, which reports after layout) to land.
-      const later = (then: () => void): void => {
-        cancelAnimationFrame(frame);
-        frame = requestAnimationFrame(() => {
-          frame = requestAnimationFrame(then);
-        });
-      };
-      const check = (): void => {
-        const now = untrack(tight);
-        const room = element.clientWidth;
-        const back = takenAt[now - 1];
-        if (now > 0 && back !== undefined && room > back + 16) {
-          takenAt.length = now - 1;
-          setTight(now === 2 ? 1 : 0);
-          later(check);
-        } else if (now < 2 && cramped(element)) {
-          takenAt[now] = room;
-          setTight(now === 0 ? 1 : 2);
-          later(check);
-        }
-      };
-      const observer = new ResizeObserver(() => {
-        if (element.clientWidth === width) return;
-        width = element.clientWidth;
-        later(check);
-      });
-      observer.observe(element);
-      later(check);
-      return () => {
-        cancelAnimationFrame(frame);
-        observer.disconnect();
-      };
-    },
-  );
-
-  /** One row's action: Add, Remove, Download, or the bar while it downloads. */
-  const offerAction = (offer: Offer): JSX.Element => {
-    if (offer.kind === "download")
-      return (
-        <Show
-          when={offer.pulling()}
-          fallback={
-            <Button variant="tertiary" onClick={() => offer.download()}>
-              <Download aria-hidden="true" />
-              {t("Download")}
-            </Button>
-          }
-        >
-          {/* No byte count to show, so the bar runs until the copy lands. */}
-          <div
-            role="progressbar"
-            aria-label={t("Downloading {name}", { name: offer.name })}
-            class="relative h-2 w-24 shrink-0 overflow-hidden rounded-full bg-surface-secondary"
-          >
-            <div class="absolute inset-y-0 w-1/3 animate-pulse rounded-full bg-brand" />
-          </div>
-        </Show>
-      );
-    return (
-      <Show
-        when={offer.added()}
-        fallback={
-          <Button
-            variant="tertiary"
-            disabled={busy()}
-            onClick={(event) => {
-              const button = event.currentTarget;
-              const row = button.closest("li")?.querySelector("span") ?? button;
-              offer.add(row.getBoundingClientRect());
-            }}
-          >
-            <Plus aria-hidden="true" />
-            {t("Add")}
-          </Button>
-        }
-      >
-        <Show
-          when={offer.remove !== undefined && offer.removable?.() !== false}
-          fallback={<span class="text-small text-on-surface-tertiary">{t("Project source")}</span>}
-        >
-          <Button variant="tertiary" onClick={() => offer.remove?.()}>
-            <X aria-hidden="true" />
-            {t("Remove")}
-          </Button>
-        </Show>
-      </Show>
-    );
-  };
-
-  /**
-   * The Add dropdown (the panel variant): what is downloaded, then what is
-   * available, each A–Z, one line a language — "Name (code)" and its action.
-   * Add makes it a tab (and flies it there) and turns into Remove; Remove
-   * takes it off the tabs and turns back into Add; Download runs a bar, and
-   * the language moves up to Downloaded when it lands.
-   */
-  const LanguageList = () => (
-    <div
-      data-testid="language-list"
-      class="scrollbar-padded flex max-h-[min(70vh,32rem)] flex-col overflow-y-auto py-2"
-    >
-      <h3 class="flex h-12 shrink-0 items-center px-4 text-small font-bold text-on-surface-primary">
-        {t("Downloaded")}
-      </h3>
-      <Show when={downloaded().length === 0}>
-        <p class="px-4 py-2 text-small text-on-surface-tertiary">{t("Nothing downloaded yet.")}</p>
-      </Show>
-      <ul>
-        <For each={downloaded()}>
-          {(offer) => (
-            <li
-              data-testid={`language-offer-${offer.key}`}
-              class="flex min-h-12 items-center gap-3 px-4 text-small text-on-surface-primary"
-            >
-              <span class="min-w-0 flex-1 truncate" title={offer.name}>
-                {offer.name}
-              </span>
-              {offerAction(offer)}
-            </li>
-          )}
-        </For>
-      </ul>
-      <h3 class="flex h-12 shrink-0 items-center px-4 text-small font-bold text-on-surface-primary">
-        {t("Available")}
-      </h3>
-      <Show when={listing(bibles())}>
-        <p class="px-4 py-2 text-small text-on-surface-tertiary">{t("Loading the list…")}</p>
-      </Show>
-      <Show when={notesFailure()}>
-        {(failure) => (
-          <p role="status" class="px-4 py-2 text-small text-on-surface-tertiary">
-            {failure().offline
-              ? t("You are offline. Open this list again to retry.")
-              : t("Could not read the list. Open this list again to retry.")}
-          </p>
-        )}
-      </Show>
-      <ul>
-        <For each={available()}>
-          {(offer) => (
-            <li
-              data-testid={`language-offer-${offer.key}`}
-              class="flex min-h-12 items-center gap-3 px-4 text-small text-on-surface-primary"
-            >
-              <span class="min-w-0 flex-1 truncate" title={offer.name}>
-                {offer.name}
-              </span>
-              {offerAction(offer)}
-            </li>
-          )}
-        </For>
-      </ul>
-    </div>
-  );
-
-  /** The language a tab group is called by, as the tabs and the split dropdown name it. */
+  /** The language a group is called by, as the split dropdown names it. */
   const groupName = (group: { readonly key: string; readonly entries: readonly Entry[] }): string =>
     languageName(group.key) ?? group.entries[0]?.resource.title ?? group.key;
   /** The language of the text on show, if one is. */
@@ -1616,12 +1198,12 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
                       type="button"
                       aria-current={shownLanguage() === held().key ? "true" : undefined}
                       class="flex min-h-12 w-full cursor-pointer items-center gap-3 px-4 text-start text-small text-on-surface-primary transition-colors hover:bg-surface-secondary aria-[current]:bg-brand-light aria-[current]:font-semibold aria-[current]:text-brand"
-                      onClick={(event) => {
+                      onClick={() => {
                         const group = languageTabs().find((each) => each.key === held().key);
                         const opening =
                           group === undefined ? undefined : openingOf(group.entries, group.key);
                         if (opening !== undefined) setChosen(opening.resource.id);
-                        else held().add(event.currentTarget.getBoundingClientRect());
+                        else held().add();
                         setManaging(false);
                       }}
                     >
@@ -1642,7 +1224,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       <Show when={shown()}>
         {(held) => (
           <div class="flex max-w-[50%] min-w-0 shrink-0 border-s border-surface-border">
-            <ResourcePicker resource={held().entry.resource} triggerClass={HALF} short />
+            <ResourcePicker resource={held().entry.resource} />
           </div>
         )}
       </Show>
@@ -1651,136 +1233,16 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
 
   return (
     <aside
-      ref={setAside}
       aria-label={t("Reference texts")}
       class={
-        props.variant === "panel" || props.variant === "gateway"
+        props.variant === "gateway"
           ? "flex h-full min-h-0 min-w-0 flex-1 flex-col gap-3"
           : "flex h-full min-w-0 flex-col gap-3 py-4 pe-[7.5px]"
       }
       data-references={entries().length}
     >
-      <Show
-        when={props.variant === "panel" || props.variant === "gateway"}
-        fallback={<LanguagePicker model={picker} />}
-      >
-        <Show when={props.variant === "gateway"}>
-          <GatewayPicker />
-        </Show>
-        <Show when={props.variant !== "gateway"}>
-          <div
-            ref={setStrip}
-            role="tablist"
-            aria-label={t("Languages")}
-            class="flex shrink-0 items-center gap-controls border-b border-surface-border"
-          >
-            <div class="flex min-w-0 items-end">
-              <For each={languageTabs()}>
-                {(group) => (
-                  <LanguageTab
-                    testId={`language-tab-${group.key}`}
-                    name={languageName(group.key) ?? group.entries[0]?.resource.title ?? group.key}
-                    code={group.key}
-                    active={
-                      props.heart?.active !== true &&
-                      shown() !== undefined &&
-                      languageOf(shown()!.entry.resource) === group.key
-                    }
-                    onSelect={() => {
-                      const opening = openingOf(group.entries, group.key);
-                      if (opening !== undefined) setChosen(opening.resource.id);
-                      setManaging(false);
-                      props.heart?.onActivate(false);
-                    }}
-                    onClose={
-                      group.entries.every((entry) => entry.declared)
-                        ? undefined
-                        : () => unpickLanguage(group.key)
-                    }
-                    languageKey={group.key}
-                    showIcon={tight() < 2}
-                  />
-                )}
-              </For>
-            </div>
-            <Show
-              when={tight() > 0}
-              fallback={
-                <>
-                  <Popover
-                    label={t("Add a reference language")}
-                    side="bottom"
-                    align="start"
-                    variant="menu"
-                    class="w-96 p-0"
-                    fitViewport
-                    open={managing()}
-                    onOpenChange={manage}
-                    trigger={
-                      <Button
-                        variant="tertiary"
-                        class="shrink-0 [&>svg]:shrink-0"
-                        data-testid="reference-add"
-                      >
-                        <Plus aria-hidden="true" />
-                        {t("Add")}
-                      </Button>
-                    }
-                  >
-                    <LanguageList />
-                  </Popover>
-                  {props.trailing}
-                </>
-              }
-            >
-              {/* Short of room: Split/Join and the language list behind one "…". */}
-              <Popover
-                label={t("More")}
-                side="bottom"
-                align="start"
-                variant="menu"
-                class="w-96 p-0"
-                fitViewport
-                open={managing()}
-                onOpenChange={manage}
-                trigger={
-                  <IconButton
-                    variant="quiet"
-                    class="shrink-0"
-                    data-testid="reference-more"
-                    label={t("More")}
-                    icon={<MoreHorizontal />}
-                  />
-                }
-              >
-                <Show when={props.trailing !== undefined}>
-                  <div class="flex border-b border-surface-border px-2 py-2">{props.trailing}</div>
-                </Show>
-                <LanguageList />
-              </Popover>
-            </Show>
-            {/* The heart language, flush right: gateways, then Add and Split,
-                then the one being refined at the far end. */}
-            <Show when={props.heart}>
-              {(heart) => (
-                <div class="ms-auto flex min-w-0">
-                  <LanguageTab
-                    testId="language-tab-heart"
-                    showIcon={tight() < 2}
-                    name={heart().name}
-                    code={heart().code}
-                    refining
-                    active={heart().active}
-                    onSelect={() => {
-                      setManaging(false);
-                      heart().onActivate(true);
-                    }}
-                  />
-                </div>
-              )}
-            </Show>
-          </div>
-        </Show>
+      <Show when={props.variant === "gateway"} fallback={<LanguagePicker model={picker} />}>
+        <GatewayPicker />
         <Show when={fetching() !== ""}>
           <p role="status" class="text-small text-on-surface-secondary">
             {t("Getting {language}…", { language: fetching() })}
@@ -1814,7 +1276,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
         when={shown()}
         keyed
         fallback={
-          <Show when={!loading() && props.heart?.active !== true}>
+          <Show when={!loading()}>
             <EmptyState
               icon={<BookMarked size={22} />}
               title={
@@ -1832,12 +1294,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
         }
       >
         {(held) => (
-          <div
-            class={props.heart?.active === true ? "hidden" : "flex min-h-0 flex-1 flex-col gap-3"}
-          >
-            <Show when={props.variant === "panel"}>
-              <ResourcePicker resource={held.entry.resource} />
-            </Show>
+          <div class="flex min-h-0 flex-1 flex-col gap-3">
             <ResourcePane
               resource={held.entry.resource}
               role={held.entry.role}
@@ -1847,13 +1304,6 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
             />
           </div>
         )}
-      </Show>
-      <Show when={props.editor !== undefined}>
-        {/* Hidden rather than unmounted, so switching tabs keeps the
-            editor's place; the reference pane above does the same. */}
-        <div class={props.heart?.active === true ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
-          {props.editor}
-        </div>
       </Show>
     </aside>
   );
