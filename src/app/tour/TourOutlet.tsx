@@ -6,7 +6,7 @@ import { For, Show, createEffect, createSignal, onCleanup, untrack } from "solid
 import { registerCommand, runCommand } from "../commands";
 import { t } from "../i18n";
 import { useShell } from "../ProjectContext";
-import { Button, IconButton, Menu, MenuItem, toasts } from "../ui/primitives";
+import { Button, IconButton, Menu, MenuItem, cx, toasts } from "../ui/primitives";
 import {
   anchored,
   beginTour,
@@ -254,6 +254,39 @@ const last = () => {
 const workflow = () => runningTour()?.tour.kind === "workflow";
 
 const fixed = () => runningTour()?.fixed === true;
+const reached = () => runningTour()?.reached === true;
+
+/**
+ * How far the person has dragged the card off its place, by its header, so
+ * it can be moved off something they want to read. Every step starts where
+ * the step puts it, because the next anchor is somewhere else.
+ */
+const [dragged, setDragged] = createSignal({ x: 0, y: 0 }, { name: "tourCardDragged" });
+
+const startDrag = (event: PointerEvent): void => {
+  const header = event.currentTarget;
+  if (
+    event.button !== 0 ||
+    !(header instanceof HTMLElement) ||
+    (event.target instanceof Element && event.target.closest("button, [role=menu]") !== null)
+  )
+    return;
+  const from = { x: event.clientX, y: event.clientY };
+  const initial = dragged();
+  header.setPointerCapture(event.pointerId);
+  const move = (next: PointerEvent): void => {
+    setDragged({ x: initial.x + next.clientX - from.x, y: initial.y + next.clientY - from.y });
+  };
+  const end = (): void => {
+    header.removeEventListener("pointermove", move);
+    header.removeEventListener("pointerup", end);
+    header.removeEventListener("pointercancel", end);
+  };
+  header.addEventListener("pointermove", move);
+  header.addEventListener("pointerup", end);
+  header.addEventListener("pointercancel", end);
+  event.preventDefault();
+};
 
 const stopLabel = () => {
   if (last()) return t("Close");
@@ -265,7 +298,12 @@ const nextLabel = () => {
 };
 
 const cardHeader = (context: TourContext, onPause: () => void, title: string) => (
-  <div class="flex items-baseline justify-between gap-3">
+  <div
+    class="flex cursor-grab touch-none items-baseline justify-between gap-3 select-none active:cursor-grabbing"
+    title={t("Drag to move")}
+    data-tour-drag
+    onPointerDown={startDrag}
+  >
     <h2 class="text-base font-semibold text-on-surface-primary">{title}</h2>
     <span class="flex shrink-0 items-center gap-1 text-smallest text-on-surface-tertiary tabular-nums">
       {progress()}
@@ -323,7 +361,11 @@ const tourCard = (
     aria-label={title}
     data-tour-card
     class="pointer-events-auto fixed z-50 flex flex-col gap-3 overflow-y-auto overscroll-contain rounded-lg border border-surface-border bg-surface-primary p-4 shadow-large"
-    style={{ width: `${CARD_WIDTH}px`, ...style }}
+    style={{
+      width: `${CARD_WIDTH}px`,
+      ...style,
+      translate: `${dragged().x}px ${dragged().y}px`,
+    }}
   >
     {cardHeader(context, onPause, title)}
     <p class="text-small text-on-surface-secondary">{body}</p>
@@ -350,6 +392,11 @@ const tourCard = (
     <Show when={fixed()}>
       <p class="text-small font-medium text-on-surface-success" data-tour-fixed>
         {t("Looks fixed. Press Next when you are done here.")}
+      </p>
+    </Show>
+    <Show when={reached()}>
+      <p class="text-small font-medium text-on-surface-success" data-tour-reached>
+        {last() ? t("Done.") : t("Done. Press Next when you are ready.")}
       </p>
     </Show>
     <Show when={actions !== undefined && actions.length > 0 && !fixed()}>
@@ -380,6 +427,7 @@ const tourCard = (
         <Button
           size="sm"
           variant="primary"
+          class={cx(reached() && "ring-2 ring-brand ring-offset-2 ring-offset-surface-primary")}
           onClick={() => (last() ? stopTour() : stepTour(context, 1))}
         >
           {nextLabel()}
@@ -402,6 +450,12 @@ export function TourOutlet() {
     () => runningTour()?.tour,
     () => {
       setPaused(false);
+    },
+  );
+  createEffect(
+    () => runningTour()?.index,
+    () => {
+      setDragged({ x: 0, y: 0 });
     },
   );
 

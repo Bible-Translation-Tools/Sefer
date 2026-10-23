@@ -6,7 +6,7 @@ import type { Tour, TourContext } from "../machine";
  * designer to try and argue with, so each stop says why it is so and what
  * could change. Design builds only, like the control it uses.
  *
- * Key steps move on when the caret actually lands where the key sends it:
+ * Key steps are done when the caret actually lands where the key sends it:
  * the start of the next (or previous) verse.
  */
 
@@ -94,7 +94,7 @@ export const lineByLineTour: Tour = {
         anchor: "#editor-view-switch",
         title: "Choose Line by line",
         body: "A second way to show the same book: every verse on its own line, numbered, with nothing else in the way.",
-        try: "Choose Line by line. The walk-through moves on when you do.",
+        try: "Choose Line by line.",
         notes: [
           {
             label: "What this walk-through is",

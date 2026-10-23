@@ -70,18 +70,20 @@ const toHistory = (context: TourContext): void => {
   });
 };
 
-/** True once a Save's receipt has been shown and then closed, so the receipt is read before the tour moves on. */
-const savedAndClosed = (): (() => boolean) => {
-  let seen = false;
-  return () => {
-    if (present("[data-review-record-done]")) seen = true;
-    else if (seen) {
-      seen = false;
-      return true;
-    }
-    return false;
-  };
+const toSuggestions = (context: TourContext): void => {
+  closePopover();
+  if (onPath("/suggestions")) return;
+  void context.navigate({
+    to: "/project/$slug/suggestions",
+    params: { slug: context.shell.slug() },
+  });
 };
+
+/** The number of the suggestion still waiting, from the Suggestions screen's own list. */
+const waitingSuggestion = (): string | undefined =>
+  document
+    .querySelector("[data-suggestion][data-state=waiting]")
+    ?.getAttribute("data-suggestion") ?? undefined;
 
 const copyText = (text: string): void => {
   void navigator.clipboard.writeText(text).catch(() => window.prompt("Copy this link", text));
@@ -93,7 +95,7 @@ export const whereWorkLivesTour: Tour = {
   audience: "internal",
   title: "Where your work lives (1 of 2): one person",
   summary:
-    "A shared WACS project from a link: what is on this device, what is backed up, what Save does, what is sent, and what offline looks like.",
+    "A shared WACS project from a link, worked on through your own copy: what is on this device, what is backed up, what Save does, what is sent, a suggestion on WACS, and offline.",
   needsProject: true,
   start: linkTo("/book/JHN"),
   steps: [
@@ -172,25 +174,26 @@ export const whereWorkLivesTour: Tour = {
       ready: popoverOpen,
       timeoutMs: PATIENT,
       spotlight: {
-        anchor: "[data-sync-popover]",
-        title: "Can you change it, or suggest changes?",
-        body: "If your account may write to this project, your work is sent straight to it. If not, as with most people on this sandbox, the popover says you can suggest changes, and offers Work in my own copy.",
+        anchor: "[data-sync-collab]",
+        title: "Work in your own copy",
+        body: "Your account may not write to this project, so the popover says you can suggest changes. Work in my own copy makes a copy of the project under your own WACS account (a fork). From now on your saves are sent there, and nothing reaches the shared project until you offer it.",
+        try: "Press Work in my own copy.",
         notes: [
           {
-            label: "Your own copy",
-            text: "Work in my own copy makes a copy of the project under your WACS account (a fork). Your saves are sent there, and when you are ready, Offer my changes asks the project's editors to bring them in (a suggestion, which WACS calls a pull request). Later sends add to the same suggestion.",
-          },
-          {
-            label: "Why both",
+            label: "Why copies exist",
             text: "Operations decides who may write to a project. A team can be given write access to one, for example a project started from a Tech_advance repository, and then everyone works in it directly. Anyone else can still contribute, through their own copy, without Operations doing anything first.",
           },
           {
-            label: "Part two",
-            text: "Part two shows the other side: what arrives when someone else sends to the same project.",
+            label: "If you can write here",
+            text: "Then this section is not shown, and your work goes straight to the shared project. Use an account without write access to walk this path.",
+          },
+          {
+            label: "Two ways to work",
+            text: "Each project is either shared (everyone sends to one place) or own copy and suggestions. A person can change between them in Settings, Cloud.",
           },
         ],
       },
-      advance: "user",
+      advance: () => present("[data-sync-collab=copy]"),
     },
     {
       go: (context) => {
@@ -239,7 +242,11 @@ export const whereWorkLivesTour: Tour = {
         notes: [
           {
             label: "Why the wording is careful",
-            text: "Most saves are of everyday work, so it would be easy to make Save instant. But then a stray key in a verse you were not looking at would be kept and sent. The menu says “Save & Review…” for that reason. A person who wants the instant kind can turn on “Skip review of my changes” in Settings.",
+            text: "Most saves are of everyday work, so it would be easy to make Save instant. But then a stray key in a verse you were not looking at would be kept and sent. The menu says “Save & Review…” for that reason.",
+          },
+          {
+            label: "A decision for Operations",
+            text: "Settings has “Skip review of my changes”, which makes Save instant. Design worries the look first is friction, and it may be for someone saving only to their own copy. On a project a team shares, an unseen change goes to everyone. Operations can choose to keep the switch, or to remove it so every save is seen first.",
           },
           { label: "Charter", text: "REQ-07, SC-05." },
         ],
@@ -277,7 +284,7 @@ export const whereWorkLivesTour: Tour = {
       spotlight: {
         anchor: "[data-review-record]",
         title: "Save keeps a version",
-        body: "Save writes the books and keeps that moment as a version, with your name and a line about what you changed. If you are signed in, it then sends it to WACS.",
+        body: "Save writes the books and keeps that moment as a version, with your name and a line about what you changed. If you are signed in, it then sends it to WACS: to your own copy, which only you write to.",
         try: "Press Save, fill in the two lines, and Save. Read the receipt, then press Done.",
         notes: [
           {
@@ -287,7 +294,7 @@ export const whereWorkLivesTour: Tour = {
           { label: "Charter", text: "REQ-20, REQ-21, REQ-22." },
         ],
       },
-      advance: savedAndClosed(),
+      advance: () => present("[data-review-record-done]"),
     },
     {
       go: toHistory,
@@ -313,11 +320,52 @@ export const whereWorkLivesTour: Tour = {
       advance: "user",
     },
     {
+      go: openPopover,
+      ready: popoverOpen,
+      timeoutMs: PATIENT,
+      spotlight: {
+        anchor: "[data-sync-collab]",
+        title: "Offer your changes",
+        body: "Your version is in your copy on WACS, and nobody else has to look at it. Offer my changes asks the project's editors to bring it in: a suggestion, which WACS calls a pull request.",
+        try: "Press Offer my changes.",
+        notes: [
+          {
+            label: "One suggestion, kept up to date",
+            text: "Save again later and the new versions are added to the same suggestion, until an editor brings it in or closes it. The popover says which it is.",
+          },
+          {
+            label: "What the editors see",
+            text: "The same verse-by-verse Review, showing only what the suggestion offers, with your name and your notes. Part two walks that side.",
+          },
+        ],
+      },
+      advance: () => present("[data-sync-suggestion=waiting]"),
+    },
+    {
+      go: toSuggestions,
+      ready: () => present("[data-screen=suggestions]"),
+      timeoutMs: PATIENT,
+      panel: {
+        title: "Your suggestion, on WACS",
+        body: "Suggestions lists what you have offered and what became of it. The suggestion is a real pull request on WACS, from your copy to the shared project, so the team can also see and discuss it there.",
+        actions: [
+          {
+            label: () => (waitingSuggestion() === undefined ? undefined : "Open it on WACS"),
+            run: () => {
+              const number = waitingSuggestion();
+              if (number !== undefined)
+                window.open(`${SHARED_PAGE}/pulls/${number}`, "_blank", "noopener");
+            },
+          },
+        ],
+      },
+    },
+    {
       spotlight: {
         anchor: "[data-testid=app-bar-sync]",
         title: "Now go offline",
         body: "Turn off Wi-Fi (or unplug), then open the cloud button. It says you are offline, that your saved work waits here, and that it is safe.",
-        try: "Turn the network off. This step moves on when Sefer notices.",
+        try: "Turn the network off. This card says so when Sefer notices.",
         notes: [
           {
             label: "The calmest state",
@@ -336,7 +384,7 @@ export const whereWorkLivesTour: Tour = {
       spotlight: {
         anchor: "[data-testid=app-bar-sync]",
         title: "And back on",
-        body: "Turn the network back on. Open the cloud button: the waiting work goes with Send my changes, or with your next save.",
+        body: "Turn the network back on. Open the cloud button: what waited goes with Send my changes, or with your next save.",
         try: "Turn the network on and send what is waiting.",
       },
       advance: () => syncState() !== "offline" && syncState() !== "ahead" && signedIn(),
@@ -364,7 +412,7 @@ export const someoneElseTour: Tour = {
       go: (context) => toBook(context, "JHN"),
       panel: {
         title: "Be someone else",
-        body: "You need a second person. Pick one: (1) a private window, or another browser such as Firefox, which Sefer sees as a different device: open part one's link there, sign in (a second WACS account is best), change John 3 and save. (2) Or open the project on WACS and edit a file in its web editor, if your account may write to it. Then come back to this window.",
+        body: "You need a second device, not a second account. Open part one's link in a private window or another browser such as Firefox, which Sefer sees as a different device, and sign in with the same WACS account. Change a verse in John and save. Or edit a file in WACS's own web editor. Then come back to this window.",
         actions: [
           {
             label: () => "Copy part one's link",
@@ -382,7 +430,7 @@ export const someoneElseTour: Tour = {
         anchor: "[data-testid=app-bar-sync]",
         title: "Check for changes",
         body: "Sefer checks on its own when the project opens, but not while you work. Open the cloud button and press the check button.",
-        try: "Open the cloud button and check. This step moves on when the other person's change shows up.",
+        try: "Open the cloud button and check. This card says so when the other person's change shows up.",
         notes: [
           {
             label: "Why not constantly",
@@ -441,7 +489,7 @@ export const someoneElseTour: Tour = {
         body: "Save takes their changes you kept into the project, records the result as one version, and sends it. Until every “changed in both places” has a choice, Save waits.",
         try: "Press Save, then Save, then Done.",
       },
-      advance: savedAndClosed(),
+      advance: () => present("[data-review-record-done]"),
     },
     {
       go: toHistory,
@@ -464,7 +512,7 @@ export const someoneElseTour: Tour = {
     {
       panel: {
         title: "When the other person cannot write",
-        body: "Most people on this sandbox cannot write to it, so in their window the popover offered Work in my own copy. Their saves went to their copy, and Offer my changes made a suggestion. The project's editors see “1 suggestion is waiting” in the cloud button and open it from the Suggestions tab, beside Changes and History, in the same Review: it shows only what the suggestion offers, with who sent it and why. Keep what is right and Save, which brings it into the shared project and closes it; keeping none of it is Decline, with a note the author reads. You will not see the editor's side unless you can write to a project; Will can show it on this one.",
+        body: "This half does need two people: an editor who may write to the project, and someone who may not. On this sandbox that is Will and you. The one who may not sees Work in my own copy in the popover: their saves go to their copy, and Offer my changes makes a suggestion. The project's editors see “1 suggestion is waiting” in the cloud button and open it from the Suggestions tab, beside Changes and History, in the same Review: it shows only what the suggestion offers, with who sent it and why. Keep what is right and Save, which brings it into the shared project and closes it; keeping none of it is Decline, with a note the author reads.",
       },
     },
     {
