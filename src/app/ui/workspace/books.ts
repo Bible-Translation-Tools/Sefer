@@ -1,4 +1,4 @@
-import { bookName, CANON, testamentOf, type Testament } from "@sefer/text/location/canon";
+import { bookName, testamentOf, type Testament } from "@sefer/text/location/canon";
 
-export { bookName, CANON, testamentOf };
+export { bookName, testamentOf };
 export type { Testament };

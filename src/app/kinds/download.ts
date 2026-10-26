@@ -5,7 +5,7 @@ import { Observability } from "#core/observability";
 import { remoteVerdict } from "#core/remote/remote";
 import type { Resource } from "#core/resources/library";
 
-import { describeCopy, noteLibraryChanged, referenceCopy } from "../arrival";
+import { describeCopy, referenceCopy } from "../arrival";
 import type { ListedText } from "../catalogue";
 import { describe, remoteReasonOf } from "../describe";
 import { t } from "../i18n";
@@ -79,23 +79,3 @@ const startDownload = (services: Services, help: ListedText): Promise<Resource> 
       setDownloading((held) => new Set([...held].filter((each) => each !== help.repository)));
     });
 };
-
-export const removeHelp = (services: Services, resource: Resource): Promise<void> =>
-  services
-    .run(
-      Effect.gen(function* () {
-        yield* services.library.remove(resource.id);
-        if (resource.root.startsWith(`${services.libraryRoot}/`))
-          yield* Effect.ignore(services.fileSystem.remove(resource.root, { recursive: true }));
-      }),
-    )
-    .then(() => {
-      noteLibraryChanged();
-      toasts.success({ title: t("Removed {title}", { title: resource.title }) });
-    })
-    .catch((cause: unknown) => {
-      toasts.error({
-        title: t("Could not remove {title}", { title: resource.title }),
-        message: describe(cause),
-      });
-    });

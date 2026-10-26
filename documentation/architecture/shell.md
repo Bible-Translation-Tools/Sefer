@@ -230,16 +230,22 @@ does not implement collapsing: a collapsed pane is a different tree, so the
 sidebar panel is HIDDEN rather than unmounted, because unmounting it would
 renumber the split and rebuild the editor's `EditorView` beside it.
 
-### The book screen is a second split
+### The book screen
 
-`src/routes/_app/project/$slug/book/$book.tsx` is its own `Resizable.Root`: the
-reference pane, a visible handle, then the editor. The pane is
-`ReferenceColumn`, and each bound resource inside it is a read-only
-`EditorView` over the same book (see [resources](resources.md), "A reference
-is a read-only editor, not a card"). Two or more references stack **vertically
-inside the pane** as a nested `Resizable.Root orientation="vertical"` with
-their own handles, so the reader decides how the pane is divided as well as
-how wide it is.
+`src/routes/_app/project/$slug/book/$book.tsx` draws one white surface: the
+toolbar, then the editor in its outlined panel (`EditorPanel`), whose action
+bar holds "Show reference" on the left and the book's view switch
+(`BookViewSwitch`) on the right. The editor has no location strip of its own:
+the project panel's chapter grid is the way between chapters.
+
+**Joined** (the default) only the heart language is on screen. **Split**
+(`workspace.referenceSplit`, remembered) puts the reference beside it as a
+second `Resizable.Root`: `ReferenceColumn` straight on the page, under one
+split dropdown — the language on the left, the text in it on the right — then
+an edge handle that is the editor's own left border. Each text in it is a
+read-only `EditorView` over the same book (see [resources](resources.md), "A
+reference is a read-only editor, not a card"). "Show reference" is the only
+way to show or hide it.
 
 The width is `workspace.referenceWidth`, a fraction of the editor row, with
 the same discipline as `workspace.sidebarWidth`: the signal moves at pointer
@@ -250,36 +256,12 @@ session state, because reading beside a source is how a translator works all
 day and re-making that decision on every navigation is the kind of small tax
 that makes a pane not worth opening.
 
-**Collapsed** is the state with nothing bound: the panel takes a fixed narrow
-basis (`13rem`), the handle is hidden, and the editor takes the row back with
-an inline-beating `grow!`/`[flex-basis:auto]!`. Both the panel and the handle
-stay MOUNTED for the reason the sidebar's do — `Resizable` registers panels
-during render and has no unregister, so an unmounted panel renumbers the split.
-The route learns the count from the column's `onBound` callback rather than
-asking the Library a second time: the split is the route's, so the route is
-told.
-
-**The editor and its references are one aligned group.** The route makes it
-(`createAlignedGroup`) and provides it (`AlignedProvider`,
-`src/app/ui/workspace/aligned.ts`); `BookEditor` and each `ReferencePane` join
-it when their view mounts, so scrolling either brings the same verse into the
-other when it is not already in sight there — by verse address, never by
-scroll position ([editor](editor.md), "Two editors side by side"). The pane's
-chain (`FollowToggle`) decides whether it leads and follows; the clip is still
-chapter-level.
-
-**The location strip is shared.** The editor's sticky bar is `LocationStrip`
-plus `Crumbs` (`src/app/ui/workspace/Crumbs.tsx`) — a book picker and a
-chapter picker over whatever lists the caller gives, with optional counts and
-chapter arrows — and `LocationBar` is the editor's adapter over them: the
-project's books, the book's chapters, `shell.showChapter`. Review's Whole book
-uses the same strip over the books and chapters that changed.
-
-The panes themselves are remounted rather than reconciled whenever the binding
-set or the open book changes (`<Show keyed>` over the entries array), which is
-the same constraint said once more — a panel list that changes length has to
-be a new split, and each of those changes is already a reason to rebuild every
-pane.
+**No aligned scrolling on the book page.** The route provides
+`AlignedProvider value={null}` — none, said explicitly: each side scrolls on
+its own, and the reference catches up when the reader clicks in the heart
+language, through the caret's paired-verse reveal. `createAlignedGroup` is
+still what Review's Whole book uses for its two panes, over the shared
+`LocationStrip` and `Crumbs` (`src/app/ui/workspace/Crumbs.tsx`).
 
 The chrome's own preferences, all declared in `src/app/settings.ts`:
 `workspace.sidebarOpen` (the reader's toggle), `workspace.sidebarWidth` and

@@ -11,7 +11,7 @@ import { BookEditor } from "#app/ui/BookEditor";
 import { Button, DelayedSpinner, Resizable, cx } from "#app/ui/primitives";
 import { RecoveryBanner } from "#app/ui/recovery/RecoveryBanner";
 import { AlignedProvider } from "#app/ui/workspace/aligned";
-import { BookViewSwitch } from "#app/ui/workspace/LocationBar";
+import { BookViewSwitch } from "#app/ui/workspace/BookViewSwitch";
 import { ReferenceColumn } from "#app/ui/workspace/ReferenceColumn";
 import { Toolbar } from "#app/ui/workspace/Toolbar";
 
@@ -55,7 +55,7 @@ function EditorPanel(props: { readonly book: EditorBook; readonly split?: boolea
       </div>
       <div class="flex min-h-0 flex-1 flex-col px-6">
         <Show when={props.book.id} keyed>
-          <BookEditor book={props.book} bare />
+          <BookEditor book={props.book} />
         </Show>
       </div>
     </section>
@@ -135,7 +135,7 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
                       maxSize={REFERENCE_WIDTH.max}
                       class="flex min-w-0 flex-col pe-6 pt-3.5"
                     >
-                      <ReferenceColumn variant="gateway" />
+                      <ReferenceColumn />
                     </Resizable.Panel>
                     {/* The editor's left border IS the handle: an edge handle,
                         nudged 1px so its 2px line lies exactly over the border
