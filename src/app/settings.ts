@@ -148,10 +148,15 @@ export interface ShellKeys {
   /** Project root → the book, the clip and the chapter the reader last had on screen. */
   readonly lastLocation: SettingKey<LastLocations>;
   readonly referenceWidth: SettingKey<number>;
+  /** The projects page: the loaded projects' share of the row, beside the WACS table. */
+  readonly projectsWidth: SettingKey<number>;
 }
 
 /** The sidebar's share of the workspace row, and the range a drag may reach. */
 export const SIDEBAR_WIDTH = { default: 0.2, min: 0.15, max: 0.36 } as const;
+
+/** The loaded projects' share of the projects page, and the range a drag may reach. */
+export const PROJECTS_WIDTH = { default: 0.3, min: 0.22, max: 0.4 } as const;
 
 /** The reference pane's share of the editor row, and the range a drag may reach. */
 export const REFERENCE_WIDTH = { default: 0.34, min: 0.18, max: 0.6 } as const;
@@ -210,6 +215,11 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
       "workspace.referenceWidth",
       Schema.Number,
       REFERENCE_WIDTH.default,
+    ),
+    projectsWidth: settings.register(
+      "landing.projectsWidth",
+      Schema.Number,
+      PROJECTS_WIDTH.default,
     ),
   };
   registered.set(settings, keys);
