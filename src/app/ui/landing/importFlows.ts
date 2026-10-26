@@ -11,6 +11,7 @@ import { announceSourceTexts, arrivalRoot, cloneArrival } from "../../arrival";
 import { APP_AUTHOR } from "../../author";
 import { describe, reasonOf, remoteReasonOf } from "../../describe";
 import { t } from "../../i18n";
+import { m } from "../../paraglide/messages";
 import type { Domain, Services } from "../../services";
 import { toasts } from "../primitives";
 import { rememberProject } from "./summaries";
@@ -251,7 +252,7 @@ export const cloneRepository = (context: ImportContext, url: string): void => {
   const name = lastSegment(url.replace(/\.git$/u, ""));
   const into = arrivalRoot(services, "project", url);
   const toast = toasts.progress({ title: t("Cloning {name}", { name }) });
-  context.running(t("Clone from cloud"), "commit");
+  context.running(m.landing_clone_repository(), "commit");
   const operation = services.composition.observability.operation("import.remote", {
     "import.source": "cloud",
     "import.host": services.hostInfo.kind(),

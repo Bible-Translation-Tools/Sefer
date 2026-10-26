@@ -1,17 +1,16 @@
-import type { JSX } from "@solidjs/web";
 import { useNavigate } from "@tanstack/solid-router";
 import BookCopy from "lucide-solid/icons/book-copy";
 import FileArchive from "lucide-solid/icons/file-archive";
 import FolderOpen from "lucide-solid/icons/folder-open";
 import GitBranch from "lucide-solid/icons/git-branch";
 import Upload from "lucide-solid/icons/upload";
-import { For, Match, Show, Switch, createSignal, onCleanup, untrack } from "solid-js";
+import { For, Show, createSignal, onCleanup, untrack } from "solid-js";
 
 import { registerCommand } from "../../commands";
 import { t } from "../../i18n";
 import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
-import { Button, Dialog, Menu, MenuItem, cx, toasts } from "../primitives";
+import { Button, Dialog, cx, toasts } from "../primitives";
 import {
   STEPS,
   STEP_LABEL,
@@ -127,38 +126,6 @@ const ImportButtons = (props: { readonly pick: Picker }) => {
   );
 };
 
-const ImportMenu = (props: {
-  readonly pick: Picker;
-  readonly trigger: JSX.Element | undefined;
-}) => {
-  const navigate = useNavigate();
-  return (
-    <Menu label={t("Import")} side="bottom" align="end" class="w-56" trigger={props.trigger}>
-      <MenuItem
-        data-testid="import-zip"
-        icon={<FileArchive aria-hidden="true" />}
-        onSelect={() => props.pick("zip")}
-      >
-        {t("Import zip")}
-      </MenuItem>
-      <MenuItem
-        data-testid="import-folder"
-        icon={<FolderOpen aria-hidden="true" />}
-        onSelect={() => props.pick("folder")}
-      >
-        {t("Import folder")}
-      </MenuItem>
-      <MenuItem
-        data-testid="import-writer"
-        icon={<BookCopy aria-hidden="true" />}
-        onSelect={() => void navigate({ to: "/migrate" })}
-      >
-        {t("Migrate from Writer")}
-      </MenuItem>
-    </Menu>
-  );
-};
-
 const StepList = (props: {
   readonly step: NonNullable<Progress["step"]>;
   readonly detail: string | undefined;
@@ -239,16 +206,12 @@ const createImportProgress = (services: HubServices, onImported: () => void) => 
   return { progress, context };
 };
 
-export function ImportHub(props: {
-  readonly onImported?: () => void;
-  readonly variant?: "buttons" | "menu" | "drop";
-  readonly trigger?: JSX.Element;
-}) {
+export function ImportHub(props: { readonly variant: "buttons" | "drop" }) {
   const shell = useShell();
   const { services } = shell;
   const capabilities = services.hostInfo.capabilities();
 
-  const { progress, context } = createImportProgress(services, () => props.onImported?.());
+  const { progress, context } = createImportProgress(services, () => undefined);
 
   const nativeFolder = capabilities.nativeDisk && capabilities.dialogs;
 
@@ -271,7 +234,8 @@ export function ImportHub(props: {
     else toasts.error({ title: m.landing_drop_not_project(), message: m.landing_drop_one() });
   };
 
-  if (untrack(() => props.variant) !== "buttons" && untrack(() => props.variant) !== undefined)
+  // The drop zone is the projects page's own import, so it owns `Mod-o` while that page is up.
+  if (untrack(() => props.variant) === "drop")
     onCleanup(
       registerCommand({
         id: "project.open",
@@ -283,14 +247,9 @@ export function ImportHub(props: {
 
   return (
     <>
-      <Switch fallback={<ImportButtons pick={pick} />}>
-        <Match when={props.variant === "menu"}>
-          <ImportMenu pick={pick} trigger={props.trigger} />
-        </Match>
-        <Match when={props.variant === "drop"}>
-          <DropZone pick={pick} drop={drop} />
-        </Match>
-      </Switch>
+      <Show when={props.variant === "drop"} fallback={<ImportButtons pick={pick} />}>
+        <DropZone pick={pick} drop={drop} />
+      </Show>
 
       <Show when={progress()}>
         {(state) => <ProgressDialog state={state()} onClose={context.clear} />}

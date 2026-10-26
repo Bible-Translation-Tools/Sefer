@@ -53,10 +53,15 @@ const COLUMNS =
 
 const HOLE = "\u0000";
 
-/** A search that is a repository address rather than a language: offered as a clone, not matched. */
+/**
+ * A search that starts with `http` is an address, not a language: when it
+ * parses as a URL it is offered as a clone instead of matched. Whether a
+ * repository answers there is the clone's to find out, as Migrate's
+ * "From a URL" leaves it to the remote's probe.
+ */
 const repositoryUrl = (query: string): string | undefined => {
   const typed = query.trim();
-  if (!/^https?:\/\/\S+\/\S+\/\S+/u.test(typed)) return undefined;
+  if (!typed.startsWith("http")) return undefined;
   try {
     return new URL(typed).href;
   } catch {
