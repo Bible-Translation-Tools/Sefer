@@ -115,10 +115,6 @@ export const createLayoutPreferences = ({
     services.settings.get(keys.referenceWidth),
     { name: "referenceWidth" },
   );
-  const [referenceOpen, setReferenceOpen] = createSignal(
-    services.settings.get(keys.referenceOpen),
-    { name: "referenceOpen" },
-  );
   const [referenceSplit, setReferenceSplit] = createSignal(
     services.settings.get(keys.referenceSplit),
     { name: "referenceSplit" },
@@ -141,11 +137,6 @@ export const createLayoutPreferences = ({
     setSidebarOpen: (open: boolean): void => {
       setSidebarOpen(open);
       persist(keys.sidebarOpen, open);
-    },
-    referenceOpen,
-    setReferenceOpen: (open: boolean): void => {
-      setReferenceOpen(open);
-      persist(keys.referenceOpen, open);
     },
     referenceSplit,
     setReferenceSplit: (split: boolean): void => {

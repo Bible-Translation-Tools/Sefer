@@ -19,7 +19,7 @@ import type { Tour, TourContext } from "../machine";
 const PROJECT = "/r/Will_Kelly/leb-x-bisa_reg/book/JHN?host=content.bibletranslationtools.org";
 
 const toBook = (context: TourContext): void => {
-  context.shell.setReferenceOpen(true);
+  context.shell.setReferenceSplit(true);
   void context.navigate({
     to: "/project/$slug/book/$book",
     params: { slug: context.shell.slug(), book: "JHN" },
