@@ -25,6 +25,7 @@ import { Toolbar } from "#app/ui/workspace/Toolbar";
  */
 function EditorPanel(props: { readonly book: EditorBook; readonly split?: boolean }) {
   const shell = useShell();
+  const lineByLine = (): boolean => shell.mode() !== "usfm" && shell.lineByLine();
   return (
     <section
       aria-label={m.refine_editor_label()}
@@ -32,7 +33,9 @@ function EditorPanel(props: { readonly book: EditorBook; readonly split?: boolea
       class={cx(
         // The page's own white, outlined: the border goes brand while the
         // text has focus. Split, its left edge is also the resize handle's line.
-        "flex min-h-0 flex-1 flex-col rounded-lg border-2 border-surface-border bg-surface-primary transition-colors focus-within:border-brand",
+        // Line by line drops the outline: each verse's box is the outline there.
+        "flex min-h-0 flex-1 flex-col rounded-lg border-2 bg-surface-primary transition-colors",
+        lineByLine() ? "border-transparent" : "border-surface-border focus-within:border-brand",
       )}
     >
       {/* 12px top and bottom; each side lines up with the text's own edge:

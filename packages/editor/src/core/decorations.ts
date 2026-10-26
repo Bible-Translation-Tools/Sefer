@@ -22,7 +22,7 @@ import type { DocLine, WordRange } from "./fold";
 import type { DocPlan, PlanSpan, ResolvedSlot } from "./plan";
 import type { WidgetKey } from "./registry";
 import { chipRenderer, markupOf } from "./unsupported";
-import { keptAsReading, type KeptAsReading } from "./verseLines";
+import { chapterTitles, keptAsReading, type KeptAsReading } from "./verseLines";
 import { markerWords } from "./words";
 
 class JoinWidget extends WidgetType {
@@ -751,7 +751,10 @@ export function buildRegular(
 
   // Line by line keeps a table and a sidebar as Reading draws them, on their own lines.
   const kept = plan.verseLines ? keptAsReading(structure) : null;
-  if (kept !== null) joined += layOutVerseLines(structure, plan, add, outside, kept);
+  if (kept !== null) {
+    joined += layOutVerseLines(structure, plan, add, outside, kept);
+    nameChapters(doc, structure, add, outside);
+  }
   for (let i = 0; i < structure.blocks.length; i++) {
     if (kept !== null && !kept.blocks.has(i)) continue;
     if (outside(structure.blocks.fromAt(i), structure.blocks.toAt(i))) continue;
@@ -939,6 +942,46 @@ function layOutVerseLines(
     add.push({ from: verse.markerFrom, to: verse.markerFrom, deco: VERSE_BREAK });
   }
   return joined;
+}
+
+const CHAPTER_TITLE = Decoration.line({ class: "usfm-chap-title" });
+const CHAPTER_NAMED = Decoration.line({ class: "usfm-chap-named" });
+
+/** A CSS string for `content`: quoted, its quotes and backslashes escaped. */
+const cssString = (text: string): string => `"${text.replace(/["\\]/g, "\\$&")}"`;
+
+/** Line by line's chapter titles (`chapterTitles`, core/verseLines.ts), drawn. */
+function nameChapters(
+  doc: string,
+  structure: DocStructure,
+  add: Pending[],
+  outside: (from: number, to: number) => boolean,
+): void {
+  const { bookLabel, named, folds } = chapterTitles(doc, structure);
+  const namedDeco =
+    bookLabel === ""
+      ? CHAPTER_NAMED
+      : Decoration.line({
+          class: "usfm-chap-named",
+          attributes: { style: `--usfm-chapter-label: ${cssString(bookLabel)}` },
+        });
+  for (const chapter of named)
+    if (!outside(chapter.from, chapter.from))
+      add.push({ from: chapter.from, to: chapter.from, deco: namedDeco });
+  const shown = folds.filter((fold) => !outside(fold.from, fold.to));
+  if (shown.length === 0) return;
+  // Each fold is one hide over its whole span. Hides already inside it (the
+  // marker, the number) go first: of two that overlap only the earlier is
+  // kept, and the number would still show.
+  const inFold = (d: Pending): boolean =>
+    d.to > d.from &&
+    specOf(d.deco).class === undefined &&
+    shown.some((fold) => d.from >= fold.from && d.to <= fold.to);
+  for (let k = add.length - 1; k >= 0; k--) if (inFold(add[k])) add.splice(k, 1);
+  for (const fold of shown) {
+    add.push({ from: fold.from, to: fold.to, deco: HIDDEN });
+    add.push({ from: fold.from, to: fold.from, deco: CHAPTER_TITLE });
+  }
 }
 
 function setOfPending(add: Pending[]): DecorationSet {

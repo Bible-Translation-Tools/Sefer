@@ -284,8 +284,37 @@
 }
 /* Line by line hangs every number: each verse's text, wrapped lines too, starts
    one hang in from the edge. */
+/* Line by line: a label column (72px), a 12px gap, then each verse's box with
+   24px of padding all round (`verseBoxes` in core/verseLines.ts draws the box). */
+.cm-mode-regular.cm-line-by-line {
+  --verse-label: 72px;
+  --verse-box-pad: 24px;
+  --verse-box-gap: 8px;
+}
 .cm-mode-regular.cm-line-by-line .usfm-verse-line {
-  padding-inline-start: calc(var(--usfm-hang) * 1em);
+  padding-inline-start: calc(var(--verse-label) + 12px + var(--verse-box-pad));
+  padding-inline-end: var(--verse-box-pad);
+  padding-top: calc(var(--verse-box-pad) * 2 + var(--verse-box-gap));
+}
+.cm-mode-regular.cm-line-by-line .usfm-brk.usfm-verse-break {
+  height: calc(var(--verse-box-pad) * 2 + var(--verse-box-gap));
+}
+/* The number stands outside its verse's box: a gutter of 0.9em between them,
+   the box drawn 0.55em before the words (`verseBoxes`). */
+.cm-mode-regular.cm-line-by-line .usfm-num-hung {
+  width: calc(var(--verse-label) + 12px + var(--verse-box-pad));
+  margin-inline-start: calc(-1 * (var(--verse-label) + 12px + var(--verse-box-pad)));
+  padding-inline-end: 0;
+  vertical-align: baseline;
+  /* Flush left, under the chapter number and the headings. */
+  text-align: start;
+  white-space: nowrap;
+}
+/* Line by line labels the number as a form would: "Verse 1". Drawn, not
+   written; the word is --usfm-verse-label, for the host to translate. */
+.cm-mode-regular.cm-line-by-line .usfm-num-hung::before {
+  content: var(--usfm-verse-label, "Verse") " ";
+  font-weight: 500;
 }
 .cm-mode-regular .usfm-b {
   /*min-height: 0.8em;*/
@@ -886,6 +915,46 @@
 
 .cm-mode-regular .usfm-verse-line {
   padding-top: 0.5em;
+}
+
+/* Line by line: each verse's text in a box, its number hung outside it
+   (`verseBoxes` in core/verseLines.ts). Cosmetic, behind the text. */
+.cm-host .cm-editor .usfm-verse-boxes {
+  pointer-events: none;
+}
+.cm-host .cm-editor .usfm-verse-box {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid var(--editor-rule);
+  border-radius: 24px;
+  background: var(--editor-paper);
+}
+.cm-host .cm-editor .usfm-verse-box-active {
+  border-color: var(--editor-accent);
+  box-shadow: 0 0 0 1px var(--editor-accent);
+}
+
+/* Line by line names each chapter once (`nameChapters`, core/decorations.ts),
+   with plenty of room after the last verse of the one before. */
+.cm-mode-regular.cm-line-by-line .usfm-chap {
+  padding-top: 4em;
+}
+.cm-mode-regular.cm-line-by-line .usfm-chap-named .usfm-num-c::before {
+  content: var(--usfm-chapter-label, "Chapter") " ";
+}
+.cm-mode-regular.cm-line-by-line .usfm-chap-named .usfm-num-c {
+  font-size: 1.6em;
+}
+/* The chapter has its own label: the number's line is hidden and the label,
+   drawn on it, is the chapter's title. */
+.cm-mode-regular.cm-line-by-line .usfm-chap-title {
+  font: 700 1.6em/1.2 var(--font-scripture);
+  color: var(--editor-accent);
+  text-transform: none;
+  letter-spacing: -0.01em;
+  opacity: 1;
+  /* 4em of the text's size, in the title's own 1.6em. */
+  padding-top: 2.5em;
 }
 
 .cm-mode-regular .usfm-verse-heading {

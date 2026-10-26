@@ -4,7 +4,7 @@ title: "Form mode, verse per line, and the editor's sharp edges"
 kind: idea
 status: discussing
 created: 2026-10-14
-updated: 2026-10-22
+updated: 2026-10-26
 sha: 50aa9cd
 priority: 1
 tags: [editor]
@@ -197,6 +197,44 @@ marker in this mode; that is what the spike proves first, with Will at the keybo
 <Question id="keys">How is key handling organised by mode: branch on mode inside each key, or one handler per key that checks the mode? Ideally a matrix, mode × behaviour = policy.</Question>
 
 <Followup id="spike">A spike with Will at the keyboard. `plan.ts` is the risk.</Followup>
+
+## Chapter titles in line by line (designer, 2026-10-26, branch `design/editor-design`)
+
+Asked against a real project (`leb-x-bisa-reg`, Matthew), where each chapter is `\c 2` and then
+`\cl Icipandwa 2`, and both were drawn: the big number, then the label as a small heading.
+
+> Is there a reason why we can't just say "Chapter 2" or "icipandwa 2" here? Why is there a 2 and
+> then the chapter information? Further, I'd like to include a lot more space between this and the
+> end of the verse from the previous chapter
+> — Thomas, 2026-10-26
+
+**Built as a prototype, line by line only** (`nameChapters`): each chapter gets one title, with
+4em above it.
+
+- A chapter with its own `\cl` (between its `\c` and its first verse) shows the label alone; the
+  `\c` line is hidden, and the caret passes over it (`caretSkipsFoldedChapters`).
+- Otherwise a book-wide `\cl` before chapter 1 (`\cl Psalm`) prefixes the number: "Psalm 2".
+- Otherwise "Chapter 2". The word is a CSS fallback, not yet translated.
+
+> IMO, if you can't physically see the line, the cursor shouldn't be able to access it. If you need
+> to access hidden items, the USFM / Raw mode is probably more appropriate
+> — Thomas, 2026-10-26
+
+The caret's stops (`stops.ts`) are built from the book's structure and the plan's paint, not
+from line by line's drawing, so they still stop on the hidden number. A transaction filter in
+`verseLines.ts` moves a caret that lands there on in its direction of travel: to the label's
+first letter going forward, to the end of the previous verse going back. Both it and the
+drawing read one scan, `chapterTitles`.
+
+Paisano has concerns about edge cases; left as is until he weighs in.
+
+<Question id="chapter-titles">Paisano: is folding the `\c` line behind its `\cl` sound, or should
+line by line draw chapter titles another way? Is a transaction filter the right home for "the caret skips
+what line by line hides", or should the plan's paint know line by line, so `stops.ts` never
+offers the stop at all? (A selection can still span the hidden line.) Edge cases to judge: `\cl` placed after the
+first verse, or more than once; `\cp` (a published number); a `\cl` that is empty or carries
+markup; a book-wide `\cl` that should not read as a prefix; and the "Chapter" word's translation.
+The Reading view still draws both.</Question>
 
 ## The editor's sharp edges, done in the same pass
 

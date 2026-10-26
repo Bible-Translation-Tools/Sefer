@@ -8,10 +8,10 @@ import {
   Transaction,
   type TransactionSpec,
 } from "@codemirror/state";
-import { EditorView, type KeyBinding } from "@codemirror/view";
+import { EditorView, type KeyBinding, type LayerMarker, layer } from "@codemirror/view";
 
 import { docText, structureAt, type DocStructure } from "./docStructure";
-import type { VerseRow } from "./fold";
+import type { DocLine, VerseRow } from "./fold";
 import { isVisual, trusted } from "./kernel";
 import { assignmentAt, isContainerClass } from "./registry";
 
@@ -261,9 +261,173 @@ const lineByLineClass = EditorView.editorAttributes.of((view) => {
   return numbersHaveMenus(view.state) ? { class: "cm-number-menus" } : null;
 });
 
+/**
+ * Line by line names each chapter once. A chapter with its own label (`\\c 2`
+ * then `\\cl Icipandwa 2`, before its first verse) is titled by the label and its
+ * number's line is folded away: `folds` runs from the `\\c` line's start to the
+ * label's line. Any other chapter is `named`: "Chapter 2", or the book's label
+ * (`\\cl Psalm` before the first chapter) and the number.
+ */
+export interface ChapterTitles {
+  readonly bookLabel: string;
+  readonly named: readonly DocLine[];
+  /** `to` is the label's line; `label` where its words start. */
+  readonly folds: readonly { readonly from: number; readonly to: number; readonly label: number }[];
+}
+
+export const chapterTitles = (doc: string, structure: DocStructure): ChapterTitles => {
+  const verseStarts = new Set(structure.verses.map((verse) => verse.markerFrom));
+  const opensVerse = (line: DocLine): boolean =>
+    verseStarts.has(line.contentFrom) || verseStarts.has(line.from);
+  const labelOf = (line: DocLine): string => doc.slice(line.contentFrom, line.to).trim();
+  let bookLabel = "";
+  const named: DocLine[] = [];
+  const folds: { from: number; to: number; label: number }[] = [];
+  // One pass: a chapter waits for its own label until its first verse or the next chapter.
+  let open: DocLine | null = null;
+  let seenChapter = false;
+  const settle = (): void => {
+    if (open !== null) named.push(open);
+    open = null;
+  };
+  for (const line of structure.lines) {
+    if (line.cls === "slot.c") {
+      settle();
+      open = line;
+      seenChapter = true;
+    } else if (line.marker === "cl" && labelOf(line) !== "") {
+      if (!seenChapter) bookLabel = labelOf(line);
+      else if (open !== null) {
+        folds.push({ from: open.from, to: line.from, label: line.contentFrom });
+        open = null;
+      }
+    } else if (opensVerse(line)) settle();
+  }
+  settle();
+  return { bookLabel, named, folds };
+};
+
+/**
+ * What cannot be seen cannot hold the caret: a folded chapter line is passed
+ * over in the direction of travel, to the label it folds into or back to the
+ * line before. The caret's stops (`stops.ts`) know only the book's structure,
+ * not line by line's drawing, so this catches what they let through.
+ */
+const caretSkipsFoldedChapters = EditorState.transactionFilter.of((tr) => {
+  if (!tr.selection || !isVerseLines(tr.state)) return tr;
+  const range = tr.selection.main;
+  if (!range.empty) return tr;
+  const { folds } = chapterTitles(docText(tr.state), structureAt(tr.state));
+  const fold = folds.find((f) => range.head > f.from && range.head < f.label);
+  if (fold === undefined) return tr;
+  const before = tr.startState.selection.main.head;
+  const pos = before <= fold.from ? fold.label : Math.max(0, fold.from - 1);
+  return [tr, { selection: EditorSelection.cursor(pos), sequential: true }];
+});
+
+/** One verse's box, in the layer's coordinates. */
+class VerseBox implements LayerMarker {
+  constructor(
+    private readonly left: number,
+    private readonly top: number,
+    private readonly width: number,
+    private readonly height: number,
+    private readonly active: boolean,
+  ) {}
+  eq(other: VerseBox): boolean {
+    return (
+      this.left === other.left &&
+      this.top === other.top &&
+      this.width === other.width &&
+      this.height === other.height &&
+      this.active === other.active
+    );
+  }
+  draw(): HTMLElement {
+    const box = document.createElement("div");
+    box.className = this.active ? "usfm-verse-box usfm-verse-box-active" : "usfm-verse-box";
+    this.update(box);
+    return box;
+  }
+  update(box: HTMLElement): boolean {
+    box.className = this.active ? "usfm-verse-box usfm-verse-box-active" : "usfm-verse-box";
+    Object.assign(box.style, {
+      left: `${this.left}px`,
+      top: `${this.top}px`,
+      width: `${this.width}px`,
+      height: `${this.height}px`,
+    });
+    return true;
+  }
+}
+
+/**
+ * Line by line draws each verse's text inside a box, its number outside to the
+ * left: a touch target the size of the verse, not of its words. Cosmetic: the
+ * boxes sit behind the text in a layer, so a verse that starts mid-line in the
+ * file gets its own box and nothing is written.
+ */
+const verseBoxes = layer({
+  above: false,
+  class: "usfm-verse-boxes",
+  update: (update) =>
+    update.docChanged ||
+    update.selectionSet ||
+    update.viewportChanged ||
+    update.geometryChanged ||
+    update.focusChanged ||
+    assignmentAt(update.startState).verseLines !== assignmentAt(update.state).verseLines,
+  markers: (view) => {
+    if (!isVerseLines(view.state)) return [];
+    const structure = structureAt(view.state);
+    const doc = docText(view.state);
+    const scroller = view.scrollDOM.getBoundingClientRect();
+    const baseLeft = scroller.left - view.scrollDOM.scrollLeft * view.scaleX;
+    const baseTop = scroller.top - view.scrollDOM.scrollTop * view.scaleY;
+    const sample = view.contentDOM.querySelector<HTMLElement>(".usfm-verse-line");
+    if (sample === null) return [];
+    const style = getComputedStyle(sample);
+    const hang = parseFloat(style.paddingInlineStart);
+    const pad = parseFloat(style.getPropertyValue("--verse-box-pad")) || 24;
+    const gap = parseFloat(style.getPropertyValue("--verse-box-gap")) || 8;
+    const lineBox = sample.getBoundingClientRect();
+    const caret = view.state.selection.main.head;
+    const caretVerse = verseIndexAt(structure, caret);
+    const { from: shownFrom, to: shownTo } = view.viewport;
+    const rects: { left: number; top: number; width: number; bottom: number; active: boolean }[] =
+      [];
+    for (let k = 0; k < structure.verses.length; k++) {
+      const verse = structure.verses[k];
+      const end = Math.max(verseEnd(structure, doc, k), verse.contentFrom);
+      if (end < shownFrom || verse.markerFrom > shownTo) continue;
+      const start = view.coordsAtPos(verse.markerFrom, 1);
+      const last = view.coordsAtPos(end, -1);
+      if (start === null || last === null) continue;
+      const left = lineBox.left + hang - pad;
+      const right = lineBox.right;
+      rects.push({
+        left: (left - baseLeft) / view.scaleX,
+        top: (start.top - pad - baseTop) / view.scaleY,
+        width: (right - left) / view.scaleX,
+        bottom: (Math.max(last.bottom, start.bottom) + pad - baseTop) / view.scaleY,
+        active: k === caretVerse && view.hasFocus,
+      });
+    }
+    // A verse that starts mid-line in the file sits closer to the one before;
+    // its neighbour's box stops short so the two never touch.
+    return rects.map((rect, i) => {
+      const next = rects[i + 1];
+      const bottom = next === undefined ? rect.bottom : Math.min(rect.bottom, next.top - gap);
+      return new VerseBox(rect.left, rect.top, rect.width, bottom - rect.top, rect.active);
+    });
+  },
+});
+
 /** Everything line-by-line adds besides its keys and its layout. */
 export const verseLineBehaviour: Extension = [
   lineByLineClass,
+  verseBoxes,
+  caretSkipsFoldedChapters,
   typeIntoEmptyVerse,
   labelsStayPut,
   pasteAsOneLine,
