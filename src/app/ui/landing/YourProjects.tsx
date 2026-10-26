@@ -231,25 +231,6 @@ const createProjectActions = (
   };
 };
 
-const observeOverflow = (box: HTMLElement, setHidden: (count: number) => void): (() => void) => {
-  const past = new Set<Element>();
-  const observer = new IntersectionObserver(
-    (entries) => {
-      for (const entry of entries) {
-        const beyond =
-          entry.intersectionRatio < 0.99 &&
-          entry.boundingClientRect.left > (entry.rootBounds?.left ?? 0);
-        if (beyond) past.add(entry.target);
-        else past.delete(entry.target);
-      }
-      setHidden(past.size);
-    },
-    { root: box, threshold: [0.99] },
-  );
-  for (const card of box.children) observer.observe(card);
-  return () => observer.disconnect();
-};
-
 const flyIn = (card: HTMLElement, from: DOMRect | undefined, download: PendingDownload): void => {
   card.scrollIntoView({ block: "nearest" });
   if (from !== undefined) flyCard(from, card, download.language);
@@ -271,21 +252,10 @@ const createStrip = (
   props: { readonly downloads: readonly PendingDownload[]; readonly flyFrom: DOMRect | undefined },
   rows: () => readonly ProjectSummary[] | undefined,
 ) => {
-  const [strip, setStrip] = createSignal<HTMLUListElement>();
-  const [hidden, setHidden] = createSignal(0, { name: "projectsHidden" });
-
   const pending = (): readonly PendingDownload[] => {
     const listed = new Set((rows() ?? []).map((row) => row.root));
     return props.downloads.filter((download) => !listed.has(download.root));
   };
-
-  createEffect(
-    () => ({ box: strip(), count: rows()?.length, pending: pending().length }),
-    ({ box }) => {
-      if (box === undefined) return;
-      return observeOverflow(box, setHidden);
-    },
-  );
 
   const flown = new Set<string>();
   const arrive = (card: HTMLElement, download: PendingDownload): void => {
@@ -293,12 +263,11 @@ const createStrip = (
     flown.add(download.id);
     const from = props.flyFrom;
     requestAnimationFrame(() => {
-      strip()?.scrollTo({ left: 0 });
       flyIn(card, from, download);
     });
   };
 
-  return { strip, setStrip, hidden, pending, arrive };
+  return { pending, arrive };
 };
 
 const DownloadLine = (props: { readonly download: PendingDownload }) => (
@@ -355,10 +324,10 @@ const DownloadCard = (props: {
   <li
     ref={(card) => props.arrive(card, props.download)}
     data-downloading={props.download.id}
-    class="shrink-0 snap-start"
+    class="shrink-0"
   >
     <Card
-      class="flex w-64 flex-col gap-1"
+      class="flex flex-col gap-1"
       aria-busy={props.download.state === "downloading" ? "true" : "false"}
     >
       <h3 class="truncate text-h4 font-semibold text-on-surface-primary">
@@ -434,8 +403,8 @@ const ProjectCard = (props: {
   readonly onExport: () => void;
   readonly onDelete: () => void;
 }) => (
-  <li data-project={props.row.root} class="shrink-0 snap-start">
-    <Card class="flex w-64 flex-col gap-1" title={props.row.name}>
+  <li data-project={props.row.root} class="shrink-0">
+    <Card class="flex flex-col gap-1" title={props.row.name}>
       <div class="flex items-start gap-2">
         <h3 class="min-w-0 flex-1 truncate text-h4 font-semibold text-on-surface-primary">
           {props.row.language || props.row.name}
@@ -479,49 +448,26 @@ const ProjectStrip = (props: {
   readonly actions: ReturnType<typeof createProjectActions> & ReturnType<typeof createRowActions>;
   readonly onDismiss: (id: string) => void;
 }) => (
-  <div class="relative">
-    <ul
-      ref={props.list.setStrip}
-      data-projects={props.sorted.length}
-      class="scrollbar-subtle flex snap-x gap-4 overflow-x-auto pb-2"
-    >
-      <For each={props.list.pending()}>
-        {(download) => (
-          <DownloadCard
-            download={download}
-            arrive={props.list.arrive}
-            onDismiss={props.onDismiss}
-          />
-        )}
-      </For>
-      <For each={props.sorted}>
-        {(row) => (
-          <ProjectCard
-            row={row}
-            folder={props.folderLabel(row)}
-            onOpen={() => props.actions.open(row)}
-            onShare={() => props.actions.share(row)}
-            onRename={() => props.actions.startRename(row)}
-            onExport={() => props.actions.exportZip(row)}
-            onDelete={() => props.actions.startDelete(row)}
-          />
-        )}
-      </For>
-    </ul>
-    <Show when={props.list.hidden() > 0}>
-      <Button
-        size="sm"
-        data-testid="projects-more"
-        class="absolute end-0 top-1/2 -translate-y-1/2 shadow-medium"
-        onClick={() => {
-          const box = props.list.strip();
-          box?.scrollBy({ left: box.clientWidth, behavior: "smooth" });
-        }}
-      >
-        {t("+{count} more", { count: props.list.hidden() })}
-      </Button>
-    </Show>
-  </div>
+  <ul data-projects={props.sorted.length} class="flex shrink-0 flex-col gap-3">
+    <For each={props.list.pending()}>
+      {(download) => (
+        <DownloadCard download={download} arrive={props.list.arrive} onDismiss={props.onDismiss} />
+      )}
+    </For>
+    <For each={props.sorted}>
+      {(row) => (
+        <ProjectCard
+          row={row}
+          folder={props.folderLabel(row)}
+          onOpen={() => props.actions.open(row)}
+          onShare={() => props.actions.share(row)}
+          onRename={() => props.actions.startRename(row)}
+          onExport={() => props.actions.exportZip(row)}
+          onDelete={() => props.actions.startDelete(row)}
+        />
+      )}
+    </For>
+  </ul>
 );
 
 const RenameDialog = (props: {

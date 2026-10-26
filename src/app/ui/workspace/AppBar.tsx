@@ -1,7 +1,6 @@
 import type { JSX } from "@solidjs/web";
 import { useNavigate, useRouterState } from "@tanstack/solid-router";
 import Bell from "lucide-solid/icons/bell";
-import Download from "lucide-solid/icons/download";
 import Ellipsis from "lucide-solid/icons/ellipsis";
 import FileText from "lucide-solid/icons/file-text";
 import GitCompare from "lucide-solid/icons/git-compare";
@@ -15,7 +14,6 @@ import { createSignal, For } from "solid-js";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { SyncButton } from "../cloud/SyncButton";
-import { ImportHub } from "../landing/ImportHub";
 import { IconButton, Menu, MenuItem, SegmentedControl } from "../primitives";
 
 function BarButton(props: {
@@ -212,14 +210,6 @@ export function AppBar() {
       <div class="flex shrink-0 items-center gap-2">
         <SyncButton />
         <MoreMenu />
-
-        <ImportHub
-          variant="menu"
-          onImported={() => void navigate({ to: "/projects" })}
-          trigger={
-            <BarButton label={t("Import")} testId="app-bar-import" icon={<Download size={20} />} />
-          }
-        />
 
         <BarButton
           label={t("Settings")}

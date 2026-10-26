@@ -12,7 +12,6 @@ import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { Card, IconButton, Input, Popover } from "../primitives";
 import { bookName } from "./books";
-import { PanelToggle } from "./PanelToggle";
 import { metadataOf, projectName } from "./project";
 
 const can = (id: string): boolean => findCommand(id)?.available() === true;
@@ -186,13 +185,8 @@ function FindingsBell() {
   );
 }
 
-export function Toolbar(props: {
-  /**
-   * `false`: no show/hide here — the panels layout (a design tweak) keeps it
-   * at the top of the panel itself (`SidebarButton`).
-   */
-  readonly panelToggle?: boolean;
-}) {
+/** No show/hide here: it is at the top of the project panel itself (`SidebarButton`). */
+export function Toolbar() {
   const [query, setQuery] = createSignal("", { name: "toolbarQuery" });
   const [menuOpen, setMenuOpen] = createSignal(false, { name: "toolbarMenu" });
   const shell = useShell();
@@ -218,9 +212,6 @@ export function Toolbar(props: {
   return (
     <div class="flex flex-wrap items-center gap-3" data-testid="toolbar">
       <div class="flex min-w-0 shrink items-center gap-2">
-        <Show when={props.panelToggle !== false}>
-          <PanelToggle />
-        </Show>
         <strong
           class="min-w-0 truncate text-h4 font-semibold text-on-surface-primary"
           data-workspace-title

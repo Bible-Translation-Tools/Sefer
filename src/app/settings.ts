@@ -132,12 +132,9 @@ export interface ShellKeys {
   readonly findingsFilter: SettingKey<FindingsFilterPreference>;
   readonly sousSettings: SettingKey<SousOverrides>;
   readonly sidebarOpen: SettingKey<boolean>;
-  /** Is the reference column beside the editor open (the crumb strip's split toggle). */
-  readonly referenceOpen: SettingKey<boolean>;
   /**
    * Refine's language panels split in two — the gateways beside the heart
-   * language — or joined as one card of tabs. Read only by the `panels`
-   * layout, a design tweak on the book route.
+   * language — or joined as one card of tabs.
    */
   readonly referenceSplit: SettingKey<boolean>;
   readonly sidebarWidth: SettingKey<number>;
@@ -151,10 +148,15 @@ export interface ShellKeys {
   /** Project root → the book, the clip and the chapter the reader last had on screen. */
   readonly lastLocation: SettingKey<LastLocations>;
   readonly referenceWidth: SettingKey<number>;
+  /** The projects page: the loaded projects' share of the row, beside the WACS table. */
+  readonly projectsWidth: SettingKey<number>;
 }
 
 /** The sidebar's share of the workspace row, and the range a drag may reach. */
 export const SIDEBAR_WIDTH = { default: 0.2, min: 0.15, max: 0.36 } as const;
+
+/** The loaded projects' share of the projects page, and the range a drag may reach. */
+export const PROJECTS_WIDTH = { default: 0.3, min: 0.22, max: 0.4 } as const;
 
 /** The reference pane's share of the editor row, and the range a drag may reach. */
 export const REFERENCE_WIDTH = { default: 0.34, min: 0.18, max: 0.6 } as const;
@@ -201,7 +203,6 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
     ),
     sousSettings: settings.register("sous.settings", SousOverrides, {}),
     sidebarOpen: settings.register("workspace.sidebarOpen", Schema.Boolean, true),
-    referenceOpen: settings.register("workspace.referenceOpen", Schema.Boolean, true),
     referenceSplit: settings.register("workspace.referenceSplit", Schema.Boolean, false),
     sidebarWidth: settings.register("workspace.sidebarWidth", Schema.Number, SIDEBAR_WIDTH.default),
     fontSize: settings.register("shell.fontSize", Schema.Number, 16),
@@ -214,6 +215,11 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
       "workspace.referenceWidth",
       Schema.Number,
       REFERENCE_WIDTH.default,
+    ),
+    projectsWidth: settings.register(
+      "landing.projectsWidth",
+      Schema.Number,
+      PROJECTS_WIDTH.default,
     ),
   };
   registered.set(settings, keys);

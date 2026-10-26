@@ -7,49 +7,38 @@ import { readyShell, useShell, useShellState } from "#app/ProjectContext";
 import { SIDEBAR_WIDTH } from "#app/settings";
 import { TourOutlet } from "#app/tour/TourOutlet";
 import { CommandPalette } from "#app/ui/CommandPalette";
-import { PageDoor, PageLeading, Resizable, Toaster, cx } from "#app/ui/primitives";
+import { PageDoor, Resizable, Toaster, cx } from "#app/ui/primitives";
 import { AppBar } from "#app/ui/workspace/AppBar";
 import { BackToEditor } from "#app/ui/workspace/BackToEditor";
 import { VersionTabs } from "#app/ui/workspace/ChangesHistorySidebar";
-import { layout, useLayoutTweak } from "#app/ui/workspace/layoutTweak";
-import { SidebarButton, usePanelToggleLeading } from "#app/ui/workspace/PanelToggle";
 import { ProjectSidebar } from "#app/ui/workspace/ProjectSidebar";
 import { useScreen } from "#app/ui/workspace/screen";
+import { SidebarButton } from "#app/ui/workspace/SidebarButton";
 import { sidebarClaim } from "#app/ui/workspace/sidebarSlot";
 
 function WorkspacePage(props: {
-  readonly toggle: ReturnType<typeof usePanelToggleLeading>;
   readonly tabs: ReturnType<ReturnType<typeof useScreen>["versionsTab"]> | undefined;
 }) {
   return (
-    <PageLeading value={props.toggle}>
-      <PageDoor value={() => <BackToEditor />}>
-        <div
-          class={cx(
-            "flex h-full min-w-0 flex-col",
-            // …on the panels layout's one white surface.
-            layout() === "panels" && "bg-surface-primary",
+    <PageDoor value={() => <BackToEditor />}>
+      <div class="flex h-full min-w-0 flex-col bg-surface-primary">
+        <Show when={props.tabs}>
+          {(active) => (
+            <div class="shrink-0 border-b border-surface-border px-4">
+              <VersionTabs active={active()} inline />
+            </div>
           )}
-        >
-          <Show when={props.tabs}>
-            {(active) => (
-              <div class="shrink-0 border-b border-surface-border px-4">
-                <VersionTabs active={active()} inline />
-              </div>
-            )}
-          </Show>
-          <div class="min-h-0 min-w-0 flex-1 overflow-y-auto">
-            <Outlet />
-          </div>
+        </Show>
+        <div class="min-h-0 min-w-0 flex-1 overflow-y-auto">
+          <Outlet />
         </div>
-      </PageDoor>
-    </PageLeading>
+      </div>
+    </PageDoor>
   );
 }
 
 function Workspace() {
   const shell = useShell();
-  useLayoutTweak();
   const path = useRouterState({ select: (state) => state.location.pathname });
   // Never on `/`, `/projects` or `/migrate`. `/` is home: it forwards to the
   // last project, or draws `EmptyWorkspace` — a skeleton that draws its own
@@ -57,15 +46,14 @@ function Workspace() {
   // the open project's sidebar there was only lost width (Will, 2026-10-07).
   const here = (): boolean => path() !== "/projects" && path() !== "/" && path() !== "/migrate";
   const showing = (): boolean => shell.sidebarShowing() && here();
-  // The panels layout (a design tweak): the panel's show/hide is the top of
-  // the panel itself, and hidden, the panel folds to a rail that still holds
-  // it — no border, as wide as the button — rather than going.
-  const rail = (): boolean => layout() === "panels" && shell.project() !== undefined && here();
+  // The panel's show/hide is the top of the panel itself, and hidden, the
+  // panel folds to a rail that still holds it — no border, as wide as the
+  // button — rather than going.
+  const rail = (): boolean => shell.project() !== undefined && here();
   // Plain values: Resizable.Panel reads its sizes once, at registration; the split owns the width after.
   const initialWidth = untrack(() => shell.sidebarWidth());
   const minWidth = SIDEBAR_WIDTH.min;
   const maxWidth = SIDEBAR_WIDTH.max;
-  const panelToggle = usePanelToggleLeading();
   const screen = useScreen();
   const pageTabs = () =>
     showing() || shell.project() === undefined ? undefined : screen.versionsTab();
@@ -114,7 +102,7 @@ function Workspace() {
       <Resizable.Panel
         class={showing() ? "relative min-w-0" : "relative min-w-0 [flex-basis:100%]!"}
       >
-        <WorkspacePage toggle={panelToggle} tabs={pageTabs()} />
+        <WorkspacePage tabs={pageTabs()} />
       </Resizable.Panel>
     </Resizable.Root>
   );

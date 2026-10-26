@@ -12,7 +12,7 @@ import {
 } from "@sefer/editor";
 import type { SourceStamp } from "@sefer/text/source";
 import { Effect, Fiber, Stream } from "effect";
-import { Show, createEffect, createRenderEffect, createSignal, untrack } from "solid-js";
+import { createEffect, createRenderEffect, createSignal, untrack } from "solid-js";
 
 import { stale, type Finding } from "#core/findings/finding";
 
@@ -24,18 +24,12 @@ import { shellKeys } from "../settings";
 import { allow, checkLabel, fineHere, flaggedText, turnOff } from "../suppressAnswers";
 import { useAlignedGroup } from "./workspace/aligned";
 import { nameBlock } from "./workspace/blockNames";
-import { LocationBar } from "./workspace/LocationBar";
 import { metadataOf } from "./workspace/project";
 
 import "@sefer/editor/editor.css";
 
 export interface BookEditorProps {
   readonly book: EditorBook;
-  /**
-   * Straight on the page, with no card and no location bar: Refine's language
-   * panels (a design tweak), where the USFM switch is in the toolbar instead.
-   */
-  readonly bare?: boolean;
 }
 
 type Shell = ReturnType<typeof useShell>;
@@ -111,7 +105,6 @@ export function BookEditor(props: BookEditorProps) {
   const [host, setHost] = createSignal<HTMLDivElement | undefined>(undefined, {
     name: "editorHost",
   });
-  const [atTop, setAtTop] = createSignal<number | undefined>(undefined, { name: "chapterAtTop" });
 
   createEffect(
     () => host(),
@@ -152,7 +145,6 @@ export function BookEditor(props: BookEditorProps) {
       const { ghosting, pairing } = watchSettings(shell, editor);
 
       const unwatch = editor.onViewport((where) => {
-        setAtTop(where === null ? undefined : where.ordinal);
         if (where !== null)
           shell.noteChapterAtTop(where.ordinal, {
             chapter: where.topChapter ?? where.label,
@@ -223,16 +215,12 @@ export function BookEditor(props: BookEditorProps) {
 
   return (
     <div
-      class={props.bare === true ? "editor-host" : "editor-host shadow-small"}
-      data-bare={props.bare === true ? "" : undefined}
+      class="editor-host"
+      data-bare=""
       data-testid="editor-card"
       data-mode={shell.mode()}
       data-revision={(stamp() ?? props.book.source().stamp).revision}
     >
-      <Show when={props.bare !== true}>
-        <LocationBar ordinal={atTop()} />
-      </Show>
-
       <div class="cm-host" dir={direction()} data-testid="editor-host" ref={setHost} />
     </div>
   );

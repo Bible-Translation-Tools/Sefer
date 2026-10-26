@@ -13,8 +13,10 @@ import { through } from "#core/remote/transport";
 import { catalogueFor, type CatalogueEntry } from "../../catalogue";
 import { transportFor } from "../../endpoints";
 import { t } from "../../i18n";
+import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
+import { WriterTable } from "../migrate/WriterLanguages";
 import {
   Button,
   Card,
@@ -43,7 +45,7 @@ import {
   type Column,
 } from "./catalogueView";
 import type { PendingDownload } from "./downloads";
-import { ImportHub } from "./ImportHub";
+import { CloneFromUrl, ImportHub } from "./ImportHub";
 import { RegionIcon } from "./RegionIcon";
 import { formatDate, listProjects, projectIndexRevision } from "./summaries";
 
@@ -51,6 +53,33 @@ const COLUMNS =
   "grid grid-cols-[var(--code-column)_minmax(0,1fr)_8rem_8rem_9rem] items-center gap-x-8 px-8 text-body";
 
 const HOLE = "\u0000";
+
+/**
+ * A search that starts with `http` is an address, not a language: when it
+ * parses as a URL it is offered as a clone instead of matched. Whether a
+ * repository answers there is the clone's to find out, as Migrate's
+ * "From a URL" leaves it to the remote's probe.
+ */
+const repositoryUrl = (query: string): string | undefined => {
+  const typed = query.trim();
+  if (!typed.startsWith("http")) return undefined;
+  try {
+    return new URL(typed).href;
+  } catch {
+    return undefined;
+  }
+};
+
+const CloneOffer = (props: { readonly url: string }) => (
+  <div
+    data-testid="catalogue-clone"
+    class="mx-auto flex max-w-2xl flex-col items-center gap-4 px-8 py-12 text-center"
+  >
+    <h3 class="text-h4 font-bold text-on-surface-primary">{m.landing_clone_from_link()}</h3>
+    <p class="break-all text-body text-on-surface-secondary">{props.url}</p>
+    <CloneFromUrl url={props.url} />
+  </div>
+);
 
 type Filters = ReturnType<typeof createCatalogueFilters>;
 
@@ -349,33 +378,45 @@ const CatalogueRowView = (props: {
   </div>
 );
 
+type Repos = "consolidated" | "writer" | "gateway";
+
 const CatalogueToolbar = (props: {
   readonly gatewaysOffered: boolean;
   readonly filters: Filters;
+  readonly repos: Repos;
+  readonly onRepos: (repos: Repos) => void;
 }) => (
   <div class="flex flex-wrap items-center gap-3">
-    <PanelHeader title={t("Projects Available on WACS")} class="me-auto" />
-
-    <Show when={props.gatewaysOffered}>
-      <SegmentedControl
-        size="sm"
-        label={t("Which languages")}
-        items={[
-          { value: "translation", label: t("Translations") },
-          { value: "gateway", label: t("Gateway languages") },
-        ]}
-        value={props.filters.kind()}
-        onChange={props.filters.setKind}
-      />
-    </Show>
+    <PanelHeader title={t("Projects Available on WACS")} />
+    <SegmentedControl
+      size="md"
+      label={m.landing_repos_label()}
+      items={[
+        { value: "consolidated", label: m.landing_repos_consolidated() },
+        { value: "writer", label: m.landing_repos_writer() },
+        ...(props.gatewaysOffered
+          ? [{ value: "gateway" as const, label: t("Gateway languages") }]
+          : []),
+      ]}
+      value={props.repos}
+      onChange={props.onRepos}
+    />
     <Input
       type="search"
       size="lg"
-      wrapperClass="w-full sm:w-[28rem]"
+      wrapperClass="w-full min-w-64 sm:w-auto sm:flex-1"
       class="w-full"
       icon={<SearchIcon size={20} aria-hidden="true" />}
-      aria-label={t("Search projects available on WACS")}
-      placeholder={t("Search 'english' or 'axd'…")}
+      aria-label={
+        props.repos === "writer"
+          ? t("Search Writer projects by language")
+          : m.landing_search_or_link()
+      }
+      placeholder={
+        props.repos === "writer"
+          ? m.writer_languages_placeholder()
+          : t("Search 'english' or 'axd'…")
+      }
       value={props.filters.query()}
       onInput={(event) => props.filters.setQuery(event.currentTarget.value)}
     />
@@ -424,21 +465,32 @@ const TableBody = (props: {
   <VirtualList<CatalogueRow>
     role="rowgroup"
     class="scrollbar-subtle min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]"
-    sections={props.virtualRows.length > 0 ? [{ key: "catalogue", rows: props.virtualRows }] : []}
+    sections={
+      props.virtualRows.length > 0 && repositoryUrl(props.filters.query()) === undefined
+        ? [{ key: "catalogue", rows: props.virtualRows }]
+        : []
+    }
     empty={
       <Show
-        when={props.entries}
+        when={repositoryUrl(props.filters.query())}
         fallback={
-          <p class="py-8 text-center text-body text-on-surface-tertiary">
-            {t("Loading projects…")}
-          </p>
+          <Show
+            when={props.entries}
+            fallback={
+              <p class="py-8 text-center text-body text-on-surface-tertiary">
+                {t("Loading projects…")}
+              </p>
+            }
+          >
+            <NoMatch
+              query={props.filters.query().trim()}
+              regions={[...props.filters.regionFilter()]}
+              onDropRegion={(name) => props.filters.toggleRegion(name, false)}
+            />
+          </Show>
         }
       >
-        <NoMatch
-          query={props.filters.query().trim()}
-          regions={[...props.filters.regionFilter()]}
-          onDropRegion={(name) => props.filters.toggleRegion(name, false)}
-        />
+        {(url) => <CloneOffer url={url()} />}
       </Show>
     }
     row={(item) => (
@@ -518,6 +570,7 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
     const key = sourceKey(entry.gitUrl);
     return key === undefined ? undefined : held().get(key);
   };
+  const [repos, setRepos] = createSignal<Repos>("consolidated", { name: "catalogueRepos" });
 
   const download = (entry: CatalogueEntry, from: DOMRect): void => {
     // Untracked on purpose: a one-time read, not a dependency (Solid 2: STRICT_READ_UNTRACKED).
@@ -526,10 +579,28 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
   };
 
   return (
-    <section class="flex min-h-0 flex-1 flex-col gap-3">
-      <CatalogueToolbar gatewaysOffered={gatewaysOffered} filters={filters} />
+    <section class="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+      <CatalogueToolbar
+        gatewaysOffered={gatewaysOffered}
+        filters={filters}
+        repos={repos()}
+        onRepos={(next) => {
+          setRepos(next);
+          if (next !== "writer") filters.setKind(next === "gateway" ? "gateway" : "translation");
+        }}
+      />
 
-      <div class="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+      <Show when={repos() === "writer"}>
+        <WriterTable
+          query={filters.query()}
+          class="flex-1"
+          onPick={(language) => void navigate({ to: "/migrate", search: { language } })}
+        />
+      </Show>
+
+      <div
+        class={cx("flex min-h-0 min-w-0 flex-1 flex-col gap-3", repos() === "writer" && "hidden")}
+      >
         <Show when={problem() !== ""}>
           <p class="rounded-md bg-surface-error px-3 py-2 text-small text-on-surface-error">
             {problem()}

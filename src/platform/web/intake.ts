@@ -120,13 +120,10 @@ export const pickFolder = async (
   return files.length === 0 ? undefined : { name: root === "" ? "project" : root, files };
 };
 
-export const pickZip = async (
+const unzipPicked = async (
+  archive: File,
   observability?: ObservabilityService,
 ): Promise<Picked | undefined> => {
-  const picked = await pickFiles({ accept: ".zip,application/zip" });
-  const archive = picked[0];
-  if (archive === undefined) return undefined;
-
   const read = observability?.span("import.pick.read", undefined, { "import.source": "zip" });
   let archiveBytes: ArrayBuffer;
   try {
@@ -153,6 +150,75 @@ export const pickZip = async (
   }
   const stem = lastSegment(archive.name).replace(/\.zip$/iu, "");
   return { name: root === "" ? stem : root, files };
+};
+
+export const pickZip = async (
+  observability?: ObservabilityService,
+): Promise<Picked | undefined> => {
+  const picked = await pickFiles({ accept: ".zip,application/zip" });
+  const archive = picked[0];
+  return archive === undefined ? undefined : unzipPicked(archive, observability);
+};
+
+const entriesOf = (directory: FileSystemDirectoryEntry): Promise<FileSystemEntry[]> => {
+  const reader = directory.createReader();
+  const all: FileSystemEntry[] = [];
+  return new Promise((resolve, reject) => {
+    // `readEntries` answers in batches and an empty batch means done.
+    const next = (): void =>
+      reader.readEntries((batch) => {
+        if (batch.length === 0) resolve(all);
+        else {
+          all.push(...batch);
+          next();
+        }
+      }, reject);
+    next();
+  });
+};
+
+const walkEntry = async (entry: FileSystemEntry, prefix: string, into: IntakeFile[]) => {
+  const path = prefix === "" ? entry.name : `${prefix}/${entry.name}`;
+  if (entry.isDirectory) {
+    // SAFETY: `isDirectory` is the discriminant the spec defines, and the DOM types do not narrow on it.
+    for (const child of await entriesOf(entry as FileSystemDirectoryEntry))
+      await walkEntry(child, path, into);
+    return;
+  }
+  if (!usable(path)) return;
+  const file = await new Promise<File>((resolve, reject) =>
+    // SAFETY: the branch above took every directory, so this is a file entry.
+    (entry as FileSystemFileEntry).file(resolve, reject),
+  );
+  into.push({ path, bytes: new Uint8Array(await file.arrayBuffer()) });
+};
+
+export interface Dropped {
+  readonly entry: FileSystemEntry | null;
+  readonly file: File | undefined;
+}
+
+/**
+ * What was dropped on the import area: one folder, or one zip. The caller takes `entry` and `file`
+ * off the `DataTransfer` synchronously inside its drop handler, because the browser empties it after.
+ */
+export const readDropped = async (
+  dropped: Dropped,
+  observability?: ObservabilityService,
+): Promise<Picked | undefined> => {
+  const { entry, file } = dropped;
+  if (entry?.isDirectory !== true)
+    return file === undefined ? undefined : unzipPicked(file, observability);
+  const stop = observability?.span("import.pick.read", undefined, { "import.source": "folder" });
+  const files: IntakeFile[] = [];
+  try {
+    // SAFETY: checked `isDirectory` above.
+    for (const child of await entriesOf(entry as FileSystemDirectoryEntry))
+      await walkEntry(child, "", files);
+  } finally {
+    stop?.({ "import.files": files.length });
+  }
+  return files.length === 0 ? undefined : { name: entry.name, files };
 };
 
 export const intake = (
