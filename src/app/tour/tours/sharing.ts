@@ -281,10 +281,10 @@ export const windowATour: Tour = {
     },
     {
       spotlight: {
-        anchor: "[data-testid=app-bar-import]",
+        anchor: "[data-testid=app-bar]",
         title: "Every other way in",
-        body: "Import brings a project in from WACS, a zip, a folder, or BTT Writer. Every one ends as the same kind of copy on this device.",
-        try: "Open Import to see the choices. A choice this device cannot use is shown greyed out with the reason, never hidden.",
+        body: "The projects page brings a project in from WACS, a zip, a folder, or BTT Writer. Every one ends as the same kind of copy on this device.",
+        try: "Later, on the projects page: drop a zip or folder on it, choose one, or paste a repository link into the WACS search. A choice this device cannot use is shown greyed out with the reason, never hidden.",
         notes: [
           {
             label: "Why a zip and a folder",
