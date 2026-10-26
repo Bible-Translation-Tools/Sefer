@@ -148,6 +148,9 @@ export interface Shell {
   readonly setSidebarWidth: (fraction: number) => void;
   readonly referenceWidth: Accessor<number>;
   readonly setReferenceWidth: (fraction: number) => void;
+  /** The projects page: the loaded projects' share of the row, beside the WACS table. */
+  readonly projectsWidth: Accessor<number>;
+  readonly setProjectsWidth: (fraction: number) => void;
   readonly referenceOpen: Accessor<boolean>;
   readonly setReferenceOpen: (open: boolean) => void;
   /** Refine's language panels split in two, or joined; see `referenceSplit` in settings. */
@@ -402,6 +405,8 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     setSidebarWidth: layout.setSidebarWidth,
     referenceWidth: layout.referenceWidth,
     setReferenceWidth: layout.setReferenceWidth,
+    projectsWidth: layout.projectsWidth,
+    setProjectsWidth: layout.setProjectsWidth,
   };
 
   const bridge: ShellBridge = {

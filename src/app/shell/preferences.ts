@@ -6,7 +6,7 @@ import type { Project } from "#core/project/project";
 import { DEFAULT_JOURNAL_POLICY } from "#core/recovery/recovery";
 
 import type { Services } from "../services";
-import { REFERENCE_WIDTH, SIDEBAR_WIDTH, type shellKeys } from "../settings";
+import { PROJECTS_WIDTH, REFERENCE_WIDTH, SIDEBAR_WIDTH, type shellKeys } from "../settings";
 import type { ShellEvent } from "../shellEvent";
 import { sousValues } from "../sousSettings";
 import { applyEditorFontSize } from "../ui/theme";
@@ -108,13 +108,6 @@ export const createLayoutPreferences = ({
   const [sidebarOpen, setSidebarOpen] = createSignal(services.settings.get(keys.sidebarOpen), {
     name: "sidebarOpen",
   });
-  const [sidebarWidth, setSidebarWidth] = createSignal(services.settings.get(keys.sidebarWidth), {
-    name: "sidebarWidth",
-  });
-  const [referenceWidth, setReferenceWidth] = createSignal(
-    services.settings.get(keys.referenceWidth),
-    { name: "referenceWidth" },
-  );
   const [referenceOpen, setReferenceOpen] = createSignal(
     services.settings.get(keys.referenceOpen),
     { name: "referenceOpen" },
@@ -128,12 +121,44 @@ export const createLayoutPreferences = ({
     void services.run(Effect.result(services.settings.set(key, value)));
   };
 
-  let widthWrite: ReturnType<typeof setTimeout> | undefined;
-  let referenceWrite: ReturnType<typeof setTimeout> | undefined;
-  onCleanup(() => {
-    if (widthWrite !== undefined) clearTimeout(widthWrite);
-    if (referenceWrite !== undefined) clearTimeout(referenceWrite);
-  });
+  /**
+   * A panel's share of its row: the signal moves at pointer speed, clamped to
+   * the range a drag may reach, and the file is written once the drag settles.
+   */
+  const settledWidth = (
+    key: SettingKey<number>,
+    range: { readonly min: number; readonly max: number },
+    name: string,
+  ) => {
+    const [width, setWidth] = createSignal(services.settings.get(key), { name });
+    let write: ReturnType<typeof setTimeout> | undefined;
+    onCleanup(() => clearTimeout(write));
+    const set = (fraction: number): void => {
+      const clamped = Math.min(range.max, Math.max(range.min, fraction));
+      setWidth(clamped);
+      clearTimeout(write);
+      write = setTimeout(() => {
+        write = undefined;
+        persist(key, clamped);
+      }, 400);
+    };
+    return [width, set] as const;
+  };
+  const [sidebarWidth, setSidebarWidth] = settledWidth(
+    keys.sidebarWidth,
+    SIDEBAR_WIDTH,
+    "sidebarWidth",
+  );
+  const [referenceWidth, setReferenceWidth] = settledWidth(
+    keys.referenceWidth,
+    REFERENCE_WIDTH,
+    "referenceWidth",
+  );
+  const [projectsWidth, setProjectsWidth] = settledWidth(
+    keys.projectsWidth,
+    PROJECTS_WIDTH,
+    "projectsWidth",
+  );
 
   return {
     persist,
@@ -153,24 +178,10 @@ export const createLayoutPreferences = ({
       persist(keys.referenceSplit, split);
     },
     sidebarWidth,
-    setSidebarWidth: (fraction: number): void => {
-      const clamped = Math.min(SIDEBAR_WIDTH.max, Math.max(SIDEBAR_WIDTH.min, fraction));
-      setSidebarWidth(clamped);
-      if (widthWrite !== undefined) clearTimeout(widthWrite);
-      widthWrite = setTimeout(() => {
-        widthWrite = undefined;
-        persist(keys.sidebarWidth, clamped);
-      }, 400);
-    },
+    setSidebarWidth,
     referenceWidth,
-    setReferenceWidth: (fraction: number): void => {
-      const clamped = Math.min(REFERENCE_WIDTH.max, Math.max(REFERENCE_WIDTH.min, fraction));
-      setReferenceWidth(clamped);
-      if (referenceWrite !== undefined) clearTimeout(referenceWrite);
-      referenceWrite = setTimeout(() => {
-        referenceWrite = undefined;
-        persist(keys.referenceWidth, clamped);
-      }, 400);
-    },
+    setReferenceWidth,
+    projectsWidth,
+    setProjectsWidth,
   };
 };
