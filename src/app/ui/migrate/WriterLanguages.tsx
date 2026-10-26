@@ -40,11 +40,18 @@ const sortValue = (column: Column, row: WriterLanguage): string => {
   }
 };
 
-/** A code matches from its start ("ni" finds `nij`, not `fni`); a name anywhere in it. */
+/** Whether any word of `name` starts with `needle`: "ni" finds "Nindi" and "Kwa Ni", not "Danish". */
+const wordStarts = (name: string, needle: string): boolean =>
+  name
+    .toLowerCase()
+    .split(/[\s\-(),/]+/u)
+    .some((word) => word.startsWith(needle));
+
+/** A code matches from its start ("ni" finds `nij`, not `fni`); a name from the start of any word in it. */
 const matches = (row: WriterLanguage, needle: string): boolean =>
   row.code.toLowerCase().startsWith(needle) ||
-  row.naturalName.toLowerCase().includes(needle) ||
-  row.anglicizedName.toLowerCase().includes(needle);
+  wordStarts(row.naturalName, needle) ||
+  wordStarts(row.anglicizedName, needle);
 
 /** The whole list once, then searched here: no round trip per keystroke. */
 const createLanguageSearch = (query: () => string) => {
