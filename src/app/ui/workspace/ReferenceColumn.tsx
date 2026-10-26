@@ -45,6 +45,7 @@ import BookMarked from "lucide-solid/icons/book-marked";
 import Check from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import Download from "lucide-solid/icons/download";
+import Trash from "lucide-solid/icons/trash-2";
 import X from "lucide-solid/icons/x";
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 
@@ -61,7 +62,7 @@ import { announceSourceTexts, libraryRevision, sourceTextCopy } from "../../arri
 import { listSourceTexts, listTranslationNotes, type ListedText } from "../../catalogue";
 import { describe, remoteReasonOf } from "../../describe";
 import { t } from "../../i18n";
-import { downloadHelp, helpDownloads } from "../../kinds/download";
+import { downloadHelp, helpDownloads, removeHelp } from "../../kinds/download";
 import { KIND_ROLES, roleFor } from "../../kinds/table";
 import { uiLocale } from "../../locale";
 import { m } from "../../paraglide/messages";
@@ -412,6 +413,12 @@ export function ReferenceColumn() {
 
   const heldHelps = (): readonly Resource[] => copies().filter((resource) => !isBible(resource));
 
+  /** Deletes downloaded notes from this device; showing them, the panel falls back to what is left. */
+  const removeNotes = (resource: Resource): void => {
+    if (chosen() === resource.id) setChosen(undefined);
+    void removeHelp(services, resource);
+  };
+
   /**
    * The Translation Notes this device does not hold yet, A–Z by language as
    * the catalogue gives them. Held means the same URL, or notes in the same
@@ -581,6 +588,8 @@ export function ReferenceColumn() {
       offeredBibles().filter((text) => text.language.toLowerCase() === key());
     const notesHere = (): readonly ListedText[] =>
       helps().filter((help) => help.language.toLowerCase() === key());
+    const heldNotesHere = (): readonly Resource[] =>
+      heldHelps().filter((each) => languageOf(each) === key());
     return (
       <Menu
         label={m.reference_resource()}
@@ -610,6 +619,19 @@ export function ReferenceColumn() {
               <Show when={text.id === pickerProps.resource.id}>
                 <Check aria-label={m.reference_showing()} class="size-5 shrink-0 text-brand" />
               </Show>
+            </MenuItem>
+          )}
+        </For>
+        {/* Downloaded notes, and only those, can go again: a Library copy, never a project. */}
+        <For each={heldNotesHere()}>
+          {(notes) => (
+            <MenuItem
+              class={ROW}
+              data-testid="reference-remove-notes"
+              icon={<Trash aria-hidden="true" />}
+              onSelect={() => removeNotes(notes)}
+            >
+              {m.reference_remove_notes()}
             </MenuItem>
           )}
         </For>

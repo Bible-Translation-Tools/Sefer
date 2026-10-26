@@ -52,6 +52,7 @@ export const libraryRevision = revision;
 const libraryChanged = (): void => {
   setRevision((held) => held + 1);
 };
+export const noteLibraryChanged = libraryChanged;
 
 const ownerAndRepo = (url: string): { readonly owner: string; readonly repo: string } => {
   const parts = normaliseRepoUrl(url).split("/");

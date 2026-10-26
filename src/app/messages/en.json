@@ -44,5 +44,6 @@
   "refine_editor_label": "Refinement",
   "refine_hide_reference": "Hide reference",
   "refine_show_reference": "Show reference",
-  "refine_resize_reference": "Resize the reference panel"
+  "refine_resize_reference": "Resize the reference panel",
+  "reference_remove_notes": "Remove Translation Notes from this device"
 }
