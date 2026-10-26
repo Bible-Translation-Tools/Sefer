@@ -4,7 +4,7 @@ import { Show } from "solid-js";
 
 import { t } from "../../../i18n";
 import { ago } from "../../panels/format";
-import { Badge, Button, Popover, type usePageLeading } from "../../primitives";
+import { Badge, Button, Popover } from "../../primitives";
 import { BackToEditor } from "../../workspace/BackToEditor";
 import type { Compare } from "./createCompare";
 import type { Decisions } from "./createDecisions";
@@ -13,7 +13,6 @@ import type { Sides } from "./createSides";
 import { SourcePicker } from "./SourcePicker";
 
 interface ReviewHeaderProps {
-  readonly pageLeading: ReturnType<typeof usePageLeading>;
   readonly sides: Sides;
   readonly compare: Compare;
   readonly decisions: Decisions;
@@ -133,7 +132,6 @@ function HeaderActions(props: { readonly header: ReviewHeaderProps }) {
 export function ReviewHeader(props: ReviewHeaderProps) {
   return (
     <header class="flex min-h-12 min-w-0 flex-wrap items-center gap-2" data-review-header>
-      {props.pageLeading()}
       <Popover
         label={t("What is compared")}
         align="start"

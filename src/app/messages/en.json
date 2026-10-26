@@ -59,5 +59,6 @@
   "landing_search_or_link": "Search projects available on WACS, or paste a repository link",
   "landing_resize_columns": "Resize the project columns",
   "writer_languages_loading": "Loading languages…",
-  "writer_languages_placeholder": "Search 'nindi' or 'nxi'…"
+  "writer_languages_placeholder": "Search 'nindi' or 'nxi'…",
+  "reference_remove_notes": "Remove Translation Notes from this device"
 }

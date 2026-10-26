@@ -10,8 +10,8 @@
  * regex-sliced passage: that could not show markup, could not be scrolled,
  * and would disagree with the editor about what a verse looks like. A pane is
  * the same `decoField` over the same `DocStructure`, so the two sides cannot
- * drift. The whole column is shut from the editor's crumb strip
- * (`shell.referenceOpen`) and nowhere else: a second button here that folded
+ * drift. The panel is shown and hidden by the editor's "Show reference"
+ * (`shell.referenceSplit`) and nowhere else: a second button here that folded
  * it to cards was one close too many (Will, 2026-10-22).
  *
  * Which text is on show is the "Reference language" menu above the pane:
@@ -44,21 +44,10 @@ import { Effect, Option, Result } from "effect";
 import BookMarked from "lucide-solid/icons/book-marked";
 import Check from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
-import ChevronUp from "lucide-solid/icons/chevron-up";
 import Download from "lucide-solid/icons/download";
-import Search from "lucide-solid/icons/search";
 import Trash from "lucide-solid/icons/trash-2";
 import X from "lucide-solid/icons/x";
-import {
-  For,
-  Match,
-  Show,
-  Switch,
-  createEffect,
-  createMemo,
-  createSignal,
-  onCleanup,
-} from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 
 import { Observability } from "#core/observability";
 import { remoteVerdict } from "#core/remote/remote";
@@ -81,16 +70,7 @@ import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
 import { ResourcePane } from "../kinds/registry";
 import { listProjects, type ProjectSummary } from "../landing/summaries";
-import {
-  Button,
-  EmptyState,
-  Input,
-  Menu,
-  MenuItem,
-  Popover,
-  SegmentedControl,
-  cx,
-} from "../primitives";
+import { Button, EmptyState, Menu, MenuItem, Popover, cx } from "../primitives";
 
 const ROLES: readonly Role[] = KIND_ROLES;
 
@@ -116,377 +96,12 @@ type Listing =
   | { readonly state: "ready"; readonly rows: readonly ListedText[] }
   | { readonly state: "failed"; readonly offline: boolean };
 
-type Shelf = "notes" | "bibles" | "projects";
-
-/** Whether `query` (already lowercased and trimmed) is in any of `fields`; an empty query matches everything. */
-const matches = (query: string, ...fields: readonly (string | undefined)[]): boolean =>
-  query === "" || fields.some((field) => field?.toLowerCase().includes(query) === true);
-
 type Shown = { readonly entry: Entry; readonly book: string } | undefined;
-
-interface PickerModel {
-  readonly busy: () => boolean;
-  readonly fetching: () => string;
-  readonly nameOf: (resource: Resource | undefined) => string;
-  readonly shown: () => Shown;
-  readonly installed: () => readonly Resource[];
-  readonly show: (resource: Resource) => void;
-  readonly offer: () => void;
-  readonly otherProjects: () => readonly ProjectSummary[];
-  readonly showProject: (row: ProjectSummary) => void;
-  readonly notes: () => Listing | undefined;
-  readonly helps: () => readonly ListedText[];
-  readonly heldHelps: () => readonly Resource[];
-  readonly removeNotes: (resource: Resource) => void;
-  readonly fetchHelp: (help: ListedText) => void;
-  readonly bibles: () => Listing | undefined;
-  readonly offeredBibles: () => readonly ListedText[];
-  readonly fetchBible: (text: ListedText) => void;
-  readonly showMaterial: () => boolean;
-  readonly setShowMaterial: (open: boolean) => void;
-  readonly shelf: () => Shelf;
-  readonly setShelf: (shelf: Shelf) => void;
-  readonly query: () => string;
-  readonly setQuery: (query: string) => void;
-}
 
 const ROW = "px-6";
 
-function GroupToggle(props: {
-  readonly testId: string;
-  readonly label: string;
-  readonly open: boolean;
-  readonly onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="menuitem"
-      tabindex={-1}
-      data-testid={props.testId}
-      aria-expanded={props.open ? "true" : "false"}
-      class={`${ROW} flex h-12 w-full cursor-pointer items-center gap-3 text-start text-small font-semibold text-on-surface-primary outline-none hover:bg-surface-secondary focus-visible:bg-surface-secondary`}
-      onClick={() => props.onToggle()}
-    >
-      <span class="min-w-0 flex-1">{props.label}</span>
-      <Show when={props.open} fallback={<ChevronDown aria-hidden="true" class="size-5" />}>
-        <ChevronUp aria-hidden="true" class="size-5" />
-      </Show>
-    </button>
-  );
-}
-
-function RowText(props: { readonly name: string; readonly detail?: string }) {
-  return (
-    <span class="flex min-w-0 flex-1 flex-col">
-      <span class="truncate">{props.name}</span>
-      <Show when={props.detail !== undefined && props.detail !== props.name}>
-        <span class="truncate text-smallest text-on-surface-tertiary">{props.detail}</span>
-      </Show>
-    </span>
-  );
-}
-
-function HeldNotesRow(props: { readonly resource: Resource; readonly model: PickerModel }) {
-  return (
-    <div
-      class={`${ROW} flex min-h-12 items-center gap-3 text-small text-on-surface-primary`}
-      data-testid="reference-held-notes"
-      data-language={props.resource.language}
-    >
-      <RowText
-        name={`${languageName(props.resource.language) ?? props.resource.title} (${props.resource.language ?? ""})`}
-        detail={t("On this device")}
-      />
-      <button
-        type="button"
-        role="menuitem"
-        tabindex={-1}
-        data-testid="reference-remove-notes"
-        title={t("Remove {title} from this device", {
-          title: props.model.nameOf(props.resource),
-        })}
-        class="flex shrink-0 cursor-pointer items-center gap-1 rounded-md px-2 py-1 text-small text-on-surface-secondary outline-none hover:bg-surface-secondary focus-visible:bg-surface-secondary"
-        onClick={() => props.model.removeNotes(props.resource)}
-      >
-        <Trash aria-hidden="true" class="size-4" />
-        {t("Remove")}
-      </button>
-    </div>
-  );
-}
-
-/** One downloadable text: its language, the language's own name under it, and a download mark. */
-function ListedRow(props: {
-  readonly text: ListedText;
-  readonly name: string;
-  readonly testId: string;
-  readonly downloading: boolean;
-  readonly onSelect: () => void;
-}) {
-  return (
-    <MenuItem
-      class={ROW}
-      data-testid={props.testId}
-      title={m.reference_download_title({ title: props.name })}
-      onSelect={() => props.onSelect()}
-    >
-      <span class="flex min-w-0 flex-1 flex-col">
-        <span class="truncate">{props.name}</span>
-        <Show
-          when={
-            props.text.nationalName !== "" && props.text.nationalName !== props.text.languageName
-          }
-        >
-          <span
-            dir={props.text.direction}
-            class="truncate text-start text-smallest text-on-surface-tertiary"
-          >
-            {props.text.nationalName}
-          </span>
-        </Show>
-      </span>
-      <Show
-        when={props.downloading}
-        fallback={<Download aria-hidden="true" class="size-5 shrink-0" />}
-      >
-        <span
-          role="status"
-          aria-label={t("Downloading")}
-          class="size-5 shrink-0 animate-spin rounded-full border-2 border-on-surface-tertiary border-t-transparent"
-        />
-      </Show>
-    </MenuItem>
-  );
-}
-
-function ListingStatus(props: { readonly listing: Listing | undefined; readonly empty: boolean }) {
-  const note = (): string | undefined => {
-    const listing = props.listing;
-    if (listing === undefined || listing.state === "loading") return t("Loading the list…");
-    if (listing.state === "failed")
-      return listing.offline
-        ? t("You are offline. Open this menu again to retry.")
-        : t("Could not read the list. Open this menu again to retry.");
-    return props.empty ? t("Nothing matches.") : undefined;
-  };
-  return (
-    <Show when={note()}>
-      {(text) => (
-        <p role="status" class={`${ROW} py-3 text-small text-on-surface-tertiary`}>
-          {text()}
-        </p>
-      )}
-    </Show>
-  );
-}
-
 const textName = (text: ListedText): string =>
   `${text.languageName || text.language} (${text.language})`;
-
-function NotesShelf(props: { readonly model: PickerModel }) {
-  const query = (): string => props.model.query().trim().toLowerCase();
-  const held = () =>
-    props.model
-      .heldHelps()
-      .filter((resource) =>
-        matches(query(), languageName(resource.language), resource.language, resource.title),
-      );
-  const offered = () =>
-    props.model
-      .helps()
-      .filter((help) => matches(query(), help.languageName, help.nationalName, help.language));
-  return (
-    <div role="group" aria-label={t("Translation Notes")} data-testid="reference-notes">
-      <For each={held()}>
-        {(resource) => <HeldNotesRow resource={resource} model={props.model} />}
-      </For>
-      <For each={offered()}>
-        {(help) => (
-          <ListedRow
-            text={help}
-            name={textName(help)}
-            testId={`pick-help-${help.repository}`}
-            downloading={helpDownloads().has(help.repository)}
-            onSelect={() => props.model.fetchHelp(help)}
-          />
-        )}
-      </For>
-      <ListingStatus
-        listing={props.model.notes()}
-        empty={held().length === 0 && offered().length === 0}
-      />
-    </div>
-  );
-}
-
-function BiblesShelf(props: { readonly model: PickerModel }) {
-  const offered = () => {
-    const query = props.model.query().trim().toLowerCase();
-    return props.model
-      .offeredBibles()
-      .filter((text) =>
-        matches(query, text.languageName, text.nationalName, text.language, text.title),
-      );
-  };
-  return (
-    <div role="group" aria-label={t("Bibles")} data-testid="reference-bibles">
-      <For each={offered()}>
-        {(text) => (
-          <ListedRow
-            text={text}
-            name={text.title === "ULB" ? textName(text) : `${textName(text)} · ${text.title}`}
-            testId={`pick-${text.repository}`}
-            downloading={false}
-            onSelect={() => props.model.fetchBible(text)}
-          />
-        )}
-      </For>
-      <ListingStatus listing={props.model.bibles()} empty={offered().length === 0} />
-    </div>
-  );
-}
-
-function ProjectsShelf(props: { readonly model: PickerModel }) {
-  const offered = () => {
-    const query = props.model.query().trim().toLowerCase();
-    return props.model
-      .otherProjects()
-      .filter((row) => matches(query, row.name, row.language, languageName(row.language)));
-  };
-  return (
-    <div role="group" aria-label={t("Your projects")} data-testid="reference-other-projects">
-      <For each={offered()}>
-        {(row) => (
-          <MenuItem
-            class={ROW}
-            data-testid={`pick-${row.folder}`}
-            onSelect={() => props.model.showProject(row)}
-          >
-            <RowText name={row.name} detail={languageName(row.language) ?? row.language} />
-          </MenuItem>
-        )}
-      </For>
-      <Show when={offered().length === 0}>
-        <p role="status" class={`${ROW} py-3 text-small text-on-surface-tertiary`}>
-          {props.model.otherProjects().length === 0
-            ? t("No other projects on this device.")
-            : t("Nothing matches.")}
-        </p>
-      </Show>
-    </div>
-  );
-}
-
-/** Keys the menu would take to move between its rows, kept for the toggle and the search box. */
-const KEPT_KEYS = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End"]);
-
-function ReferenceMaterialGroup(props: { readonly model: PickerModel }) {
-  return (
-    <>
-      <GroupToggle
-        testId="reference-material"
-        label={m.reference_material()}
-        open={props.model.showMaterial()}
-        onToggle={() => props.model.setShowMaterial(!props.model.showMaterial())}
-      />
-      <Show when={props.model.showMaterial()}>
-        <div
-          class="sticky -top-1 z-10 flex flex-col gap-2 border-b border-surface-border bg-surface-primary px-3 pt-1 pb-3"
-          onKeyDown={(event) => {
-            if (KEPT_KEYS.has(event.key)) event.stopPropagation();
-          }}
-        >
-          <SegmentedControl
-            label={t("Kind of reference material")}
-            class="w-full"
-            items={[
-              { value: "notes", label: m.reference_shelf_notes() },
-              { value: "bibles", label: m.reference_shelf_bibles() },
-              { value: "projects", label: m.reference_shelf_projects() },
-            ]}
-            value={props.model.shelf()}
-            onChange={(shelf) => props.model.setShelf(shelf)}
-          />
-          <Input
-            type="search"
-            size="sm"
-            wrapperClass="w-full"
-            class="w-full"
-            icon={<Search class="size-4" />}
-            data-testid="reference-search"
-            aria-label={t("Search by language")}
-            placeholder={m.reference_search_placeholder()}
-            value={props.model.query()}
-            onInput={(event) => props.model.setQuery(event.currentTarget.value)}
-          />
-        </div>
-        <Switch>
-          <Match when={props.model.shelf() === "notes"}>
-            <NotesShelf model={props.model} />
-          </Match>
-          <Match when={props.model.shelf() === "bibles"}>
-            <BiblesShelf model={props.model} />
-          </Match>
-          <Match when={props.model.shelf() === "projects"}>
-            <ProjectsShelf model={props.model} />
-          </Match>
-        </Switch>
-      </Show>
-    </>
-  );
-}
-
-function LanguagePicker(props: { readonly model: PickerModel }) {
-  return (
-    <Menu
-      label={m.reference_language()}
-      onOpenChange={(open) => {
-        if (!open) return;
-        props.model.setShowMaterial(false);
-        props.model.setQuery("");
-        props.model.setShelf(props.model.installed().some(isBible) ? "notes" : "bibles");
-        props.model.offer();
-      }}
-      side="bottom"
-      align="start"
-      class="w-96"
-      fitViewport
-      trigger={
-        <button
-          type="button"
-          data-testid="reference-language"
-          disabled={props.model.busy()}
-          class="flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-2xl bg-surface-primary p-3 text-start transition-colors hover:bg-surface-secondary disabled:cursor-wait"
-        >
-          <span class="flex min-w-0 flex-1 flex-col">
-            <span class="text-small text-on-surface-secondary">{m.reference_language()}</span>
-            <span class="truncate text-small font-semibold text-on-surface-primary">
-              {props.model.fetching() === ""
-                ? props.model.nameOf(props.model.shown()?.entry.resource) || m.reference_none_yet()
-                : t("Getting {language}…", { language: props.model.fetching() })}
-            </span>
-          </span>
-          <ChevronDown aria-hidden="true" class="size-5 shrink-0 text-on-surface-primary" />
-        </button>
-      }
-    >
-      <div class="scrollbar-padded max-h-[min(60vh,25.5rem)] overflow-y-auto py-1">
-        <For each={props.model.installed()}>
-          {(resource) => (
-            <MenuItem class={ROW} onSelect={() => props.model.show(resource)}>
-              <RowText name={props.model.nameOf(resource)} detail={resource.title} />
-              <Show when={props.model.shown()?.entry.resource.id === resource.id}>
-                <Check aria-label={t("Showing")} class="size-5 shrink-0 text-brand" />
-              </Show>
-            </MenuItem>
-          )}
-        </For>
-        <ReferenceMaterialGroup model={props.model} />
-      </div>
-    </Menu>
-  );
-}
 
 const readLibraryState = (
   services: ReturnType<typeof useShell>["services"],
@@ -507,17 +122,11 @@ const readLibraryState = (
     return { found, absent, library };
   });
 
-export interface ReferenceColumnProps {
-  readonly onBound?: (count: number) => void;
-  /**
-   * `gateway`: the panels layout's reference panel — one split dropdown,
-   * language then text, over the text on show, no column padding. `column`
-   * otherwise.
-   */
-  readonly variant?: "column" | "gateway";
-}
-
-export function ReferenceColumn(props: ReferenceColumnProps) {
+/**
+ * The reference panel: one split dropdown, language then text, over the text
+ * on show.
+ */
+export function ReferenceColumn() {
   const shell = useShell();
   const { services } = shell;
   const [entries, setEntries] = createSignal<readonly Entry[]>([], { name: "referenceEntries" });
@@ -538,8 +147,6 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
   const [busy, setBusy] = createSignal(false, { name: "referenceBusy" });
   const [fetching, setFetching] = createSignal("", { name: "referenceFetching" });
   const [bound, setBound] = createSignal(0, { name: "referenceBound" });
-
-  const report = (count: number): void => props.onBound?.(count);
 
   const declared = (): readonly RelatedResource[] =>
     Option.match(shell.project()?.metadata() ?? Option.none(), {
@@ -571,7 +178,6 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
           setMissing(absent);
           setCopies(library);
           setLoading(false);
-          report(found.length);
         });
     },
   );
@@ -807,6 +413,12 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
 
   const heldHelps = (): readonly Resource[] => copies().filter((resource) => !isBible(resource));
 
+  /** Deletes downloaded notes from this device; showing them, the panel falls back to what is left. */
+  const removeNotes = (resource: Resource): void => {
+    if (chosen() === resource.id) setChosen(undefined);
+    void removeHelp(services, resource);
+  };
+
   /**
    * The Translation Notes this device does not hold yet, A–Z by language as
    * the catalogue gives them. Held means the same URL, or notes in the same
@@ -831,11 +443,6 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       (help) =>
         !urls.has(normaliseRepoUrl(help.url)) && !languages.has(help.language.toLowerCase()),
     );
-  };
-
-  const removeNotes = (resource: Resource): void => {
-    if (chosen() === resource.id) setChosen(undefined);
-    void removeHelp(services, resource);
   };
 
   const fetchHelp = (help: ListedText): void => {
@@ -878,45 +485,6 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
         a?.book === b?.book,
     },
   );
-
-  const nameOf = (resource: Resource | undefined): string => {
-    if (resource === undefined) return "";
-    const tag = resource.language ?? "";
-    if (tag === "") return resource.title;
-    const name = nameOfLanguage(tag);
-    return isBible(resource)
-      ? `${name} (${resource.language ?? ""})`
-      : `${resource.title} · ${name} (${resource.language ?? ""})`;
-  };
-
-  const [showMaterial, setShowMaterial] = createSignal(false, { name: "referenceShowMaterial" });
-  const [shelf, setShelf] = createSignal<Shelf>("notes", { name: "referenceShelf" });
-  const [query, setQuery] = createSignal("", { name: "referenceQuery" });
-  const picker: PickerModel = {
-    busy,
-    fetching,
-    nameOf,
-    shown,
-    installed,
-    show,
-    offer,
-    otherProjects,
-    showProject,
-    notes,
-    helps,
-    heldHelps,
-    removeNotes,
-    fetchHelp,
-    bibles,
-    offeredBibles,
-    fetchBible,
-    showMaterial,
-    setShowMaterial,
-    shelf,
-    setShelf,
-    query,
-    setQuery,
-  };
 
   /** The split dropdown's language list, open or shut. */
   const [managing, setManaging] = createSignal(false, { name: "referenceManaging" });
@@ -1020,6 +588,8 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
       offeredBibles().filter((text) => text.language.toLowerCase() === key());
     const notesHere = (): readonly ListedText[] =>
       helps().filter((help) => help.language.toLowerCase() === key());
+    const heldNotesHere = (): readonly Resource[] =>
+      heldHelps().filter((each) => languageOf(each) === key());
     return (
       <Menu
         label={m.reference_resource()}
@@ -1049,6 +619,19 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
               <Show when={text.id === pickerProps.resource.id}>
                 <Check aria-label={m.reference_showing()} class="size-5 shrink-0 text-brand" />
               </Show>
+            </MenuItem>
+          )}
+        </For>
+        {/* Downloaded notes, and only those, can go again: a Library copy, never a project. */}
+        <For each={heldNotesHere()}>
+          {(notes) => (
+            <MenuItem
+              class={ROW}
+              data-testid="reference-remove-notes"
+              icon={<Trash aria-hidden="true" />}
+              onSelect={() => removeNotes(notes)}
+            >
+              {m.reference_remove_notes()}
             </MenuItem>
           )}
         </For>
@@ -1299,20 +882,14 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
   return (
     <aside
       aria-label={t("Reference texts")}
-      class={
-        props.variant === "gateway"
-          ? "flex h-full min-h-0 min-w-0 flex-1 flex-col gap-3"
-          : "flex h-full min-w-0 flex-col gap-3 py-4 pe-[7.5px]"
-      }
+      class="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-3"
       data-references={entries().length}
     >
-      <Show when={props.variant === "gateway"} fallback={<LanguagePicker model={picker} />}>
-        <GatewayPicker />
-        <Show when={fetching() !== ""}>
-          <p role="status" class="text-small text-on-surface-secondary">
-            {m.reference_getting({ language: fetching() })}
-          </p>
-        </Show>
+      <GatewayPicker />
+      <Show when={fetching() !== ""}>
+        <p role="status" class="text-small text-on-surface-secondary">
+          {m.reference_getting({ language: fetching() })}
+        </p>
       </Show>
 
       <Show when={!loading() && missing().length > 0 && entries().every((entry) => entry.declared)}>
@@ -1365,7 +942,7 @@ export function ReferenceColumn(props: ReferenceColumnProps) {
               role={held.entry.role}
               bookId={held.book}
               clip={clip}
-              followControl={props.variant === "column" || props.variant === undefined}
+              followControl={false}
             />
           </div>
         )}
