@@ -386,7 +386,7 @@ const CatalogueToolbar = (props: {
   readonly repos: Repos;
   readonly onRepos: (repos: Repos) => void;
 }) => (
-  <div class="flex flex-wrap items-center gap-3">
+  <div data-tour="wacs-repos" class="flex flex-wrap items-center gap-3">
     <PanelHeader title={t("Projects Available on WACS")} />
     <SegmentedControl
       size="md"
