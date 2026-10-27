@@ -69,12 +69,14 @@ export const writerTour: Tour = {
       advance: () => present("[data-writer-language]"),
     },
     {
-      ready: () => present("[data-writer-language]"),
-      timeoutMs: 60_000,
+      // The toolbar, not the language rows: the list takes seconds to arrive
+      // from WACS, and none come at all if Writer repos was not chosen.
+      ready: () => present("[data-tour=wacs-repos]"),
+      timeoutMs: 30_000,
       spotlight: {
         anchor: "[data-tour=wacs-repos]",
         title: "Find a language",
-        body: "Search by code or by name; a name matches from the start of any word in it. Choosing a language opens Migrate from Writer with its books.",
+        body: "With Writer repos chosen, search by code or by name; a name matches from the start of any word in it. The list takes a few seconds to arrive from WACS. Choosing a language opens Migrate from Writer with its books.",
         try: "Type bwc and choose it.",
         notes: [
           {
