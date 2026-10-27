@@ -3,7 +3,6 @@ import { expectTour } from "./expect";
 import { findingsTour } from "./findings";
 import { lineByLineTour } from "./lineByLine";
 import { notesTour } from "./notes";
-import { windowATour, windowBTour } from "./sharing";
 import { suppressionsTour } from "./suppressions";
 import { verseNumbersWorkflow } from "./verseNumbers";
 
@@ -15,15 +14,7 @@ import { verseNumbersWorkflow } from "./verseNumbers";
 export const TOURS: readonly Tour[] = [
   verseNumbersWorkflow,
   ...(__SEFER_DESIGN__
-    ? [
-        windowATour,
-        windowBTour,
-        findingsTour,
-        suppressionsTour,
-        expectTour,
-        notesTour,
-        lineByLineTour,
-      ]
+    ? [findingsTour, suppressionsTour, expectTour, notesTour, lineByLineTour]
     : []),
 ];
 
