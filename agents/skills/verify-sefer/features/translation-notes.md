@@ -31,12 +31,15 @@ Preconditions:
 - **The column.** Turn on **Show reference**. `aside[data-references]` and
   `[data-testid=gateway-picker]` appear: `[data-testid=gateway-language]` on the
   left, `[data-testid=resource-picker]` on the right.
-- **Choose the notes.** Choose English (en) in `gateway-language`, then
-  Translation Notes in `resource-picker` (downloaded the first time). Wait
-  (minutes on a slow line) for `[data-testid=notes-pane]`.
-- **Follow.** Place the caret in a verse (mouse sequence, as in
-  [edit and save](./edit-and-save.md)). `[data-testid=notes-pane]` gets a
-  `data-place`. Move to another verse; `data-place` changes.
+- **Choose the notes.** With English on the left, click
+  `[data-testid=resource-picker]`; `snapshot -i` lists the menu items
+  "Unlocked Literal Bible" and "Translation Notes". Click "Translation Notes"
+  by ref (it downloads the first time). Wait (about 25 s here; minutes on a
+  slow line) for `[data-testid=notes-pane]`.
+- **Follow.** The pane opens already on a place (`data-place` "JHN 1").
+  Place the caret in verse 2 (mouse sequence, as in
+  [edit and save](./edit-and-save.md); "Uyu wine" is in JHN 1:2): `data-place`
+  reads "JHN 1:2". Then in verse 3 ("Ifintu"): "JHN 1:3".
 - **Proof.** Screenshot the pane after each move; record both `data-place`
   values. `errors()` is `[]`.
 
@@ -45,11 +48,13 @@ Preconditions:
 - The download is per browser storage: a new session downloads again.
 - Menus wait on a frame. On a hidden page, screenshot before deciding a
   menu item is missing.
-- `remove` needs held notes and isn't walked here yet: its row is
-  `[data-testid=reference-remove-notes]`.
+- `remove` is the menu item "Remove Translation Notes from this device"
+  (`[data-testid=reference-remove-notes]`), shown once notes are held. Not
+  walked yet.
+- The pane opens already showing a place, so a check for "`data-place` is not
+  empty" passes before anyone has clicked. Check that it changes.
+- In zsh, a variable holding "x y" is one word: use `mouse move ${=P}`.
 
-Not walked end to end since the reference column was rebuilt in PR #9
-(2026-10-26). The handles above are read from the code, not driven: walk it
-and correct this file before trusting it. The `notes` tour still waits on
-`[data-testid=reference-language]`, which PR #9 removed, so it stalls at
-step 2.
+Last walked end to end: 2026-10-27, Web, through the `notes` tour, fixed
+the same day (`.verify/2026-10-27T16-20-09-158Z-0a0f1cf7/`). The download took
+about 25 s. Not walked: `remove`, desktop.

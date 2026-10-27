@@ -2,9 +2,9 @@ import type { Tour, TourContext } from "../machine";
 
 /**
  * Translation Notes, end to end: opening a project, choosing (and, the first
- * time, downloading) them in the reference column's menu, the notes following
- * the caret, and Find searching them. The projects page lists no notes
- * (Will, 2026-10-15); the menu's Reference material is where they come from.
+ * time, downloading) them in the right half of the reference column's split
+ * dropdown, the notes following the caret, and Find searching them. The
+ * projects page lists no notes (Will, 2026-10-15).
  *
  * It needs no project to start: it begins on `/projects`, and opens a
  * translation, the Bisa Bible, through its share link with the host named
@@ -18,12 +18,16 @@ import type { Tour, TourContext } from "../machine";
 
 const PROJECT = "/r/Will_Kelly/leb-x-bisa_reg/book/JHN?host=content.bibletranslationtools.org";
 
+/** The open project, or the one named in the address while it is still opening (a step's own link). */
+const slugOf = (context: TourContext): string =>
+  context.shell.slug() || (/^\/project\/([^/]+)/u.exec(window.location.pathname)?.[1] ?? "");
+
 const toBook = (context: TourContext): void => {
   context.shell.setReferenceSplit(true);
-  void context.navigate({
-    to: "/project/$slug/book/$book",
-    params: { slug: context.shell.slug(), book: "JHN" },
-  });
+  const slug = slugOf(context);
+  // Next pressed before the project arrived: there is no project to go to yet.
+  if (slug === "") return;
+  void context.navigate({ to: "/project/$slug/book/$book", params: { slug, book: "JHN" } });
 };
 
 const present = (selector: string): boolean => document.querySelector(selector) !== null;
@@ -31,6 +35,11 @@ const present = (selector: string): boolean => document.querySelector(selector) 
 const placeShown = (): string =>
   document.querySelector("[data-testid=notes-pane]")?.getAttribute("data-place") ?? "";
 
+/**
+ * Where the notes stood when the caret step was first on screen: they open
+ * already showing a place, which is not the person putting the caret anywhere.
+ */
+let openedAt: string | undefined;
 let firstPlace = "";
 
 /** Ten minutes: en_tn is about 8.5 MB, a little under three minutes on slow 3G. */
@@ -60,29 +69,39 @@ export const notesTour: Tour = {
     },
     {
       go: toBook,
-      ready: () => present("[data-testid=reference-language]"),
+      ready: () => present("[data-testid=gateway-picker]"),
       timeoutMs: DOWNLOAD_MS,
       spotlight: {
-        anchor: "aside[data-references]",
+        anchor: "[data-testid=gateway-picker]",
         side: "right",
         title: "Choose them beside the text",
-        body: "Open the Reference language menu at the top of this column. If “Translation Notes · English (en)” is with the texts on this device, choose it. If not, open Reference material, choose Translation Notes in the toggle at its top, then English (en): the notes come down once for this device, a toast in the corner shows how far it has got, and they open here when they arrive.",
+        body: "The control at the top of this column has two halves: the language on the left, and what to read in it on the right. With English on the left, open the right half and choose Translation Notes. The first time, they download once for this device (a spinner shows on the row), and they open here when they arrive.",
       },
       advance: () => present("[data-testid=notes-pane]"),
     },
     {
+      go: () => {
+        openedAt = undefined;
+      },
       ready: () => present("[data-testid=notes-pane]"),
+      timeoutMs: DOWNLOAD_MS,
       spotlight: {
         anchor: "[data-testid=editor-host]",
         title: "Put the caret in a verse",
         body: "Click anywhere in a verse of John. The notes for that verse appear beside it, each one on its own: the phrase it explains, then the note.",
       },
       advance: () => {
+        if (openedAt === undefined) {
+          openedAt = placeShown();
+          return false;
+        }
         firstPlace = placeShown();
-        return firstPlace !== "";
+        return firstPlace !== "" && firstPlace !== openedAt;
       },
     },
     {
+      ready: () => present("[data-testid=notes-pane]"),
+      timeoutMs: DOWNLOAD_MS,
       spotlight: {
         anchor: "[data-testid=notes-pane]",
         title: "They follow you",
@@ -97,7 +116,7 @@ export const notesTour: Tour = {
       go: (context) =>
         void context.navigate({
           to: "/project/$slug/find",
-          params: { slug: context.shell.slug() },
+          params: { slug: slugOf(context) },
           search: { q: "believe", scope: "helps" },
         }),
       ready: () => present("[data-tour=find-helps]"),
