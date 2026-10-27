@@ -1,6 +1,6 @@
 ---
 id: e8d8cd0a-4177-4450-85dc-fad9f6ebdd0e
-title: "Writer migration's pure core in scripture-kitchen, as wasm"
+title: "Assembling a Bible from independent books, outside Sefer (kitchen, wasm, CLI)"
 kind: idea
 status: idea
 created: 2026-10-27
@@ -23,23 +23,64 @@ ported from `src/core/migrate/writerBook.ts` at `50aa9cd`, and `crates/history`
 hand, because the hub and Sefer must stitch a Writer book to the same bytes. Keeping
 them in step by hand will eventually fail, and nothing would notice when it does.
 
-## The shape
+## What Will wants (2026-10-27)
 
-The file system is not the obstacle, because the pure part never touches one:
+> I just don't like having an implementation for [it] written inside of [Sefer] itself. Like, I just feel like that should be an external thing.
 
-- **Stitch** (paths → book tree → USFM through the one template, plus `decode_text`) is
-  pure already. `hub-stitch` has no dependencies, so it would go into the kitchen
-  (galley) almost as it is, and onto the galley wasm Sefer already loads.
-- **History replay** splits in two. The pure half takes each save as files and
-  metadata, and returns the commits to write: the book bytes, the author, the date,
-  the "TIT 1:6–7" message and the trailers. The I/O half stays with each host: walking
-  the Writer repositories (isomorphic-git or git2 in Sefer, libgit2 in the hub) and
-  writing objects (Sefer's `src/core/git/pack.ts`; ordinary git in the hub).
-- **"In memory first"** is how Sefer already works on the Web: candidates are cloned
-  into an in-memory FileSystem, and the replay writes one pack. The kitchen only has to
-  take bytes in and give bytes back.
+> the idea is I am taking a bunch of books and bringing them together as a single Bible from independent sources. And I don't know how to abstract that from the file system part that's needed. Because Git is so much based on the file system
 
-<Question id="history-split">Does the pure half of the history replay move as well, or only stitch at first? Stitch is the part where byte-for-byte agreement matters most.</Question>
-<Question id="pack">Should `pack.ts` (deltas, chains capped at 50) move too? The hub does not need it, so it stays in Sefer unless another consumer turns up.</Question>
+> I like to keep its primitives pretty, its code pretty focused on just orchestrating things that already exist, hence the editor is actually not in this repo.
+
+So the aim is wider than Writer. **Assembly** means taking independent single-book sources and making one Bible that keeps every source's history. It should be a library that Sefer calls, the same way it calls the editor and the parser. A person with plain git on a laptop (someone who asked about using git directly) should be able to run the same assembly from a command line, with no Sefer involved.
+
+## The boundary: bytes in, commits out
+
+Git doesn't need a file system to be described. It already has a text format for history in transit: `git fast-export` writes a repository's commits as one stream, and `git fast-import` builds a repository from one. Every commit is in it, with its author, date, message and full file contents. Nothing in the format is a path on disk.
+
+So the library never touches a disk or a git implementation:
+
+- **In:** each source's history, as a list of saves. A save is the commit's author, committer, date, zone and message, plus the files it changed as `path → bytes`. That is exactly what a fast-export stream holds, and what Sefer's `walk` + `blobs` already produce.
+- **Out:** the assembled history, as a list of commits to make. Each is the whole book file's bytes at that point, an author, a date, a message (`TIT 1:6–7`), and the `Writer-Message` / `Writer-Source` trailers, interleaved by time. The final assembly commit (`metadata.json`, `manifest.yaml`, `.upstreams.json`) is the last item. This list can be handed back as data, or written as a fast-import stream.
+
+Each host brings its own git to either end, and only the host touches storage:
+
+| Host | Reads sources with | Writes the result with |
+|---|---|---|
+| Command line, any machine | `git fast-export` per source repo | `git fast-import` into a new repo |
+| Sefer desktop | git2 (as today) | git2, or fast-import |
+| Sefer Web | isomorphic-git `walk` + `blobs` (as today) | `src/core/git/pack.ts` (as today: one pack, five files on OPFS) |
+| The hub (`wacs-dashboard-2`) | libgit2 over its bare repos | libgit2 |
+
+"In memory first" is then just the normal case. A source is a stream or a list in memory, and so is the result. Writing to disk is the last step and belongs to the host.
+
+<Mermaid id="flow" caption="One library; each host brings its git to both ends">
+```mermaid
+flowchart LR
+  A[Writer repo] -->|fast-export or walk| L
+  B[Single-book USFM repo] -->|fast-export or walk| L
+  C[Folder or zip] -->|files as one save| L
+  L["assemble (kitchen)<br/>pick, stitch, replay, interleave"] -->|commits as data| W[Sefer Web: pack.ts]
+  L -->|fast-import stream| G[git fast-import / git2 / libgit2]
+```
+</Mermaid>
+
+## What moves and what stays
+
+**Moves to scripture-kitchen,** as one crate, in the galley wasm build and as a CLI binary:
+
+- **Stitch adapters,** one per source shape. Writer chunks become a USFM book (`writerBook.ts`, `hub-stitch`). A single-book USFM repo passes through. More shapes can be added later.
+- **Pick:** one candidate per book, with the rule "Primary, else newest Active, never Inactive" when asked for a recommendation. The UI's choice is passed in as data.
+- **Replay** (`writerHistory.ts`, `hub-history`'s pure half): saves become book-file commits, said in verses.
+- **The assembly metadata:** the Burrito and RC forms from one prefill (`writeMetadata.ts`'s share), and `.upstreams.json`.
+- **The fast-export reader and the fast-import writer.** Both are text formats with no I/O, about a few hundred lines each.
+
+**Stays in Sefer** is orchestration only: the catalogue and the candidate table, cloning, the health line and Compare (which use the editor and Review), materialising commits on the Web (`pack.ts`), and following Writer upstreams afterwards.
+
+**The hub** drops `hub-stitch` and the pure half of `hub-history` and calls the same crate. That removes the hand-kept copies.
+
+<Tradeoff id="fast-import" chose="fast-export / fast-import as the wire format" cost="isomorphic-git has neither, so the Web keeps reading with walk and writing with pack.ts and passes the library data, not streams">Every git on a command line already speaks it, so the CLI case needs no code of ours to read or write a repository.</Tradeoff>
+
+<Question id="history-split" answer="Yes, it splits (Will, 2026-10-27): the library returns commits in memory and the host brings its own git.">Does the pure half of the history replay move as well, or only stitch at first?</Question>
+<Question id="pack">Should `pack.ts` move into the kitchen too, as an optional "write a pack" for hosts with no git of their own? Today only Sefer Web needs it.</Question>
+<Question id="first-step">Is the first step stitch alone (smallest, and where byte agreement matters most), with replay after?</Question>
 <Followup id="golden">Before either side changes, run the hub's `crates/stitch/tests/golden.rs` against Sefer's renderer, so the move starts from proof that the two agree today.</Followup>
-
