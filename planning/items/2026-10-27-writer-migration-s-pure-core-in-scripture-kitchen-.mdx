@@ -81,6 +81,17 @@ flowchart LR
 <Tradeoff id="fast-import" chose="fast-export / fast-import as the wire format" cost="isomorphic-git has neither, so the Web keeps reading with walk and writing with pack.ts and passes the library data, not streams">Every git on a command line already speaks it, so the CLI case needs no code of ours to read or write a repository.</Tradeoff>
 
 <Question id="history-split" answer="Yes, it splits (Will, 2026-10-27): the library returns commits in memory and the host brings its own git.">Does the pure half of the history replay move as well, or only stitch at first?</Question>
-<Question id="pack">Should `pack.ts` move into the kitchen too, as an optional "write a pack" for hosts with no git of their own? Today only Sefer Web needs it.</Question>
+<Question id="pack" answer="Claude's lean, not yet ruled (Will hasn't had time to look, 2026-10-27): move it, as the library's third output beside data and a fast-import stream.">Should `pack.ts` move into the kitchen too, as an optional "write a pack" for hosts with no git of their own? Today only Sefer Web needs it.</Question>
+
+**Lean on the pack writer: move it with the replay.**
+
+- **Only the replay uses it.** `src/core/git/pack.ts`'s one caller is `writerHistory.ts`. If the replay leaves Sefer and the pack writer stays, Sefer keeps git object encoding (zlib, SHA-1, deltas, the `.idx` format) for a job it no longer does. That is the kind of primitive Will wants out of the app.
+- **It is already bytes in, bytes out.** Commits go in; a `.pack` and its `.idx` come out. Nothing in it touches storage, so it fits the library's boundary as it is.
+- **Any host without a fast-import needs it.** Today that is isomorphic-git on the Web. It would also be any other wasm caller in a browser or a worker. Without it, each of those writes loose objects, which is 1–9 ms each on OPFS. Isomorphic-git's own `packObjects` stores every version whole: 35 MB, against 2.7 MB from ours.
+- **Rust does it more cheaply.** Deflate and SHA-1 are mature crates. The delta search is the slow part in JavaScript today, and would run in wasm.
+- **The hub doesn't need it, and that's fine.** It's an output the caller asks for, so libgit2 and the command line never pay for it.
+
+So the library has three outputs for one result: commits as data, a fast-import stream, and a pack with its index. Sefer Web writes the last as two files, then adopts them through intake, as now. The first step stays as stitch on its own. The replay and the pack move together after, because a pack is only useful once there are replayed commits to put in it.
+
 <Question id="first-step">Is the first step stitch alone (smallest, and where byte agreement matters most), with replay after?</Question>
 <Followup id="golden">Before either side changes, run the hub's `crates/stitch/tests/golden.rs` against Sefer's renderer, so the move starts from proof that the two agree today.</Followup>
