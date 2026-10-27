@@ -1,0 +1,45 @@
+---
+id: e8d8cd0a-4177-4450-85dc-fad9f6ebdd0e
+title: "Writer migration's pure core in scripture-kitchen, as wasm"
+kind: idea
+status: idea
+created: 2026-10-27
+updated: 2026-10-27
+sha: 168be465
+tags: [migrate]
+related: [bb738860-9176-4836-8b23-2402471e521f, cb93b577-f532-4ded-a6ab-bfd316cce8fd]
+---
+
+> one day I might see if this could move to scripture kitchen and compile to wasm? Obv need fs, but might could write it all in memory first? Not sure. I just also have this same primitive in … WACs dash 2
+
+(Will, 2026-10-27.)
+
+## Why
+
+The same Writer code now exists twice. `wacs-dashboard-2` (the translation hub,
+`WycliffeAssociates/hackathon-translation-hub`) has `crates/stitch` (`hub-stitch`),
+ported from `src/core/migrate/writerBook.ts` at `50aa9cd`, and `crates/history`
+(`hub-history`), ported from `writerHistory.ts`. Both say they are "kept in step" by
+hand, because the hub and Sefer must stitch a Writer book to the same bytes. Keeping
+them in step by hand will eventually fail, and nothing would notice when it does.
+
+## The shape
+
+The file system is not the obstacle, because the pure part never touches one:
+
+- **Stitch** (paths → book tree → USFM through the one template, plus `decode_text`) is
+  pure already. `hub-stitch` has no dependencies, so it would go into the kitchen
+  (galley) almost as it is, and onto the galley wasm Sefer already loads.
+- **History replay** splits in two. The pure half takes each save as files and
+  metadata, and returns the commits to write: the book bytes, the author, the date,
+  the "TIT 1:6–7" message and the trailers. The I/O half stays with each host: walking
+  the Writer repositories (isomorphic-git or git2 in Sefer, libgit2 in the hub) and
+  writing objects (Sefer's `src/core/git/pack.ts`; ordinary git in the hub).
+- **"In memory first"** is how Sefer already works on the Web: candidates are cloned
+  into an in-memory FileSystem, and the replay writes one pack. The kitchen only has to
+  take bytes in and give bytes back.
+
+<Question id="history-split">Does the pure half of the history replay move as well, or only stitch at first? Stitch is the part where byte-for-byte agreement matters most.</Question>
+<Question id="pack">Should `pack.ts` (deltas, chains capped at 50) move too? The hub does not need it, so it stays in Sefer unless another consumer turns up.</Question>
+<Followup id="golden">Before either side changes, run the hub's `crates/stitch/tests/golden.rs` against Sefer's renderer, so the move starts from proof that the two agree today.</Followup>
+
