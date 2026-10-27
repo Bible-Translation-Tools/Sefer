@@ -1,6 +1,6 @@
 # Agent verification
 
-Status: agreed workflow direction. This is not yet an executable app-specific skill: exact launch isolation and readiness checks must be proved as the application takes shape. The desktop driving recipe is proved (2026-10-12; "Driving the desktop app" below).
+Status: agreed workflow direction. The executable skill is [verify-sefer](../../agents/skills/verify-sefer/SKILL.md), which drives these tools and keeps the feature map; the Web edit-and-save path is proved through it (2026-10-27). The desktop driving recipe is proved (2026-10-12; "Driving the desktop app" below).
 
 ## What exists now
 
@@ -217,6 +217,6 @@ When promoting a journey, distill the exploration into a minimal fixture, stable
 
 ## Grow the runbook from working features
 
-When the first vertical slice works, add its verified launch/health/drive/cleanup recipe and a short feature map: how a user reaches it, what to do, and what proves the result. Link existing automated tests instead of copying their steps into a second detailed specification. A future agent skill should point here rather than duplicate this guidance.
+The feature map is [verify-sefer](../../agents/skills/verify-sefer/SKILL.md) (2026-10-27): one file per user-facing feature in `agents/skills/verify-sefer/features/`, saying how a person reaches it, how to drive it with agent-browser, what proves it, and when it was last walked. This page stays the account of the tools; the skill points here rather than repeating it. When a feature is next verified and has no file, add one. Link existing automated tests instead of copying their steps into a second detailed specification.
 
 References: [agent-browser](https://github.com/vercel-labs/agent-browser), and [the verification-skill pattern](https://github.com/cursor/plugins/blob/main/pstack/skills/create-verification-skill/SKILL.md).
