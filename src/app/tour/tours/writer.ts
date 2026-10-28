@@ -88,6 +88,11 @@ export const writerTour: Tour = {
       advance: () => onPath("/migrate"),
     },
     {
+      // Next pressed before a language was chosen: open the suggested one.
+      go: (context) => {
+        if (!onPath("/migrate"))
+          void context.navigate({ to: "/migrate", search: { language: "bwc" } });
+      },
       ready: () => present("[data-tour=migrate-books]"),
       timeoutMs: PATIENT,
       spotlight: {
