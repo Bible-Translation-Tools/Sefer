@@ -2,7 +2,7 @@
 id: c03582e3-c024-44aa-97a2-19681c1f66a5
 title: "Tab and Enter for poetry levels in Refine"
 kind: plan
-status: discussing
+status: in-progress
 created: 2026-10-27
 updated: 2026-10-28
 sha: b4bbf347
@@ -29,6 +29,9 @@ The guiding rule:
   level, back down to the paragraph floor. No tab character is ever written.
 - **Enter** after text in a poetry line makes another line at the same level. **Enter on an empty
   poetry line** steps out one level: empty `\q2` → `\q1`, empty `\q1` → paragraph.
+- **Backspace at the start of a poetry line** (before its first word, a verse number included) steps
+  out one level, as Word takes a bullet off before joining lines: `\q2` → `\q1` → `\p`, then the
+  next Backspace joins the line above. Thomas, 2026-10-28: "Lets start with the Word approach".
 - **A selection across lines** changes every line it touches together (Word's bullets).
 - **Only `\q`/`\q1` and `\q2`.** Other poetry markers already in the file are never deleted. A `\q3`
   added in USFM unlocks a third level for that chapter only.

@@ -20,6 +20,7 @@ import { frontMatterCard } from "./core/frontmatter";
 import { annotateOpen } from "./core/instrument";
 import { trusted } from "./core/kernel";
 import { keystrokeMeter } from "./core/meter";
+import { lineKindAt, turnLineInto, type LineKind } from "./core/poetryLevels";
 import { deleteColumn, deleteRow, insertColumn, insertRow } from "./core/tableCommands";
 import { span } from "./core/timing";
 import { type UnsupportedMarkup, unsupportedMarkup } from "./core/unsupported";
@@ -118,6 +119,10 @@ export interface BookEditorMount extends EditorHandle {
    * False when there is no verse there, or `number` is no verse number.
    */
   renumberVerse(offset: number, number: string): boolean;
+  /** The line (block) at an offset: its marker and what Refine may turn it into; null elsewhere. */
+  lineKindAt(offset: number): LineKind | null;
+  /** Turns the line at an offset into another kind (`turnable` choices only), as one Undo step. */
+  turnLineInto(offset: number, kind: string): boolean;
   /** Removes the marker of the verse at an offset; its text joins the verse before. */
   removeVerseMarker(offset: number): boolean;
   /** Adds an empty verse after the one at an offset, numbered one past it, with the caret in it. */
@@ -436,6 +441,8 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
     insertTableColumn: (offset: number, side: "before" | "after") =>
       run(insertColumn(created.state, offset, side)),
     deleteTableColumn: (offset: number) => run(deleteColumn(created.state, offset)),
+    lineKindAt: (offset: number) => lineKindAt(created.state, offset),
+    turnLineInto: (offset: number, kind: string) => run(turnLineInto(created.state, offset, kind)),
     renumberVerse: (offset: number, number: string) =>
       run(renumberVerse(created.state, verseAt(created.state, offset), number)),
     removeVerseMarker: (offset: number) =>

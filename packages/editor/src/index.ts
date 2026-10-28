@@ -25,6 +25,7 @@ export {
   type FiguresOptions,
 } from "./features";
 export { type Figure } from "./core/figures";
+export { type LineKind } from "./core/poetryLevels";
 export { type UnsupportedMarkup } from "./core/unsupported";
 export { PHRASES, type EditorWords, type PhraseKey } from "./core/words";
 

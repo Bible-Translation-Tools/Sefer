@@ -262,7 +262,7 @@ export function ProjectSidebar() {
 
   return (
     <div
-      class="flex h-full flex-col border-e border-sidebar-border bg-sidebar-surface"
+      class="flex h-full flex-col border-e border-sidebar-border bg-surface-primary"
       data-testid="sidebar"
     >
       <ProjectControl />

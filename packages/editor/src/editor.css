@@ -41,7 +41,7 @@
   /* The reading column's measure: the regular projection's text, its notes
      and its front matter card, and anything outside the editor that lines up
      with them (the panels layout's action bar, `EditorPanel`). */
-  --editor-measure: 40rem;
+  --editor-measure: 50rem;
   --editor-paper: var(--surface-primary);
   --editor-ink: var(--on-surface-primary);
   /* Verse and chapter numbers, and the caret. The mockup's "verse numbers
@@ -88,6 +88,24 @@
   --editor-link-x: #7c3aed;
   --editor-nested-fg: #6d28d9;
   --editor-nested-line: #ddd0f7;
+
+  /* The USFM view: a code editor's palette, in the app's theme. Light keeps
+     the same hues, darkened to read on paper; dark is the terminal palette. */
+  --usfm-bg: var(--surface-primary);
+  --usfm-fg: var(--on-surface-primary);
+  --usfm-caret: #0284c7;
+  --usfm-selection: var(--editor-selection);
+  --usfm-marker: #0369a1;
+  --usfm-num: #b45309;
+  --usfm-chapter: #be185d;
+  --usfm-para: #4d7c0f;
+  --usfm-heading: #7e22ce;
+  --usfm-front: var(--on-surface-tertiary);
+  --usfm-gutter-line: var(--surface-border);
+  --usfm-error-bg: var(--editor-error-bg);
+  --usfm-error-line: var(--editor-error-line);
+  --usfm-warn-bg: var(--editor-warn-bg);
+  --usfm-warn-line: var(--editor-warn-line);
 }
 
 :root[data-theme="dark"] {
@@ -99,6 +117,22 @@
   --editor-link-x: #b393f5;
   --editor-nested-fg: #b393f5;
   --editor-nested-line: #3d3357;
+
+  --usfm-bg: #0c0a09;
+  --usfm-fg: #d6d3d1;
+  --usfm-caret: #38bdf8;
+  --usfm-selection: #1e3a5f;
+  --usfm-marker: #38bdf8;
+  --usfm-num: #fbbf24;
+  --usfm-chapter: #f472b6;
+  --usfm-para: #a3e635;
+  --usfm-heading: #c084fc;
+  --usfm-front: #78716c;
+  --usfm-gutter-line: #292524;
+  --usfm-error-bg: #4a1f1f;
+  --usfm-error-line: #a33;
+  --usfm-warn-bg: #453a17;
+  --usfm-warn-line: #a8892f;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -109,6 +143,22 @@
     --editor-link-x: #b393f5;
     --editor-nested-fg: #b393f5;
     --editor-nested-line: #3d3357;
+
+    --usfm-bg: #0c0a09;
+    --usfm-fg: #d6d3d1;
+    --usfm-caret: #38bdf8;
+    --usfm-selection: #1e3a5f;
+    --usfm-marker: #38bdf8;
+    --usfm-num: #fbbf24;
+    --usfm-chapter: #f472b6;
+    --usfm-para: #a3e635;
+    --usfm-heading: #c084fc;
+    --usfm-front: #78716c;
+    --usfm-gutter-line: #292524;
+    --usfm-error-bg: #4a1f1f;
+    --usfm-error-line: #a33;
+    --usfm-warn-bg: #453a17;
+    --usfm-warn-line: #a8892f;
   }
 }
 
@@ -149,7 +199,7 @@
   line-height: 1.6;
 }
 /* 1.5rem each side is the findings layer's gutter: its marks sit 6–16px in
-   from the edge (recipes/findingMarks.ts), so a pane narrower than the 40rem
+   from the edge (recipes/findingMarks.ts), so a pane narrower than the 50rem
    column must not run the text under them. Symmetric, so the column stays
    centred. */
 .cm-mode-regular .cm-content {
@@ -157,7 +207,8 @@
   /* 3rem a side: the text's own 1.5rem, and the 1.5rem the panel no longer
      pads, so the scroller can run flush to the panel's edge. */
   padding: 56px 3rem 30vh;
-  max-width: calc(var(--editor-measure) + 3rem);
+  /* The measure is the TEXT's width: the padding either side is added to it. */
+  max-width: calc(var(--editor-measure) + 6rem);
   font-family: var(--font-scripture);
   /* The reader's own size (`editor.fontSize`, written onto <html> by
      `src/app/ui/theme.ts`). The fallback is the value this was hardcoded to,
@@ -167,10 +218,11 @@
   color: var(--editor-ink);
   caret-color: var(--editor-accent);
 }
-/* A reference pane is narrower than the 40rem column, so `margin: auto` gives
+/* A reference pane is narrower than the 50rem column, so `margin: auto` gives
    its text no gutter at all; it takes the reading's own breathing room. */
 [data-reference] .cm-mode-regular .cm-content {
   padding-inline: 1.5rem;
+  max-width: calc(var(--editor-measure) + 3rem);
 }
 .cm-mode-regular .cm-cursor {
   border-left-color: var(--editor-accent);
@@ -205,31 +257,41 @@
   text-indent: 0;
 }
 
-/* Poetry: \q1 at the edge, each level one unit in, and a wrapped line under
-   its own words. On screen an indent only ever means a marker, never a wrap:
-   the width moves, and a printed turnover two units in read as a \q3 (Will,
-   2026-10-22). A verse number opening a line hangs in the margin, so the
-   words of one level always start in one place, and a small gap above each
-   poetry line tells a new line from a wrap, which gets none. No italics: in
-   scripture they mean supplied words (\add) or emphasis. */
+/* Poetry: every level further in than a paragraph's first line (\q1 two
+   units, each level one more), and italic. The italic is not a rule, only a
+   visible difference so a change of marker shows at once without knowing its
+   name (Thomas, 2026-10-28); any other distinct treatment would do as well. A wrapped line sits under its own words: on
+   screen an indent only ever means a marker, never a wrap (Will, 2026-10-22).
+   A verse number opening a line hangs in the margin, and a small gap above
+   each poetry line tells a new line from a wrap, which gets none. */
 .cm-mode-regular .usfm-q,
 .cm-mode-regular .usfm-q1,
 .cm-mode-regular .usfm-q2,
 .cm-mode-regular .usfm-q3,
 .cm-mode-regular .usfm-q4 {
-  --usfm-level: 0;
+  --usfm-level: 2;
+  font-style: italic;
   padding-top: calc(var(--usfm-poetry-gap) * 1em);
   padding-bottom: 0;
   padding-inline-start: calc(var(--usfm-level) * var(--usfm-indent) * 1em);
 }
 .cm-mode-regular .usfm-q2 {
-  --usfm-level: 1;
+  --usfm-level: 3;
+}
+/* A stanza is set off from the prose around it by the same space on both
+   ends: above, the paragraph's own 0.5em gap and the poetry gap; below the
+   last line, the two again. */
+.cm-mode-regular
+  :is(.usfm-q, .usfm-q1, .usfm-q2, .usfm-q3, .usfm-q4):has(
+    + .usfm-block:not(:is(.usfm-q, .usfm-q1, .usfm-q2, .usfm-q3, .usfm-q4))
+  ) {
+  padding-bottom: calc((0.5 + var(--usfm-poetry-gap)) * 1em);
 }
 .cm-mode-regular .usfm-q3 {
-  --usfm-level: 2;
+  --usfm-level: 4;
 }
 .cm-mode-regular .usfm-q4 {
-  --usfm-level: 3;
+  --usfm-level: 5;
 }
 
 /* Lists: \li# and \lim# a level each, like poetry, with a hanging indent so a
@@ -371,41 +433,41 @@
 }
 
 .cm-mode-usfm {
-  background: #0c0a09;
+  background: var(--usfm-bg);
 }
 .cm-mode-usfm .cm-content {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 13px;
   line-height: 1.6;
-  color: #d6d3d1;
+  color: var(--usfm-fg);
   padding: 14px 3rem 30vh;
-  caret-color: #38bdf8;
+  caret-color: var(--usfm-caret);
 }
 .cm-mode-usfm .cm-cursor {
-  border-left-color: #38bdf8;
+  border-left-color: var(--usfm-caret);
 }
 .cm-mode-usfm .cm-selectionBackground,
 .cm-mode-usfm.cm-focused .cm-selectionBackground {
-  background: #1e3a5f !important;
+  background: var(--usfm-selection) !important;
 }
 .cm-mode-usfm .cm-usfm-marker {
-  color: #38bdf8;
+  color: var(--usfm-marker);
   font-weight: 600;
 }
 .cm-mode-usfm .cm-usfm-num {
-  color: #fbbf24;
+  color: var(--usfm-num);
 }
 .cm-mode-usfm .cm-usfm-chapter {
-  color: #f472b6;
+  color: var(--usfm-chapter);
 }
 .cm-mode-usfm .cm-usfm-para {
-  color: #a3e635;
+  color: var(--usfm-para);
 }
 .cm-mode-usfm .cm-usfm-heading {
-  color: #c084fc;
+  color: var(--usfm-heading);
 }
 .cm-mode-usfm .cm-usfm-front {
-  color: #78716c;
+  color: var(--usfm-front);
 }
 
 .cm-mode-regular .usfm-caller {
@@ -693,12 +755,12 @@
   border-radius: 2px;
 }
 .cm-mode-usfm .usfm-lint-error {
-  background: #4a1f1f;
-  box-shadow: inset 0 0 0 1px #a33;
+  background: var(--usfm-error-bg);
+  box-shadow: inset 0 0 0 1px var(--usfm-error-line);
 }
 .cm-mode-usfm .usfm-lint-warn {
-  background: #453a17;
-  box-shadow: inset 0 0 0 1px #a8892f;
+  background: var(--usfm-warn-bg);
+  box-shadow: inset 0 0 0 1px var(--usfm-warn-line);
 }
 
 .cm-mode-regular .usfm-note-open {
@@ -724,8 +786,8 @@
   border: none;
 }
 .cm-mode-usfm .cm-gutters {
-  background: #0c0a09;
-  border-right: 1px solid #292524;
+  background: var(--usfm-bg);
+  border-right: 1px solid var(--usfm-gutter-line);
 }
 
 .cm-mode-regular .usfm-focus {
@@ -1210,9 +1272,8 @@
  * reads from the semantic tokens in `src/app/ui/tokens.css` and follows the
  * app's theme — light and dark — instead of carrying its own hexes. (Of the
  * two scripture surfaces above, `.cm-mode-regular` swaps with the theme through
- * the `--editor-*` names at the top of this file; `.cm-mode-usfm` keeps its
- * literal terminal palette in both themes, because a terminal is dark either
- * way and that IS the projection choice.)
+ * the `--editor-*` names at the top of this file, and `.cm-mode-usfm` through
+ * the `--usfm-*` ones: a code palette in each theme.)
  *
  * CodeMirror's own base theme paints `.cm-tooltip` `#f5f5f5` and only swaps it
  * under a `&dark` editor theme, which Sefer does not install — so in dark mode
@@ -1446,7 +1507,7 @@
 }
 
 /* A satellite inside an excerpt card (`src/app/ui/excerpts/`).
-   `.cm-mode-regular` is the PAGE: a centred 40rem column with a 56px head and
+   `.cm-mode-regular` is the PAGE: a centred 50rem column with a 56px head and
    a 30vh tail, on its own paper. A card is none of those, so these rules undo
    exactly that chrome and leave every USFM decoration alone — and they take
    their colours from the tokens, because a card is themed and the page theme

@@ -15,6 +15,7 @@ const NAMES: Record<string, string> = {
   s3: "Heading 3",
   s4: "Heading 4",
   r: "Parallel reference",
+  li: "List item",
   li1: "List item",
   li2: "List item",
   li3: "List item",

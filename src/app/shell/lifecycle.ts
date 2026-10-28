@@ -167,7 +167,9 @@ export const createLifecycle = ({
   };
 
   const offerRecovery = (ready: Project, root: string): void => {
-    if (services.settings.get(keys.offerRecovery)) {
+    // Backups are found either way; "Don't remind me again" only keeps the banner quiet for a while.
+    const quiet = Date.now() < services.settings.get(keys.recoveryQuietUntil);
+    if (services.settings.get(keys.offerRecovery) && !quiet) {
       void services
         .run(pendingOnOpen(services.recovery, ready.id, (text) => services.galley.hash(text)))
         .then(

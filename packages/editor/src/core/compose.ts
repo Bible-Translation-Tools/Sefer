@@ -28,6 +28,7 @@ import { insertFootnote, insertParagraph, insertPoetry, insertVerse } from "./in
 import { traceFor, type TraceVerdict } from "./instrument";
 import type { ChangeRule, TransactionRule } from "./kernel";
 import { HOOK, PHASES, type ParserPort, type PhaseRule, type RuleName } from "./phases";
+import { poetryLevelKeys } from "./poetryLevels";
 import { renderRangeField, renderWindow } from "./render";
 import { scrollGuard } from "./scroll";
 import { tableKeys } from "./tableCommands";
@@ -242,7 +243,7 @@ export function usfmKeys(): readonly KeyBinding[] {
 }
 
 export const commandsLayer: Extension = [
-  Prec.highest(keymap.of([...tableKeys(), ...verseLineKeys()])),
+  Prec.highest(keymap.of([...tableKeys(), ...verseLineKeys(), ...poetryLevelKeys()])),
   verseLineBehaviour,
   Prec.high(keymap.of([...usfmKeys()])),
   keymap.of([...defaultKeymap, ...historyKeymap]),

@@ -1,7 +1,6 @@
 import type { JSX } from "@solidjs/web";
 import { useNavigate, useRouterState } from "@tanstack/solid-router";
 import Bell from "lucide-solid/icons/bell";
-import CodeIcon from "lucide-solid/icons/code";
 import Ellipsis from "lucide-solid/icons/ellipsis";
 import FileText from "lucide-solid/icons/file-text";
 import GitCompare from "lucide-solid/icons/git-compare";
@@ -11,20 +10,13 @@ import Rows3 from "lucide-solid/icons/rows-3";
 import SettingsIcon from "lucide-solid/icons/settings";
 import TypeIcon from "lucide-solid/icons/type";
 import UserIcon from "lucide-solid/icons/user";
-import { createSignal, For } from "solid-js";
+import { Show, createSignal, For } from "solid-js";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import { SyncButton } from "../cloud/SyncButton";
-import {
-  IconButton,
-  Menu,
-  MenuCheckbox,
-  MenuItem,
-  MenuSeparator,
-  SegmentedControl,
-  cx,
-} from "../primitives";
+import { SyncPopover, createSync, syncGlyph, syncHeadline } from "../cloud/SyncButton";
+import { IconButton, Menu, MenuItem, MenuSeparator, SegmentedControl, cx } from "../primitives";
+import { ProjectTools } from "./Toolbar";
 
 function BarButton(props: {
   readonly label: string;
@@ -63,6 +55,9 @@ function MoreMenu() {
   const shell = useShell();
   const [open, setOpen] = createSignal(false, { name: "appBarMoreOpen" });
   const attention = () => shell.findingCounts().errors + shell.findingCounts().warnings;
+  // Sync lives here, first in the menu: the row names its state, and opens
+  // the same popover the cloud button did, dropped from this button.
+  const sync = createSync(shell);
 
   const items: ReadonlyArray<{ label: string; to: ProjectScreen; icon: JSX.Element }> = [
     { label: t("Findings"), to: "/project/$slug/findings", icon: <Bell size={16} /> },
@@ -76,53 +71,60 @@ function MoreMenu() {
   ];
 
   return (
-    <Menu
-      label={t("More")}
-      side="bottom"
-      align="end"
-      open={open()}
-      onOpenChange={setOpen}
-      class="w-52"
-      trigger={
-        <BarButton
-          label={t("More")}
-          testId="app-bar-more"
-          pressed={open() ? "true" : "false"}
-          icon={<Ellipsis size={20} />}
-        />
-      }
-    >
-      <For each={items}>
-        {(item) => (
-          <MenuItem
-            data-testid={`app-bar-more-${item.to.split("/").pop()}`}
-            disabled={shell.project() === undefined}
-            icon={item.icon}
-            onSelect={() =>
-              void navigate({ to: item.to, params: { slug: shell.slug() }, search: {} })
-            }
-          >
-            <span class="flex-1">{item.label}</span>
-            {item.to === "/project/$slug/findings" && attention() > 0 ? (
-              <span class="min-w-4 rounded-full bg-on-surface-error px-1 text-center text-smallest leading-4 font-semibold text-surface-error">
-                {attention() > 99 ? "99+" : attention()}
-              </span>
-            ) : null}
-          </MenuItem>
-        )}
-      </For>
-      <MenuSeparator />
-      {/* The markers themselves, over Refine or Form Mode: a switch, not a place. */}
-      <MenuCheckbox
-        data-testid="app-bar-more-usfm"
-        disabled={shell.project() === undefined}
-        icon={<CodeIcon size={16} />}
-        checked={shell.mode() === "usfm"}
-        onChange={(on) => shell.setMode(on ? "usfm" : "default")}
+    <span class="relative inline-flex">
+      <Menu
+        label={t("More")}
+        side="bottom"
+        align="end"
+        open={open()}
+        onOpenChange={setOpen}
+        class="w-52"
+        trigger={
+          <BarButton
+            label={t("More")}
+            testId="app-bar-more"
+            pressed={open() ? "true" : "false"}
+            icon={<Ellipsis size={20} />}
+          />
+        }
       >
-        {t("USFM")}
-      </MenuCheckbox>
-    </Menu>
+        <Show when={shell.project() !== undefined}>
+          <MenuItem
+            data-testid="app-bar-sync"
+            icon={syncGlyph(sync)}
+            class={sync.pop.attention() !== "none" ? "text-on-surface-warning" : undefined}
+            onSelect={() => setTimeout(() => sync.pop.openChanged(true))}
+          >
+            {syncHeadline(sync)}
+          </MenuItem>
+          <MenuSeparator />
+        </Show>
+        <For each={items}>
+          {(item) => (
+            <MenuItem
+              data-testid={`app-bar-more-${item.to.split("/").pop()}`}
+              disabled={shell.project() === undefined}
+              icon={item.icon}
+              onSelect={() =>
+                void navigate({ to: item.to, params: { slug: shell.slug() }, search: {} })
+              }
+            >
+              <span class="flex-1">{item.label}</span>
+              {item.to === "/project/$slug/findings" && attention() > 0 ? (
+                <span class="min-w-4 rounded-full bg-on-surface-error px-1 text-center text-smallest leading-4 font-semibold text-surface-error">
+                  {attention() > 99 ? "99+" : attention()}
+                </span>
+              ) : null}
+            </MenuItem>
+          )}
+        </For>
+      </Menu>
+      <span class="absolute end-0 bottom-0">
+        <Show when={shell.project() !== undefined}>
+          <SyncPopover sync={sync} />
+        </Show>
+      </span>
+    </span>
   );
 }
 
@@ -255,7 +257,7 @@ export function AppBar() {
       <ModeControl mode={mode()} open={open()} onChange={goTo} />
 
       <div class="flex shrink-0 items-center gap-2">
-        <SyncButton />
+        <ProjectTools />
         <MoreMenu />
 
         <BarButton

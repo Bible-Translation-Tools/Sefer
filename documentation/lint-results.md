@@ -47,8 +47,8 @@ The generated half looks after itself; the judgement half does not. When a gate 
 | oxlint errors | 0 | `pnpm lint`, every commit |
 | oxlint warnings | 0 | `pnpm lint` fails on any, every commit |
 | fallow dead code (`pnpm deadcode`) | 1 issue(s) | every deploy; advisory on branches |
-| fallow duplication | 1.6% in 60 clone group(s) | none — advisory |
-| suppression comments | 80 | each listed below with its reason |
+| fallow duplication | 1.7% in 63 clone group(s) | none — advisory |
+| suppression comments | 85 | each listed below with its reason |
 
 ### Oxlint warnings, by rule and file
 
@@ -75,6 +75,11 @@ None.
 | `src/app/paraglide/messages/landing_repos_writer.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/landing_resize_columns.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/landing_search_or_link.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/line_menu_current.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/line_menu_fixed.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/line_menu_label.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/line_menu_turn_into.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/recovery_quiet.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/reference_active.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/reference_bibles_offered.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/reference_cancel.js` | `eslint-disable` | — |

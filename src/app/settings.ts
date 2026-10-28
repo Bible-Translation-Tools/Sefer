@@ -119,6 +119,8 @@ export interface ShellKeys {
   readonly showGatewayProjects: SettingKey<boolean>;
   /** Ask about unsaved work found when a project opens. Backups are written either way. */
   readonly offerRecovery: SettingKey<boolean>;
+  /** Until when (epoch ms) the unsaved-work reminder stays quiet: "Don't remind me again", for 12 hours. */
+  readonly recoveryQuietUntil: SettingKey<number>;
   readonly excerptContext: SettingKey<number>;
   readonly reviewLayout: SettingKey<string>;
   readonly reviewScope: SettingKey<string>;
@@ -188,6 +190,7 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
     enableReplaceAll: settings.register("find.enableReplaceAll", Schema.Boolean, false),
     showGatewayProjects: settings.register("projects.showGateways", Schema.Boolean, false),
     offerRecovery: settings.register("recovery.offerOnOpen", Schema.Boolean, true),
+    recoveryQuietUntil: settings.register("recovery.quietUntil", Schema.Number, 0),
     excerptContext: settings.register("excerpts.context", Schema.Number, 0),
     reviewLayout: settings.register("review.layout", Schema.String, "auto"),
     reviewScope: settings.register("review.scope", Schema.String, "changes"),
