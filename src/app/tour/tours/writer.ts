@@ -165,7 +165,8 @@ export const writerTour: Tour = {
       go: (context) => toProjectPage(context, "history"),
       ready: () =>
         Number(document.querySelector("[data-commits]")?.getAttribute("data-commits")) > 0,
-      timeoutMs: 60_000,
+      // bwc's whole Bible is about 8,800 versions: close to a minute to list here.
+      timeoutMs: PATIENT,
       spotlight: {
         anchor: "[data-testid=sidebar]",
         side: "right",
