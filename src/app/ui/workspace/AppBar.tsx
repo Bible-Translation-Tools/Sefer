@@ -1,11 +1,13 @@
 import type { JSX } from "@solidjs/web";
 import { useNavigate, useRouterState } from "@tanstack/solid-router";
 import Bell from "lucide-solid/icons/bell";
+import CodeIcon from "lucide-solid/icons/code";
 import Ellipsis from "lucide-solid/icons/ellipsis";
 import FileText from "lucide-solid/icons/file-text";
 import GitCompare from "lucide-solid/icons/git-compare";
 import HistoryIcon from "lucide-solid/icons/history";
 import ListChecks from "lucide-solid/icons/list-checks";
+import Rows3 from "lucide-solid/icons/rows-3";
 import SettingsIcon from "lucide-solid/icons/settings";
 import TypeIcon from "lucide-solid/icons/type";
 import UserIcon from "lucide-solid/icons/user";
@@ -14,7 +16,15 @@ import { createSignal, For } from "solid-js";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { SyncButton } from "../cloud/SyncButton";
-import { IconButton, Menu, MenuItem, SegmentedControl } from "../primitives";
+import {
+  IconButton,
+  Menu,
+  MenuCheckbox,
+  MenuItem,
+  MenuSeparator,
+  SegmentedControl,
+  cx,
+} from "../primitives";
 
 function BarButton(props: {
   readonly label: string;
@@ -39,7 +49,8 @@ function BarButton(props: {
   );
 }
 
-type Mode = "refine" | "terms";
+/** Refine is the book as it reads; Form Mode is the same book one verse per line (design builds only). */
+type Mode = "refine" | "form" | "terms";
 
 type ProjectScreen =
   | "/project/$slug/findings"
@@ -100,6 +111,17 @@ function MoreMenu() {
           </MenuItem>
         )}
       </For>
+      <MenuSeparator />
+      {/* The markers themselves, over Refine or Form Mode: a switch, not a place. */}
+      <MenuCheckbox
+        data-testid="app-bar-more-usfm"
+        disabled={shell.project() === undefined}
+        icon={<CodeIcon size={16} />}
+        checked={shell.mode() === "usfm"}
+        onChange={(on) => shell.setMode(on ? "usfm" : "default")}
+      >
+        {t("USFM")}
+      </MenuCheckbox>
     </Menu>
   );
 }
@@ -150,27 +172,46 @@ function ModeControl(props: {
   onChange: (next: Mode) => void;
 }) {
   return (
-    <SegmentedControl<Mode>
-      label={t("Mode")}
-      iconsWhenNarrow
-      class="mx-auto w-full max-w-[20.75rem] max-md:w-auto"
-      value={props.mode}
-      onChange={props.onChange}
-      items={[
-        {
-          value: "refine",
-          label: t("Refine"),
-          icon: <FileText aria-hidden="true" />,
-          disabled: !props.open,
-        },
-        {
-          value: "terms",
-          label: t("Spiritual terms"),
-          icon: <ListChecks aria-hidden="true" />,
-          disabled: !props.open,
-        },
-      ]}
-    />
+    // The id is the line-by-line tour's anchor (tour/tours/lineByLine.ts).
+    <div
+      id="app-mode-control"
+      class={cx(
+        "mx-auto w-full max-md:w-auto",
+        __SEFER_DESIGN__ ? "max-w-[30rem]" : "max-w-[20.75rem]",
+      )}
+    >
+      <SegmentedControl<Mode>
+        label={t("Mode")}
+        iconsWhenNarrow
+        class="w-full max-md:w-auto"
+        value={props.mode}
+        onChange={props.onChange}
+        items={[
+          {
+            value: "refine",
+            label: t("Refine"),
+            icon: <FileText aria-hidden="true" />,
+            disabled: !props.open,
+          },
+          ...(__SEFER_DESIGN__
+            ? [
+                {
+                  value: "form" as const,
+                  label: t("Form Mode"),
+                  icon: <Rows3 aria-hidden="true" />,
+                  disabled: !props.open,
+                },
+              ]
+            : []),
+          {
+            value: "terms",
+            label: t("Spiritual terms"),
+            icon: <ListChecks aria-hidden="true" />,
+            disabled: !props.open,
+          },
+        ]}
+      />
+    </div>
   );
 }
 
@@ -189,11 +230,17 @@ export function AppBar() {
 
   const mode = (): Mode | undefined => {
     if (terms() === "true") return "terms";
-    return refining() === "true" ? "refine" : undefined;
+    if (refining() !== "true") return undefined;
+    return __SEFER_DESIGN__ && shell.lineByLine() ? "form" : "refine";
   };
   const goTo = (next: Mode): void => {
-    if (next === "refine") void navigate({ to: "/project/$slug", params: { slug: shell.slug() } });
-    else if (next === "terms")
+    if (next === "refine" || next === "form") {
+      // Choosing a view shows that view: out of USFM, into reading or one verse per line.
+      shell.setMode("default");
+      shell.setLineByLine(next === "form");
+      if (refining() !== "true")
+        void navigate({ to: "/project/$slug", params: { slug: shell.slug() } });
+    } else if (next === "terms")
       void navigate({ to: "/project/$slug/terms", params: { slug: shell.slug() }, search: {} });
   };
 

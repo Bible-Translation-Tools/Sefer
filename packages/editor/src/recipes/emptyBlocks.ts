@@ -11,6 +11,7 @@ import { structureAt, structureField } from "../core/editorState";
 import { isVisual, modeFacet } from "../core/kernel";
 import type { ClassKey } from "../core/registry";
 import { renderRangeAt, renderRangeField } from "../core/render";
+import { emptyChapters } from "../core/verseLines";
 
 type BlockNamer = (marker: string) => string;
 
@@ -92,13 +93,22 @@ function ghosts(state: EditorState): DecorationSet {
   const structure = structureAt(state);
   const windowRange = renderRangeAt(state) ?? { from: 0, to: state.doc.length };
   const name = state.facet(blockNamer);
+  // An empty chapter's markers are hidden behind its empty state, which names
+  // nothing: no ghost there either (`hideEmptyChapters`, core/decorations.ts).
+  const silent = emptyChapters(state.doc.toString(), structure);
+  const hidden = (at: number): boolean => silent.some((c) => at > c.at && at <= c.to);
+  const main = state.selection.main;
+  const caret = main.empty ? main.head : null;
   const out = [];
   for (let i = 0; i < structure.blocks.length; i++) {
     if (structure.blocks.toAt(i) < windowRange.from) continue;
     if (structure.blocks.fromAt(i) > windowRange.to) break;
     if (!NAMEABLE.has(structure.blocks.clsAt(i))) continue;
     const b = structure.blocks.at(i);
-    if (!blockIsEmpty(state, b.contentFrom, b.to)) continue;
+    if (!blockIsEmpty(state, b.contentFrom, b.to) || hidden(b.contentFrom)) continue;
+    // Not the one being written in: Enter makes an empty paragraph to type
+    // into, and naming it then is noise. Left empty, it is named once the caret goes.
+    if (caret !== null && caret >= b.from && caret <= b.to) continue;
     out.push(
       Decoration.widget({ widget: new GhostWidget(name(b.kind)), side: 1 }).range(b.contentFrom),
     );
@@ -129,7 +139,7 @@ export const annotateEmptyBlocks = (initial = false): Extension => [
   initialAnnotate.of(initial),
   annotateField,
   EditorView.decorations.compute(
-    ["doc", structureField, renderRangeField, annotateField, blockNamer, modeFacet],
+    ["doc", "selection", structureField, renderRangeField, annotateField, blockNamer, modeFacet],
     ghosts,
   ),
 ];

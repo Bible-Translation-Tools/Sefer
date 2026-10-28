@@ -1,0 +1,82 @@
+---
+id: c03582e3-c024-44aa-97a2-19681c1f66a5
+title: "Tab and Enter for poetry levels in Refine"
+kind: plan
+status: discussing
+created: 2026-10-27
+updated: 2026-10-28
+sha: b4bbf347
+tags: [editor]
+---
+
+Thomas (designer), 2026-10-27, on branch `design/editor-design`:
+
+> one `tab` would indent the line creating a first level poetry. `enter` would create another level 1
+> poetry...but another `tab` would indent to level 2. We wouldn't go any further than level 2 as its
+> not needed for our use case. While in a poetry marker, enter would add a new line, and if empty,
+> would bring up a level until you got back to a normal paragraph marker.
+
+The guiding rule:
+
+> The idea really is to try to copy as much of Word's behavior as its a commonly used alternative our
+> users use frequently. "Do what Word does" is probably a safe smart default.
+
+## Settled
+
+- **Refine only.** Tab keeps its current meaning everywhere else: table cells in Refine
+  (`tableCommands.ts`), the next empty verse in Form Mode (`verseLines.ts`).
+- **Tab** changes the line's marker one level in: `\p` → `\q1` → `\q2`. **Shift+Tab** steps out one
+  level, back down to the paragraph floor. No tab character is ever written.
+- **Enter** after text in a poetry line makes another line at the same level. **Enter on an empty
+  poetry line** steps out one level: empty `\q2` → `\q1`, empty `\q1` → paragraph.
+- **A selection across lines** changes every line it touches together (Word's bullets).
+- **Only `\q`/`\q1` and `\q2`.** Other poetry markers already in the file are never deleted. A `\q3`
+  added in USFM unlocks a third level for that chapter only.
+
+## Thomas's answers, 2026-10-28
+
+> the cursor being anywhere within a 'line' should affect the whole line. `tab` should affect the entire
+> line...which could be a lot of content within a verse bound. Tabbing verse 3 shouldn't affect verse 4
+
+> enter even in the middle of a q1 should create a new q1. Tabbing that new line would create a q2.
+
+> I would probably advocate for treating p and p1 as the same thing.
+
+> if the user doesn't want it to be on a new line, they could backspace until its back up with the verse marker.
+
+> Users should be able to do whatever they want in USFM mode though, but if they're using our WYSIWYG
+> editor, then it should be opinionated towards our own standard.
+
+> At any point a q3+ will unlock that for the rest of the chapter. If the user deletes the out of scope
+> items, it goes away again.
+
+> Empty chapter, the only thing to do is click in that ghost area and start typing. Tab shouldn't affect that
+
+> I'd actually like to visually render the different markers in unique ways... our requirements state
+> that the user should be able to interact with all of this without that knowledge
+
+> I also want to at least include some verse error handling and a simple context menu too.
+
+## Still open
+
+<Question id="tab-mid-line" answer="Yes: the caret anywhere on a line changes that whole line, never past the line, so verse 4 is untouched when tabbing verse 3.">Tab anywhere on a line changes that line's level (there is no tab character to type)? Word only indents a list from the line's start.</Question>
+
+<Question id="enter-mid-line" answer="Yes: Enter mid-q1 makes a new q1; Tab on it makes it q2. Auto-q2 was considered and set aside as possibly weird.">Enter in the middle of a poetry line splits it, the second half at the same level?</Question>
+
+<Question id="enter-line-start">Enter at the very start of a poetry line with text pushes an empty line of the same level above it (Word), leaving an empty `\q1`? Thomas is still thinking.</Question>
+
+<Question id="q-spelling">Level 1 is written as the chapter already spells it (`\q` or `\q1`), defaulting to `\q1`? Thomas would treat `\p`/`\q` and their `1` forms as the same; for the PO (Glorious Leader) to confirm.</Question>
+
+<Question id="verse-line-indent">How does a verse number sit against poetry: does the `\v` line never indent, with Tab adding poetry lines under it? Thomas needs to see examples. A new line can be joined back to the verse with Backspace.</Question>
+
+<Question id="floor" answer="`\p` for now; publishing will give the house rules. USFM mode stays unrestricted; Refine is opinionated toward our standard.">The floor is `\p` for now.</Question>
+
+<Question id="q3-scope" answer="Yes: any q3+ unlocks it for the rest of the chapter; deleting them removes the unlock.">A `\q3` anywhere in the chapter unlocks level 3 for the whole chapter, and the unlock goes when the last `\q3` does?</Question>
+
+<Question id="empty-chapter-tab" answer="No: Tab does nothing in the empty state (maybe moves focus in). Click and type is the only way in.">In an empty chapter's empty state, does Tab do anything?</Question>
+
+<Question id="discoverability" answer="Each supported marker gets its own printed look (paragraphs indented, poetry indented further and maybe italic), so the level is visible without knowing marker names. Styles come later.">Most users won't know Shift+Tab. How does the user see a line's level?</Question>
+
+<Followup id="also-wanted">Verse error handling and a simple context menu, alongside this prototype.</Followup>
+
+<Question id="paisano-review">Paisano: this changes `guardedEnter` (core/input.ts) and adds key handling in `@sefer/editor`. Built as a prototype on the designer's branch; review the behaviour above separately from the code. Thomas wants to play with it to make sure it feels right.</Question>

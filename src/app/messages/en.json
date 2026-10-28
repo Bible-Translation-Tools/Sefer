@@ -44,6 +44,7 @@
   "refine_editor_label": "Refinement",
   "refine_hide_reference": "Hide reference",
   "refine_show_reference": "Show reference",
+  "refine_scope_chapter": "One chapter",
   "refine_resize_reference": "Resize the reference panel",
   "landing_clone_from_link": "Clone from a link",
   "landing_clone_repository": "Clone this repository",

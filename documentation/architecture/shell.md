@@ -234,8 +234,10 @@ renumber the split and rebuild the editor's `EditorView` beside it.
 
 `src/routes/_app/project/$slug/book/$book.tsx` draws one white surface: the
 toolbar, then the editor in its outlined panel (`EditorPanel`), whose action
-bar holds "Show reference" on the left and the book's view switch
-(`BookViewSwitch`) on the right. The editor has no location strip of its own:
+bar holds "Show reference" on the left and the One chapter switch
+(`editor.preferChapterView`, applied at once by `setChapterScope`) on the right.
+The view is chosen elsewhere: Refine or Form Mode (line by line, design builds
+only) in the app bar's mode control, and USFM as a toggle in its More menu. The editor has no location strip of its own:
 the project panel's chapter grid is the way between chapters.
 
 **Joined** (the default) only the heart language is on screen. **Split**

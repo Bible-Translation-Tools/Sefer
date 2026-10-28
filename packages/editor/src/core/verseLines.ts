@@ -1,3 +1,4 @@
+import { isolateHistory } from "@codemirror/commands";
 import type { Diagnostic } from "@codemirror/lint";
 import {
   ChangeSet,
@@ -12,7 +13,7 @@ import { EditorView, type KeyBinding, type LayerMarker, layer } from "@codemirro
 
 import { docText, structureAt, type DocStructure } from "./docStructure";
 import type { DocLine, VerseRow } from "./fold";
-import { isVisual, trusted } from "./kernel";
+import { isVisual, modeFacet, trusted } from "./kernel";
 import { assignmentAt, isContainerClass } from "./registry";
 
 /** The verse the caret is in: the last one whose marker starts at or before it, or -1 before the first. */
@@ -255,6 +256,145 @@ const typeIntoEmptyVerse = EditorView.inputHandler.of((view, from, to, text) => 
   return true;
 });
 
+/**
+ * The first keystroke in an empty chapter's paragraph — where its empty state
+ * (`emptyChapters`) shows "1 Click here to start editing…" — writes that verse:
+ * `\\v 1` on its own line under the paragraph marker, then what was typed, in
+ * place of the leftover markers the empty state was hiding.
+ * Until then nothing is written; Refine and line by line alike.
+ */
+const typeIntoEmptyChapter = EditorView.inputHandler.of((view, from, to, text) => {
+  if (from !== to || view.state.facet(modeFacet) !== "regular") return false;
+  const doc = docText(view.state);
+  const empty = emptyChapters(doc, structureAt(view.state)).find(
+    (chapter) =>
+      chapter.field !== undefined && from >= chapter.field.from && from <= chapter.field.to,
+  );
+  if (empty?.field === undefined) return false;
+  let at = empty.field.from;
+  while (doc[at - 1] === " " || doc[at - 1] === "\t") at--;
+  const insert = `\n\\v 1 ${text}`;
+  view.dispatch({
+    changes: { from: at, to: empty.to, insert },
+    selection: EditorSelection.cursor(at + insert.length),
+    annotations: trusted.of("empty-chapter"),
+    userEvent: "input.type",
+    scrollIntoView: true,
+  });
+  return true;
+});
+
+/** What an emptied chapter holds after its heading: a paragraph and its first verse. */
+const EMPTY_CHAPTER_BODY = "\n\\p\n\\v 1";
+
+/**
+ * A chapter always starts at verse 1. An edit that empties one — deleting all
+ * its words, which leaves a bare `\\p` and `\\v` or less — writes it back as
+ * `\\p` and `\\v 1` in the same step, so the file never holds a chapter
+ * without its first verse, and the empty state (`emptyChapters`) stands on
+ * it. Only chapters the edit touched: an empty chapter elsewhere is left as
+ * it was opened.
+ */
+const emptiedChaptersKeepVerseOne = EditorState.transactionFilter.of((tr) => {
+  if (!tr.docChanged || tr.startState.facet(modeFacet) !== "regular") return tr;
+  if (tr.annotation(trusted) === "empty-chapter") return tr;
+  const doc = docText(tr.state);
+  const touched: [number, number][] = [];
+  tr.changes.iterChangedRanges((_fromA, _toA, fromB, toB) => touched.push([fromB, toB]));
+  const rewrite = emptyChapters(doc, structureAt(tr.state)).find(
+    (chapter) =>
+      doc.slice(chapter.at, chapter.to) !== EMPTY_CHAPTER_BODY &&
+      touched.some(([from, to]) => from <= chapter.to && to >= chapter.at),
+  );
+  if (rewrite === undefined) return tr;
+  return [
+    tr,
+    {
+      changes: { from: rewrite.at, to: rewrite.to, insert: EMPTY_CHAPTER_BODY },
+      selection: EditorSelection.cursor(rewrite.at + "\n\\p".length, -1),
+      annotations: trusted.of("empty-chapter"),
+      sequential: true,
+    },
+  ];
+});
+
+/**
+ * In an empty chapter's paragraph the caret is drawn against what comes
+ * before it — the waiting verse number — not after the ghost text that
+ * shares its position, so it reads number, caret, "Click here…".
+ */
+const caretBesideEmptyChapterVerse = EditorState.transactionFilter.of((tr) => {
+  if ((!tr.selection && !tr.docChanged) || tr.state.facet(modeFacet) !== "regular") return tr;
+  const range = tr.newSelection.main;
+  if (!range.empty) return tr;
+  // Anywhere in an empty chapter's hidden leftovers — where deleting its
+  // words leaves the caret — is its empty state's paragraph.
+  const chapter = emptyChapters(docText(tr.state), structureAt(tr.state)).find(
+    (c) => c.field !== undefined && range.head > c.at && range.head <= c.to,
+  );
+  if (chapter?.field === undefined) return tr;
+  if (range.head === chapter.field.from && range.assoc === -1) return tr;
+  return [tr, { selection: EditorSelection.cursor(chapter.field.from, -1), sequential: true }];
+});
+
+/** "1", "1.", "v1", "v 1", "verse 1" at the end of what is before the caret, as its own word. */
+const TYPED_VERSE = /(^|\s)((?:verse\s*|v\s*)?(\d{1,3})\.?)$/i;
+/** A marker (and its number) just before: `\\v 4 ` is USFM already, not a typed number. */
+const MARKER_BEFORE = /\\[A-Za-z]+\d*(?:\s+[\d-]+)?\s*$/;
+/** Just after `\\v N`, its own number again: the reader retyping what is shown. */
+const SAME_VERSE_BEFORE = /\\v\s+(\d+)\s*$/;
+
+/**
+ * Verse numbers typed the way people write them without USFM — "1", "1.",
+ * "v1", "v 1", "verse 1" — become a verse (`\\v N`) on the space after them,
+ * but only for the verse that comes next in this chapter (the one after the
+ * caret's verse, or 1 before any) and only when the chapter has no such verse
+ * yet. "7000" in chapter 3, a number out of order, or "12" in "12 disciples"
+ * at verse 4 stay words. Undo takes the verse back to what was typed. Refine
+ * and line by line; USFM is typed as USFM.
+ */
+const typedVerseNumbers = EditorView.inputHandler.of((view, from, to, text) => {
+  if (text !== " " || from !== to || view.state.facet(modeFacet) !== "regular") return false;
+  const line = view.state.doc.lineAt(from);
+  const before = view.state.doc.sliceString(line.from, from);
+  const typed = TYPED_VERSE.exec(before);
+  if (typed === null) return false;
+  const tokenFrom = line.from + typed.index + typed[1].length;
+  const ahead = before.slice(0, tokenFrom - line.from);
+  const number = Number(typed[3]);
+  const same = SAME_VERSE_BEFORE.exec(ahead);
+  if (same !== null && Number(same[1]) === number) {
+    // "1 " typed straight after the `\\v 1` an empty chapter just wrote: already that verse.
+    view.dispatch({
+      changes: { from: tokenFrom, to: from },
+      selection: EditorSelection.cursor(tokenFrom),
+      userEvent: "input.type",
+    });
+    return true;
+  }
+  if (MARKER_BEFORE.test(ahead)) return false;
+  const structure = structureAt(view.state);
+  const chapter = structure.chapters.findLast((row) => row.from <= from);
+  const start = chapter?.from ?? 0;
+  const end = chapter?.to ?? view.state.doc.length;
+  let previous = 0;
+  for (const verse of structure.verses) {
+    if (verse.markerFrom < start || verse.markerFrom > end) continue;
+    const last = Number((verse.num ?? "").split("-").pop());
+    if (Number.isFinite(last) && last === number) return false;
+    if (verse.markerFrom < from && Number.isFinite(last)) previous = last;
+  }
+  if (number !== previous + 1) return false;
+  const insert = `\\v ${number} `;
+  view.dispatch({
+    changes: { from: tokenFrom, to: from, insert },
+    selection: EditorSelection.cursor(tokenFrom + insert.length),
+    annotations: [trusted.of("typed-verse"), isolateHistory.of("before")],
+    userEvent: "input.type.verse",
+  });
+  return true;
+});
+
 /** `cm-line-by-line` and `cm-number-menus` on the editor, for what the stylesheet does only there. */
 const lineByLineClass = EditorView.editorAttributes.of((view) => {
   if (isVerseLines(view.state)) return { class: "cm-line-by-line cm-number-menus" };
@@ -308,21 +448,180 @@ export const chapterTitles = (doc: string, structure: DocStructure): ChapterTitl
 };
 
 /**
- * What cannot be seen cannot hold the caret: a folded chapter line is passed
- * over in the direction of travel, to the label it folds into or back to the
- * line before. The caret's stops (`stops.ts`) know only the book's structure,
- * not line by line's drawing, so this catches what they let through.
+ * A chapter with nothing to see: after its `\\c` (and its own `\\cl`) only
+ * markers and blank lines, up to the next chapter or the end. `at` is the end
+ * of its heading's last line, where the empty state is drawn and where a
+ * click starts the text; `title` is how the chapter is named on screen — its
+ * own label, else the book's label or "Chapter" and the number.
  */
-const caretSkipsFoldedChapters = EditorState.transactionFilter.of((tr) => {
-  if (!tr.selection || !isVerseLines(tr.state)) return tr;
+export interface EmptyChapter {
+  readonly at: number;
+  readonly title: string;
+  /** Where its leftover markers end: the newline before the next chapter, or the end. */
+  readonly to: number;
+  /**
+   * Its first leftover paragraph, where the caret already sits: `line` where
+   * its marker starts, `from` where its text would go, `to` its line's end. Absent when nothing follows the heading.
+   */
+  readonly field?: { readonly line: number; readonly from: number; readonly to: number };
+}
+
+/**
+ * Text left once markers and whitespace are taken out — a verse marker with
+ * its number, too: deleting a chapter's words leaves `\\v 1` behind, and that
+ * "1" is the marker's, not text anyone wrote.
+ */
+const VISIBLE = /\\v[ \t]+[\w-]*|\\[A-Za-z0-9]+\*?|\s+/g;
+
+export const emptyChapters = (doc: string, structure: DocStructure): readonly EmptyChapter[] => {
+  const { bookLabel } = chapterTitles(doc, structure);
+  const chapters: DocLine[] = [];
+  for (const line of structure.lines) if (line.cls === "slot.c") chapters.push(line);
+  const found: EmptyChapter[] = [];
+  chapters.forEach((line, k) => {
+    const end = chapters[k + 1]?.from ?? doc.length;
+    const number = /\\c\s+(\S+)/.exec(doc.slice(line.from, line.to))?.[1] ?? "";
+    let at = line.to;
+    let title = `${bookLabel === "" ? "Chapter" : bookLabel} ${number}`;
+    // Its own label, on the line straight after (blank lines aside), names it and ends the heading.
+    const rest = doc.slice(line.to, end);
+    const own = /^\s*\\cl[ \t]+([^\n]*)/.exec(rest);
+    if (own !== null && own[1].trim() !== "") {
+      title = own[1].trim();
+      at = line.to + own[0].length;
+    }
+    const to = end < doc.length ? Math.max(at, end - 1) : end;
+    if (doc.slice(at, end).replace(VISIBLE, "") !== "") return;
+    let field: EmptyChapter["field"];
+    for (let i = 0; i < structure.blocks.length; i++) {
+      const from = structure.blocks.fromAt(i);
+      if (from <= at) continue;
+      if (from > to) break;
+      // A paragraph, not a heading or a section mark (`\\s5`): the ghost takes
+      // the indent a verse at a paragraph's start would have.
+      if (structure.blocks.clsAt(i) !== "block.para") continue;
+      const block = structure.blocks.at(i);
+      const lineEnd = doc.indexOf("\n", block.contentFrom);
+      field = {
+        line: from,
+        from: block.contentFrom,
+        to: lineEnd < 0 || lineEnd > to ? to : lineEnd,
+      };
+      break;
+    }
+    found.push(field === undefined ? { at, title, to } : { at, title, to, field });
+  });
+  return found;
+};
+
+/**
+ * Each chapter's heading — its `\\c` line, and its own `\\cl` line when it has
+ * one — as a range from the `\\c` line's start to the heading's last line end.
+ */
+export const chapterHeadings = (
+  doc: string,
+  structure: DocStructure,
+): readonly { readonly from: number; readonly to: number }[] => {
+  const { folds } = chapterTitles(doc, structure);
+  const labelled = new Map(folds.map((fold) => [fold.from, fold.to]));
+  const headings: { from: number; to: number }[] = [];
+  for (const line of structure.lines) {
+    if (line.cls !== "slot.c") continue;
+    const labelLine = labelled.get(line.from);
+    const end = labelLine === undefined ? line.to : doc.indexOf("\n", labelLine);
+    headings.push({ from: line.from, to: end < 0 ? doc.length : end });
+  }
+  return headings;
+};
+
+/**
+ * A chapter's title is the book's, not the text's: set in its front matter
+ * (`\\c`, `\\cl`), shown here, edited elsewhere — USFM for now. So in Refine
+ * and line by line the caret passes over a heading in the direction of travel
+ * (to the line after it, or the end of the line before), and an edit that
+ * would touch it — typing in it, deleting into it, or deleting the line break
+ * either side, which would run it into the text — is refused. An empty
+ * chapter's hidden leftovers are refused the same way: there is nothing there
+ * to delete, and deleting into them reached the title.
+ */
+const HEADING_WRITERS = new Set(["empty-chapter", "typed-verse", "frontmatter", "canonical"]);
+
+const chapterHeadingsAreFixed = EditorState.transactionFilter.of((tr) => {
+  if (tr.startState.facet(modeFacet) !== "regular") return tr;
+  // Trusted edits pass only from what writes headings or empty chapters on
+  // purpose; a guarded Backspace is trusted too, and is exactly what must not reach a title.
+  const seal = tr.annotation(trusted);
+  if (seal !== undefined && HEADING_WRITERS.has(seal)) return tr;
+  const doc = docText(tr.startState);
+  const structure = structureAt(tr.startState);
+  const headings = chapterHeadings(doc, structure);
+  if (
+    tr.docChanged &&
+    (tr.isUserEvent("input") || tr.isUserEvent("delete") || tr.isUserEvent("move"))
+  ) {
+    const fixed = [
+      ...headings.map((h) => ({
+        from: Math.max(0, h.from - 1),
+        to: Math.min(doc.length, h.to + 1),
+      })),
+      ...emptyChapters(doc, structure).map((c) => ({ from: c.at, to: c.to })),
+    ];
+    let touches = false;
+    tr.changes.iterChangedRanges((fromA, toA) => {
+      for (const r of fixed)
+        if (fromA === toA ? fromA > r.from && fromA < r.to : fromA < r.to && toA > r.from)
+          touches = true;
+    });
+    if (touches) return [];
+  }
+  if (!tr.selection) return tr;
   const range = tr.selection.main;
   if (!range.empty) return tr;
-  const { folds } = chapterTitles(docText(tr.state), structureAt(tr.state));
-  const fold = folds.find((f) => range.head > f.from && range.head < f.label);
-  if (fold === undefined) return tr;
+  const after = docText(tr.state);
+  const heading = chapterHeadings(after, structureAt(tr.state)).find(
+    (h) => range.head >= h.from && range.head <= h.to,
+  );
+  if (heading === undefined) return tr;
+  // A click on a title, or arriving from above, goes on into the chapter —
+  // to its empty state's paragraph when it has nothing yet; from below, back
+  // to the end of the line before.
   const before = tr.startState.selection.main.head;
-  const pos = before <= fold.from ? fold.label : Math.max(0, fold.from - 1);
+  const forward = tr.isUserEvent("select.pointer") || before <= heading.from;
+  const field = emptyChapters(after, structureAt(tr.state)).find((c) => c.at === heading.to)?.field;
+  const pos = forward
+    ? (field?.from ?? Math.min(after.length, heading.to + 1))
+    : Math.max(0, heading.from - 1);
   return [tr, { selection: EditorSelection.cursor(pos), sequential: true }];
+});
+
+/**
+ * The room above a chapter's title is the title line's own padding, so a
+ * press there would land on the heading and be carried on into the new
+ * chapter. It belongs to the chapter before: the caret goes to the line just
+ * above the title, where the press was across it. Only a press on the title
+ * itself goes on into its chapter (`chapterHeadingsAreFixed`).
+ */
+const pressesAboveTitlesStayBehind = EditorView.domEventHandlers({
+  mousedown(event, view) {
+    if (event.button !== 0 || view.state.facet(modeFacet) !== "regular") return false;
+    const target = event.target instanceof Element ? event.target : null;
+    const line = target?.closest(".usfm-chap");
+    if (line === null || line === undefined || !view.contentDOM.contains(line)) return false;
+    const box = line.getBoundingClientRect();
+    const titleTop = box.top + parseFloat(getComputedStyle(line).paddingTop);
+    if (event.clientY >= titleTop) return false;
+    const at = view.posAtDOM(line);
+    const heading = chapterHeadings(docText(view.state), structureAt(view.state)).find(
+      (h) => at >= h.from && at <= h.to,
+    );
+    if (heading === undefined) return false;
+    const above = view.posAtCoords({ x: event.clientX, y: box.top - 2 });
+    const pos = above !== null && above < heading.from ? above : Math.max(0, heading.from - 1);
+    event.preventDefault();
+    view.dispatch({ selection: EditorSelection.cursor(pos), userEvent: "select" });
+    view.focus();
+    return true;
+  },
 });
 
 /** One verse's box, in the layer's coordinates. */
@@ -427,7 +726,12 @@ const verseBoxes = layer({
 export const verseLineBehaviour: Extension = [
   lineByLineClass,
   verseBoxes,
-  caretSkipsFoldedChapters,
+  chapterHeadingsAreFixed,
+  pressesAboveTitlesStayBehind,
+  emptiedChaptersKeepVerseOne,
+  typeIntoEmptyChapter,
+  caretBesideEmptyChapterVerse,
+  typedVerseNumbers,
   typeIntoEmptyVerse,
   labelsStayPut,
   pasteAsOneLine,

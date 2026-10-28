@@ -1,6 +1,13 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { EditorState, type Extension, Prec, Transaction } from "@codemirror/state";
-import { Decoration, EditorView, drawSelection, keymap, type KeyBinding } from "@codemirror/view";
+import {
+  Decoration,
+  EditorView,
+  ViewPlugin,
+  drawSelection,
+  keymap,
+  type KeyBinding,
+} from "@codemirror/view";
 
 import { type Analyze, analyzed, analyzer } from "./analyzer";
 import { caretLineBoundary, extendCaret, moveCaret, moveCaretByWord } from "./caret";
@@ -241,6 +248,47 @@ export const commandsLayer: Extension = [
   keymap.of([...defaultKeymap, ...historyKeymap]),
 ];
 
+/**
+ * The caret moves only for a press on the text. A press in the editor but
+ * off its lines — the margins either side of the column, the room under the
+ * last line — lets go of the editor instead of moving the caret to the
+ * nearest text; so does a press on the page outside it, unless it lands on a
+ * control (a toolbar button keeps its own say over focus) — where the
+ * browser, left alone, puts the caret back in the nearest editable text. Listened for on
+ * the whole document, capturing, because the editor only hears presses on its
+ * content.
+ */
+const pressesOutsideTextLetGo = ViewPlugin.define((view) => {
+  const doc = view.dom.ownerDocument;
+  const onDown = (event: MouseEvent): void => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (target === null) return;
+    const onText =
+      view.contentDOM.contains(target) && target.closest(".cm-line, .cm-widgetBuffer") !== null;
+    if (onText || target.closest(".cm-tooltip, .cm-panels, .cm-gutters") !== null) return;
+    if (view.dom.contains(target)) {
+      if (target === view.scrollDOM && event.offsetX >= view.scrollDOM.clientWidth) return; // the scrollbar
+      event.preventDefault();
+      event.stopPropagation();
+      view.contentDOM.blur();
+      return;
+    }
+    if (!view.hasFocus) return;
+    if (target.closest("button, a, input, select, textarea, [role], [tabindex], [contenteditable]"))
+      return;
+    // Bare background (no words of its own, not another editor): the browser
+    // would put the caret in the nearest editable text — this editor — so the
+    // press is kept from doing anything but letting go.
+    const words = [...target.childNodes].some(
+      (node) => node.nodeType === Node.TEXT_NODE && (node.textContent ?? "").trim() !== "",
+    );
+    if (!words && target.closest(".cm-editor") === null) event.preventDefault();
+    view.contentDOM.blur();
+  };
+  doc.addEventListener("mousedown", onDown, true);
+  return { destroy: () => doc.removeEventListener("mousedown", onDown, true) };
+});
+
 export function viewLayer(options: ViewOptions = {}): Extension {
   return [
     drawSelection(),
@@ -249,6 +297,7 @@ export function viewLayer(options: ViewOptions = {}): Extension {
     ...(options.clipboard === false ? [] : [clipboardHandlers]),
     renderWindow,
     scrollGuard,
+    pressesOutsideTextLetGo,
     EditorView.atomicRanges.of((v) => v.state.field(decoField, false)?.atomic ?? Decoration.none),
     EditorView.bidiIsolatedRanges.of(
       (v) => v.state.field(decoField, false)?.isolates ?? Decoration.none,

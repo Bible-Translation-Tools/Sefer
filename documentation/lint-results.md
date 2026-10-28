@@ -46,9 +46,9 @@ The generated half looks after itself; the judgement half does not. When a gate 
 | --- | --- | --- |
 | oxlint errors | 0 | `pnpm lint`, every commit |
 | oxlint warnings | 0 | `pnpm lint` fails on any, every commit |
-| fallow dead code (`pnpm deadcode`) | 0 issue(s) | every deploy; advisory on branches |
+| fallow dead code (`pnpm deadcode`) | 1 issue(s) | every deploy; advisory on branches |
 | fallow duplication | 1.6% in 60 clone group(s) | none — advisory |
-| suppression comments | 79 | each listed below with its reason |
+| suppression comments | 80 | each listed below with its reason |
 
 ### Oxlint warnings, by rule and file
 
@@ -103,6 +103,7 @@ None.
 | `src/app/paraglide/messages/refine_editor_label.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/refine_hide_reference.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/refine_resize_reference.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/refine_scope_chapter.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/refine_show_reference.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/settings_language_automatic.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/sidebar_hide_books.js` | `eslint-disable` | — |

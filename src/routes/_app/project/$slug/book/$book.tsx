@@ -8,10 +8,9 @@ import { m } from "#app/paraglide/messages";
 import { useShell } from "#app/ProjectContext";
 import { REFERENCE_WIDTH } from "#app/settings";
 import { BookEditor } from "#app/ui/BookEditor";
-import { Button, DelayedSpinner, Resizable, cx } from "#app/ui/primitives";
+import { Button, DelayedSpinner, Resizable, Switch, cx } from "#app/ui/primitives";
 import { RecoveryBanner } from "#app/ui/recovery/RecoveryBanner";
 import { AlignedProvider } from "#app/ui/workspace/aligned";
-import { BookViewSwitch } from "#app/ui/workspace/BookViewSwitch";
 import { ReferenceColumn } from "#app/ui/workspace/ReferenceColumn";
 import { Toolbar } from "#app/ui/workspace/Toolbar";
 
@@ -19,8 +18,8 @@ import { Toolbar } from "#app/ui/workspace/Toolbar";
  * The editor: the heart language, the only text that can be
  * edited, outlined on the page's white, the outline brand while it has focus.
  * A small action bar over the text: "Show reference" on the left (the only
- * way to the gateways — joined, there is none on screen), the book's view
- * (Reading, Line by line, USFM) flush right.
+ * way to the gateways — joined, there is none on screen), the One chapter
+ * switch flush right.
  * Split, its left border is the resize handle's line.
  */
 function EditorPanel(props: { readonly book: EditorBook; readonly split?: boolean }) {
@@ -41,7 +40,9 @@ function EditorPanel(props: { readonly book: EditorBook; readonly split?: boolea
       {/* 12px top and bottom; each side lines up with the text's own edge:
           the same side padding as the editor below, and the same centred
           measure as its text column (`--editor-measure`, editor.css). */}
-      <div class="shrink-0 px-6">
+      {/* A rule under the bar in every view, line by line included: the
+          panel's own 2px outline colour. */}
+      <div class="shrink-0 border-b-2 border-surface-border px-6">
         <div class="mx-auto flex max-w-(--editor-measure) items-center gap-controls py-3">
           <Button
             variant="tertiary"
@@ -53,10 +54,22 @@ function EditorPanel(props: { readonly book: EditorBook; readonly split?: boolea
             </Show>
             {props.split === true ? m.refine_hide_reference() : m.refine_show_reference()}
           </Button>
-          <BookViewSwitch class="ms-auto" />
+          {/* Whole book or one chapter: the "Open books one chapter at a
+              time" setting, applied at once (`setChapterScope`). The view
+              itself is chosen in the app bar (Refine, Form Mode) and the
+              More menu (USFM). */}
+          <Switch
+            class="ms-auto"
+            labelFirst
+            label={m.refine_scope_chapter()}
+            checked={shell.preferChapterView()}
+            onChange={(one) => shell.setChapterScope(one)}
+          />
         </div>
       </div>
-      <div class="flex min-h-0 flex-1 flex-col px-6">
+      {/* No side padding: the scroller runs to the panel's edge, so its
+          scrollbar sits flush right; the text keeps its own inset (editor.css). */}
+      <div class="flex min-h-0 flex-1 flex-col">
         <Show when={props.book.id} keyed>
           <BookEditor book={props.book} />
         </Show>

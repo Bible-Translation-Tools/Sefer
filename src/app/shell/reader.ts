@@ -42,6 +42,7 @@ export interface ReaderDeps {
   readonly reveal: Accessor<Reveal | undefined>;
   readonly setReveal: Setter<Reveal | undefined>;
   readonly preferChapterView: Accessor<boolean>;
+  readonly setPreferChapterView: (on: boolean) => void;
   readonly stampOf: ShellStores["stampOf"];
   readonly live: LiveProject;
   readonly persist: <S>(key: SettingKey<S>, value: S) => void;
@@ -231,6 +232,7 @@ export const createReader = ({
   reveal,
   setReveal,
   preferChapterView,
+  setPreferChapterView,
   stampOf,
   live,
   persist,
@@ -248,14 +250,17 @@ export const createReader = ({
   });
   const { caret, noteCaret, place } = createPlace({ services, focused, stampOf });
 
-  const openingChapter = (book: EditorBook, at: number | undefined): number | null => {
-    if (!preferChapterView()) return null;
+  /** The chapter holding `at`, the first when there is no `at`. */
+  const chapterAt = (book: EditorBook, at: number | undefined): number => {
     if (at === undefined) return 0;
-    const chapters = book.structure().chapters;
     let found = 0;
-    for (const chapter of chapters) if (chapter.from <= at) found = chapter.ordinal;
+    for (const chapter of book.structure().chapters)
+      if (chapter.from <= at) found = chapter.ordinal;
     return found;
   };
+
+  const openingChapter = (book: EditorBook, at: number | undefined): number | null =>
+    preferChapterView() ? chapterAt(book, at) : null;
 
   let honoured: Reveal | undefined;
 
@@ -337,6 +342,36 @@ export const createReader = ({
     aim(book.id, anchorFrom(chapter), undefined, "top");
   };
 
+  /**
+   * The editor bar's One chapter switch: saves the preference and applies it
+   * now, on the chapter the reader is looking at; back to the whole book,
+   * that chapter at the top.
+   */
+  const setChapterScope = (one: boolean): void => {
+    setPreferChapterView(one);
+    const book = focused();
+    if (book === undefined) return;
+    // The chapter on screen: the one shown, else the one scrolled to the top
+    // (`noteChapterAtTop`), else the caret's. The caret alone would send a
+    // reader who scrolled without clicking back to the book's start.
+    const ordinal = untrack(() => {
+      const shown = chapter();
+      if (shown !== null) return shown;
+      const root = project()?.root;
+      const held = root === undefined ? undefined : lastLocation(root);
+      if (held?.bookId === book.id && held.at !== undefined) return held.at;
+      return chapterAt(book, caret());
+    });
+    remember(book.id, one ? ordinal : null, ordinal);
+    setChapter(one ? ordinal : null);
+    // Either way the chapter starts at the top of the pane, a frame later,
+    // once the editor has laid out its new extent: the old scroll offset
+    // means nothing in it, and left alone it can sit past a short chapter's end.
+    const row = book.structure().chapters[ordinal];
+    if (row !== undefined)
+      requestAnimationFrame(() => aim(book.id, anchorFrom(row), undefined, "top"));
+  };
+
   const showReference = (address: Address): void => {
     if (project() === undefined) return;
     if (!location.holds(address.book)) {
@@ -389,6 +424,7 @@ export const createReader = ({
     remember,
     aim,
     showChapter,
+    setChapterScope,
     showReference,
     openProjectAtStart,
   };
