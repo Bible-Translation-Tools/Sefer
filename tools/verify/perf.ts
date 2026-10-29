@@ -148,13 +148,15 @@ const seqOf = (line: string): number => Number(/^\{"seq":(\d+)/u.exec(line)?.[1]
 const lastSeq = (lines: readonly string[], fallback: number): number =>
   lines.length === 0 ? fallback : seqOf(lines.at(-1) ?? "");
 
-const charCount = async (page: Page): Promise<number> => {
-  const text = await page
-    .getByText(/^\d+ chars$/u)
-    .first()
-    .textContent();
-  return Number(/\d+/u.exec(text ?? "")?.[0] ?? Number.NaN);
-};
+// The book's length, read off the editor's own view (the status bar's "N chars" is gone).
+const charCount = (page: Page): Promise<number> =>
+  page.evaluate(() => {
+    // SAFETY: CodeMirror hangs its view on .cm-content as cmTile; a missing one reads as NaN below.
+    const content = document.querySelector("[data-testid=editor-host] .cm-content") as
+      | (Element & { cmTile?: { view?: { state: { doc: { length: number } } } } })
+      | null;
+    return content?.cmTile?.view?.state.doc.length ?? Number.NaN;
+  });
 
 interface Tails {
   readonly p50: number | null;
@@ -244,7 +246,10 @@ const measure = async (
     await page.locator(".cm-editor").first().waitFor();
     const projectOpenMs = performance.now() - openStarted;
 
-    await page.getByRole("radio", { name: "USFM" }).click();
+    // USFM is a switch in the book's More menu; Escape closes the menu.
+    await page.getByTestId("toolbar-kebab").click();
+    await page.getByRole("switch", { name: "USFM" }).click();
+    await page.keyboard.press("Escape");
     await page.locator(".cm-line:has-text('meditates day and night')").click();
     await page.keyboard.press("End");
     await typeAt(page, options.warmup, options.cadence);
