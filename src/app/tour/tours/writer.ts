@@ -145,10 +145,11 @@ export const writerTour: Tour = {
       advance: () => !present("[data-testid=migrate-recommended]"),
     },
     {
-      ready: () => present("[data-testid=migrate-next]"),
+      // Assemble already pressed during the step before: the project is open.
+      ready: () => present("[data-testid=migrate-next]") || onPath("/project/"),
       timeoutMs: PATIENT,
       spotlight: {
-        anchor: "[data-testid=migrate-next]",
+        anchor: "[data-testid=migrate-next], [data-testid=sidebar]",
         title: "Assemble",
         body: "Assemble writes one project from the chosen books, named and described the way WA's consolidated repositories are, then opens it. There is no form to fill in first; anything to correct is edited in the project afterwards.",
         try: "Press Assemble. While it runs it reads “Writing N books' history…”.",
@@ -199,14 +200,20 @@ export const writerTour: Tour = {
     },
     {
       go: (context) => toProjectPage(context, "settings"),
-      ready: () => present("[data-cloud-card=writer]"),
+      // The box shows only on a project that follows Writer projects; on any
+      // other, the Cloud section it would sit in.
+      ready: () => present("[data-cloud-card=writer]") || present("[data-cloud-card=settings]"),
       timeoutMs: 30_000,
       spotlight: {
-        anchor: "[data-cloud-card=writer]",
+        anchor: "[data-cloud-card=writer], [data-panel=cloud]:not(:has([data-cloud-card=writer]))",
         title: "Still following Writer",
         body: "The books keep following the Writer projects they came from. Every check for changes asks them for new work too, and anything new comes through Review as “From Writer”, only the verses changed since, for a person to accept.",
         try: "When the team has moved to Sefer, Stop following ends it. That is the tour.",
         notes: [
+          {
+            label: "No such box here?",
+            text: "It shows only on a project assembled from Writer, until Stop following is pressed. Open one of those to see it.",
+          },
           {
             label: "Why follow at all",
             text: "A migration rarely happens on one day. Some translators keep working in Writer for a while, and their work should reach the project without anyone copying it across by hand.",
