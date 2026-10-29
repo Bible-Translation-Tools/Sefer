@@ -89,12 +89,12 @@ export const lineByLineTour: Tour = {
           toFixtureCases(context);
         else toBook(context);
       },
-      ready: () => present("#editor-view-switch"),
+      ready: () => present("#app-mode-control"),
       spotlight: {
-        anchor: "#editor-view-switch",
-        title: "Choose Line by line",
+        anchor: "#app-mode-control",
+        title: "Choose Form Mode",
         body: "A second way to show the same book: every verse on its own line, numbered, with nothing else in the way.",
-        try: "Choose Line by line.",
+        try: "Choose Form Mode.",
         notes: [
           {
             label: "What this walk-through is",
@@ -219,9 +219,9 @@ export const lineByLineTour: Tour = {
     },
     {
       spotlight: {
-        anchor: "#editor-view-switch",
+        anchor: "#app-mode-control",
         title: "Back to the full view",
-        body: "Choose Reading to see paragraphs, poetry and headings again, or USFM to see the markers themselves. This device remembers which you used last.",
+        body: "Choose Refine to see paragraphs, poetry and headings again; USFM, to see the markers themselves, is in the More menu. This device remembers which you used last.",
       },
       advance: "user",
     },

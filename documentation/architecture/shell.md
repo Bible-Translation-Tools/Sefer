@@ -168,8 +168,9 @@ the application's Mod-K for an application it is not part of.
   `SegmentedControl` (`md`, `iconsWhenNarrow`), which drop to icons below `md`;
   right, 48px icon-only buttons. Everything on it is lit from the `pathname`,
   not from a signal, and every button but three is a plain navigation.
-  The first of them, with a project open, is the **cloud** (`SyncButton`,
-  `app-bar-sync`): where the project stands with the shared project, from the
+  **Sync** is the first row of the More menu, with a project open
+  (`createSync`/`SyncPopover` in `cloud/SyncButton.tsx`, `app-bar-sync`): the
+  row names where the project stands with the shared project, from the
   application's one sync reading (`syncWatch`), quiet until something waits on
   a person and with a popover where sync is done ([sync](sync.md), "One
   reading for every surface").
@@ -234,8 +235,10 @@ renumber the split and rebuild the editor's `EditorView` beside it.
 
 `src/routes/_app/project/$slug/book/$book.tsx` draws one white surface: the
 toolbar, then the editor in its outlined panel (`EditorPanel`), whose action
-bar holds "Show reference" on the left and the book's view switch
-(`BookViewSwitch`) on the right. The editor has no location strip of its own:
+bar holds "Show reference" on the left and the One chapter switch
+(`editor.preferChapterView`, applied at once by `setChapterScope`) on the right.
+The view is chosen elsewhere: Refine or Form Mode (line by line, design builds
+only) in the app bar's mode control, and USFM as a switch in the editor's own bar, beside One chapter. The editor has no location strip of its own:
 the project panel's chapter grid is the way between chapters.
 
 **Joined** (the default) only the heart language is on screen. **Split**

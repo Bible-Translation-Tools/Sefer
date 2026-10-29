@@ -76,12 +76,12 @@ function Workspace() {
         }}
         class={showing() ? undefined : rail() ? "shrink-0 [flex-basis:auto]!" : "hidden"}
       >
-        <div class={cx("flex h-full flex-col", !showing() && "bg-surface-primary")}>
+        <div class={cx("flex h-full flex-col", !showing() && "bg-surface-canvas")}>
           <Show when={rail()}>
             <div
               class={cx(
                 "shrink-0 px-4 pt-4",
-                showing() && "border-e border-sidebar-border bg-sidebar-surface",
+                showing() && "border-e border-sidebar-border bg-surface-primary",
               )}
             >
               <SidebarButton showing={showing()} />

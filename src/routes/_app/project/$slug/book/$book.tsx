@@ -8,19 +8,20 @@ import { m } from "#app/paraglide/messages";
 import { useShell } from "#app/ProjectContext";
 import { REFERENCE_WIDTH } from "#app/settings";
 import { BookEditor } from "#app/ui/BookEditor";
-import { Button, DelayedSpinner, Resizable, cx } from "#app/ui/primitives";
+import { Button, DelayedSpinner, Resizable } from "#app/ui/primitives";
 import { RecoveryBanner } from "#app/ui/recovery/RecoveryBanner";
 import { AlignedProvider } from "#app/ui/workspace/aligned";
-import { BookViewSwitch } from "#app/ui/workspace/BookViewSwitch";
 import { ReferenceColumn } from "#app/ui/workspace/ReferenceColumn";
-import { Toolbar } from "#app/ui/workspace/Toolbar";
+import { BookTitle, BookTools } from "#app/ui/workspace/Toolbar";
 
 /**
- * The editor: the heart language, the only text that can be
- * edited, outlined on the page's white, the outline brand while it has focus.
- * A small action bar over the text: "Show reference" on the left (the only
- * way to the gateways — joined, there is none on screen), the book's view
- * (Reading, Line by line, USFM) flush right.
+ * The editor: the heart language, the only text that can be edited, a white
+ * panel on the grey page, with no outline.
+ * Over the text, one bar: the book and chapter on the left, and flush right
+ * search, "Show reference" (the only way to the gateways — joined, there is
+ * none on screen) and the book's kebab, which holds the USFM and One chapter
+ * switches and Match formatting from source. Undo and Redo are in the app
+ * bar; Findings in its More menu.
  * Split, its left border is the resize handle's line.
  */
 function EditorPanel(props: { readonly book: EditorBook; readonly split?: boolean }) {
@@ -29,31 +30,38 @@ function EditorPanel(props: { readonly book: EditorBook; readonly split?: boolea
     <section
       aria-label={m.refine_editor_label()}
       data-testid="refine-editor"
-      class={cx(
-        // The page's own white, outlined: the border goes brand while the
-        // text has focus. Split, its left edge is also the resize handle's line.
-        "flex min-h-0 flex-1 flex-col rounded-lg border-2 border-surface-border bg-surface-primary transition-colors focus-within:border-brand",
-      )}
+      // The page is grey; only the editor and the book menu are white. No
+      // outline: the white is the edge. Line by line's own verse boxes sit
+      // on the white.
+      class="flex min-h-0 flex-1 flex-col rounded-lg bg-surface-primary"
     >
       {/* 12px top and bottom; each side lines up with the text's own edge:
           the same side padding as the editor below, and the same centred
           measure as its text column (`--editor-measure`, editor.css). */}
-      <div class="shrink-0 px-6">
+      {/* A rule under the bar in every view, line by line included: the
+          panel's own 2px outline colour. */}
+      <div class="shrink-0 border-b-2 border-surface-border px-6">
         <div class="mx-auto flex max-w-(--editor-measure) items-center gap-controls py-3">
-          <Button
-            variant="tertiary"
-            data-testid="refine-reference"
-            onClick={() => shell.setReferenceSplit(props.split !== true)}
-          >
-            <Show when={props.split === true} fallback={<PanelLeftOpen aria-hidden="true" />}>
-              <PanelLeftClose aria-hidden="true" />
-            </Show>
-            {props.split === true ? m.refine_hide_reference() : m.refine_show_reference()}
-          </Button>
-          <BookViewSwitch class="ms-auto" />
+          {/* Where the reader is: the book and its chapter. */}
+          <BookTitle />
+          <span class="ms-auto" />
+          <BookTools>
+            <Button
+              variant="tertiary"
+              data-testid="refine-reference"
+              onClick={() => shell.setReferenceSplit(props.split !== true)}
+            >
+              <Show when={props.split === true} fallback={<PanelLeftOpen aria-hidden="true" />}>
+                <PanelLeftClose aria-hidden="true" />
+              </Show>
+              {props.split === true ? m.refine_hide_reference() : m.refine_show_reference()}
+            </Button>
+          </BookTools>
         </div>
       </div>
-      <div class="flex min-h-0 flex-1 flex-col px-6">
+      {/* No side padding: the scroller runs to the panel's edge, so its
+          scrollbar sits flush right; the text keeps its own inset (editor.css). */}
+      <div class="flex min-h-0 flex-1 flex-col">
         <Show when={props.book.id} keyed>
           <BookEditor book={props.book} />
         </Show>
@@ -76,22 +84,8 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
     },
   );
 
-  /**
-   * The measure shared by the toolbar and the panels under it so their edges
-   * line up: joined, one panel, the editor's text measure (`--editor-measure`,
-   * 40rem) and 10rem round it — 50rem; split, two of those and the 1.5rem
-   * handle between them, shared as the handle sets.
-   */
-  const measure = (): string =>
-    cx(
-      "mx-auto w-full",
-      shell.referenceSplit()
-        ? "max-w-[calc(2_*_(var(--editor-measure)_+_10rem)_+_1.5rem)]"
-        : "max-w-[calc(var(--editor-measure)_+_10rem)]",
-    );
-
   return (
-    <main class="flex h-full min-h-0 min-w-0 flex-col gap-3 bg-surface-primary p-6">
+    <main class="flex h-full min-h-0 min-w-0 flex-col gap-3 bg-surface-canvas p-6">
       <RecoveryBanner />
       <Show
         when={shell.recoveryOffer() !== undefined ? shell.focused() : undefined}
@@ -103,10 +97,6 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
       >
         {(book) => (
           <>
-            <div class={measure()}>
-              <Toolbar />
-            </div>
-
             {/* One white surface. Joined, only the heart language is on
                 screen, in its editor panel; split, the reference sits to its
                 left, bare on the page, under one language-and-text dropdown.
@@ -116,7 +106,7 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
                 — the caret's paired-verse reveal in each pane. Provided as
                 `null`: none, said explicitly. */}
             <AlignedProvider value={null}>
-              <div class={cx("flex min-h-0 flex-1", measure())}>
+              <div class="flex min-h-0 w-full flex-1">
                 <Show when={shell.referenceSplit()} fallback={<EditorPanel book={book()} />}>
                   <Resizable.Root
                     class="min-h-0 min-w-0 flex-1"

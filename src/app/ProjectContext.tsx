@@ -72,6 +72,8 @@ export interface Shell {
   readonly chapter: Accessor<number | null>;
   readonly setChapter: (ordinal: number | null) => void;
   readonly preferChapterView: Accessor<boolean>;
+  /** Whole book or one chapter, saved and applied at once (`setChapterScope`, shell/reader.ts). */
+  readonly setChapterScope: (one: boolean) => void;
   readonly lineByLine: Accessor<boolean>;
   readonly setLineByLine: (on: boolean) => void;
 
@@ -226,7 +228,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
   const [reveal, setReveal] = createSignal<Reveal | undefined>(undefined, { name: "reveal" });
 
   const keys = shellKeys(services.settings);
-  const { preferChapterView, lineByLine, setLineByLine } = createPreferences({
+  const { preferChapterView, setPreferChapterView, lineByLine, setLineByLine } = createPreferences({
     services,
     keys,
     changed: (event) => changed(event),
@@ -289,6 +291,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     reveal,
     setReveal,
     preferChapterView,
+    setPreferChapterView,
     stampOf,
     live: liveProject,
     persist: layout.persist,
@@ -349,6 +352,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
       remember(focused()?.id, ordinal);
     },
     preferChapterView,
+    setChapterScope: reader.setChapterScope,
     lineByLine,
     setLineByLine,
     aim,

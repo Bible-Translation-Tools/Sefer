@@ -12,16 +12,18 @@ import {
 } from "@sefer/editor";
 import type { SourceStamp } from "@sefer/text/source";
 import { Effect, Fiber, Stream } from "effect";
-import { createEffect, createRenderEffect, createSignal, untrack } from "solid-js";
+import { Show, createEffect, createRenderEffect, createSignal, untrack } from "solid-js";
 
 import { stale, type Finding } from "#core/findings/finding";
 
+import { editorWords } from "../editorWords";
 import { reportEdits } from "../editReports";
 import { t } from "../i18n";
 import { textDirection } from "../language";
 import { useShell } from "../ProjectContext";
 import { shellKeys } from "../settings";
 import { allow, checkLabel, fineHere, flaggedText, turnOff } from "../suppressAnswers";
+import { LineMenu, type LineMenuAt } from "./LineMenu";
 import { useAlignedGroup } from "./workspace/aligned";
 import { nameBlock } from "./workspace/blockNames";
 import { metadataOf } from "./workspace/project";
@@ -102,6 +104,9 @@ export function BookEditor(props: BookEditorProps) {
     name: "boundView",
   });
   const aligned = useAlignedGroup();
+  const [lineMenu, setLineMenu] = createSignal<LineMenuAt | undefined>(undefined, {
+    name: "lineMenu",
+  });
   const [host, setHost] = createSignal<HTMLDivElement | undefined>(undefined, {
     name: "editorHost",
   });
@@ -124,6 +129,7 @@ export function BookEditor(props: BookEditorProps) {
         emptyBlocks: settings.get(keys.annotateEmptyParagraphs),
         pairBlocks: settings.get(keys.pairBlocks),
         features: editorFeatures(),
+        words: editorWords,
       });
 
       const supply = (): void => {
@@ -221,7 +227,30 @@ export function BookEditor(props: BookEditorProps) {
       data-mode={shell.mode()}
       data-revision={(stamp() ?? props.book.source().stamp).revision}
     >
-      <div class="cm-host" dir={direction()} data-testid="editor-host" ref={setHost} />
+      {/* Right-click on a line: its type and what it can turn into (Refine only;
+          Form Mode and USFM keep the browser's own menu). */}
+      <div
+        class="cm-host"
+        dir={direction()}
+        data-testid="editor-host"
+        ref={setHost}
+        onContextMenu={(event) => {
+          const editor = bound();
+          if (editor === undefined) return;
+          const offset = editor.offsetAt({ x: event.clientX, y: event.clientY });
+          const line = offset === undefined ? null : editor.lineKindAt(offset);
+          if (offset === undefined || line === null) return;
+          event.preventDefault();
+          setLineMenu({ x: event.clientX, y: event.clientY, offset, line });
+        }}
+      />
+      <Show when={bound()}>
+        {(editor) => (
+          <Show when={lineMenu()} keyed>
+            {(at) => <LineMenu editor={editor()} at={at} onClose={() => setLineMenu(undefined)} />}
+          </Show>
+        )}
+      </Show>
     </div>
   );
 }

@@ -52,6 +52,9 @@ const SPANISH_PHRASES: Partial<Record<PhraseKey, string>> = {
   "verseMenu.removeMarker": "Quitar marca de versículo",
   "verseMenu.addVerseAfter": "Añadir versículo después",
   "attributes.hint": "Intro guarda · Esc cierra",
+  "verseLines.verse": "Versículo",
+  "verseLines.chapter": "Capítulo",
+  "emptyChapter.prompt": "Haz clic aquí para empezar a editar {title}",
 };
 
 /** A URL `src` is used as it is; a bare file name gets a real placeholder image named after it. */

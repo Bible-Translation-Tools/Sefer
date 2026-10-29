@@ -98,7 +98,18 @@ export const createPreferences = ({ services, keys, changed, live }: Preferences
     void services.run(Effect.result(services.settings.set(keys.lineByLine, on)));
   };
 
-  return { preferChapterView, lineByLine, setLineByLine: setLineByLineSetting };
+  /** Shown at once, saved behind it; the settings stream then repeats the same value. */
+  const setPreferChapterViewSetting = (on: boolean): void => {
+    setPreferChapterView(on);
+    void services.run(Effect.result(services.settings.set(keys.preferChapterView, on)));
+  };
+
+  return {
+    preferChapterView,
+    setPreferChapterView: setPreferChapterViewSetting,
+    lineByLine,
+    setLineByLine: setLineByLineSetting,
+  };
 };
 
 export const createLayoutPreferences = ({

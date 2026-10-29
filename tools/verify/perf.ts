@@ -1,4 +1,4 @@
-// pnpm verify:perf [--chars N] [--runs K] [--headed]: types at each recording level, prints one JSON line of costs.
+// pnpm verify:perf [--chars N] [--runs K] [--views usfm,reading,form] [--throttle X] [--headed]: types in each view at each recording level, prints one JSON line of costs.
 
 import { createWriteStream, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -11,6 +11,10 @@ import { freePort, newRun, sleep, spawnVite, waitForReady } from "./devServer.ts
 const LEVELS = ["off", "verdicts", "spans", "all"] as const;
 type Level = (typeof LEVELS)[number];
 
+/** How the book shows while typing: USFM, Refine's reading view, or Form Mode (one verse per box). */
+const VIEWS = ["usfm", "reading", "form"] as const;
+type View = (typeof VIEWS)[number];
+
 const RING_CAPACITY = 2000;
 
 const TEXT = "the quick brown fox jumps over the lazy dog and then rests a while ";
@@ -21,8 +25,13 @@ interface Options {
   readonly warmup: number;
   readonly cadence: number;
   readonly levels: readonly Level[];
+  readonly views: readonly View[];
+  /** Chrome's CPU slowdown, 1 for none; 4 is the documented "feels slow" setting. */
+  readonly throttle: number;
   readonly headed: boolean;
 }
+
+const isView = (value: string): value is View => VIEWS.some((view) => view === value);
 
 const isLevel = (value: string): value is Level => LEVELS.some((level) => level === value);
 
@@ -32,6 +41,8 @@ const parseOptions = (argv: readonly string[]): Options => {
   let warmup = 20;
   let cadence = 150;
   let levels: readonly Level[] = ["off", "all"];
+  let views: readonly View[] = VIEWS;
+  let throttle = 1;
   let headed = false;
   const count = (value: string | undefined, flag: string): number => {
     const parsed = Number(value);
@@ -50,9 +61,14 @@ const parseOptions = (argv: readonly string[]): Options => {
       const asked = (argv[(index += 1)] ?? "").split(",");
       if (!asked.every(isLevel)) throw new Error(`--levels takes ${LEVELS.join(",")}`);
       levels = asked;
-    } else throw new Error(`unknown argument: ${String(argument)}`);
+    } else if (argument === "--views") {
+      const asked = (argv[(index += 1)] ?? "").split(",");
+      if (!asked.every(isView)) throw new Error(`--views takes ${VIEWS.join(",")}`);
+      views = asked;
+    } else if (argument === "--throttle") throttle = count(argv[(index += 1)], argument);
+    else throw new Error(`unknown argument: ${String(argument)}`);
   }
-  return { chars, runs, warmup, cadence, levels, headed };
+  return { chars, runs, warmup, cadence, levels, views, throttle, headed };
 };
 
 const percentile = (values: readonly number[], percent: number): number | null => {
@@ -148,13 +164,15 @@ const seqOf = (line: string): number => Number(/^\{"seq":(\d+)/u.exec(line)?.[1]
 const lastSeq = (lines: readonly string[], fallback: number): number =>
   lines.length === 0 ? fallback : seqOf(lines.at(-1) ?? "");
 
-const charCount = async (page: Page): Promise<number> => {
-  const text = await page
-    .getByText(/^\d+ chars$/u)
-    .first()
-    .textContent();
-  return Number(/\d+/u.exec(text ?? "")?.[0] ?? Number.NaN);
-};
+// The book's length, read off the editor's own view (the status bar's "N chars" is gone).
+const charCount = (page: Page): Promise<number> =>
+  page.evaluate(() => {
+    // SAFETY: CodeMirror hangs its view on .cm-content as cmTile; a missing one reads as NaN below.
+    const content = document.querySelector("[data-testid=editor-host] .cm-content") as
+      | (Element & { cmTile?: { view?: { state: { doc: { length: number } } } } })
+      | null;
+    return content?.cmTile?.view?.state.doc.length ?? Number.NaN;
+  });
 
 interface Tails {
   readonly p50: number | null;
@@ -163,6 +181,7 @@ interface Tails {
 }
 
 interface Measurement {
+  readonly view: View;
   readonly level: Level;
   readonly run: number;
   readonly typed: number;
@@ -217,6 +236,7 @@ const typeAt = async (
 const measure = async (
   browser: Browser,
   base: string,
+  view: View,
   level: Level,
   run: number,
   options: Options,
@@ -227,6 +247,8 @@ const measure = async (
   const page = await context.newPage();
   const cdp = await context.newCDPSession(page);
   await cdp.send("Performance.enable");
+  if (options.throttle > 1)
+    await cdp.send("Emulation.setCPUThrottlingRate", { rate: options.throttle });
   try {
     await page.goto(`${base}/projects?fixture=1`);
     const open = page.getByRole("button", { name: "Open Project", exact: true });
@@ -244,7 +266,13 @@ const measure = async (
     await page.locator(".cm-editor").first().waitFor();
     const projectOpenMs = performance.now() - openStarted;
 
-    await page.getByRole("radio", { name: "USFM" }).click();
+    if (view === "usfm") {
+      // USFM is a switch in the book's More menu; Escape closes the menu.
+      await page.getByTestId("toolbar-kebab").click();
+      await page.getByRole("switch", { name: "USFM" }).click();
+      await page.keyboard.press("Escape");
+    } else
+      await page.getByRole("radio", { name: view === "form" ? "Form Mode" : "Refine" }).click();
     await page.locator(".cm-line:has-text('meditates day and night')").click();
     await page.keyboard.press("End");
     await typeAt(page, options.warmup, options.cadence);
@@ -252,7 +280,7 @@ const measure = async (
 
     const before = await charCount(page);
     let seq = lastSeq(await drain(page, -1), -1);
-    const out = createWriteStream(path.join(runDir, `${level}-${String(run)}.jsonl`));
+    const out = createWriteStream(path.join(runDir, `${view}-${level}-${String(run)}.jsonl`));
     const lines: string[] = [];
     const take = async (): Promise<void> => {
       const fresh = await drain(page, seq);
@@ -315,6 +343,7 @@ const measure = async (
     const bytes = lines.reduce((total, line) => total + Buffer.byteLength(line) + 1, 0);
     const eventsPerMin = lines.length / minutes;
     return {
+      view,
       level,
       run,
       typed: options.chars,
@@ -350,8 +379,8 @@ const measure = async (
   }
 };
 
-const summarise = (measurements: readonly Measurement[], level: Level) => {
-  const mine = measurements.filter((one) => one.level === level);
+const summarise = (measurements: readonly Measurement[], view: View, level: Level) => {
+  const mine = measurements.filter((one) => one.view === view && one.level === level);
   const pick = (read: (one: Measurement) => number | null) => round(median(mine.map(read)), 2);
   return {
     runs: mine.length,
@@ -412,41 +441,46 @@ const main = async (): Promise<void> => {
     await warm.close();
 
     const measurements: Measurement[] = [];
-    for (let run = 0; run < options.runs; run += 1) {
-      const order = run % 2 === 0 ? options.levels : [...options.levels].reverse();
-      for (const level of order) {
-        const measured = await measure(browser, base, level, run, options, runDir);
-        measurements.push(measured);
-        process.stderr.write(
-          `run ${String(run)} ${level}: probe handlers p95 ${String(measured.probe.handlers.p95)}ms (${String(measured.probe.presses)} presses), ` +
-            `meter gesture p95 ${String(measured.meter.gesture.p95)}ms, ` +
-            `${String(measured.eventsPerMin)} events/min, inserted ${String(measured.inserted)}/${String(measured.typed)}\n`,
-        );
+    for (const view of options.views)
+      for (let run = 0; run < options.runs; run += 1) {
+        const order = run % 2 === 0 ? options.levels : [...options.levels].reverse();
+        for (const level of order) {
+          const measured = await measure(browser, base, view, level, run, options, runDir);
+          measurements.push(measured);
+          process.stderr.write(
+            `${view} run ${String(run)} ${level}: probe handlers p95 ${String(measured.probe.handlers.p95)}ms (${String(measured.probe.presses)} presses), ` +
+              `meter gesture p95 ${String(measured.meter.gesture.p95)}ms, ` +
+              `${String(measured.eventsPerMin)} events/min, inserted ${String(measured.inserted)}/${String(measured.typed)}\n`,
+          );
+        }
       }
-    }
 
-    const levels = Object.fromEntries(
-      options.levels.map((level) => [level, summarise(measurements, level)]),
+    const views = Object.fromEntries(
+      options.views.map((view) => {
+        const levels = Object.fromEntries(
+          options.levels.map((level) => [level, summarise(measurements, view, level)]),
+        );
+        const off = levels.off;
+        const all = levels.all;
+        const delta =
+          off === undefined || all === undefined
+            ? undefined
+            : {
+                handlersP95: percentOver(all.probe.handlers.p95, off.probe.handlers.p95),
+                handlersP99: percentOver(all.probe.handlers.p99, off.probe.handlers.p99),
+                inputP95: percentOver(all.probe.input.p95, off.probe.input.p95),
+                inputP99: percentOver(all.probe.input.p99, off.probe.input.p99),
+                paintP95: percentOver(all.probe.paint.p95, off.probe.paint.p95),
+                paintP99: percentOver(all.probe.paint.p99, off.probe.paint.p99),
+              };
+        return [view, { levels, ...(delta === undefined ? {} : { allVsOffPercent: delta }) }];
+      }),
     );
-    const off = levels.off;
-    const all = levels.all;
-    const delta =
-      off === undefined || all === undefined
-        ? undefined
-        : {
-            handlersP95: percentOver(all.probe.handlers.p95, off.probe.handlers.p95),
-            handlersP99: percentOver(all.probe.handlers.p99, off.probe.handlers.p99),
-            inputP95: percentOver(all.probe.input.p95, off.probe.input.p95),
-            inputP99: percentOver(all.probe.input.p99, off.probe.input.p99),
-            paintP95: percentOver(all.probe.paint.p95, off.probe.paint.p95),
-            paintP99: percentOver(all.probe.paint.p99, off.probe.paint.p99),
-          };
     const summary = {
       runId,
       runDir,
       options: { ...options, headed: undefined },
-      levels,
-      ...(delta === undefined ? {} : { allVsOffPercent: delta }),
+      views,
     };
     writeFileSync(
       path.join(runDir, "summary.json"),

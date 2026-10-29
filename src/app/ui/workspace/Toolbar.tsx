@@ -1,36 +1,24 @@
+import type { JSX } from "@solidjs/web";
 import { useNavigate } from "@tanstack/solid-router";
-import ArrowLeftRight from "lucide-solid/icons/arrow-left-right";
-import Bell from "lucide-solid/icons/bell";
 import MoreVertical from "lucide-solid/icons/more-vertical";
 import Redo2 from "lucide-solid/icons/redo-2";
 import SearchIcon from "lucide-solid/icons/search";
 import Undo2 from "lucide-solid/icons/undo-2";
 import { Show, createEffect, createSignal } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
+
 import { findCommand, runCommand } from "../../commands";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import { Card, IconButton, Input, Popover } from "../primitives";
+import { IconButton, Input, Popover, Switch } from "../primitives";
 import { bookName } from "./books";
-import { metadataOf, projectName } from "./project";
+import { metadataOf } from "./project";
 
 const can = (id: string): boolean => findCommand(id)?.available() === true;
 
 const kebabItem =
   "flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-lg px-3 text-start text-small text-on-surface-primary transition-colors hover:bg-surface-secondary disabled:cursor-not-allowed disabled:text-on-surface-tertiary disabled:hover:bg-transparent [&>svg]:size-5";
-
-function toolbarTitle(shell: ReturnType<typeof useShell>): string {
-  const book = shell.focused();
-  if (book === undefined) return "";
-  const project = shell.project();
-  const clipped = shell.chapter();
-  const label = clipped === null ? undefined : book.structure().chapters[clipped]?.label;
-  const named = bookName(book.id, metadataOf(project));
-  const of = projectName(project);
-  if (clipped === null) return t("{book} ({project})", { book: named, project: of });
-  const where = label === undefined || label === "" ? t("front") : label;
-  return t("{book} {where} ({project})", { book: named, where, project: of });
-}
 
 function ToolbarSearch(props: { query: string; onQuery: (value: string) => void }) {
   const navigate = useNavigate();
@@ -77,7 +65,11 @@ function KebabItem(props: {
   );
 }
 
-function KebabMenu(props: { open: boolean; onOpenChange: (open: boolean) => void }) {
+function KebabMenu(props: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  hasSource: boolean;
+}) {
   const navigate = useNavigate();
   const shell = useShell();
   return (
@@ -90,6 +82,35 @@ function KebabMenu(props: { open: boolean; onOpenChange: (open: boolean) => void
       onOpenChange={props.onOpenChange}
       trigger={<IconButton data-testid="toolbar-kebab" label={t("More")} icon={<MoreVertical />} />}
     >
+      {/* How the book shows: switches, so the menu stays open while they flip. */}
+      <Switch
+        class="min-h-12 w-full justify-between rounded-lg px-3 hover:bg-surface-secondary"
+        labelFirst
+        label="USFM"
+        checked={shell.mode() === "usfm"}
+        onChange={(on) => shell.setMode(on ? "usfm" : "default")}
+      />
+      <Switch
+        class="min-h-12 w-full justify-between rounded-lg px-3 hover:bg-surface-secondary"
+        labelFirst
+        label={m.refine_scope_chapter()}
+        checked={shell.preferChapterView()}
+        onChange={(one) => shell.setChapterScope(one)}
+      />
+      <Show when={props.hasSource}>
+        <KebabItem
+          testId="toolbar-overlay"
+          label={t("Match formatting from source")}
+          disabled={!can("overlay.book")}
+          onSelect={() => {
+            props.onOpenChange(false);
+            runCommand("overlay.book");
+          }}
+        />
+      </Show>
+
+      <span aria-hidden="true" class="my-1 block h-px bg-surface-border" />
+
       <KebabItem
         testId="kebab-save-review"
         label={t("Save & Review")}
@@ -153,45 +174,44 @@ function KebabMenu(props: { open: boolean; onOpenChange: (open: boolean) => void
   );
 }
 
-function FindingsBell() {
-  const navigate = useNavigate();
+/**
+ * The project's tools, in the app bar beside Settings: Undo and Redo for the
+ * book in front. Only while a project is open. (Findings is in the More menu.)
+ */
+export function ProjectTools() {
   const shell = useShell();
-  const findings = () => shell.findingCounts();
-  const attention = () => findings().errors + findings().warnings;
   return (
-    <span class="relative inline-flex">
-      <IconButton
-        data-testid="toolbar-findings"
-        label={t("Findings")}
-        icon={<Bell />}
-        onClick={() =>
-          void navigate({
-            to: "/project/$slug/findings",
-            params: { slug: shell.slug() },
-            search: {},
-          })
-        }
-      />
-      <Show when={attention() > 0}>
-        <span
-          aria-hidden="true"
-          data-findings={attention()}
-          class="pointer-events-none absolute -end-1 -top-1 min-w-4 rounded-full bg-on-surface-error px-1 text-center text-smallest leading-4 font-semibold text-surface-error"
-        >
-          {attention() > 99 ? "99+" : attention()}
-        </span>
-      </Show>
-    </span>
+    <Show when={shell.project() !== undefined}>
+      <div class="flex shrink-0 items-center gap-2" data-testid="toolbar">
+        <IconButton
+          data-testid="toolbar-undo"
+          label={t("Undo")}
+          icon={<Undo2 />}
+          disabled={!can("book.undo")}
+          onClick={() => runCommand("book.undo")}
+        />
+        <IconButton
+          data-testid="toolbar-redo"
+          label={t("Redo")}
+          icon={<Redo2 />}
+          disabled={!can("book.redo")}
+          onClick={() => runCommand("book.redo")}
+        />
+      </div>
+    </Show>
   );
 }
 
-/** No show/hide here: it is at the top of the project panel itself (`SidebarButton`). */
-export function Toolbar() {
+/**
+ * The book's tools, at the end of the editor's own header: search, what the
+ * header puts between (Show reference), and the book's kebab — USFM and One chapter switches, Match formatting from source
+ * (when the project has one), Save & Review, inventory, formatting, export,
+ * rename.
+ */
+export function BookTools(props: { readonly children?: JSX.Element }) {
   const [query, setQuery] = createSignal("", { name: "toolbarQuery" });
   const [menuOpen, setMenuOpen] = createSignal(false, { name: "toolbarMenu" });
   const shell = useShell();
-
-  const title = () => toolbarTitle(shell);
 
   const [hasSource, setHasSource] = createSignal(false, { name: "toolbarHasSource" });
   createEffect(
@@ -210,48 +230,38 @@ export function Toolbar() {
   );
 
   return (
-    <div class="flex flex-wrap items-center gap-3" data-testid="toolbar">
-      <div class="flex min-w-0 shrink items-center gap-2">
-        <strong
-          class="min-w-0 truncate text-h4 font-semibold text-on-surface-primary"
-          data-workspace-title
-        >
-          {title()}
-        </strong>
-      </div>
+    <>
+      <ToolbarSearch query={query()} onQuery={setQuery} />
+      {props.children}
+      <KebabMenu open={menuOpen()} onOpenChange={setMenuOpen} hasSource={hasSource()} />
+    </>
+  );
+}
 
-      <Card class="ms-auto flex items-center gap-controls p-1.5" padded={false}>
-        <ToolbarSearch query={query()} onQuery={setQuery} />
-
-        <IconButton
-          data-testid="toolbar-undo"
-          label={t("Undo")}
-          icon={<Undo2 />}
-          disabled={!can("book.undo")}
-          onClick={() => runCommand("book.undo")}
-        />
-        <IconButton
-          data-testid="toolbar-redo"
-          label={t("Redo")}
-          icon={<Redo2 />}
-          disabled={!can("book.redo")}
-          onClick={() => runCommand("book.redo")}
-        />
-
-        <Show when={hasSource()}>
-          <IconButton
-            data-testid="toolbar-overlay"
-            label={t("Match formatting from source")}
-            icon={<ArrowLeftRight />}
-            disabled={!can("overlay.book")}
-            onClick={() => runCommand("overlay.book")}
-          />
-        </Show>
-
-        <FindingsBell />
-
-        <KebabMenu open={menuOpen()} onOpenChange={setMenuOpen} />
-      </Card>
-    </div>
+/**
+ * Where the reader is, at the head of the editor: the book, and the chapter
+ * shown (One chapter) or the one at the top of the view — "Psalms 3".
+ */
+export function BookTitle() {
+  const shell = useShell();
+  const title = (): string => {
+    const book = shell.focused();
+    if (book === undefined) return "";
+    const named = bookName(book.id, metadataOf(shell.project()));
+    const chapters = book.structure().chapters;
+    const clipped = shell.chapter();
+    const root = shell.project()?.root;
+    const held = root === undefined ? undefined : shell.lastLocation(root);
+    const at = clipped ?? (held?.bookId === book.id ? held.at : undefined);
+    const label = at === undefined || at === 0 ? undefined : chapters[at]?.label;
+    return label === undefined || label === "" ? named : `${named} ${label}`;
+  };
+  return (
+    <strong
+      class="block min-w-0 truncate text-h3 font-semibold text-on-surface-primary"
+      data-workspace-title
+    >
+      {title()}
+    </strong>
   );
 }

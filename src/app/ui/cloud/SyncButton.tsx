@@ -1,3 +1,4 @@
+import type { JSX } from "@solidjs/web";
 import Cloud from "lucide-solid/icons/cloud";
 import CloudAlert from "lucide-solid/icons/cloud-alert";
 import CloudCheck from "lucide-solid/icons/cloud-check";
@@ -12,7 +13,7 @@ import type { Sync } from "#core/sync";
 
 import { collaboration } from "../../collaboration";
 import { t } from "../../i18n";
-import { useShell, type Shell } from "../../ProjectContext";
+import type { Shell } from "../../ProjectContext";
 import { syncStatus } from "../../syncStatus";
 import { syncWatch } from "../../syncWatch";
 import { writerWatch } from "../../writerWatch";
@@ -129,33 +130,6 @@ const createSyncPopover = (shell: Shell, quick: QuickSync, account: Account) => 
     },
   };
 };
-
-const SyncTrigger = (props: {
-  readonly attention: "none" | "tint" | "alert";
-  readonly headline: string | undefined;
-  readonly sync: Sync | undefined;
-  readonly open: boolean;
-}) => (
-  <span class="relative inline-flex" data-sync-attention={props.attention}>
-    <IconButton
-      label={props.headline ?? t("Sync")}
-      data-testid="app-bar-sync"
-      data-sync-state={props.sync?.state ?? "unknown"}
-      tooltipSide="bottom"
-      aria-pressed={props.open ? "true" : "false"}
-      class={cx(props.attention !== "none" && "text-on-surface-warning")}
-      icon={glyphOf(props.sync)}
-    />
-    <Show when={props.attention === "alert"}>
-      <span
-        aria-hidden="true"
-        class="pointer-events-none absolute end-1 top-1 flex size-4 items-center justify-center rounded-full bg-on-surface-warning text-[10px] leading-none font-bold text-surface-primary"
-      >
-        !
-      </span>
-    </Show>
-  </span>
-);
 
 const StateHeading = (props: { readonly copy: StateCopy | undefined }) => (
   <div>
@@ -322,41 +296,45 @@ const AccountRow = (props: { readonly account: Account; readonly host: string })
   </div>
 );
 
-export function SyncButton() {
-  const shell = useShell();
+/** The sync state, its popover's state and the account: one per place that shows sync. */
+export const createSync = (shell: Shell) => {
   const quick = createQuickSync(shell);
   const account = createAccount(shell);
   const pop = createSyncPopover(shell, quick, account);
+  return { quick, account, pop };
+};
 
+export type SyncHandle = ReturnType<typeof createSync>;
+
+/** The state's glyph and one-line headline, for a row that opens the popover. */
+export const syncGlyph = (sync: SyncHandle): JSX.Element => glyphOf(sync.quick.sync());
+export const syncHeadline = (sync: SyncHandle): string => sync.pop.copy()?.headline ?? t("Sync");
+
+/**
+ * The sync popover, opened from somewhere else (the app bar's More menu):
+ * anchored to an invisible point, so it drops from where its opener sits.
+ */
+export function SyncPopover(props: { readonly sync: SyncHandle }) {
+  // The handle is made once by the caller and never swapped.
+  const { quick, account, pop } = untrack(() => props.sync);
   return (
-    <Show when={shell.project()}>
-      <Popover
-        label={t("Sync")}
-        side="bottom"
-        align="end"
-        class="w-[min(480px,92vw)]"
-        open={pop.open()}
-        onOpenChange={pop.openChanged}
-        trigger={
-          <SyncTrigger
-            attention={pop.attention()}
-            headline={pop.copy()?.headline}
-            sync={quick.sync()}
-            open={pop.open()}
-          />
-        }
+    <Popover
+      label={t("Sync")}
+      side="bottom"
+      align="end"
+      class="w-[min(480px,92vw)]"
+      open={pop.open()}
+      onOpenChange={pop.openChanged}
+      trigger={<span class="block size-px" aria-hidden="true" />}
+    >
+      <Show
+        when={quick.sync()}
+        fallback={<p class="text-small text-on-surface-secondary">{t("Reading this project…")}</p>}
       >
-        <Show
-          when={quick.sync()}
-          fallback={
-            <p class="text-small text-on-surface-secondary">{t("Reading this project…")}</p>
-          }
-        >
-          {(held) => <SyncDetails held={held()} pop={pop} quick={quick} account={account} />}
-        </Show>
+        {(held) => <SyncDetails held={held()} pop={pop} quick={quick} account={account} />}
+      </Show>
 
-        <Show when={account.host}>{(host) => <AccountRow account={account} host={host()} />}</Show>
-      </Popover>
-    </Show>
+      <Show when={account.host}>{(host) => <AccountRow account={account} host={host()} />}</Show>
+    </Popover>
   );
 }

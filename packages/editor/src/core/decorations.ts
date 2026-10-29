@@ -19,11 +19,12 @@ import { blockHost } from "./blockHost";
 import { lineIndexAt, type DocStructure, type NoteRange } from "./docStructure";
 import { figureSource } from "./figures";
 import type { DocLine, WordRange } from "./fold";
+import { trusted } from "./kernel";
 import type { DocPlan, PlanSpan, ResolvedSlot } from "./plan";
 import type { WidgetKey } from "./registry";
 import { chipRenderer, markupOf } from "./unsupported";
-import { keptAsReading, type KeptAsReading } from "./verseLines";
-import { markerWords } from "./words";
+import { chapterTitles, emptyChapters, keptAsReading, type KeptAsReading } from "./verseLines";
+import { markerWords, phrase } from "./words";
 
 class JoinWidget extends WidgetType {
   readonly glyph: string;
@@ -61,6 +62,82 @@ class EmptySlotWidget extends WidgetType {
   }
   ignoreEvent() {
     return false;
+  }
+}
+
+/**
+ * An empty chapter's empty state, as ghost text where the caret already
+ * waits: "Click here to start editing Icipandwa 6" in its first leftover
+ * paragraph, behind the verse number it will get. Typing replaces it like any
+ * placeholder, and the first keystroke writes that verse (`\\v 1`). A chapter with no
+ * paragraph at all has nowhere to type, so there the ghost is clickable and
+ * writes one (`\\p`) in place of whatever was left, the caret in it.
+ */
+/** The verse the first keystroke writes (`typeIntoEmptyChapter`, core/verseLines.ts), shown ahead of time. */
+const emptyChapterVerse = (): HTMLElement => {
+  const verse = document.createElement("span");
+  verse.className = "usfm-chap-empty-verse";
+  verse.textContent = "1";
+  return verse;
+};
+
+/** That verse number alone, BEFORE the caret, so the caret sits between it and the ghost text. */
+class EmptyChapterVerseWidget extends WidgetType {
+  eq() {
+    return true;
+  }
+  toDOM() {
+    // Wrapped at the text's own size: the caret is drawn against this
+    // widget's box, and the superscript alone would make it a short caret.
+    const lead = document.createElement("span");
+    lead.className = "usfm-chap-empty-lead";
+    lead.append(emptyChapterVerse());
+    return lead;
+  }
+}
+
+class EmptyChapterWidget extends WidgetType {
+  constructor(
+    readonly title: string | undefined,
+    readonly number: string,
+    readonly writes?: { readonly from: number; readonly to: number },
+  ) {
+    super();
+  }
+  eq(other: EmptyChapterWidget) {
+    return (
+      other.title === this.title &&
+      other.number === this.number &&
+      other.writes?.from === this.writes?.from &&
+      other.writes?.to === this.writes?.to
+    );
+  }
+  toDOM(view: EditorView) {
+    const span = document.createElement("span");
+    span.className = "usfm-chap-empty";
+    const title = this.title ?? `${phrase(view.state, "verseLines.chapter")} ${this.number}`;
+    span.textContent = phrase(view.state, "emptyChapter.prompt", { title });
+    const writes = this.writes;
+    if (writes !== undefined) {
+      span.prepend(emptyChapterVerse());
+      span.classList.add("usfm-chap-empty-writes");
+      span.addEventListener("mousedown", (event) => {
+        event.preventDefault();
+        const insert = "\n\\p ";
+        view.dispatch({
+          changes: { from: writes.from, to: writes.to, insert },
+          selection: { anchor: writes.from + insert.length },
+          annotations: trusted.of("empty-chapter"),
+          userEvent: "input.type",
+          scrollIntoView: true,
+        });
+        view.focus();
+      });
+    }
+    return span;
+  }
+  ignoreEvent() {
+    return this.writes !== undefined;
   }
 }
 
@@ -752,6 +829,7 @@ export function buildRegular(
   // Line by line keeps a table and a sidebar as Reading draws them, on their own lines.
   const kept = plan.verseLines ? keptAsReading(structure) : null;
   if (kept !== null) joined += layOutVerseLines(structure, plan, add, outside, kept);
+  nameChapters(doc, structure, add, outside);
   for (let i = 0; i < structure.blocks.length; i++) {
     if (kept !== null && !kept.blocks.has(i)) continue;
     if (outside(structure.blocks.fromAt(i), structure.blocks.toAt(i))) continue;
@@ -824,6 +902,7 @@ export function buildRegular(
     });
   }
 
+  hideEmptyChapters(doc, structure, add, outside);
   return finish(add, doc, opts, { joined, blocks: structure.blocks.length });
 }
 
@@ -939,6 +1018,97 @@ function layOutVerseLines(
     add.push({ from: verse.markerFrom, to: verse.markerFrom, deco: VERSE_BREAK });
   }
   return joined;
+}
+
+const CHAPTER_TITLE = Decoration.line({ class: "usfm-chap-title" });
+const CHAPTER_NAMED = Decoration.line({ class: "usfm-chap-named" });
+
+/** A CSS string for `content`: quoted, its quotes and backslashes escaped. */
+const cssString = (text: string): string => `"${text.replace(/["\\]/g, "\\$&")}"`;
+
+/** Reading's and line by line's chapter titles (`chapterTitles`, core/verseLines.ts), drawn, with an empty chapter's empty state (`emptyChapters`). */
+function nameChapters(
+  doc: string,
+  structure: DocStructure,
+  add: Pending[],
+  outside: (from: number, to: number) => boolean,
+): void {
+  const { bookLabel, named, folds } = chapterTitles(doc, structure);
+  const namedDeco =
+    bookLabel === ""
+      ? CHAPTER_NAMED
+      : Decoration.line({
+          class: "usfm-chap-named",
+          attributes: { style: `--usfm-chapter-label: ${cssString(bookLabel)}` },
+        });
+  for (const chapter of named)
+    if (!outside(chapter.from, chapter.from))
+      add.push({ from: chapter.from, to: chapter.from, deco: namedDeco });
+  const shown = folds.filter((fold) => !outside(fold.from, fold.to));
+  if (shown.length === 0) return;
+  // Each fold is one hide over its whole span. Hides already inside it (the
+  // marker, the number) go first: of two that overlap only the earlier is
+  // kept, and the number would still show.
+  const inFold = (d: Pending): boolean =>
+    d.to > d.from &&
+    specOf(d.deco).class === undefined &&
+    shown.some((fold) => d.from >= fold.from && d.to <= fold.to);
+  for (let k = add.length - 1; k >= 0; k--) if (inFold(add[k])) add.splice(k, 1);
+  for (const fold of shown) {
+    add.push({ from: fold.from, to: fold.to, deco: HIDDEN });
+    add.push({ from: fold.from, to: fold.from, deco: CHAPTER_TITLE });
+  }
+}
+
+/**
+ * An empty chapter: its first leftover paragraph keeps the caret and shows
+ * the empty state as ghost text (`EmptyChapterWidget`); every other leftover
+ * marker (an empty `\\v`, a bare `\\q2`) is hidden, the ghost doing their work.
+ * Last of all, so whatever was drawn inside them goes first; then one hide
+ * over them all. USFM still shows them.
+ */
+function hideEmptyChapters(
+  doc: string,
+  structure: DocStructure,
+  add: Pending[],
+  outside: (from: number, to: number) => boolean,
+): void {
+  for (const empty of emptyChapters(doc, structure)) {
+    if (outside(empty.at, empty.to)) continue;
+    const kept = empty.field;
+    // Hidden: everything left but the kept paragraph's own line — what comes
+    // before it (a section mark, a blank line) and what comes after.
+    const hides =
+      kept === undefined
+        ? [{ from: empty.at, to: empty.to }]
+        : [
+            { from: empty.at, to: Math.max(empty.at, kept.line - 1) },
+            { from: kept.to, to: empty.to },
+          ];
+    for (const hide of hides) {
+      if (hide.to <= hide.from) continue;
+      for (let k = add.length - 1; k >= 0; k--)
+        if (add[k].from > hide.from && add[k].to <= hide.to) add.splice(k, 1);
+      add.push({ from: hide.from, to: hide.to, deco: HIDDEN });
+    }
+    const ghost =
+      kept === undefined
+        ? new EmptyChapterWidget(empty.title, empty.number, { from: empty.at, to: empty.to })
+        : new EmptyChapterWidget(empty.title, empty.number);
+    const at = kept === undefined ? empty.at : kept.from;
+    // Number, caret, ghost: the number before the caret's position, the words after it.
+    if (kept !== undefined)
+      add.push({
+        from: at,
+        to: at,
+        deco: Decoration.widget({ widget: new EmptyChapterVerseWidget(), side: -1 }),
+      });
+    add.push({
+      from: at,
+      to: at,
+      deco: Decoration.widget({ widget: ghost, side: kept === undefined ? -1 : 1 }),
+    });
+  }
 }
 
 function setOfPending(add: Pending[]): DecorationSet {

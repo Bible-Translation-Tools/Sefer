@@ -1,25 +1,29 @@
-const NAMES: Record<string, string> = {
-  p: "Paragraph",
-  pi: "Paragraph, indented",
-  m: "Flush paragraph",
-  nb: "Continued paragraph",
-  q: "Poetry",
-  q1: "Poetry 1",
-  q2: "Poetry 2",
-  q3: "Poetry 3",
-  q4: "Poetry 4",
-  d: "Descriptive title",
-  s: "Heading",
-  s1: "Heading 1",
-  s2: "Heading 2",
-  s3: "Heading 3",
-  s4: "Heading 4",
-  r: "Parallel reference",
-  li1: "List item",
-  li2: "List item",
-  li3: "List item",
-  ip: "Introduction paragraph",
-  iq: "Introduction poetry",
+import { m } from "#app/paraglide/messages";
+
+/** What a reader calls a line's marker, as a message each: read when shown, so a language change shows. */
+const NAMES: Readonly<Record<string, () => string>> = {
+  p: () => m.block_name_p(),
+  pi: () => m.block_name_pi(),
+  m: () => m.block_name_m(),
+  nb: () => m.block_name_nb(),
+  q: () => m.block_name_q(),
+  q1: () => m.block_name_q1(),
+  q2: () => m.block_name_q2(),
+  q3: () => m.block_name_q3(),
+  q4: () => m.block_name_q4(),
+  d: () => m.block_name_d(),
+  s: () => m.block_name_s(),
+  s1: () => m.block_name_s1(),
+  s2: () => m.block_name_s2(),
+  s3: () => m.block_name_s3(),
+  s4: () => m.block_name_s4(),
+  r: () => m.block_name_r(),
+  li: () => m.block_name_li(),
+  li1: () => m.block_name_li(),
+  li2: () => m.block_name_li(),
+  li3: () => m.block_name_li(),
+  ip: () => m.block_name_ip(),
+  iq: () => m.block_name_iq(),
 };
 
-export const nameBlock = (marker: string): string => NAMES[marker] ?? `\\${marker}`;
+export const nameBlock = (marker: string): string => NAMES[marker]?.() ?? `\\${marker}`;

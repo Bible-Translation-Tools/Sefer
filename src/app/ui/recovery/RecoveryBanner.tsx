@@ -2,13 +2,18 @@ import { Effect, Result } from "effect";
 import History from "lucide-solid/icons/history";
 import { Show, createSignal } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import type { Restorable } from "#core/recovery/recovery";
 
 import { describe } from "../../describe";
 import { t } from "../../i18n";
 import { uiLocale } from "../../locale";
 import { useShell } from "../../ProjectContext";
-import { Button, Card, PanelHeader, toasts } from "../primitives";
+import { shellKeys } from "../../settings";
+import { Button, Card, PanelHeader, Switch, toasts } from "../primitives";
+
+/** "Don't remind me again" keeps the banner away this long; then it may ask once more. */
+const QUIET_MS = 12 * 60 * 60 * 1000;
 
 const lastTouched = (journals: readonly Restorable[]): string => {
   let latest: number | undefined;
@@ -173,6 +178,15 @@ function createRecoveryActions(shell: Shell) {
 export function RecoveryBanner() {
   const shell = useShell();
   const { offered, busy, books, restoreAll, discardAll } = createRecoveryActions(shell);
+  const quietKey = shellKeys(shell.services.settings).recoveryQuietUntil;
+  // The banner stays up for this session; the switch only decides whether the next opens ask.
+  const [quiet, setQuiet] = createSignal(Date.now() < shell.services.settings.get(quietKey), {
+    name: "recoveryQuiet",
+  });
+  const remind = (off: boolean): void => {
+    setQuiet(off);
+    void shell.services.run(shell.services.settings.set(quietKey, off ? Date.now() + QUIET_MS : 0));
+  };
 
   return (
     <Show when={books() > 0}>
@@ -216,6 +230,12 @@ export function RecoveryBanner() {
             "These edits were never recorded. Restore all puts them back in the editor, unsaved — Save & Review then shows every changed book beside the file on disk, where you can keep or revert any of it. Discard all throws them away.",
           )}
         </p>
+        <Switch
+          label={m.recovery_quiet()}
+          data-recovery-quiet
+          checked={quiet()}
+          onChange={remind}
+        />
         <Show when={offered().filter((journal) => journal.stale === true).length}>
           {(count) => (
             <p class="text-small text-on-surface-warning" data-recovery-stale={count()}>

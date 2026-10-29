@@ -453,13 +453,13 @@ call goes through the WACS proxy's allowlist ([git](git.md), Suggested changes).
 
 `src/app/syncWatch.ts` holds the open project's last reading (`readSync` and its plan) for the whole
 application, the way `syncStatus` holds the network. The check on open, every send, a combine or
-receive from Review leave their reading there; the app bar's cloud button (`SyncButton`) and
+receive from Review leave their reading there; the Sync row in the app bar's More menu (`createSync`, `SyncPopover`) and
 Review's status line (`SyncLine`, the "Shared project" part, with when it was checked and a refresh) read it. A reading is local work — refs
 and logs already in the object database — so opening the cloud popover reads again; only a check or
 a send touches the network.
 
-The cloud button is quiet when both sides agree, tinted when work is waiting to be sent, and tinted
-with a "!" when something waits on a person (versions to receive or review, a refused send, a
+The Sync row names the state, and is tinted when work is waiting to be sent or something waits on a
+person (versions to receive or review, a refused send, a
 sign-in, a stopped transfer). A project attached to nothing is never the alarm. Its popover is where
 sync is done: the state, the two clocks, the incoming changes, the one right move, the shared
 project's link to copy, and the account — signing in and out (`SignInForm`, the same fields and

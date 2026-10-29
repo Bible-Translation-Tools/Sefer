@@ -4,11 +4,16 @@ title: "Form mode, verse per line, and the editor's sharp edges"
 kind: idea
 status: discussing
 created: 2026-10-14
-updated: 2026-10-22
+updated: 2026-10-27
 sha: 50aa9cd
 priority: 1
 tags: [editor]
-related: [858618e5-da52-4556-8734-d055729b7b8b, 9cdeee6c-1747-4922-b2b8-84748a95839a, c8b63600-40a8-4937-bc03-e0264e9a13f0]
+related:
+  [
+    858618e5-da52-4556-8734-d055729b7b8b,
+    9cdeee6c-1747-4922-b2b8-84748a95839a,
+    c8b63600-40a8-4937-bc03-e0264e9a13f0,
+  ]
 source: sefer-next-features doc, 2026-10-07 to 13
 ---
 
@@ -38,7 +43,13 @@ No new mode, only drivers: tab through empty verses, or step through every dupli
 out-of-order verse ([workflows](/items/2026-10-14-workflows-routes-and-state-in-the-url)). Falls
 out of the step machine, which is now built.
 
-<Question id="which" answer="Option 1, spiked on its own branch (form-mode). Option 2's workflows can come alongside later (Will, 2026-10-21).">Option 1, option 2, or both? The roadmap's lean: option 2 first, option 1 only if that isn't enough.</Question>
+<Question
+  id="which"
+  answer="Option 1, spiked on its own branch (form-mode). Option 2's workflows can come alongside later (Will, 2026-10-21)."
+>
+  Option 1, option 2, or both? The roadmap's lean: option 2 first, option 1 only if that isn't
+  enough.
+</Question>
 
 > I thought 2, but I'm changing my mind cause I do think 1 is cheaper than sounds.
 > — Will, 2026-10-21
@@ -65,16 +76,25 @@ the text. No newline is written; the text and its offsets stay as they are.
 **What shows:** the verse number (locked, as today) and the verse text. Everything else between
 verses is hidden but not lost: it stays in the string, untouched, and the cursor cannot enter it.
 
-<Question id="structure" answer="Start with this proposal and get a feel for which policies are available; hiding them entirely (an immortal policy) is the other candidate (Will, 2026-10-21).">How do `\p`, `\q1`, `\s` and friends show in line-by-line mode? Proposal:
-a section heading (`\s`) is a quiet, read-only label row between verses, because people copying
-from paper use it to keep their place; a paragraph or poetry marker BETWEEN verses is a small
-mark in the gutter of the verse it opens (¶, q1), read-only; a poetry break INSIDE a verse
-(`\v 3 … \q2 …`) shows inline as a thin `/`, so the verse stays one line. Changing structure is
-the normal editor's job.</Question>
+<Question
+  id="structure"
+  answer="Start with this proposal and get a feel for which policies are available; hiding them entirely (an immortal policy) is the other candidate (Will, 2026-10-21)."
+>
+  How do `\p`, `\q1`, `\s` and friends show in line-by-line mode? Proposal: a section heading (`\s`)
+  is a quiet, read-only label row between verses, because people copying from paper use it to keep
+  their place; a paragraph or poetry marker BETWEEN verses is a small mark in the gutter of the
+  verse it opens (¶, q1), read-only; a poetry break INSIDE a verse (`\v 3 … \q2 …`) shows inline as
+  a thin `/`, so the verse stays one line. Changing structure is the normal editor's job.
+</Question>
 
-<Question id="verse-actions" answer="Change number, Remove, and Add verse (split is just adding a verse) (Will, 2026-10-21).">Structured actions on the verse number? Proposal for the spike:
-the number's popup offers **Change number** and **Remove** (the verse's text joins the one before),
-nothing else. Split and join wait to see if people ask.</Question>
+<Question
+  id="verse-actions"
+  answer="Change number, Remove, and Add verse (split is just adding a verse) (Will, 2026-10-21)."
+>
+  Structured actions on the verse number? Proposal for the spike: the number's popup offers **Change
+  number** and **Remove** (the verse's text joins the one before), nothing else. Split and join wait
+  to see if people ask.
+</Question>
 
 > on the \p and q bits, yeah it's hard, cause like p's job is text indentaiton. Q is block and
 > poetry. But if it all becomes a block or each verse does then... You could argue pip it
@@ -97,18 +117,23 @@ block) and keep the one that reads best.
 
 **Keys, the defaults** (mode × key → policy):
 
-| Key | Normal editor | Line-by-line |
-|---|---|---|
-| Enter | new paragraph | move to the start of the next verse; at the last verse, nothing |
-| Shift+Enter | — | the previous verse |
-| Tab / Shift+Tab | indent (today) | next / previous empty verse |
-| Backspace at a verse's start | joins across the marker (sealed rules) | nothing: a verse never merges by accident |
-| Delete at a verse's end | same | nothing |
-| Paste | as today | newlines in the paste become spaces; never creates a marker |
-| Selection | free | clamped to the verse it starts in |
-| `\` | blocked | blocked |
+| Key                          | Normal editor                          | Line-by-line                                                    |
+| ---------------------------- | -------------------------------------- | --------------------------------------------------------------- |
+| Enter                        | new paragraph                          | move to the start of the next verse; at the last verse, nothing |
+| Shift+Enter                  | —                                      | the previous verse                                              |
+| Tab / Shift+Tab              | indent (today)                         | next / previous empty verse                                     |
+| Backspace at a verse's start | joins across the marker (sealed rules) | nothing: a verse never merges by accident                       |
+| Delete at a verse's end      | same                                   | nothing                                                         |
+| Paste                        | as today                               | newlines in the paste become spaces; never creates a marker     |
+| Selection                    | free                                   | clamped to the verse it starts in                               |
+| `\`                          | blocked                                | blocked                                                         |
 
-<Question id="enter-next" answer="Yes: Enter takes over; in line-by-line it moves to the start of the next verse (Will, 2026-10-21).">Enter in line-by-line: move to the next verse?</Question>
+<Question
+  id="enter-next"
+  answer="Yes: Enter takes over; in line-by-line it moves to the start of the next verse (Will, 2026-10-21)."
+>
+  Enter in line-by-line: move to the next verse?
+</Question>
 
 **Defaults for the spike:** a view switch beside chapter view, remembered per device; a `\c` is a
 read-only label row; notes work as in the normal editor; findings stay on; no tests until the
@@ -188,15 +213,92 @@ Tried at once instead (Will, 2026-10-22): `--usfm-poetry-gap` (0.25em) above eac
 
 </Followup>
 
-<Followup id="ship">To `dev` behind `__SEFER_DESIGN__` once it holds up, and finish with a
-tutorial for the PO and designer, as for suppressions (Will, 2026-10-21).</Followup>
+<Followup id="ship">
+  To `dev` behind `__SEFER_DESIGN__` once it holds up, and finish with a tutorial for the PO and
+  designer, as for suppressions (Will, 2026-10-21).
+</Followup>
 
 **Risk:** `plan.ts` (the edit plan) must refuse any edit that touches a hidden range or a verse
 marker in this mode; that is what the spike proves first, with Will at the keyboard.
 
-<Question id="keys">How is key handling organised by mode: branch on mode inside each key, or one handler per key that checks the mode? Ideally a matrix, mode × behaviour = policy.</Question>
+<Question id="keys">
+  How is key handling organised by mode: branch on mode inside each key, or one handler per key that
+  checks the mode? Ideally a matrix, mode × behaviour = policy.
+</Question>
 
 <Followup id="spike">A spike with Will at the keyboard. `plan.ts` is the risk.</Followup>
+
+## Chapter titles in line by line (designer, 2026-10-26, branch `design/editor-design`)
+
+Asked against a real project (`leb-x-bisa-reg`, Matthew), where each chapter is `\c 2` and then
+`\cl Icipandwa 2`, and both were drawn: the big number, then the label as a small heading.
+
+> Is there a reason why we can't just say "Chapter 2" or "icipandwa 2" here? Why is there a 2 and
+> then the chapter information? Further, I'd like to include a lot more space between this and the
+> end of the verse from the previous chapter
+> — Thomas, 2026-10-26
+
+**Built as a prototype, line by line only** (`nameChapters`): each chapter gets one title, with
+4em above it.
+
+- A chapter with its own `\cl` (between its `\c` and its first verse) shows the label alone; the
+  `\c` line is hidden, and the caret passes over it (`chapterHeadingsAreFixed`, which since 2026-10-27 also makes every chapter heading uneditable outside USFM).
+- Otherwise a book-wide `\cl` before chapter 1 (`\cl Psalm`) prefixes the number: "Psalm 2".
+- Otherwise "Chapter 2". The word is a CSS fallback, not yet translated.
+
+> IMO, if you can't physically see the line, the cursor shouldn't be able to access it. If you need
+> to access hidden items, the USFM / Raw mode is probably more appropriate
+> — Thomas, 2026-10-26
+
+The caret's stops (`stops.ts`) are built from the book's structure and the plan's paint, not
+from line by line's drawing, so they still stop on the hidden number. A transaction filter in
+`verseLines.ts` moves a caret that lands there on in its direction of travel: to the label's
+first letter going forward, to the end of the previous verse going back. Both it and the
+drawing read one scan, `chapterTitles`.
+
+Paisano has concerns about edge cases; left as is until he weighs in.
+
+<Question id="chapter-titles">
+  Paisano: is folding the `\c` line behind its `\cl` sound, or should line by line draw chapter
+  titles another way? Is a transaction filter the right home for "the caret skips what line by line
+  hides", or should the plan's paint know line by line, so `stops.ts` never offers the stop at all?
+  (A selection can still span the hidden line.) Edge cases to judge: `\cl` placed after the first
+  verse, or more than once; `\cp` (a published number); a `\cl` that is empty or carries markup; a
+  book-wide `\cl` that should not read as a prefix; and the "Chapter" word's translation. Since
+  2026-10-27 Reading draws chapter titles the same way, and the caret skips there too (Thomas: "can
+  we replicate the `cl` changes we just made in the Reading mode as well?").
+  An empty chapter (only markers after its heading) now shows "Click here to start editing
+  Icipandwa 6" as ghost text in its first leftover paragraph, where the caret already sits, and
+  hides the other leftover markers (`emptyChapters`, core/verseLines.ts; `hideEmptyChapters`,
+  core/decorations.ts). A chapter with no paragraph left gets a clickable ghost that writes `\p`.
+  Is a bare paragraph (no `\v 1`) the right place to start, and where should the sentence's
+  translation come from inside `@sefer/editor`?
+</Question>
+
+<Question id="presses-outside-text">
+  Paisano: Thomas, 2026-10-27: "clicking way outside of the bounds
+  of the editor seems to make it active or shift where the cursor sits. Clicking anywhere outside of
+  the editor should remove focus from it." A first pass (`pressesOutsideTextLetGo`,
+  packages/editor/src/core/compose.ts) listens on the whole document: a press in the editor off its
+  lines lets go instead of moving the caret, and a press on bare page background blurs it and
+  prevents the browser's default (which put the caret in the nearest editable text). His verdict:
+  "its still a bit weird but its better". Handed to you as a development question rather than a
+  design one: is a document listener the right home, what is still weird, and does it fight
+  anything (selection drags that start in a margin, the reference pane, satellites, touch)?
+</Question>
+
+<Question id="typed-verse-numbers">
+  Paisano: Thomas, 2026-10-27, asked for "macros" for the ways people mark verses without USFM:
+  "1", "1.", "verse 1", "v1" — "if the order makes sense and is in the bounds of the chapter
+  (obviously if the user types 7000, we shouldn't add a verse 7000)". Built as
+  `typedVerseNumbers` (packages/editor/src/core/verseLines.ts): on the space after such a word,
+  in Refine and Form Mode, it becomes `\v N` only when N is the next verse after the caret's
+  (1 before any) and the chapter has no verse N yet; Undo gives the typed number back. "Bounds"
+  is only "the next one", since nothing here knows a chapter's real verse count — should it read
+  versification? Also: it fires on a keystroke, not on paste; "12 disciples" typed at verse 11
+  becomes verse 12; and an empty chapter now writes `\v 1` on the first keystroke
+  (`typeIntoEmptyChapter`), its ghost text showing the 1 ahead of time.
+</Question>
 
 ## The editor's sharp edges, done in the same pass
 
@@ -204,17 +306,32 @@ Folded in from [editor sharp edges](/items/2026-10-14-editor-sharp-edges) (2026-
 handling by mode is the same work as the Enter question, and the tests belong on the
 [package's](/items/2026-10-14-embeddable-editor) harness.
 
-<Question id="enter" answer="Keep taking over Enter (Will, 2026-10-21).">Keep taking over Enter (a line break means nothing, so Enter makes a paragraph), at the cost of no pressing Enter for blank space?</Question>
+<Question id="enter" answer="Keep taking over Enter (Will, 2026-10-21).">
+  Keep taking over Enter (a line break means nothing, so Enter makes a paragraph), at the cost of no
+  pressing Enter for blank space?
+</Question>
 
-<Followup id="tests">Tests around copy, paste and Enter, on the package's harness (`@sefer/editor/testing`).</Followup>
+<Followup id="tests">
+  Tests around copy, paste and Enter, on the package's harness (`@sefer/editor/testing`).
+</Followup>
 
-<Followup id="cursor">Cursor mechanics with the arrow keys, on the playground. The cursor code is a first target for the [fallow pass](/items/2026-10-14-fallow-readability-pass).</Followup>
+<Followup id="cursor">
+  Cursor mechanics with the arrow keys, on the playground. The cursor code is a first target for the
+  [fallow pass](/items/2026-10-14-fallow-readability-pass).
+</Followup>
 
-<Followup id="formatter">Revisit the USFM formatter, written before the editor drew newlines by context. Consider format-on-save.</Followup>
+<Followup id="formatter">
+  Revisit the USFM formatter, written before the editor drew newlines by context. Consider
+  format-on-save.
+</Followup>
 
 <Followup id="usfm-light">USFM mode has no light theme.</Followup>
 
-<Followup id="extensions-global">The engine's marker registry is process-wide (`onion/src/extensions.rs`, `static REGISTRY`), so two editors on one page with different marker configs interfere. The package documents one config per page; a per-call or per-handle registry would be a kitchen ask.</Followup>
+<Followup id="extensions-global">
+  The engine's marker registry is process-wide (`onion/src/extensions.rs`, `static REGISTRY`), so
+  two editors on one page with different marker configs interfere. The package documents one config
+  per page; a per-call or per-handle registry would be a kitchen ask.
+</Followup>
 
 <Followup id="empty-note-body">
 
@@ -236,6 +353,14 @@ Or (Will, 2026-10-20): insert a new note with a known placeholder body, so it is
 
 </Followup>
 
-<Followup id="markdown">Markdown mode: CodeMirror's own Markdown support, for glossaries and notes.</Followup>
+<Followup id="markdown">
+  Markdown mode: CodeMirror's own Markdown support, for glossaries and notes.
+</Followup>
 
-<Tradeoff id="gutter" chose="a line-based gutter" cost="a project with no paragraphs has no real lines to number">Accepted as a known limit.</Tradeoff>
+<Tradeoff
+  id="gutter"
+  chose="a line-based gutter"
+  cost="a project with no paragraphs has no real lines to number"
+>
+  Accepted as a known limit.
+</Tradeoff>

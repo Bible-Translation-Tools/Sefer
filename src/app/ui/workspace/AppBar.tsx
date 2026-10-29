@@ -6,15 +6,17 @@ import FileText from "lucide-solid/icons/file-text";
 import GitCompare from "lucide-solid/icons/git-compare";
 import HistoryIcon from "lucide-solid/icons/history";
 import ListChecks from "lucide-solid/icons/list-checks";
+import Rows3 from "lucide-solid/icons/rows-3";
 import SettingsIcon from "lucide-solid/icons/settings";
 import TypeIcon from "lucide-solid/icons/type";
 import UserIcon from "lucide-solid/icons/user";
-import { createSignal, For } from "solid-js";
+import { Show, createSignal, For } from "solid-js";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
-import { SyncButton } from "../cloud/SyncButton";
-import { IconButton, Menu, MenuItem, SegmentedControl } from "../primitives";
+import { SyncPopover, createSync, syncGlyph, syncHeadline } from "../cloud/SyncButton";
+import { IconButton, Menu, MenuItem, MenuSeparator, SegmentedControl, cx } from "../primitives";
+import { ProjectTools } from "./Toolbar";
 
 function BarButton(props: {
   readonly label: string;
@@ -39,7 +41,8 @@ function BarButton(props: {
   );
 }
 
-type Mode = "refine" | "terms";
+/** Refine is the book as it reads; Form Mode is the same book one verse per line (design builds only). */
+type Mode = "refine" | "form" | "terms";
 
 type ProjectScreen =
   | "/project/$slug/findings"
@@ -52,6 +55,9 @@ function MoreMenu() {
   const shell = useShell();
   const [open, setOpen] = createSignal(false, { name: "appBarMoreOpen" });
   const attention = () => shell.findingCounts().errors + shell.findingCounts().warnings;
+  // Sync lives here, first in the menu: the row names its state, and opens
+  // the same popover the cloud button did, dropped from this button.
+  const sync = createSync(shell);
 
   const items: ReadonlyArray<{ label: string; to: ProjectScreen; icon: JSX.Element }> = [
     { label: t("Findings"), to: "/project/$slug/findings", icon: <Bell size={16} /> },
@@ -65,42 +71,60 @@ function MoreMenu() {
   ];
 
   return (
-    <Menu
-      label={t("More")}
-      side="bottom"
-      align="end"
-      open={open()}
-      onOpenChange={setOpen}
-      class="w-52"
-      trigger={
-        <BarButton
-          label={t("More")}
-          testId="app-bar-more"
-          pressed={open() ? "true" : "false"}
-          icon={<Ellipsis size={20} />}
-        />
-      }
-    >
-      <For each={items}>
-        {(item) => (
+    <span class="relative inline-flex">
+      <Menu
+        label={t("More")}
+        side="bottom"
+        align="end"
+        open={open()}
+        onOpenChange={setOpen}
+        class="w-52"
+        trigger={
+          <BarButton
+            label={t("More")}
+            testId="app-bar-more"
+            pressed={open() ? "true" : "false"}
+            icon={<Ellipsis size={20} />}
+          />
+        }
+      >
+        <Show when={shell.project() !== undefined}>
           <MenuItem
-            data-testid={`app-bar-more-${item.to.split("/").pop()}`}
-            disabled={shell.project() === undefined}
-            icon={item.icon}
-            onSelect={() =>
-              void navigate({ to: item.to, params: { slug: shell.slug() }, search: {} })
-            }
+            data-testid="app-bar-sync"
+            icon={syncGlyph(sync)}
+            class={sync.pop.attention() !== "none" ? "text-on-surface-warning" : undefined}
+            onSelect={() => setTimeout(() => sync.pop.openChanged(true))}
           >
-            <span class="flex-1">{item.label}</span>
-            {item.to === "/project/$slug/findings" && attention() > 0 ? (
-              <span class="min-w-4 rounded-full bg-on-surface-error px-1 text-center text-smallest leading-4 font-semibold text-surface-error">
-                {attention() > 99 ? "99+" : attention()}
-              </span>
-            ) : null}
+            {syncHeadline(sync)}
           </MenuItem>
-        )}
-      </For>
-    </Menu>
+          <MenuSeparator />
+        </Show>
+        <For each={items}>
+          {(item) => (
+            <MenuItem
+              data-testid={`app-bar-more-${item.to.split("/").pop()}`}
+              disabled={shell.project() === undefined}
+              icon={item.icon}
+              onSelect={() =>
+                void navigate({ to: item.to, params: { slug: shell.slug() }, search: {} })
+              }
+            >
+              <span class="flex-1">{item.label}</span>
+              {item.to === "/project/$slug/findings" && attention() > 0 ? (
+                <span class="min-w-4 rounded-full bg-on-surface-error px-1 text-center text-smallest leading-4 font-semibold text-surface-error">
+                  {attention() > 99 ? "99+" : attention()}
+                </span>
+              ) : null}
+            </MenuItem>
+          )}
+        </For>
+      </Menu>
+      <span class="absolute end-0 bottom-0">
+        <Show when={shell.project() !== undefined}>
+          <SyncPopover sync={sync} />
+        </Show>
+      </span>
+    </span>
   );
 }
 
@@ -150,27 +174,46 @@ function ModeControl(props: {
   onChange: (next: Mode) => void;
 }) {
   return (
-    <SegmentedControl<Mode>
-      label={t("Mode")}
-      iconsWhenNarrow
-      class="mx-auto w-full max-w-[20.75rem] max-md:w-auto"
-      value={props.mode}
-      onChange={props.onChange}
-      items={[
-        {
-          value: "refine",
-          label: t("Refine"),
-          icon: <FileText aria-hidden="true" />,
-          disabled: !props.open,
-        },
-        {
-          value: "terms",
-          label: t("Spiritual terms"),
-          icon: <ListChecks aria-hidden="true" />,
-          disabled: !props.open,
-        },
-      ]}
-    />
+    // The id is the line-by-line tour's anchor (tour/tours/lineByLine.ts).
+    <div
+      id="app-mode-control"
+      class={cx(
+        "mx-auto w-full max-md:w-auto",
+        __SEFER_DESIGN__ ? "max-w-[30rem]" : "max-w-[20.75rem]",
+      )}
+    >
+      <SegmentedControl<Mode>
+        label={t("Mode")}
+        iconsWhenNarrow
+        class="w-full max-md:w-auto"
+        value={props.mode}
+        onChange={props.onChange}
+        items={[
+          {
+            value: "refine",
+            label: t("Refine"),
+            icon: <FileText aria-hidden="true" />,
+            disabled: !props.open,
+          },
+          ...(__SEFER_DESIGN__
+            ? [
+                {
+                  value: "form" as const,
+                  label: t("Form Mode"),
+                  icon: <Rows3 aria-hidden="true" />,
+                  disabled: !props.open,
+                },
+              ]
+            : []),
+          {
+            value: "terms",
+            label: t("Spiritual terms"),
+            icon: <ListChecks aria-hidden="true" />,
+            disabled: !props.open,
+          },
+        ]}
+      />
+    </div>
   );
 }
 
@@ -189,11 +232,17 @@ export function AppBar() {
 
   const mode = (): Mode | undefined => {
     if (terms() === "true") return "terms";
-    return refining() === "true" ? "refine" : undefined;
+    if (refining() !== "true") return undefined;
+    return __SEFER_DESIGN__ && shell.lineByLine() ? "form" : "refine";
   };
   const goTo = (next: Mode): void => {
-    if (next === "refine") void navigate({ to: "/project/$slug", params: { slug: shell.slug() } });
-    else if (next === "terms")
+    if (next === "refine" || next === "form") {
+      // Choosing a view shows that view: out of USFM, into reading or one verse per line.
+      shell.setMode("default");
+      shell.setLineByLine(next === "form");
+      if (refining() !== "true")
+        void navigate({ to: "/project/$slug", params: { slug: shell.slug() } });
+    } else if (next === "terms")
       void navigate({ to: "/project/$slug/terms", params: { slug: shell.slug() }, search: {} });
   };
 
@@ -208,7 +257,7 @@ export function AppBar() {
       <ModeControl mode={mode()} open={open()} onChange={goTo} />
 
       <div class="flex shrink-0 items-center gap-2">
-        <SyncButton />
+        <ProjectTools />
         <MoreMenu />
 
         <BarButton
