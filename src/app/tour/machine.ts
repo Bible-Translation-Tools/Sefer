@@ -77,6 +77,12 @@ interface Running {
   readonly index: number;
   readonly phase: "waiting" | "showing" | "timedOut";
   readonly fixed: boolean;
+  /**
+   * The step's `advance` has come true. The tour does not move on by itself:
+   * the card says the step is done and Next is for the person to press, so
+   * Back is never undone by a condition that is still true (the PO, 2026-10-23).
+   */
+  readonly reached: boolean;
 }
 
 const [running, setRunning] = createSignal<Running | undefined>(undefined, {
@@ -154,7 +160,7 @@ const enter = (context: TourContext, tour: Tour, steps: readonly Step[], index: 
     return;
   }
   const reported = new Set<string>();
-  setRunning({ tour, steps, index, phase: "waiting", fixed: false });
+  setRunning({ tour, steps, index, phase: "waiting", fixed: false, reached: false });
   safely(context, tour, index, "go", () => step.go?.(context), undefined, reported);
   const started = Date.now();
   poll = setInterval(() => {
@@ -171,13 +177,13 @@ const enter = (context: TourContext, tour: Tour, steps: readonly Step[], index: 
         reported,
       );
       if (ready) {
-        setRunning({ tour, steps, index, phase: "showing", fixed: false });
+        setRunning({ tour, steps, index, phase: "showing", fixed: false, reached: false });
         if (step.spotlight === undefined && step.panel === undefined && step.advance === undefined)
           enter(context, tour, steps, index + 1);
       } else if (Date.now() - started > (step.timeoutMs ?? READY_TIMEOUT_MS)) {
         stopPolling();
         drifted(context, tour, index, "never became ready");
-        setRunning({ tour, steps, index, phase: "timedOut", fixed: false });
+        setRunning({ tour, steps, index, phase: "timedOut", fixed: false, reached: false });
       }
       return;
     }
@@ -189,9 +195,10 @@ const enter = (context: TourContext, tour: Tour, steps: readonly Step[], index: 
     const advance = step.advance;
     if (
       typeof advance === "function" &&
+      !now.reached &&
       safely(context, tour, index, "advance", () => advance(context), false, reported)
     )
-      enter(context, tour, steps, index + 1);
+      setRunning({ ...(running() ?? now), reached: true });
   }, POLL_MS);
 };
 

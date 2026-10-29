@@ -14,11 +14,18 @@ const Row = Schema.Struct({
   books: Schema.Number,
   lastOpened: Schema.optionalKey(Schema.String),
   from: Schema.optionalKey(ProjectOrigin),
+  /** `sourceKey` of each remote the project tracks now (origin, and its own copy if any). */
+  remotes: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 
 export type ProjectRow = typeof Row.Type;
 
-const INDEX_VERSION = 4;
+/**
+ * 5 added `remotes`. An index of an older version reads as empty, and
+ * `repairProjectIndex` then describes every project folder afresh, so each
+ * row gains its remotes once, on the first listing after the update.
+ */
+const INDEX_VERSION = 5;
 
 const Index = Schema.Struct({ v: Schema.Literal(INDEX_VERSION), rows: Schema.Array(Row) });
 
@@ -75,6 +82,38 @@ export const recordProject = (
         ? { ...row, lastOpened: existing.lastOpened }
         : row;
     yield* writeProjectIndex(fileSystem, projectsRoot, [...withoutRoot(rows, row.root), merged]);
+  });
+
+/** The project already tracking this repository, by any of its remotes. */
+export const projectTracking = (
+  fileSystem: FileSystem.FileSystem,
+  projectsRoot: string,
+  key: string,
+): Effect.Effect<ProjectRow | undefined> =>
+  Effect.map(readProjectIndex(fileSystem, projectsRoot), (rows) =>
+    rows.find((row) => row.remotes?.includes(key) === true),
+  );
+
+/** Rewrites one row's remotes; nothing when the root has no row (a source text, say). */
+export const noteRemotes = (
+  fileSystem: FileSystem.FileSystem,
+  projectsRoot: string,
+  root: string,
+  remotes: readonly string[],
+): Effect.Effect<void, PlatformError.PlatformError> =>
+  Effect.gen(function* () {
+    const rows = yield* readProjectIndex(fileSystem, projectsRoot);
+    const existing = rows.find((row) => row.root === root);
+    if (existing === undefined) return;
+    if (
+      existing.remotes?.length === remotes.length &&
+      remotes.every((key) => existing.remotes?.includes(key) === true)
+    )
+      return;
+    yield* writeProjectIndex(fileSystem, projectsRoot, [
+      ...withoutRoot(rows, root),
+      { ...existing, remotes },
+    ]);
   });
 
 export const forgetProject = (

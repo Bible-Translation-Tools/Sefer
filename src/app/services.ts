@@ -32,6 +32,7 @@ import { NoUpdaterLive, Updater, type UpdaterService } from "#core/host/updater"
 import { Observability } from "#core/observability";
 import { METADATA_FILE } from "#core/project/discovery";
 import type { Seat } from "#core/project/project";
+import { indexingRemotes } from "#core/project/remotes";
 import { Recovery, RecoveryLive, type RecoveryService } from "#core/recovery/recovery";
 import { Gitea, GiteaLive, type GiteaService, type HttpFetch } from "#core/remote/gitea";
 import { Remote, type RemoteService } from "#core/remote/remote";
@@ -286,8 +287,8 @@ const laned = <EG, RG, ER, RR>(
   ).pipe(Layer.provide(Layer.merge(hostGit, repositories)));
   const remote = Layer.effect(
     Remote,
-    Effect.map(Effect.all([Remote, Repositories]), ([inner, lanes]) =>
-      serialiseRemote(inner, lanes),
+    Effect.map(Effect.all([Remote, Repositories, FileSystem.FileSystem]), ([inner, lanes, files]) =>
+      indexingRemotes(serialiseRemote(inner, lanes), files),
     ),
   ).pipe(Layer.provide(Layer.merge(hostRemote, repositories)));
   return Layer.mergeAll(git, remote, repositories);

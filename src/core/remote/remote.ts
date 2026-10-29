@@ -10,6 +10,9 @@ export interface Progress {
   readonly unit?: "objects" | "bytes";
 }
 
+/** The remote a project in "own copy" mode sends to: the person's fork. `origin` stays the shared project. */
+export const COPY_REMOTE = "copy";
+
 export type RemoteFailureReason = "Unavailable" | "Unauthorized" | "Network" | "Rejected";
 
 export const remoteVerdict = (reason: RemoteFailureReason | undefined): Verdict => {

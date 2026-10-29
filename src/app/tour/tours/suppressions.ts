@@ -133,7 +133,7 @@ export const suppressionsTour: Tour = {
         anchor: "[data-tour=fine-here]",
         title: "Fine here",
         body: "Fine here means: I have looked at this one, it is right, stop showing it to me. Only this one, at this place. The same thing elsewhere in the Bible still shows, because it might be a real mistake there.",
-        try: "Press Fine here on this card. The walk-through moves on when you do.",
+        try: "Press Fine here on this card.",
         notes: [
           {
             label: "What Sefer remembers",
