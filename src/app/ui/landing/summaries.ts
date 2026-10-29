@@ -3,6 +3,7 @@ import { createSignal } from "solid-js";
 
 import { ProjectAdmin } from "#core/admin/projectAdmin";
 import { lastSegment } from "#core/fileSystem/path";
+import { Git } from "#core/git/git";
 import { HostInfo } from "#core/host/hostInfo";
 import {
   forgetProject,
@@ -11,6 +12,8 @@ import {
   type ProjectRow,
 } from "#core/project/projectIndex";
 import { firstArrival, type ProjectOrigin } from "#core/project/provenance";
+import { remotesOf } from "#core/project/remotes";
+import { Remote } from "#core/remote/remote";
 
 import { languageName, languageTag, projectDisplayName } from "../../language";
 import { uiLocale } from "../../locale";
@@ -25,6 +28,8 @@ export interface ProjectSummary {
   readonly books: number;
   readonly lastOpened: string | undefined;
   readonly from: ProjectOrigin | undefined;
+  /** `sourceKey` of each remote it tracks, from the index. */
+  readonly remotes: readonly string[];
   readonly fixture: boolean;
 }
 
@@ -49,6 +54,12 @@ const summarize = (
     );
     const recorded = yield* Effect.map(admin.recordedName(root), Option.getOrUndefined);
     const from = yield* Effect.map(firstArrival(fileSystem, root), Option.getOrUndefined);
+    const remotes = yield* Effect.orElseSucceed(
+      Effect.flatMap(Effect.all([Git, Remote]), ([git, remote]) =>
+        Effect.flatMap(git.open(root), (repo) => remotesOf(remote, repo)),
+      ),
+      (): readonly string[] => [],
+    );
 
     const folder = lastSegment(root);
     const locale = host.locale();
@@ -61,6 +72,7 @@ const summarize = (
       books: entries.filter(isUsfm).length,
       lastOpened,
       from,
+      remotes,
       fixture,
     };
   });
@@ -73,6 +85,7 @@ const asRow = (summary: ProjectSummary): ProjectRow => ({
   books: summary.books,
   ...(summary.lastOpened === undefined ? {} : { lastOpened: summary.lastOpened }),
   ...(summary.from === undefined ? {} : { from: summary.from }),
+  ...(summary.remotes.length === 0 ? {} : { remotes: summary.remotes }),
 });
 
 const asSummary = (row: ProjectRow, lastOpened: string | undefined): ProjectSummary => ({
@@ -84,6 +97,7 @@ const asSummary = (row: ProjectRow, lastOpened: string | undefined): ProjectSumm
   books: row.books,
   lastOpened: row.lastOpened ?? lastOpened,
   from: row.from,
+  remotes: row.remotes ?? [],
   fixture: false,
 });
 

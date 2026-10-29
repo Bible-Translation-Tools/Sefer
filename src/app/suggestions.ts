@@ -4,7 +4,7 @@ import { Git, type Commit, type Repo } from "#core/git/git";
 import { Settings } from "#core/host/settings";
 import type { Project } from "#core/project/project";
 import { Gitea, type ForkParent, type RemoteRepo } from "#core/remote/gitea";
-import { Remote } from "#core/remote/remote";
+import { COPY_REMOTE, Remote } from "#core/remote/remote";
 import { BROUGHT_IN, Suggestions, type Suggestion } from "#core/remote/suggestions";
 import { notIn, trackingRef } from "#core/sync";
 
@@ -13,7 +13,7 @@ import { t } from "./i18n";
 import type { Services } from "./services";
 import { chosenMode, setChosenMode, type CollabMode } from "./syncSettings";
 
-const COPY = "copy";
+const COPY = COPY_REMOTE;
 
 export const copyRef = (branch: string): string => trackingRef(branch, COPY);
 

@@ -650,7 +650,7 @@ export function MigrateScreen(props: {
         />
 
         <div class="grid min-h-0 grid-cols-[15rem_minmax(0,1fr)] items-start gap-4">
-          <Card padded={false} class="max-h-[75vh] overflow-y-auto">
+          <Card padded={false} data-tour="migrate-books" class="max-h-[75vh] overflow-y-auto">
             <TestamentSection
               testament="ot"
               title={t("Old Testament")}

@@ -5,6 +5,7 @@ import { lineByLineTour } from "./lineByLine";
 import { notesTour } from "./notes";
 import { suppressionsTour } from "./suppressions";
 import { verseNumbersWorkflow } from "./verseNumbers";
+import { writerTour } from "./writer";
 
 /**
  * Field tours ship everywhere; internal ones (notes to the PO about a design,
@@ -14,7 +15,7 @@ import { verseNumbersWorkflow } from "./verseNumbers";
 export const TOURS: readonly Tour[] = [
   verseNumbersWorkflow,
   ...(__SEFER_DESIGN__
-    ? [findingsTour, suppressionsTour, expectTour, notesTour, lineByLineTour]
+    ? [writerTour, findingsTour, suppressionsTour, expectTour, notesTour, lineByLineTour]
     : []),
 ];
 

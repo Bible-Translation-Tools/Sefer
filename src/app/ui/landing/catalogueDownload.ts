@@ -3,7 +3,13 @@ import { Effect, Fiber, Option, Stream } from "effect";
 import { Observability } from "#core/observability";
 import { Remote, remoteVerdict } from "#core/remote/remote";
 
-import { announceSourceTexts, arrivalRoot, cloneArrival, type ArrivalKind } from "../../arrival";
+import {
+  AlreadyHeld,
+  announceSourceTexts,
+  arrivalRoot,
+  cloneArrival,
+  type ArrivalKind,
+} from "../../arrival";
 import { type CatalogueEntry } from "../../catalogue";
 import { describe, describeTransfer, reasonOf, remoteReasonOf } from "../../describe";
 import { t } from "../../i18n";
@@ -102,9 +108,11 @@ export const downloadEntry = (
   setBusy: (id: string) => void,
   entry: CatalogueEntry,
   from: DOMRect,
+  open: (root: string) => void,
 ): void => {
   const kind: ArrivalKind = entry.type === "gateway" ? "sourceText" : "project";
   const into = arrivalRoot(services, kind, entry.gitUrl);
+  let arrivedAt = into;
   setBusy(entry.id);
   const toast = beginTracking(downloads, entry, kind, into, from);
   const watching = watchProgress(services, entry, toast, downloads);
@@ -121,7 +129,10 @@ export const downloadEntry = (
             const held = yield* services.library.cloned(entry.gitUrl);
             if (Option.isSome(held)) return "held" as const;
           }
-          yield* cloneArrival(services, kind, entry.gitUrl, { catalogueId: entry.id });
+          const arrived = yield* cloneArrival(services, kind, entry.gitUrl, {
+            catalogueId: entry.id,
+          });
+          arrivedAt = arrived.root;
           return "cloned" as const;
         }),
         Observability,
@@ -131,7 +142,7 @@ export const downloadEntry = (
     .then((outcome) => {
       operation.end("passed", { "import.phase": "complete", "import.outcome": outcome });
       announceDownloaded(outcome, entry, toast, downloads, () => {
-        void announceSourceTexts(services, into);
+        void announceSourceTexts(services, arrivedAt);
       });
     })
     .catch((cause: unknown) => {
@@ -140,6 +151,14 @@ export const downloadEntry = (
       });
       if (toast !== undefined) toasts.dismiss(toast);
       else downloads.update(entry.id, { state: "failed", status: describe(cause) });
+      if (cause instanceof AlreadyHeld) {
+        toasts.info({
+          title: t("Already on this device"),
+          message: cause.description,
+          action: { label: t("Open"), onPress: () => open(cause.root) },
+        });
+        return;
+      }
       toasts.error({
         title: t("Could not download {name}", { name: entry.repo }),
         message: describe(cause),

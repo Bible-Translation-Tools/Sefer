@@ -7,6 +7,7 @@ Loadable skills live in `agents/skills/` (`.claude/skills` is a symlink to it):
 - [Release channels](agents/skills/release-channels/SKILL.md): read before deploying, tagging, or answering "what does a push to master do"; the dev/preview/production matrix, the tag format, the exact commands, and why master deploys `dev`.
 - [The design surface](agents/skills/design-surface/SKILL.md): read before design work; prototyping on `/design`, the point-and-comment collector, variants and tweaks, and how a designer's change graduates into the real screens.
 - [Merging designer code](agents/skills/merging-designer-code/SKILL.md): read before merging, reviewing or getting green the designer's branch; the merge mechanics and the developer questions he does not ask for himself.
+- [Verify Sefer](agents/skills/verify-sefer/SKILL.md): read before claiming a UI change works or when asked to try something in the app; the order of a verification run (your own instance, doctor, drive, evidence, cleanup) and the feature map, one file per feature saying how a person reaches it, how to drive it, and what proves it.
 - [Plans](agents/skills/plans/SKILL.md): plans, ideas, open questions, follow-ups and trade-offs live in `planning/items/*.mdx`; read before planning, recording or answering an open question, triaging a transcript, or acting on comments pasted from the planning site. `pnpm plans open` lists what is open.
 
 Read only the guidance relevant to the task:

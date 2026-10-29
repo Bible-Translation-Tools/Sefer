@@ -189,9 +189,10 @@ const ProgressDialog = (props: { readonly state: Progress; readonly onClose: () 
   </Dialog>
 );
 
-type HubServices = ImportContext["services"];
-
-const createImportProgress = (services: HubServices, onImported: () => void) => {
+/** Every import's progress dialog, and its way to open a project that turns out to be here already. */
+const createImportProgress = (shell: ReturnType<typeof useShell>) => {
+  const { services } = shell;
+  const navigate = useNavigate();
   const [progress, setProgress] = createSignal<Progress | undefined>(undefined, {
     name: "importProgress",
   });
@@ -201,7 +202,8 @@ const createImportProgress = (services: HubServices, onImported: () => void) => 
       setProgress({ title, step, message: "", failed: false, detail }),
     finished: (title, message, failed) => setProgress({ title, step: undefined, message, failed }),
     clear: () => setProgress(undefined),
-    onImported,
+    onImported: () => undefined,
+    open: (root) => void navigate({ to: "/project/$slug", params: { slug: shell.slugFor(root) } }),
   };
   return { progress, context };
 };
@@ -211,7 +213,7 @@ export function ImportHub(props: { readonly variant: "buttons" | "drop" }) {
   const { services } = shell;
   const capabilities = services.hostInfo.capabilities();
 
-  const { progress, context } = createImportProgress(services, () => undefined);
+  const { progress, context } = createImportProgress(shell);
 
   const nativeFolder = capabilities.nativeDisk && capabilities.dialogs;
 
@@ -263,8 +265,7 @@ export function ImportHub(props: { readonly variant: "buttons" | "drop" }) {
  * pipeline and progress dialog as every other import. For technicians; most people never see it.
  */
 export function CloneFromUrl(props: { readonly url: string }) {
-  const { services } = useShell();
-  const { progress, context } = createImportProgress(services, () => undefined);
+  const { progress, context } = createImportProgress(useShell());
   return (
     <>
       <Button

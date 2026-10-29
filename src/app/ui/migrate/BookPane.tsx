@@ -298,7 +298,11 @@ export function BookPane(props: {
   };
 
   return (
-    <Card padded={false} class="flex min-h-0 min-w-0 flex-col overflow-hidden">
+    <Card
+      padded={false}
+      data-tour="migrate-book-pane"
+      class="flex min-h-0 min-w-0 flex-col overflow-hidden"
+    >
       <div class="flex flex-wrap items-baseline gap-3 border-b border-surface-border px-4 py-3">
         <span class="me-auto text-h4 font-semibold">{name()}</span>
         <Show when={source()}>
