@@ -37,6 +37,8 @@ export const verseEnd = (structure: DocStructure, doc: string, k: number): numbe
   let end = verse.contentFrom;
   for (const line of structure.lines) {
     if (line.from >= next) break;
+    // A verse ends at the next chapter: its `\\cp`, `\\ca` and heading are not the verse's.
+    if (line.cls === "slot.c" && line.from >= verse.contentFrom) break;
     if (line.to <= verse.contentFrom || line.contentFrom >= line.to || isLabel(line.cls)) continue;
     end = Math.min(line.to, next);
   }
