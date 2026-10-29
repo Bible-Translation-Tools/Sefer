@@ -106,7 +106,7 @@
   "chapter_labels_use_everywhere": "Use for every book",
   "chapter_labels_leave": "Leave as it is",
   "chapter_labels_word_count": "{word} ({count}×)",
-  "chapter_labels_book_label": "{word} (book label)",
+  "chapter_labels_book_label": "{word} ({count}×, book label)",
   "chapter_labels_other": "Another word",
   "chapter_labels_kept": "{count, plural, one {# label written its own way, kept} other {# labels written their own way, kept}}",
   "chapter_labels_kept_row": "Chapter {chapter}: {text}",
@@ -116,5 +116,6 @@
   "chapter_labels_cancel": "Cancel",
   "chapter_labels_done": "{count, plural, one {Chapter labels standardized in # book} other {Chapter labels standardized in # books}}",
   "chapter_labels_nothing": "Every chosen book already reads that way",
-  "chapter_labels_stale": "A book changed while this was open; open Chapter labels again"
+  "chapter_labels_stale": "A book changed while this was open; open Chapter labels again",
+  "chapter_labels_use_most": "Use {word} everywhere ({count}×, the most used)"
 }

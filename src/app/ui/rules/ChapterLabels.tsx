@@ -21,6 +21,8 @@ interface Row {
   readonly id: BookId;
   readonly name: string;
   readonly words: readonly (readonly [string, number])[];
+  /** The book label's word, when it has one. */
+  readonly bookWord?: string;
   readonly kept: readonly ChapterLabel[];
 }
 
@@ -55,6 +57,7 @@ export function ChapterLabelsDialog(props: {
           id: book.id,
           name: bookName(book.id, metadata),
           words: [...wordsOf(labels)],
+          ...(labels.book === undefined ? {} : { bookWord: labels.book.text }),
           kept: keptAsWritten(labels),
         },
       ];
@@ -81,8 +84,19 @@ export function ChapterLabelsDialog(props: {
     return word === "" ? undefined : word;
   };
 
-  const useEverywhere = (): void => {
-    const word = everyWord().trim();
+  /** The project's most used word: how many chapters read it, every book summed. */
+  const mostUsed = createMemo((): { readonly word: string; readonly count: number } | undefined => {
+    const totals = new Map<string, number>();
+    for (const row of rows())
+      for (const [word, count] of row.words) totals.set(word, (totals.get(word) ?? 0) + count);
+    let best: { word: string; count: number } | undefined;
+    for (const [word, count] of totals)
+      if (best === undefined || count > best.count) best = { word, count };
+    return best;
+  });
+
+  const useEverywhere = (given?: string): void => {
+    const word = (given ?? everyWord()).trim();
     if (word === "") return;
     for (const row of rows()) {
       const own = row.words.some(([candidate]) => candidate === word);
@@ -136,10 +150,27 @@ export function ChapterLabelsDialog(props: {
             value={everyWord()}
             onInput={(event) => setEveryWord(event.currentTarget.value)}
           />
-          <Button variant="secondary" disabled={everyWord().trim() === ""} onClick={useEverywhere}>
+          <Button
+            variant="secondary"
+            disabled={everyWord().trim() === ""}
+            onClick={() => useEverywhere()}
+          >
             {m.chapter_labels_use_everywhere()}
           </Button>
         </div>
+        <Show when={mostUsed()}>
+          {(most) => (
+            <div class="pb-3">
+              <Button
+                variant="secondary"
+                data-testid="chapter-labels-use-most"
+                onClick={() => useEverywhere(most().word)}
+              >
+                {m.chapter_labels_use_most({ word: most().word, count: most().count })}
+              </Button>
+            </div>
+          )}
+        </Show>
         <div class="max-h-[60vh] overflow-y-auto" data-testid="chapter-labels-books">
           <For each={rows()}>
             {(row) => (
@@ -158,8 +189,8 @@ export function ChapterLabelsDialog(props: {
                     <For each={row.words}>
                       {([word, count]) => (
                         <option value={word}>
-                          {count === 0
-                            ? m.chapter_labels_book_label({ word })
+                          {word === row.bookWord
+                            ? m.chapter_labels_book_label({ word, count })
                             : m.chapter_labels_word_count({ word, count })}
                         </option>
                       )}

@@ -47,6 +47,8 @@ export interface BookLabels {
   readonly book?: ChapterLabel;
   /** Where a book label goes, before chapter 1's `\c`, and what it is written as; undefined with no chapters. */
   readonly bookLabelAt?: { readonly at: number; readonly line: (word: string) => string };
+  /** How many chapters the book has. */
+  readonly chapters: number;
 }
 
 const CL = MARKERS.findIndex((row) => row.name === "cl");
@@ -122,6 +124,7 @@ export const chapterLabelsOf = (analysis: Analysis): BookLabels => {
   const first = chapters[0];
   const result: BookLabels = {
     labels,
+    chapters: chapters.length,
     ...(book === undefined ? {} : { book }),
     ...(first === undefined
       ? {}
@@ -138,12 +141,22 @@ export const chapterLabelsOf = (analysis: Analysis): BookLabels => {
   return result;
 };
 
-/** The words a book puts beside its chapter numbers, most used first, with its book label's word (0 if only there). */
+/**
+ * The words a book's chapters read, most used first, each with how many
+ * chapters read it: a chapter's own "word + number" label, else the book
+ * label, which names every chapter without a label of its own.
+ */
 export const wordsOf = (book: BookLabels): ReadonlyMap<string, number> => {
   const counts = new Map<string, number>();
+  const named = new Set<number>();
+  for (const label of book.labels)
+    if (label.chapter !== null && label.text !== "") named.add(label.chapter);
   for (const label of book.labels)
     if (label.word !== undefined) counts.set(label.word, (counts.get(label.word) ?? 0) + 1);
-  if (book.book !== undefined && !counts.has(book.book.text)) counts.set(book.book.text, 0);
+  if (book.book !== undefined) {
+    const word = book.book.text;
+    counts.set(word, (counts.get(word) ?? 0) + Math.max(0, book.chapters - named.size));
+  }
   return new Map([...counts].sort((a, b) => b[1] - a[1]));
 };
 

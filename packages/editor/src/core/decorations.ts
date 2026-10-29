@@ -1113,6 +1113,10 @@ class ChapterTitleWidget extends WidgetType {
     span.textContent = this.words;
     return span;
   }
+  /** A press on the words is the title's (`titlesAreTheHosts`), not swallowed by the widget. */
+  ignoreEvent() {
+    return false;
+  }
 }
 
 /**

@@ -1016,6 +1016,15 @@
 .cm-mode-regular .usfm-chap-named .usfm-num-c {
   font-size: 1.6em;
 }
+/* A title the host opens (Sefer's chapter labels dialog) reads as a link. */
+.cm-mode-regular.cm-titles-open .usfm-chap .usfm-chap-label,
+.cm-mode-regular.cm-titles-open .usfm-chap-named .usfm-num-c {
+  cursor: pointer;
+}
+.cm-mode-regular.cm-titles-open .usfm-chap .usfm-chap-label:hover,
+.cm-mode-regular.cm-titles-open .usfm-chap-named .usfm-num-c:hover {
+  text-decoration: underline;
+}
 /* The chapter has its own label: the number's line is hidden and the label,
    drawn on it, is the chapter's title. */
 .cm-mode-regular .usfm-chap-title {

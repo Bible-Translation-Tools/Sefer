@@ -679,6 +679,14 @@ const titlePressed = new WeakSet<EditorView>();
  * browser sends no click; and the release comes after the pointer-up a dialog
  * listens for, so the dialog it opens stays open.
  */
+/** `cm-titles-open` while the host wants presses on titles: the stylesheet shows them as links. */
+const titlesOpenClass = EditorView.editorAttributes.of((view) =>
+  view.state.facet(modeFacet) === "regular" &&
+  view.state.facet(chapterTitleAction)?.wants() === true
+    ? { class: "cm-titles-open" }
+    : null,
+);
+
 const titlesAreTheHosts = EditorView.domEventHandlers({
   mouseup(_event, view) {
     if (!titlePressed.has(view)) return false;
@@ -919,6 +927,7 @@ export const verseLineBehaviour: Extension = [
   chapterHeadingsAreFixed,
   pressesAboveTitlesStayBehind,
   titlesAreTheHosts,
+  titlesOpenClass,
   emptiedChaptersKeepVerseOne,
   typeIntoEmptyChapter,
   caretBesideEmptyChapterVerse,
