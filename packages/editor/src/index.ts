@@ -28,6 +28,8 @@ export { type Figure } from "./core/figures";
 export { type LineKind } from "./core/poetryLevels";
 export { type UnsupportedMarkup } from "./core/unsupported";
 export { PHRASES, type EditorWords, type PhraseKey } from "./core/words";
+export { KEY_BUNDLES, type EditorMode, type KeyBundle } from "./core/keymaps";
+export { DEFAULT_PREFERENCES, type EditorPreferences } from "./core/preferences";
 
 export {
   mountBookEditor,

@@ -21,6 +21,7 @@ import { annotateOpen } from "./core/instrument";
 import { trusted } from "./core/kernel";
 import { keystrokeMeter } from "./core/meter";
 import { lineKindAt, turnLineInto, type LineKind } from "./core/poetryLevels";
+import { changePreferences, editorPreferences, type EditorPreferences } from "./core/preferences";
 import { deleteColumn, deleteRow, insertColumn, insertRow } from "./core/tableCommands";
 import { span } from "./core/timing";
 import { type UnsupportedMarkup, unsupportedMarkup } from "./core/unsupported";
@@ -74,6 +75,8 @@ export interface BookEditorOptions {
    * English. Decided by the book's first mount.
    */
   readonly words?: EditorWords;
+  /** The editor's switches (`EditorPreferences`); any left out take their defaults. Each mount's own, changed live by `setPreferences`. */
+  readonly preferences?: Partial<EditorPreferences>;
 }
 
 /** One mark the linter draws: the engine's and the host's (`setHostDiagnostics`) as one set. */
@@ -98,6 +101,8 @@ export interface BookEditorMount extends EditorHandle {
   setChapter(ordinal: number | null): void;
   setEmptyBlocks(on: boolean): void;
   setPairBlocks(on: boolean): void;
+  /** Changes some of the editor's switches, leaving the rest. */
+  setPreferences(next: Partial<EditorPreferences>): void;
   /** The host's own findings for this book, drawn with the engine's as one set. */
   setHostDiagnostics(findings: readonly CorpusFinding[]): void;
   /** What the linter draws now. */
@@ -315,6 +320,7 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
         ...(options.features ?? []),
         ...(options.words === undefined ? [] : [editorWords.of(options.words)]),
         drawnWords,
+        editorPreferences(options.preferences),
         EditorView.updateListener.of((update) => {
           const listeners = activateListeners.get(book);
           if (listeners === undefined || listeners.size === 0) return;
@@ -333,7 +339,11 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
   const readOnlyOf = (on: boolean) =>
     on ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : [];
   created.dispatch({
-    effects: readOnlyCompartment.reconfigure(readOnlyOf(options.readOnly === true)),
+    effects: [
+      readOnlyCompartment.reconfigure(readOnlyOf(options.readOnly === true)),
+      // Every mount's, like read-only: the book outlives a screen that set them.
+      ...(options.preferences === undefined ? [] : [changePreferences(options.preferences)]),
+    ],
   });
 
   const run = (spec: TransactionSpec | null): boolean => {
@@ -385,6 +395,8 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
     },
     setEmptyBlocks: (on: boolean) => showEmptyBlocks(created, on),
     setPairBlocks: (on: boolean) => showBlockPairs(created, on),
+    setPreferences: (next: Partial<EditorPreferences>) =>
+      created.dispatch({ effects: changePreferences(next) }),
     setHostDiagnostics: (findings: readonly CorpusFinding[]) =>
       showCorpusFindings(created, [...findings]),
     resume: (place: RememberedPlace) => {

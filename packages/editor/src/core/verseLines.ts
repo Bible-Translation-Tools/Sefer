@@ -20,6 +20,7 @@ import {
 import { docText, structureAt, type DocStructure } from "./docStructure";
 import type { DocLine, VerseRow } from "./fold";
 import { isVisual, modeFacet, trusted } from "./kernel";
+import { preferenceOn } from "./preferences";
 import { assignmentAt, isContainerClass } from "./registry";
 
 /** The verse the caret is in: the last one whose marker starts at or before it, or -1 before the first. */
@@ -363,6 +364,7 @@ const SAME_VERSE_BEFORE = /\\v\s+(\d+)\s*$/;
  */
 const typedVerseNumbers = EditorView.inputHandler.of((view, from, to, text) => {
   if (text !== " " || from !== to || view.state.facet(modeFacet) !== "regular") return false;
+  if (!preferenceOn(view.state, "verseShortcuts")) return false;
   const line = view.state.doc.lineAt(from);
   const before = view.state.doc.sliceString(line.from, from);
   const typed = TYPED_VERSE.exec(before);

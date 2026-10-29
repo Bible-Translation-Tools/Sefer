@@ -92,7 +92,15 @@ function watchSettings(shell: Shell, editor: BookEditorMount) {
       }),
     ),
   );
-  return { ghosting, pairing };
+  const shortcutsKey = shellKeys(shell.services.settings).verseShortcuts;
+  const shortcuts = shell.services.runtime.runFork(
+    Stream.runForEach(shell.services.settings.changes(shortcutsKey), (on) =>
+      Effect.sync(() => {
+        editor.setPreferences({ verseShortcuts: on });
+      }),
+    ),
+  );
+  return { ghosting, pairing, shortcuts };
 }
 
 export function BookEditor(props: BookEditorProps) {
@@ -128,6 +136,7 @@ export function BookEditor(props: BookEditorProps) {
         blockName: nameBlock,
         emptyBlocks: settings.get(keys.annotateEmptyParagraphs),
         pairBlocks: settings.get(keys.pairBlocks),
+        preferences: { verseShortcuts: settings.get(keys.verseShortcuts) },
         features: editorFeatures(),
         words: editorWords,
       });
@@ -148,7 +157,7 @@ export function BookEditor(props: BookEditorProps) {
 
       const { watching, unsuppressing } = watchCorpus(shell, editor, book);
 
-      const { ghosting, pairing } = watchSettings(shell, editor);
+      const { ghosting, pairing, shortcuts } = watchSettings(shell, editor);
 
       const unwatch = editor.onViewport((where) => {
         if (where !== null)
@@ -174,6 +183,7 @@ export function BookEditor(props: BookEditorProps) {
         shell.noteCaret(undefined);
         Effect.runFork(Fiber.interrupt(ghosting));
         Effect.runFork(Fiber.interrupt(pairing));
+        Effect.runFork(Fiber.interrupt(shortcuts));
         Effect.runFork(Fiber.interrupt(watching));
         unsuppressing();
         unsubscribe();

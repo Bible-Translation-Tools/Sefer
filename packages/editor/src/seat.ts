@@ -2,7 +2,8 @@ import type { Extension } from "@codemirror/state";
 import type { Book } from "@sefer/text/book";
 
 import { editorBook, type EditorBook, type EditorBookOptions } from "./book";
-import { commandsLayer, viewLayer } from "./core/compose";
+import { viewLayer } from "./core/compose";
+import { commandsLayer } from "./core/keymaps";
 import { findingMarks } from "./recipes/findingMarks";
 import { usfmLinter } from "./recipes/lint";
 import { lintHoverGrace } from "./recipes/lintHover";
