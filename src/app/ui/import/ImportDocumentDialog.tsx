@@ -3,7 +3,7 @@ import { editorPolicy, type EditorBook } from "@sefer/editor";
 import { Result } from "effect";
 import FileUp from "lucide-solid/icons/file-up";
 import Info from "lucide-solid/icons/info";
-import { For, Show, createMemo, createSignal } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 
 import {
   applyImport,
@@ -79,10 +79,26 @@ function ImportInto(props: { readonly book: EditorBook; readonly onClose: () => 
   const [off, setOff] = createSignal<ReadonlySet<SwitchKey>>(new Set(), { name: "importOff" });
   const [verses, setVerses] = createSignal<VerseMode | "auto">("auto", { name: "importVerses" });
   const [words, setWords] = createSignal("", { name: "importWords" });
+  // Typing re-renders the document and re-runs the overlay; wait for a pause.
+  const [scopeSettled, setScopeSettled] = createSignal("", { name: "importScopeSettled" });
+  const [wordsSettled, setWordsSettled] = createSignal("", { name: "importWordsSettled" });
+  createEffect(
+    () => ({ scope: scope(), words: words() }),
+    (typed) => {
+      const timer = setTimeout(() => {
+        setScopeSettled(typed.scope);
+        setWordsSettled(typed.words);
+      }, 250);
+      return () => clearTimeout(timer);
+    },
+  );
+  // The book went away (project closed) with the dialog open: close it, so it
+  // does not come back unasked with the next book.
+  onCleanup(() => props.onClose());
 
   const bookHasText = () => /\\c\s+\d/.test(props.book.source().text);
   const chapterWords = () => {
-    const typed = words()
+    const typed = wordsSettled()
       .split(",")
       .map((w) => w.trim())
       .filter((w) => w !== "");
@@ -91,14 +107,18 @@ function ImportInto(props: { readonly book: EditorBook; readonly onClose: () => 
     return own === undefined ? ["chapter"] : ["chapter", own];
   };
 
+  // A second file chosen while the first is still being read wins.
+  let latest = 0;
   const choose = async (file: File) => {
+    const ticket = ++latest;
     setProblem("");
     setLoaded(undefined);
     try {
       const lib = await import("@sefer/document-import");
       const reading = await lib.readDocument(new Uint8Array(await file.arrayBuffer()));
-      setLoaded({ name: file.name, reading, lib });
+      if (ticket === latest) setLoaded({ name: file.name, reading, lib });
     } catch (error) {
+      if (ticket !== latest) return;
       setProblem(
         m.import_document_unreadable({
           file: file.name,
@@ -139,7 +159,7 @@ function ImportInto(props: { readonly book: EditorBook; readonly onClose: () => 
     ():
       | { readonly ok: true; readonly chapters: ImportChapters }
       | { readonly ok: false; readonly message: string } => {
-      const text = scope().trim();
+      const text = scopeSettled().trim();
       if (text === "") return { ok: true, chapters: undefined };
       const citation = shell.location.read(text);
       if (!citation.ok) return { ok: false, message: m.import_document_scope_problem({ text }) };
@@ -286,6 +306,8 @@ function ImportInto(props: { readonly book: EditorBook; readonly onClose: () => 
             data-import-document-file
             onChange={(event) => {
               const file = event.currentTarget.files?.[0];
+              // Cleared, so choosing the same file again (fixed in Word) reads it again.
+              event.currentTarget.value = "";
               if (file !== undefined) void choose(file);
             }}
           />

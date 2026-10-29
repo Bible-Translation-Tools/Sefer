@@ -32,6 +32,7 @@ Preconditions: the fixture (`?fixture=1`) has Psalms, Philemon, 3 John and Jude,
 
 - The fixture resets on reload; drive the palette from inside the app.
 - The hidden file input is the handle; agent-browser's `upload` sets it directly.
+- The Chapters box and the chapter words wait 250 ms after typing before the preview changes; read the notes after a pause.
 - The preview is an editor view: it paints only when a screenshot renders a frame.
 
-Last walked end to end: 2026-10-29, steps 1–7 on the Web fixture with a generated Philemon `.docx`. Not walked: `.odt`, footnotes, the Advanced settings, desktop.
+Last walked end to end: 2026-10-29 (twice, the second after the review fixes, adding Cancel and reopening and the same file chosen twice), steps 1–7 on the Web fixture with a generated Philemon `.docx`. Not walked: `.odt`, footnotes, the Advanced settings, desktop.
