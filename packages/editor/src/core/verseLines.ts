@@ -415,7 +415,22 @@ export interface ChapterTitles {
   readonly folds: readonly { readonly from: number; readonly to: number; readonly label: number }[];
 }
 
+/**
+ * Each scan is kept per structure: one structure is one document, and the
+ * filters below ask for the same chapters several times a keystroke.
+ */
+const titlesSeen = new WeakMap<DocStructure, ChapterTitles>();
+const emptySeen = new WeakMap<DocStructure, readonly EmptyChapter[]>();
+
 export const chapterTitles = (doc: string, structure: DocStructure): ChapterTitles => {
+  const seen = titlesSeen.get(structure);
+  if (seen !== undefined) return seen;
+  const titles = scanChapterTitles(doc, structure);
+  titlesSeen.set(structure, titles);
+  return titles;
+};
+
+const scanChapterTitles = (doc: string, structure: DocStructure): ChapterTitles => {
   const verseStarts = new Set(structure.verses.map((verse) => verse.markerFrom));
   const opensVerse = (line: DocLine): boolean =>
     verseStarts.has(line.contentFrom) || verseStarts.has(line.from);
@@ -474,6 +489,14 @@ export interface EmptyChapter {
 const VISIBLE = /\\v[ \t]+[\w-]*|\\[A-Za-z0-9]+\*?|\s+/g;
 
 export const emptyChapters = (doc: string, structure: DocStructure): readonly EmptyChapter[] => {
+  const seen = emptySeen.get(structure);
+  if (seen !== undefined) return seen;
+  const found = scanEmptyChapters(doc, structure);
+  emptySeen.set(structure, found);
+  return found;
+};
+
+const scanEmptyChapters = (doc: string, structure: DocStructure): readonly EmptyChapter[] => {
   const { bookLabel } = chapterTitles(doc, structure);
   const chapters: DocLine[] = [];
   for (const line of structure.lines) if (line.cls === "slot.c") chapters.push(line);
