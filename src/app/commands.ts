@@ -57,6 +57,7 @@ export interface ShellBridge {
   readonly slug: () => string;
   readonly openProject: (root: string) => Promise<void>;
   readonly setPaletteOpen: (open: boolean) => void;
+  readonly setImportOpen: (open: boolean) => void;
   readonly sidebarOpen: () => boolean;
   readonly setSidebarOpen: (open: boolean) => void;
   readonly aim: (bookId: string, from: number, to?: number) => void;
@@ -383,6 +384,19 @@ const saveCommands = (bridge: ShellBridge, h: Helpers) => {
       run: () => {
         bridge.focused()?.history()?.redo();
       },
+    }),
+  ];
+};
+
+// The palette only, until the designer places it (2026-10-29).
+const importCommands = (bridge: ShellBridge, h: Helpers) => {
+  const { hasBook } = h;
+  return [
+    registerCommand({
+      id: "import.document",
+      title: m.import_document_command(),
+      when: hasBook,
+      run: () => bridge.setImportOpen(true),
     }),
   ];
 };
@@ -914,6 +928,7 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
     ...advancedCommands(bridge),
     ...saveCommands(bridge, h),
     ...searchCommands(bridge, h),
+    ...importCommands(bridge, h),
     ...chapterCommands(bridge, h),
     ...findingCommands(bridge, h),
     ...remoteCommands(bridge),
