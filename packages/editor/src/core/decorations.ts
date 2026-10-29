@@ -828,7 +828,7 @@ export function buildRegular(
 
   // Line by line keeps a table and a sidebar as Reading draws them, on their own lines.
   const kept = plan.verseLines ? keptAsReading(structure) : null;
-  if (kept !== null) joined += layOutVerseLines(structure, plan, add, outside, kept);
+  if (kept !== null) joined += layOutVerseLines(doc, structure, plan, add, outside, kept);
   nameChapters(doc, structure, add, outside);
   for (let i = 0; i < structure.blocks.length; i++) {
     if (kept !== null && !kept.blocks.has(i)) continue;
@@ -943,6 +943,7 @@ const isPoetryMarker = (marker: string | null): boolean => marker?.startsWith("q
  * written: the text and its offsets stay as they are.
  */
 function layOutVerseLines(
+  doc: string,
   structure: DocStructure,
   plan: DocPlan,
   add: Pending[],
@@ -960,8 +961,17 @@ function layOutVerseLines(
     line.cls === "block.heading" ||
     line.cls === "block.meta" ||
     line.cls === "block.front";
+  // An empty chapter's waiting paragraph shows its prompt: a line of its own.
+  const waiting = new Set(
+    emptyChapters(doc, structure).flatMap((chapter) =>
+      chapter.field === undefined ? [] : [chapter.field.line],
+    ),
+  );
   const showsNothing = (line: DocLine): boolean =>
-    line.cls !== "slot.c" && !opensVerse(line) && line.contentFrom >= line.to;
+    line.cls !== "slot.c" &&
+    !opensVerse(line) &&
+    !waiting.has(line.from) &&
+    line.contentFrom >= line.to;
   const lineStarts = new Set<number>();
 
   let joined = 0;
@@ -972,7 +982,11 @@ function layOutVerseLines(
     if (previous !== null && !outside(previous.to, line.contentFrom)) {
       const keepsBreak = opensVerse(line) || standsAlone(line) || standsAlone(previous);
       if (keepsBreak) {
-        if (line.from > previous.to + 1)
+        // A chapter line keeps its own line, and with it its title's classes:
+        // the empty lines before it fold into the line above instead.
+        if (line.cls === "slot.c" && line.from > previous.to + 1)
+          add.push({ from: previous.to, to: line.from - 1, deco: HIDDEN });
+        else if (line.from > previous.to + 1)
           add.push({ from: previous.to + 1, to: line.from, deco: HIDDEN });
       } else {
         add.push({
@@ -990,6 +1004,8 @@ function layOutVerseLines(
       continue;
     }
     if (line.cls === "block.para" && line.contentFrom > line.from && visibleFrom === line.from)
+      add.push({ from: line.from, to: line.contentFrom, deco: HIDDEN });
+    else if (waiting.has(line.from) && line.contentFrom > line.from)
       add.push({ from: line.from, to: line.contentFrom, deco: HIDDEN });
     const visualStart = previous === null ? line.from : previous.to + 1;
     if (opensVerse(line) && !outside(visualStart, visualStart))
@@ -1033,7 +1049,7 @@ function nameChapters(
   add: Pending[],
   outside: (from: number, to: number) => boolean,
 ): void {
-  const { bookLabel, named, folds } = chapterTitles(doc, structure);
+  const { bookLabel, chapters } = chapterTitles(doc, structure);
   const namedDeco =
     bookLabel === ""
       ? CHAPTER_NAMED
@@ -1041,22 +1057,65 @@ function nameChapters(
           class: "usfm-chap-named",
           attributes: { style: `--usfm-chapter-label: ${cssString(bookLabel)}` },
         });
-  for (const chapter of named)
-    if (!outside(chapter.from, chapter.from))
-      add.push({ from: chapter.from, to: chapter.from, deco: namedDeco });
-  const shown = folds.filter((fold) => !outside(fold.from, fold.to));
-  if (shown.length === 0) return;
-  // Each fold is one hide over its whole span. Hides already inside it (the
-  // marker, the number) go first: of two that overlap only the earlier is
-  // kept, and the number would still show.
-  const inFold = (d: Pending): boolean =>
-    d.to > d.from &&
-    specOf(d.deco).class === undefined &&
-    shown.some((fold) => d.from >= fold.from && d.to <= fold.to);
-  for (let k = add.length - 1; k >= 0; k--) if (inFold(add[k])) add.splice(k, 1);
-  for (const fold of shown) {
-    add.push({ from: fold.from, to: fold.to, deco: HIDDEN });
-    add.push({ from: fold.from, to: fold.from, deco: CHAPTER_TITLE });
+  // A chapter's own label lines are hidden whole, with the line break before
+  // each, so nothing is left of them; its `\\c` line, when it has a label,
+  // shows that label in place of the number. Only those lines: a heading
+  // between them stays the text's.
+  const hides: { from: number; to: number }[] = [];
+  const titled: { at: number; to: number; own: string }[] = [];
+  for (const chapter of chapters) {
+    const line = chapter.line;
+    if (outside(line.from, Math.max(line.to, ...chapter.labels.map((label) => label.to)))) continue;
+    // An empty `\\cl` names nothing and is left as it was.
+    for (const label of chapter.labels)
+      if (doc.slice(label.contentFrom, label.to).trim() !== "")
+        hides.push({ from: Math.max(0, label.from - 1), to: label.to });
+    if (chapter.own === undefined) add.push({ from: line.from, to: line.from, deco: namedDeco });
+    else titled.push({ at: line.from, to: line.to, own: chapter.own });
+  }
+  for (const title of titled) hides.push({ from: title.at, to: title.to });
+  if (hides.length === 0) return;
+  // Hides already inside one (the marker, the number) and a hidden line's own
+  // line class go first: of two that overlap only the earlier is kept.
+  const inside = (d: Pending): boolean =>
+    hides.some(
+      (h) =>
+        (d.to > d.from && specOf(d.deco).class === undefined && d.from >= h.from && d.to <= h.to) ||
+        (d.from === d.to &&
+          d.from > h.from &&
+          d.from <= h.to &&
+          h.from < h.to &&
+          doc[h.from] === "\n"),
+    );
+  for (let k = add.length - 1; k >= 0; k--) if (inside(add[k])) add.splice(k, 1);
+  for (const hide of hides) if (hide.to > hide.from) add.push({ ...hide, deco: HIDDEN });
+  for (const title of titled) {
+    add.push({ from: title.at, to: title.at, deco: CHAPTER_TITLE });
+    add.push({
+      from: title.to,
+      to: title.to,
+      deco: Decoration.widget({ widget: new ChapterTitleWidget(title.own), side: 1 }),
+    });
+  }
+}
+
+/** A chapter's own label, drawn as its title on its `\\c` line. */
+class ChapterTitleWidget extends WidgetType {
+  constructor(readonly words: string) {
+    super();
+  }
+  eq(other: ChapterTitleWidget) {
+    return other.words === this.words;
+  }
+  toDOM() {
+    const span = document.createElement("span");
+    span.className = "usfm-chap-label";
+    span.textContent = this.words;
+    return span;
+  }
+  /** A press on the words is the title's (`titlesAreTheHosts`), not swallowed by the widget. */
+  ignoreEvent() {
+    return false;
   }
 }
 

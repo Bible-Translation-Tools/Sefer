@@ -47,8 +47,8 @@ The generated half looks after itself; the judgement half does not. When a gate 
 | oxlint errors | 0 | `pnpm lint`, every commit |
 | oxlint warnings | 0 | `pnpm lint` fails on any, every commit |
 | fallow dead code (`pnpm deadcode`) | 0 issue(s) | every deploy; advisory on branches |
-| fallow duplication | 1.7% in 65 clone group(s) | none — advisory |
-| suppression comments | 117 | each listed below with its reason |
+| fallow duplication | 1.6% in 64 clone group(s) | none — advisory |
+| suppression comments | 143 | each listed below with its reason |
 
 ### Oxlint warnings, by rule and file
 
@@ -81,6 +81,32 @@ None.
 | `src/app/paraglide/messages/block_name_s2.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/block_name_s3.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/block_name_s4.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/chapter_labels_book_label.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/chapter_labels_cancel.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/chapter_labels_description.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/chapter_labels_done.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/chapter_labels_every_book_placeholder.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/chapter_labels_every_book.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/chapter_labels_fine_everywhere.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/chapter_labels_fine_here.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/chapter_labels_fine_saved.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/chapter_labels_kept_row.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/chapter_labels_kept.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/chapter_labels_leave.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/chapter_labels_mark_number.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/chapter_labels_mark_word.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/chapter_labels_none.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/chapter_labels_nothing.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/chapter_labels_number_differs.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/chapter_labels_other.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/chapter_labels_review.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/chapter_labels_stale.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/chapter_labels_standardize.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/chapter_labels_summary.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/chapter_labels_title.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/chapter_labels_use_everywhere.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/chapter_labels_use_most.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/chapter_labels_word_count.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/editor_attributes_hint.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/editor_attributes_key_locked.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/editor_attributes_none.js` | `eslint-disable` | — |

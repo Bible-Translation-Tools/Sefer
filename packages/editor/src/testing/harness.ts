@@ -10,12 +10,13 @@ import {
 import type { EditorView } from "@codemirror/view";
 
 import type { Analyze } from "../core/analyzer";
-import { type EditorOptions, type RuleName, usfmEditorHeadless, usfmKeys } from "../core/compose";
+import { type EditorOptions, type RuleName, usfmEditorHeadless } from "../core/compose";
 import type { BuildOpts } from "../core/decorations";
 import { DEFAULT_BUILD_OPTS, isInvisible } from "../core/decorations";
 import { decoField, optsFacet, pickField } from "../core/editorState";
 import { isInsignificantWhitespace } from "../core/exceptions";
 import { type Mode, modeFacet, newlineIsABreak } from "../core/kernel";
+import { usfmKeys } from "../core/keymaps";
 import { type AssignmentDelta, assignment } from "../core/registry";
 import { type TraceSink, traceSink } from "../core/trace";
 

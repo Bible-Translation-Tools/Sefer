@@ -13,13 +13,14 @@ import { Refusal } from "@sefer/text/book";
 
 import { settleTheCaretOnALegalPosition } from "../core/caret";
 import { pullSelectionsIntoTheClip } from "../core/clip";
-import { deletionKeys, motionKeys, viewLayer } from "../core/compose";
+import { viewLayer } from "../core/compose";
 import { DEFAULT_BUILD_OPTS } from "../core/decorations";
 import { borrowedStructure, structureAt, structureField } from "../core/docStructure";
 import { optsFacet, PAINT_PORT } from "../core/editorState";
 import { touchedBy } from "../core/forward";
 import { localTracer, tracer } from "../core/instrument";
 import { isVisual, modeFacet, trusted } from "../core/kernel";
+import { deletionKeys, motionKeys } from "../core/keymaps";
 import { assignment } from "../core/registry";
 import { stopsIn } from "../core/stops";
 import { span } from "../core/timing";

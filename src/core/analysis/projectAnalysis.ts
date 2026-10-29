@@ -23,6 +23,13 @@ import {
 } from "../galley";
 import { Observability, type ObservabilityService } from "../observability";
 import type { Project } from "../project/project";
+import {
+  CHAPTER_LABELS_OFF,
+  chapterLabelsOf,
+  judge,
+  type LabelJudgement,
+  type LabelMark,
+} from "../rules/chapterLabels";
 
 const QUIET = 150;
 
@@ -76,6 +83,13 @@ export interface ProjectAnalysisService {
   readonly crossBook: () => readonly Finding[];
 
   readonly crossBookOf: (bookId: BookId) => readonly Finding[];
+
+  /**
+   * Each chapter label in a book that reads differently from the rest
+   * (`judge`, core/rules/chapterLabels.ts), as findings for the editor's
+   * marks. The Findings list carries one entry for them all, not these.
+   */
+  readonly chapterLabelsIn: (bookId: BookId) => readonly Finding[];
 
   readonly findingTotals: () => { readonly errors: number; readonly warnings: number };
 
@@ -180,6 +194,7 @@ const make = (
     let corpusCache: CorpusReader | undefined;
     let totalsCache: { readonly errors: number; readonly warnings: number } | undefined;
     let inventoryCache: Inventory | undefined;
+    let labelsCache: LabelJudgement | undefined;
     let suppressions: Suppressions = NO_SUPPRESSIONS;
     const suppressionListeners = new Set<() => void>();
 
@@ -198,6 +213,7 @@ const make = (
       corpusCache = undefined;
       totalsCache = undefined;
       inventoryCache = undefined;
+      labelsCache = undefined;
     };
 
     const arm = (bookId: BookId): void => {
@@ -335,6 +351,7 @@ const make = (
     const setSuppressions = (next: Suppressions): void => {
       suppressions = next;
       findingsCache = undefined;
+      labelsCache = undefined;
       corpusCache = undefined;
       totalsCache = undefined;
       for (const listener of suppressionListeners) listener();
@@ -357,6 +374,76 @@ const make = (
       return inventoryCache;
     };
 
+    const NO_LABELS: LabelJudgement = { marks: new Map(), count: 0, words: 0, books: 0 };
+    const quiet = (keys: { readonly here: string; readonly everywhere?: string }): boolean =>
+      suppressions.here.has(keys.here) ||
+      (keys.everywhere !== undefined && suppressions.everywhere.has(keys.everywhere));
+    const chapterLabels = (): LabelJudgement => {
+      if (labelsCache !== undefined) return labelsCache;
+      if (quiet({ here: CHAPTER_LABELS_OFF })) {
+        labelsCache = NO_LABELS;
+        return labelsCache;
+      }
+      const books = new Map<string, ReturnType<typeof chapterLabelsOf>>();
+      for (const [bookId, entry] of entries)
+        if (entry.analysis !== undefined) books.set(bookId, chapterLabelsOf(entry.analysis));
+      labelsCache = judge(books, quiet);
+      return labelsCache;
+    };
+
+    /** A mark as a finding, on its label's line; English, as the engine's are (the app names it by code). */
+    const labelFinding = (mark: LabelMark): Finding | undefined => {
+      const entry = entries.get(mark.bookId);
+      if (entry?.analysis === undefined || entry.stamp === undefined) return undefined;
+      const { label } = mark;
+      const code = `chapterLabel.${mark.reason}`;
+      return {
+        id: `project:${mark.bookId}:${code}:${String(label.from)}-${String(label.to)}`,
+        bookId: mark.bookId,
+        severity: "info",
+        code,
+        producer: "project",
+        message:
+          mark.reason === "number"
+            ? `“${label.text}” is not chapter ${String(label.chapter)}'s number`
+            : `“${label.word ?? label.text}” differs from the other chapter labels (“${mark.expected ?? ""}”)`,
+        from: label.textFrom,
+        to: label.textTo,
+        stamp: entry.stamp,
+        engine: stampOf(entry.analysis),
+        suppression: mark.keys,
+        values: {
+          text: label.text,
+          word: label.word ?? label.text,
+          expected: mark.expected ?? "",
+          chapter: String(label.chapter),
+        },
+      };
+    };
+
+    const chapterLabelsIn = (bookId: BookId): readonly Finding[] =>
+      (chapterLabels().marks.get(bookId) ?? []).flatMap((mark) => labelFinding(mark) ?? []);
+
+    /** The Findings list's one entry for every differing label, at the first of them. */
+    const labelsSummary = (): Finding | undefined => {
+      const judged = chapterLabels();
+      const first = [...judged.marks.values()][0]?.[0];
+      const at = first === undefined ? undefined : labelFinding(first);
+      if (at === undefined) return undefined;
+      return {
+        ...at,
+        id: CHAPTER_LABELS_OFF,
+        code: "chapterLabels.differ",
+        message: `Chapter labels: ${String(judged.count)} read differently (${String(judged.words)} word(s) in ${String(judged.books)} book(s))`,
+        suppression: { here: CHAPTER_LABELS_OFF },
+        values: {
+          count: String(judged.count),
+          words: String(judged.words),
+          books: String(judged.books),
+        },
+      };
+    };
+
     const findings = (): readonly Finding[] => {
       if (findingsCache !== undefined) return findingsCache;
       const out: Finding[] = [];
@@ -365,6 +452,8 @@ const make = (
         out.push(...fromAnalysis(bookId, entry.analysis, entry.stamp));
       }
       out.push(...crossBook());
+      const labels = labelsSummary();
+      if (labels !== undefined) out.push(labels);
       findingsCache = out;
       return out;
     };
@@ -575,6 +664,7 @@ const make = (
       findings,
       crossBook,
       crossBookOf,
+      chapterLabelsIn,
       findingTotals,
       setSuppressions,
       suppressed,

@@ -1,39 +1,18 @@
-import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { EditorState, type Extension, Prec, Transaction } from "@codemirror/state";
-import {
-  Decoration,
-  EditorView,
-  ViewPlugin,
-  drawSelection,
-  keymap,
-  type KeyBinding,
-} from "@codemirror/view";
+import { history } from "@codemirror/commands";
+import { EditorState, type Extension, Transaction } from "@codemirror/state";
+import { Decoration, EditorView, ViewPlugin, drawSelection } from "@codemirror/view";
 
 import { type Analyze, analyzed, analyzer } from "./analyzer";
-import { caretLineBoundary, extendCaret, moveCaret, moveCaretByWord } from "./caret";
 import { clipboardHandlers } from "./clipboard";
-import { guardedBackspace, guardedDelete, mergeParagraphBackwards } from "./deletion";
 import { buildStructure } from "./docStructure";
-import {
-  PAINT_PORT,
-  planAt,
-  decoField,
-  structureAt,
-  pickField,
-  structureField,
-  usfmModeProjection,
-} from "./editorState";
-import { guardedEnter, setBlockMarker } from "./input";
-import { insertFootnote, insertParagraph, insertPoetry, insertVerse } from "./insert";
+import { decoField, pickField, structureField, usfmModeProjection } from "./editorState";
 import { traceFor, type TraceVerdict } from "./instrument";
 import type { ChangeRule, TransactionRule } from "./kernel";
+import { commandsLayer } from "./keymaps";
 import { HOOK, PHASES, type ParserPort, type PhaseRule, type RuleName } from "./phases";
-import { poetryLevelKeys } from "./poetryLevels";
 import { renderRangeField, renderWindow } from "./render";
 import { scrollGuard } from "./scroll";
-import { tableKeys } from "./tableCommands";
 import { span } from "./timing";
-import { verseLineBehaviour, verseLineKeys } from "./verseLines";
 
 export type { RuleName };
 
@@ -159,95 +138,6 @@ function rulesLayer(options: EditorOptions): Extension {
     new Set(options.omit ?? []),
   );
 }
-
-const traced =
-  <T extends { state: EditorState }>(name: string, run: (target: T) => boolean) =>
-  (target: T): boolean => {
-    const trace = traceFor(target.state, "key");
-    if (trace === null) return run(target);
-    const close = trace.command(name);
-    let ok = false;
-    try {
-      ok = run(target);
-      return ok;
-    } finally {
-      close(ok ? "consumed" : "declined");
-    }
-  };
-
-/**
- * The caret's motion keys over the stops (`stops.ts`): arrows, Home/End, word
- * jumps, Shift-extend. The canonical editor's, and a satellite's too — a
- * surface over part of a book moves exactly as the book does, and its range
- * then pulls the result in (`recipes/satellite.ts`).
- */
-export function motionKeys(): readonly KeyBinding[] {
-  const move = (right: boolean) =>
-    traced("moveCaret", moveCaret(structureAt, right, undefined, PAINT_PORT));
-  const extend = (right: boolean) =>
-    traced("extendCaret", extendCaret(structureAt, right, undefined, PAINT_PORT));
-  const boundary = (end: boolean) =>
-    traced("caretLineBoundary", caretLineBoundary(structureAt, end, PAINT_PORT));
-  const byWord = (right: boolean) =>
-    traced("moveCaretByWord", moveCaretByWord(structureAt, right, PAINT_PORT));
-  return [
-    { key: "ArrowLeft", run: move(false) },
-    { key: "ArrowRight", run: move(true) },
-    { key: "Shift-ArrowLeft", run: extend(false) },
-    { key: "Shift-ArrowRight", run: extend(true) },
-    { key: "Home", run: boundary(false) },
-    { key: "End", run: boundary(true) },
-    { key: "Mod-ArrowLeft", run: boundary(false) },
-    { key: "Mod-ArrowRight", run: boundary(true) },
-    { key: "Alt-ArrowLeft", run: byWord(false) },
-    { key: "Alt-ArrowRight", run: byWord(true) },
-  ];
-}
-
-/**
- * Backspace and Delete as the book's rules have them — the owned sets, the
- * box of an empty number, an immortal passed to what is behind it — for every
- * surface that edits the book, the canonical editor and a card's satellite
- * alike. Without them a satellite's Backspace was CodeMirror's plain "delete
- * a character", which the Book could only refuse or let through: none of the
- * keypress rules reached a card.
- */
-export function deletionKeys(): readonly KeyBinding[] {
-  const backspace = () =>
-    traced("guardedBackspace", guardedBackspace(structureAt, planAt, PAINT_PORT));
-  const del = () => traced("guardedDelete", guardedDelete(structureAt, planAt, PAINT_PORT));
-  return [
-    { key: "Backspace", run: backspace() },
-    {
-      key: "Backspace",
-      run: traced("mergeParagraphBackwards", mergeParagraphBackwards(structureAt)),
-    },
-    { key: "Delete", run: del() },
-    { key: "Ctrl-d", run: del() },
-    { key: "Ctrl-h", run: backspace() },
-  ];
-}
-
-export function usfmKeys(): readonly KeyBinding[] {
-  return [
-    ...motionKeys(),
-    { key: "Enter", run: traced("guardedEnter", guardedEnter(structureAt, planAt)) },
-    ...deletionKeys(),
-    { key: "Mod-Alt-1", run: traced("setBlockMarker", setBlockMarker(structureAt, "q1")) },
-    { key: "Mod-Alt-0", run: traced("setBlockMarker", setBlockMarker(structureAt, "p")) },
-    { key: "Mod-Shift-v", run: traced("insertVerse", insertVerse(structureAt)) },
-    { key: "Mod-Shift-p", run: traced("insertParagraph", insertParagraph(structureAt)) },
-    { key: "Mod-Shift-l", run: traced("insertPoetry", insertPoetry(structureAt)) },
-    { key: "Mod-Shift-n", run: traced("insertFootnote", insertFootnote()) },
-  ];
-}
-
-export const commandsLayer: Extension = [
-  Prec.highest(keymap.of([...tableKeys(), ...verseLineKeys(), ...poetryLevelKeys()])),
-  verseLineBehaviour,
-  Prec.high(keymap.of([...usfmKeys()])),
-  keymap.of([...defaultKeymap, ...historyKeymap]),
-];
 
 /**
  * The caret moves only for a press on the text. A press in the editor but

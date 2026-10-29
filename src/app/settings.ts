@@ -130,6 +130,8 @@ export interface ShellKeys {
   /** The Web transport's `host=proxy` pairs, same rule. */
   readonly webTransport: SettingKey<string>;
   readonly pairBlocks: SettingKey<boolean>;
+  /** Typed verse numbers ("1", "v1", "verse 1") become verses: the editor's verse shortcuts. */
+  readonly verseShortcuts: SettingKey<boolean>;
   readonly syncReferences: SettingKey<boolean>;
   readonly findingsFilter: SettingKey<FindingsFilterPreference>;
   readonly sousSettings: SettingKey<SousOverrides>;
@@ -198,6 +200,7 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
     catalogueUrl: settings.register("network.catalogueUrl", Schema.String, ""),
     webTransport: settings.register("network.webTransport", Schema.String, ""),
     pairBlocks: settings.register("editor.pairBlocks", Schema.Boolean, false),
+    verseShortcuts: settings.register("editor.verseShortcuts", Schema.Boolean, true),
     syncReferences: settings.register("editor.syncReferences", Schema.Boolean, true),
     findingsFilter: settings.register(
       "findings.filter",
@@ -388,6 +391,14 @@ const editorBehaviourRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
     label: "Show what a block corresponds to",
     description:
       "Marks the block you are in, and the block at the same place in every reference open beside it — so you can see which paragraph or poetry line answers which.",
+    kind: "boolean",
+    group: "editor",
+  },
+  {
+    key: keys.verseShortcuts,
+    label: "Verse shortcuts",
+    description:
+      'Typing "1", "1.", "v1" or "verse 1" and then a space starts that verse, when it is the next verse the chapter is missing. Turn this off to keep such numbers as words.',
     kind: "boolean",
     group: "editor",
   },
