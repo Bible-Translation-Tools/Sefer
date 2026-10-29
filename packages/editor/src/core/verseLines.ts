@@ -518,7 +518,7 @@ export const emptyChapters = (doc: string, structure: DocStructure): readonly Em
  * Each chapter's heading — its `\\c` line, and its own `\\cl` line when it has
  * one — as a range from the `\\c` line's start to the heading's last line end.
  */
-export const chapterHeadings = (
+const chapterHeadings = (
   doc: string,
   structure: DocStructure,
 ): readonly { readonly from: number; readonly to: number }[] => {
