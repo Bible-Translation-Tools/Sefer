@@ -297,6 +297,16 @@ importers:
         specifier: ^4.136.3
         version: 4.136.3(@types/node@26.6.2)
 
+  packages/document-import:
+    dependencies:
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
+    devDependencies:
+      '@xmldom/xmldom':
+        specifier: ^0.9.12
+        version: 0.9.12
+
   packages/editor:
     devDependencies:
       '@codemirror/commands':
@@ -3565,6 +3575,10 @@ packages:
   '@wycliffeassociates/scripture-kitchen@https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/87402ba844fb60616234fd321141cf2437838a60':
     resolution: {gitHosted: true, integrity: sha512-XP9JSPFY6JSXBoEkgIGULzYBLEAY4Ax+mnTwRMt26RTX0oKk2zY4av4a9nlMISKyOQ5eBYJiJpo6hXPrzJOaGA==, tarball: https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/87402ba844fb60616234fd321141cf2437838a60}
     version: 0.1.15
+
+  '@xmldom/xmldom@0.9.12':
+    resolution: {integrity: sha512-5AXjrcMClTryPe9LgZrygpB1lj7s0S9E0+W+AHaVKAVyHanafK86iPSvG5xHVSp/jC+VH1UXu0TAEmY279xH7A==}
+    engines: {node: '>=14.6'}
 
   '@zip.js/zip.js@2.23.0':
     resolution: {integrity: sha512-K5obAqfrO7zhycnCupM9aaoZ9kx0SA0kv7+Z2oOUsdpWquv4s/Z4zyD7AdTqxrK3pgPM+ozaUi8kdRQbCWaIrQ==}
@@ -10151,6 +10165,8 @@ snapshots:
       '@wdio/logger': 9.29.1
 
   '@wycliffeassociates/scripture-kitchen@https://codeload.github.com/WycliffeAssociates/scripture-kitchen/tar.gz/87402ba844fb60616234fd321141cf2437838a60': {}
+
+  '@xmldom/xmldom@0.9.12': {}
 
   '@zip.js/zip.js@2.23.0': {}
 
