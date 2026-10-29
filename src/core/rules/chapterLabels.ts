@@ -202,3 +202,88 @@ export const standardize = (book: BookLabels, word: string): readonly Change[] =
   for (const label of repeated) changes.push({ from: label.from, to: label.lineEnd, insert: "" });
   return changes.sort((a, b) => a.from - b.from);
 };
+
+/**
+ * One chapter label that reads differently from the rest (Will, 2026-10-29):
+ * its word is not its book's (the book label, when the book has one) or, in
+ * a book with none, not the project's most used word; or its number is not
+ * its chapter's. A book label is a declaration, never flagged: choosing a
+ * book's word in the dialog writes one, and its chapters are then judged
+ * against it alone. Labels written as words are never flagged.
+ */
+export interface LabelMark {
+  readonly bookId: string;
+  readonly label: ChapterLabel;
+  readonly reason: "word" | "number";
+  /** The word it was judged against. */
+  readonly expected?: string;
+  /** "Fine here" is this label; "everywhere" is its word, in every book. */
+  readonly keys: { readonly here: string; readonly everywhere?: string };
+}
+
+export interface LabelJudgement {
+  readonly marks: ReadonlyMap<string, readonly LabelMark[]>;
+  readonly count: number;
+  /** The distinct words flagged, and the books they are in. */
+  readonly words: number;
+  readonly books: number;
+  readonly projectWord?: string;
+}
+
+/** Turning the whole check off: the summary's own key. */
+export const CHAPTER_LABELS_OFF = "project:chapterLabels";
+
+export const judge = (
+  books: ReadonlyMap<string, BookLabels>,
+  quiet: (keys: LabelMark["keys"]) => boolean,
+): LabelJudgement => {
+  const totals = new Map<string, number>();
+  for (const book of books.values())
+    for (const [word, count] of wordsOf(book)) totals.set(word, (totals.get(word) ?? 0) + count);
+  let projectWord: string | undefined;
+  let best = 0;
+  for (const [word, count] of totals)
+    if (count > best) {
+      best = count;
+      projectWord = word;
+    }
+  const marks = new Map<string, LabelMark[]>();
+  const words = new Set<string>();
+  let count = 0;
+  for (const [bookId, book] of books) {
+    const expected = book.book?.text ?? projectWord;
+    for (const label of book.labels) {
+      if (label.scope !== "chapter") continue;
+      const reason = label.mismatched
+        ? "number"
+        : label.word !== undefined && expected !== undefined && label.word !== expected
+          ? "word"
+          : undefined;
+      if (reason === undefined) continue;
+      const keys = {
+        here: `project:chapterLabel:${bookId}:${String(label.chapter)}:${label.text}`,
+        ...(reason === "word" && label.word !== undefined
+          ? { everywhere: `project:chapterLabel:word:${label.word}` }
+          : {}),
+      };
+      if (quiet(keys)) continue;
+      const mark: LabelMark = {
+        bookId,
+        label,
+        reason,
+        ...(expected === undefined ? {} : { expected }),
+        keys,
+      };
+      marks.set(bookId, [...(marks.get(bookId) ?? []), mark]);
+      words.add(label.word ?? label.text);
+      count += 1;
+    }
+  }
+  return {
+    marks,
+    count,
+    words: words.size,
+    books: marks.size,
+    ...(projectWord === undefined ? {} : { projectWord }),
+  };
+};

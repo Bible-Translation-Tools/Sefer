@@ -30,6 +30,7 @@ import {
   SegmentedControl,
   severityTone,
 } from "../primitives";
+import { findingMessage } from "../rules/labelMessages";
 import { createFindSource } from "../search/findSource";
 import { SearchDialog } from "../search/SearchDialog";
 import { SousSettingsPanel } from "../SousSettingsPanel";
@@ -281,7 +282,7 @@ const findingLine = (
           {codeLabel(finding.code)}
         </span>
         <span class="min-w-0 flex-1 text-small text-on-surface-secondary">
-          <Show when={finding.described} fallback={finding.message}>
+          <Show when={finding.described} fallback={findingMessage(finding)}>
             {(described) => <SousSentence message={described()} tier="headline" />}
           </Show>
         </span>

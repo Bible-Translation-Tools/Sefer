@@ -117,5 +117,12 @@
   "chapter_labels_done": "{count, plural, one {Chapter labels standardized in # book} other {Chapter labels standardized in # books}}",
   "chapter_labels_nothing": "Every chosen book already reads that way",
   "chapter_labels_stale": "A book changed while this was open; open Chapter labels again",
-  "chapter_labels_use_most": "Use {word} everywhere ({count}×, the most used)"
+  "chapter_labels_use_most": "Use {word} everywhere ({count}×, the most used)",
+  "chapter_labels_mark_word": "“{word}” differs from the other chapter labels (“{expected}”)",
+  "chapter_labels_mark_number": "“{text}” is not chapter {chapter}'s number",
+  "chapter_labels_summary": "{count, plural, one {# chapter label reads differently} other {# chapter labels read differently}} ({words, plural, one {# word} other {# words}} in {books, plural, one {# book} other {# books}})",
+  "chapter_labels_review": "Review chapter labels…",
+  "chapter_labels_fine_here": "Fine here",
+  "chapter_labels_fine_everywhere": "“{word}” is fine everywhere",
+  "chapter_labels_fine_saved": "Hidden on this device"
 }

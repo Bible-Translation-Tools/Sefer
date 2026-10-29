@@ -1016,6 +1016,16 @@
 .cm-mode-regular .usfm-chap-named .usfm-num-c {
   font-size: 1.6em;
 }
+/* A title whose label reads differently from the rest (`flaggedTitles`,
+   recipes/lint.ts): the info squiggle its hidden label line cannot show. */
+.cm-mode-regular .usfm-chap-flagged .usfm-chap-label,
+.cm-mode-regular .usfm-chap-flagged .usfm-num-c {
+  text-decoration: underline wavy;
+  text-decoration-thickness: 1px;
+  text-decoration-skip-ink: none;
+  text-decoration-color: var(--brand-base);
+  text-underline-offset: 0.15em;
+}
 /* A title the host opens (Sefer's chapter labels dialog) reads as a link. */
 .cm-mode-regular.cm-titles-open .usfm-chap .usfm-chap-label,
 .cm-mode-regular.cm-titles-open .usfm-chap-named .usfm-num-c {

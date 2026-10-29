@@ -71,14 +71,11 @@ judge(byBook: Map<bookId, Label[]>): Finding[]   // the cross-book reduction, in
 ```
 
 <Files id="files">
-```
-+ src/core/rules/                      -- project-wide consistency rules: pure, framework-free
-+ src/core/rules/chapterLabels.ts      -- labelsOf, styleOf, judge
-~ src/core/analysis/                   -- run the rules after each publish; memoise like crossBook
-~ src/core/findings/finding.ts         -- a third producer, "sefer", beside onion and sous
-~ src/core/fixes/                      -- a second fix kind: edits computed by a rule
-+ src/app/ui/rules/ChapterLabels.tsx   -- the per-book dialog
-```
+  ``` + src/core/rules/ -- project-wide consistency rules: pure, framework-free +
+  src/core/rules/chapterLabels.ts -- labelsOf, styleOf, judge ~ src/core/analysis/ -- run the rules
+  after each publish; memoise like crossBook ~ src/core/findings/finding.ts -- a third producer,
+  "sefer", beside onion and sous ~ src/core/fixes/ -- a second fix kind: edits computed by a rule +
+  src/app/ui/rules/ChapterLabels.tsx -- the per-book dialog ```
 </Files>
 
 ### It joins the sinks the way Sous does
@@ -138,26 +135,70 @@ Both directions: per-chapter to one `\cl Psalm` before `\c 1`, and back.
   handful of lines per book.
 
 <Mock id="dialog" height={230}>
-<div style="font:13px system-ui;padding:12px;border:1px solid #888;border-radius:10px;max-width:520px">
-<b>Chapter labels</b><div style="opacity:.7;margin:4px 0 8px">Most books use one word for the whole book: <b>Psalm</b>-style.</div>
-<table style="width:100%;border-collapse:collapse">
-<tr style="opacity:.6"><td>Book</td><td>Style</td><td>Sample</td><td></td></tr>
-<tr><td>Genesis</td><td>one word</td><td>Chapter</td><td>✓</td></tr>
-<tr><td>Psalms</td><td>per chapter</td><td>Psalm 3</td><td><button>Fix</button></td></tr>
-<tr><td>Jonah</td><td>per chapter</td><td>Chapter One</td><td style="opacity:.6">words; kept</td></tr>
-<tr><td>Mark</td><td>mixed</td><td>Chapter · Chapter 4</td><td><button>Fix</button></td></tr>
-</table>
-<div style="margin-top:8px"><button>Make all like the majority</button></div>
-</div>
+  <div style="font:13px system-ui;padding:12px;border:1px solid #888;border-radius:10px;max-width:520px">
+    <b>Chapter labels</b>
+    <div style="opacity:.7;margin:4px 0 8px">
+      Most books use one word for the whole book: <b>Psalm</b>-style.
+    </div>
+    <table style="width:100%;border-collapse:collapse">
+      <tr style="opacity:.6">
+        <td>Book</td>
+        <td>Style</td>
+        <td>Sample</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>Genesis</td>
+        <td>one word</td>
+        <td>Chapter</td>
+        <td>✓</td>
+      </tr>
+      <tr>
+        <td>Psalms</td>
+        <td>per chapter</td>
+        <td>Psalm 3</td>
+        <td>
+          <button>Fix</button>
+        </td>
+      </tr>
+      <tr>
+        <td>Jonah</td>
+        <td>per chapter</td>
+        <td>Chapter One</td>
+        <td style="opacity:.6">words; kept</td>
+      </tr>
+      <tr>
+        <td>Mark</td>
+        <td>mixed</td>
+        <td>Chapter · Chapter 4</td>
+        <td>
+          <button>Fix</button>
+        </td>
+      </tr>
+    </table>
+    <div style="margin-top:8px">
+      <button>Make all like the majority</button>
+    </div>
+  </div>
 </Mock>
 
-<Question id="none">A book with no `\cl` at all: never flagged? (Proposed: yes, never; most projects have none.)</Question>
+<Question id="none">
+  A book with no `\cl` at all: never flagged? (Proposed: yes, never; most projects have none.)
+</Question>
 
-<Question id="mixed">A book-level `\cl Psalm` plus one chapter's `\cl Psalm Twenty-Three`: valid (the second meaning), so flag a mixed book only when its per-chapter labels are "word + number" in a different word?</Question>
+<Question id="mixed">
+  A book-level `\cl Psalm` plus one chapter's `\cl Psalm Twenty-Three`: valid (the second meaning),
+  so flag a mixed book only when its per-chapter labels are "word + number" in a different word?
+</Question>
 
-<Question id="default">On by default, or a toggle in Proofreading settings for teams that never typeset?</Question>
+<Question id="default">
+  On by default, or a toggle in Proofreading settings for teams that never typeset?
+</Question>
 
-<Followup id="build">Build after the tutorials and the localization research (Will, 2026-10-22: "I will hold off one second on getting it built").</Followup>
+<Followup id="build">
+  Build after the tutorials and the localization research (Will, 2026-10-22: "I will hold off one
+  second on getting it built").
+</Followup>
 
 ## Built (2026-10-29, branch editor/keymaps-chapter-labels)
 
@@ -167,7 +208,9 @@ Will's rulings that day changed the shape: the dialog opens from a chapter's tit
 - **The rule** is `src/core/rules/chapterLabels.ts`: every `\cl` off the parse's tokens, shaped `word-number`, `number-word` or `other` against its chapter's number; `standardize(book, word)` writes or rewrites one book label before `\c 1` and takes out the chapter labels that are that word and their number. Labels written as words and stray numbers are kept; a book whose numbers come first ("3 Sura") has its words rewritten in place instead.
 - **The dialog** (`src/app/ui/rules/ChapterLabels.tsx`): one row per book with labels, its words with counts (most used first), "Another word", "Leave as it is", and a "Use for every book" box at the top. Labels kept as written are listed under their book. Standardize is one cross-book edit (`chapterLabels.standardize`), one Undo.
 
-<Followup id="findings">Not built yet: the inline marks and Findings-panel entries for mixed or stray labels (the rule's `judge`, above).</Followup>
+**Findings (built 2026-10-29, Will's rulings):** every chapter label of the form word + number whose word is not its book's is flagged, info severity; a book with a book label has declared its word and is judged against it alone, a book without one against the project's most used word; a number that is not its chapter's is flagged too; labels written as words never are. One entry in the Findings list for them all ("N chapter labels read differently"; its Fine here turns the check off); a squiggle on each label (on the drawn title in Reading and Form Mode), whose popup offers Review chapter labels…, Fine here, and "“word” is fine everywhere", which silences that word in every book. Producer `project`, the first user of it.
 
-<Followup id="multibuffer">The "kept as written" list is plain text; Will suggested a clipped read-only multibuffer of those lines.</Followup>
-
+<Followup id="multibuffer">
+  The "kept as written" list is plain text; Will suggested a clipped read-only multibuffer of those
+  lines.
+</Followup>

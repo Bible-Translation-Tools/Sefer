@@ -1,6 +1,6 @@
 import { type Diagnostic as CmDiagnostic, forceLinting, linter } from "@codemirror/lint";
 import { StateEffect, StateField, type EditorState, type Extension } from "@codemirror/state";
-import type { EditorView } from "@codemirror/view";
+import { Decoration, EditorView } from "@codemirror/view";
 import {
   type EngineStamp,
   diagnosticFixLabel,
@@ -15,12 +15,18 @@ import type { SourceStamp } from "@sefer/text/source";
 
 import { analyzed, analyzer } from "../core/analyzer";
 import { structureAt } from "../core/docStructure";
+import { docText } from "../core/docStructure";
 import { PAINT_PORT } from "../core/editorState";
 import { carryForward } from "../core/forward";
 import { reportOutcome } from "../core/instrument";
 import { trusted } from "../core/kernel";
 import { span } from "../core/timing";
-import { leaveNumbersToTheMenu, removesMarker, suggestedNumber } from "../core/verseLines";
+import {
+  chapterTitles,
+  leaveNumbersToTheMenu,
+  removesMarker,
+  suggestedNumber,
+} from "../core/verseLines";
 
 interface Finding {
   code: number;
@@ -181,6 +187,8 @@ export interface CorpusFinding {
   readonly from: number;
   readonly to: number;
   readonly stamp: SourceStamp;
+  /** Who found it, for the popup's footer (`<producer>/<code>`); Sous when left out. */
+  readonly producer?: string;
   /**
    * Buttons in the finding's popup, the host's own: a suppression's "Fine
    * here", say. The package draws them and calls `run`; what they do is the
@@ -208,6 +216,26 @@ const sousField = StateField.define<readonly CorpusFinding[]>({
 
 const corpusFindings = (state: EditorState): readonly CorpusFinding[] =>
   state.field(sousField, false) ?? NO_CORPUS;
+
+const FLAGGED_TITLE = Decoration.line({ class: "usfm-chap-flagged" });
+
+/**
+ * A host finding on a chapter's label lines (Sefer's `chapterLabel.*`) sits
+ * on text Reading and Form Mode hide, where no squiggle can show: the
+ * chapter's drawn title carries it instead (`usfm-chap-flagged`). USFM shows
+ * the label line and its squiggle as usual.
+ */
+const flaggedTitles = EditorView.decorations.compute([sousField], (state) => {
+  const flagged = corpusFindings(state).filter((f) => f.code.startsWith("chapterLabel."));
+  if (flagged.length === 0) return Decoration.none;
+  const marks = [];
+  for (const chapter of chapterTitles(docText(state), structureAt(state)).chapters) {
+    const lines = [chapter.line, ...chapter.labels];
+    if (flagged.some((f) => lines.some((line) => f.from >= line.from && f.from <= line.to)))
+      marks.push(FLAGGED_TITLE.range(chapter.line.from));
+  }
+  return Decoration.set(marks);
+});
 
 /**
  * Hand the editor the corpus findings for its book, and re-lint.
@@ -291,7 +319,7 @@ function corpusDiagnostics(
       from: f.from,
       to: Math.max(f.to, Math.min(f.from + 1, length)),
       severity: f.severity,
-      source: `sous/${f.code}`,
+      source: `${f.producer ?? "sous"}/${f.code}`,
       markClass: SEVERITY_CLASS[f.severity] ?? "usfm-lint-info",
       message: f.message,
       actions: f.actions?.map((action) => ({
@@ -317,6 +345,7 @@ export function usfmLinter(
 ): Extension {
   return [
     sousField,
+    flaggedTitles,
     linter(
       (view) => {
         return [

@@ -14,6 +14,7 @@ import type { SourceStamp } from "@sefer/text/source";
 import { Effect, Fiber, Stream } from "effect";
 import { Show, createEffect, createRenderEffect, createSignal, untrack } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import { stale, type Finding } from "#core/findings/finding";
 
 import { editorWords } from "../editorWords";
@@ -24,7 +25,9 @@ import { useShell } from "../ProjectContext";
 import { shellKeys } from "../settings";
 import { allow, checkLabel, fineHere, flaggedText, turnOff } from "../suppressAnswers";
 import { LineMenu, type LineMenuAt } from "./LineMenu";
+import { toasts } from "./primitives";
 import { ChapterLabelsDialog } from "./rules/ChapterLabels";
+import { findingMessage } from "./rules/labelMessages";
 import { useAlignedGroup } from "./workspace/aligned";
 import { nameBlock } from "./workspace/blockNames";
 import { metadataOf } from "./workspace/project";
@@ -37,7 +40,40 @@ export interface BookEditorProps {
 
 type Shell = ReturnType<typeof useShell>;
 
-function watchCorpus(shell: Shell, editor: BookEditorMount, book: EditorBook) {
+/** A differing chapter label's answers: the dialog, or fine here, or its word fine in every book. */
+function labelAnswers(shell: Shell, finding: Finding, openLabels: () => void): CorpusAction[] {
+  const word = finding.values?.word ?? "";
+  return [
+    { name: m.chapter_labels_review(), run: openLabels },
+    { name: m.chapter_labels_fine_here(), run: () => fineHere(shell, finding) },
+    ...(finding.suppression?.everywhere === undefined
+      ? []
+      : [
+          {
+            name: m.chapter_labels_fine_everywhere({ word }),
+            run: () => {
+              const id = finding.suppression?.everywhere;
+              if (id === undefined) return;
+              void shell.suppress(finding, "everywhere").then((saved) => {
+                if (!saved) return;
+                toasts.info({
+                  title: m.chapter_labels_fine_everywhere({ word }),
+                  message: m.chapter_labels_fine_saved(),
+                  action: { label: t("Undo"), onPress: () => void shell.unsuppress(id) },
+                });
+              });
+            },
+          },
+        ]),
+  ];
+}
+
+function watchCorpus(
+  shell: Shell,
+  editor: BookEditorMount,
+  book: EditorBook,
+  openLabels: () => void,
+) {
   const answersTo = (finding: Finding): readonly CorpusAction[] | undefined => {
     if (finding.producer !== "sous") return undefined;
     const check = checkLabel(finding);
@@ -60,6 +96,13 @@ function watchCorpus(shell: Shell, editor: BookEditorMount, book: EditorBook) {
     const list: CorpusFinding[] = [];
     for (const finding of shell.services.projectAnalysis.crossBookOf(book.id))
       if (!stale(finding, book)) list.push({ ...finding, actions: answersTo(finding) });
+    for (const finding of shell.services.projectAnalysis.chapterLabelsIn(book.id))
+      if (!stale(finding, book))
+        list.push({
+          ...finding,
+          message: findingMessage(finding),
+          actions: labelAnswers(shell, finding, openLabels),
+        });
     editor.setHostDiagnostics(list);
     annotateRepaint({
       "findings.shown": list.length,
@@ -157,7 +200,9 @@ export function BookEditor(props: BookEditorProps) {
         shell.changed({ kind: "book.apply", books: [book.id] });
       });
 
-      const { watching, unsuppressing } = watchCorpus(shell, editor, book);
+      const { watching, unsuppressing } = watchCorpus(shell, editor, book, () =>
+        setLabelsOpen(true),
+      );
 
       const { ghosting, pairing, shortcuts } = watchSettings(shell, editor);
 
