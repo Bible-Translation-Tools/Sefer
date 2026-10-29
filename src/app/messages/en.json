@@ -81,7 +81,7 @@
   "editor_chapter_label": "Chapter",
   "editor_empty_chapter_prompt": "Click here to start editing {title}",
   "block_name_p": "Paragraph (indented)",
-  "block_name_pi": "Paragraph (whole block indented)",
+  "block_name_pi": "Indented paragraph",
   "block_name_m": "Paragraph (nonindented)",
   "block_name_nb": "Continued paragraph",
   "block_name_q": "Poetry",
