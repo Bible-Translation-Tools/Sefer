@@ -412,17 +412,27 @@ const lineByLineClass = EditorView.editorAttributes.of((view) => {
 });
 
 /**
- * Line by line names each chapter once. A chapter with its own label (`\\c 2`
- * then `\\cl Icipandwa 2`, before its first verse) is titled by the label and its
- * number's line is folded away: `folds` runs from the `\\c` line's start to the
- * label's line. Any other chapter is `named`: "Chapter 2", or the book's label
- * (`\\cl Psalm` before the first chapter) and the number.
+ * Reading and line by line name each chapter once, on its `\\c` line. A
+ * chapter's own label is any `\\cl` inside the chapter's span (the parse's
+ * chapter rows), never "the line after `\\c`": with `\\c 2`, `\\s Heading`,
+ * `\\cl Sura 2` the heading stays where it is and "Sura 2" names the chapter.
+ * Only the `\\c` line and the label lines are hidden; the title is drawn on the
+ * `\\c` line. A chapter with no label of its own is "Chapter 2", or the book's
+ * label (`\\cl Psalm` before the first chapter) and the number.
  */
+export interface ChapterTitle {
+  /** The `\\c` line. */
+  readonly line: DocLine;
+  readonly number: string;
+  /** Its own label's words, markup taken out: the first non-empty `\\cl` in its span. */
+  readonly own?: string;
+  /** Every `\\cl` line in its span. */
+  readonly labels: readonly DocLine[];
+}
+
 export interface ChapterTitles {
   readonly bookLabel: string;
-  readonly named: readonly DocLine[];
-  /** `to` is the label's line; `label` where its words start. */
-  readonly folds: readonly { readonly from: number; readonly to: number; readonly label: number }[];
+  readonly chapters: readonly ChapterTitle[];
 }
 
 /**
@@ -440,36 +450,35 @@ export const chapterTitles = (doc: string, structure: DocStructure): ChapterTitl
   return titles;
 };
 
+/** A label's words as a reader sees them: character markers taken out. */
+const labelWords = (doc: string, line: DocLine): string =>
+  doc
+    .slice(line.contentFrom, line.to)
+    .replace(/\\\+?[A-Za-z0-9]+(?:\*|[ \t]?)/g, "")
+    .trim();
+
 const scanChapterTitles = (doc: string, structure: DocStructure): ChapterTitles => {
-  const verseStarts = new Set(structure.verses.map((verse) => verse.markerFrom));
-  const opensVerse = (line: DocLine): boolean =>
-    verseStarts.has(line.contentFrom) || verseStarts.has(line.from);
-  const labelOf = (line: DocLine): string => doc.slice(line.contentFrom, line.to).trim();
+  const rows = structure.chapters.filter((row) => row.label !== "");
+  const lines = structure.lines;
   let bookLabel = "";
-  const named: DocLine[] = [];
-  const folds: { from: number; to: number; label: number }[] = [];
-  // One pass: a chapter waits for its own label until its first verse or the next chapter.
-  let open: DocLine | null = null;
-  let seenChapter = false;
-  const settle = (): void => {
-    if (open !== null) named.push(open);
-    open = null;
-  };
-  for (const line of structure.lines) {
-    if (line.cls === "slot.c") {
-      settle();
-      open = line;
-      seenChapter = true;
-    } else if (line.marker === "cl" && labelOf(line) !== "") {
-      if (!seenChapter) bookLabel = labelOf(line);
-      else if (open !== null) {
-        folds.push({ from: open.from, to: line.from, label: line.contentFrom });
-        open = null;
-      }
-    } else if (opensVerse(line)) settle();
+  const chapters: { line: DocLine; number: string; own?: string; labels: DocLine[] }[] = rows.map(
+    (row) => ({ line: lines.at(lines.indexAt(row.from)), number: row.label, labels: [] }),
+  );
+  // One pass over the lines, the chapter rows in step: a label belongs to the row it is in.
+  let k = -1;
+  for (const line of lines) {
+    while (k + 1 < rows.length && line.from >= rows[k + 1].from) k++;
+    if (line.marker !== "cl") continue;
+    const words = labelWords(doc, line);
+    if (k < 0) {
+      if (bookLabel === "") bookLabel = words;
+      continue;
+    }
+    const chapter = chapters[k];
+    chapter.labels.push(line);
+    if (chapter.own === undefined && words !== "") chapter.own = words;
   }
-  settle();
-  return { bookLabel, named, folds };
+  return { bookLabel, chapters };
 };
 
 /**
@@ -509,22 +518,15 @@ export const emptyChapters = (doc: string, structure: DocStructure): readonly Em
 };
 
 const scanEmptyChapters = (doc: string, structure: DocStructure): readonly EmptyChapter[] => {
-  const { bookLabel } = chapterTitles(doc, structure);
-  const chapters: DocLine[] = [];
-  for (const line of structure.lines) if (line.cls === "slot.c") chapters.push(line);
+  const { bookLabel, chapters } = chapterTitles(doc, structure);
   const found: EmptyChapter[] = [];
-  chapters.forEach((line, k) => {
-    const end = chapters[k + 1]?.from ?? doc.length;
-    const number = /\\c\s+(\S+)/.exec(doc.slice(line.from, line.to))?.[1] ?? "";
-    let at = line.to;
-    let title = bookLabel === "" ? undefined : `${bookLabel} ${number}`;
-    // Its own label, on the line straight after (blank lines aside), names it and ends the heading.
-    const rest = doc.slice(line.to, end);
-    const own = /^\s*\\cl[ \t]+([^\n]*)/.exec(rest);
-    if (own !== null && own[1].trim() !== "") {
-      title = own[1].trim();
-      at = line.to + own[0].length;
-    }
+  chapters.forEach((chapter, k) => {
+    const line = chapter.line;
+    const end = chapters[k + 1]?.line.from ?? doc.length;
+    const number = chapter.number;
+    // The heading ends with the last of its lines: the `\\c`, then its own labels.
+    const at = Math.max(line.to, ...chapter.labels.map((label) => label.to));
+    const title = chapter.own ?? (bookLabel === "" ? undefined : `${bookLabel} ${number}`);
     const to = end < doc.length ? Math.max(at, end - 1) : end;
     if (doc.slice(at, end).replace(VISIBLE, "") !== "") return;
     let field: EmptyChapter["field"];
@@ -556,23 +558,33 @@ const scanEmptyChapters = (doc: string, structure: DocStructure): readonly Empty
 };
 
 /**
- * Each chapter's heading — its `\\c` line, and its own `\\cl` line when it has
- * one — as a range from the `\\c` line's start to the heading's last line end.
+ * Each chapter's heading lines — its `\\c` line and its own `\\cl` lines — one
+ * range each, in order. Whatever stands between them (a section heading) is
+ * the text's, not the title's.
  */
 const chapterHeadings = (
   doc: string,
   structure: DocStructure,
-): readonly { readonly from: number; readonly to: number }[] => {
-  const { folds } = chapterTitles(doc, structure);
-  const labelled = new Map(folds.map((fold) => [fold.from, fold.to]));
-  const headings: { from: number; to: number }[] = [];
-  for (const line of structure.lines) {
-    if (line.cls !== "slot.c") continue;
-    const labelLine = labelled.get(line.from);
-    const end = labelLine === undefined ? line.to : doc.indexOf("\n", labelLine);
-    headings.push({ from: line.from, to: end < 0 ? doc.length : end });
+): readonly { readonly from: number; readonly to: number }[] =>
+  chapterTitles(doc, structure)
+    .chapters.flatMap((chapter) => [chapter.line, ...chapter.labels])
+    .map((line) => ({ from: line.from, to: line.to }))
+    .sort((x, y) => x.from - y.from);
+
+/** Past every heading line the caret is on or runs into, forward or back. */
+const pastHeadings = (
+  headings: readonly { readonly from: number; readonly to: number }[],
+  pos: number,
+  forward: boolean,
+  length: number,
+): number => {
+  let at = pos;
+  for (;;) {
+    const on = headings.find((h) => at >= h.from && at <= h.to);
+    if (on === undefined) return at;
+    at = forward ? Math.min(length, on.to + 1) : Math.max(0, on.from - 1);
+    if (at === 0 || at === length) return at;
   }
-  return headings;
 };
 
 /**
@@ -585,7 +597,14 @@ const chapterHeadings = (
  * chapter's hidden leftovers are refused the same way: there is nothing there
  * to delete, and deleting into them reached the title.
  */
-const HEADING_WRITERS = new Set(["empty-chapter", "typed-verse", "frontmatter", "canonical"]);
+// "project.chapterLabels" is Sefer's chapter labels dialog, the one place labels are written.
+const HEADING_WRITERS = new Set([
+  "empty-chapter",
+  "typed-verse",
+  "frontmatter",
+  "canonical",
+  "project.chapterLabels",
+]);
 
 const chapterHeadingsAreFixed = EditorState.transactionFilter.of((tr) => {
   if (tr.startState.facet(modeFacet) !== "regular") return tr;
@@ -619,20 +638,54 @@ const chapterHeadingsAreFixed = EditorState.transactionFilter.of((tr) => {
   const range = tr.selection.main;
   if (!range.empty) return tr;
   const after = docText(tr.state);
-  const heading = chapterHeadings(after, structureAt(tr.state)).find(
-    (h) => range.head >= h.from && range.head <= h.to,
-  );
+  const landed = chapterHeadings(after, structureAt(tr.state));
+  const heading = landed.find((h) => range.head >= h.from && range.head <= h.to);
   if (heading === undefined) return tr;
   // A click on a title, or arriving from above, goes on into the chapter —
-  // to its empty state's paragraph when it has nothing yet; from below, back
-  // to the end of the line before.
+  // past every heading line, to its empty state's paragraph when it has
+  // nothing yet; from below, back to the end of the line before.
   const before = tr.startState.selection.main.head;
   const forward = tr.isUserEvent("select.pointer") || before <= heading.from;
-  const field = emptyChapters(after, structureAt(tr.state)).find((c) => c.at === heading.to)?.field;
-  const pos = forward
-    ? (field?.from ?? Math.min(after.length, heading.to + 1))
-    : Math.max(0, heading.from - 1);
+  const past = pastHeadings(landed, range.head, forward, after.length);
+  const field = forward
+    ? emptyChapters(after, structureAt(tr.state)).find(
+        (c) => past === Math.min(after.length, c.at + 1),
+      )?.field
+    : undefined;
+  const pos = field?.from ?? past;
   return [tr, { selection: EditorSelection.cursor(pos), sequential: true }];
+});
+
+/**
+ * What a click on a chapter's title does, from the host: Sefer opens its
+ * chapter labels dialog there. While it `wants` the title, the press is its
+ * and the caret stays put; the action runs on the release (`titlesAreTheHosts`).
+ */
+export interface ChapterTitleAction {
+  readonly wants: () => boolean;
+  readonly run: () => void;
+}
+
+export const chapterTitleAction = Facet.define<ChapterTitleAction, ChapterTitleAction | undefined>({
+  combine: (values) => values[0],
+});
+
+/** Views whose last press landed on a chapter's title the host wants: the release runs it. */
+const titlePressed = new WeakSet<EditorView>();
+
+/**
+ * The release of a press on a title runs the host's action. The release, not
+ * the click: the line can be redrawn between press and release, and then the
+ * browser sends no click; and the release comes after the pointer-up a dialog
+ * listens for, so the dialog it opens stays open.
+ */
+const titlesAreTheHosts = EditorView.domEventHandlers({
+  mouseup(_event, view) {
+    if (!titlePressed.has(view)) return false;
+    titlePressed.delete(view);
+    view.state.facet(chapterTitleAction)?.run();
+    return true;
+  },
 });
 
 /**
@@ -644,13 +697,21 @@ const chapterHeadingsAreFixed = EditorState.transactionFilter.of((tr) => {
  */
 const pressesAboveTitlesStayBehind = EditorView.domEventHandlers({
   mousedown(event, view) {
+    titlePressed.delete(view);
     if (event.button !== 0 || view.state.facet(modeFacet) !== "regular") return false;
     const target = event.target instanceof Element ? event.target : null;
     const line = target?.closest(".usfm-chap");
     if (line === null || line === undefined || !view.contentDOM.contains(line)) return false;
     const box = line.getBoundingClientRect();
     const titleTop = box.top + parseFloat(getComputedStyle(line).paddingTop);
-    if (event.clientY >= titleTop) return false;
+    if (event.clientY >= titleTop) {
+      // The title itself: the host's, when it wants it (`titlesAreTheHosts`).
+      const action = view.state.facet(chapterTitleAction);
+      if (action === undefined || !action.wants()) return false;
+      event.preventDefault();
+      titlePressed.add(view);
+      return true;
+    }
     const at = view.posAtDOM(line);
     const heading = chapterHeadings(docText(view.state), structureAt(view.state)).find(
       (h) => at >= h.from && at <= h.to,
@@ -857,6 +918,7 @@ export const verseLineBehaviour: Extension = [
   verseBoxes,
   chapterHeadingsAreFixed,
   pressesAboveTitlesStayBehind,
+  titlesAreTheHosts,
   emptiedChaptersKeepVerseOne,
   typeIntoEmptyChapter,
   caretBesideEmptyChapterVerse,

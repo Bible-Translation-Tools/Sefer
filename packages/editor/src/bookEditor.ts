@@ -26,6 +26,7 @@ import { deleteColumn, deleteRow, insertColumn, insertRow } from "./core/tableCo
 import { span } from "./core/timing";
 import { type UnsupportedMarkup, unsupportedMarkup } from "./core/unsupported";
 import { addVerseAfter, removeVerseMarker, renumberVerse, verseAt } from "./core/verseCommands";
+import { chapterTitleAction } from "./core/verseLines";
 import { drawnWords, type EditorWords, editorWords } from "./core/words";
 import type { EditorFeature } from "./features";
 import { handleFor, markMoved, type EditorHandle } from "./handle";
@@ -117,6 +118,12 @@ export interface BookEditorMount extends EditorHandle {
    * is let go), whether or not the default popover is showing. Returns the detach.
    */
   onActivate(listener: (target: AttributedMarkup | null) => void): () => void;
+  /**
+   * Called when a chapter's title is pressed in Reading or Form Mode (Sefer
+   * opens its chapter labels dialog). While anyone listens, the press is
+   * theirs and the caret stays put. Returns the detach.
+   */
+  onChapterTitle(listener: () => void): () => void;
   /** Gives `target` these attributes, as one Undo step. */
   setAttributes(target: AttributedMarkup, attributes: readonly Attribute[]): void;
   /**
@@ -179,6 +186,7 @@ const mountedConfig = new WeakMap<
 >();
 
 const activateListeners = new WeakMap<EditorBook, Set<(target: AttributedMarkup | null) => void>>();
+const titleListeners = new WeakMap<EditorBook, Set<() => void>>();
 const caretListeners = new WeakMap<EditorBook, Set<(head: number) => void>>();
 
 const drawnListeners = new WeakMap<EditorBook, Set<() => void>>();
@@ -320,6 +328,12 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
         ...(options.features ?? []),
         ...(options.words === undefined ? [] : [editorWords.of(options.words)]),
         drawnWords,
+        chapterTitleAction.of({
+          wants: () => (titleListeners.get(book)?.size ?? 0) > 0,
+          run: () => {
+            for (const listener of titleListeners.get(book) ?? []) listener();
+          },
+        }),
         editorPreferences(options.preferences),
         EditorView.updateListener.of((update) => {
           const listeners = activateListeners.get(book);
@@ -434,6 +448,11 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
     attributesAt: (offset: number) => attributesAt(created.state, offset),
     onActivate: (listener: (target: AttributedMarkup | null) => void) => {
       const held = listenersOf(activateListeners, book);
+      held.add(listener);
+      return () => held.delete(listener);
+    },
+    onChapterTitle: (listener: () => void) => {
+      const held = listenersOf(titleListeners, book);
       held.add(listener);
       return () => held.delete(listener);
     },
