@@ -692,58 +692,93 @@ class VerseBox implements LayerMarker {
 const verseBoxes = layer({
   above: false,
   class: "usfm-verse-boxes",
-  update: (update) =>
-    update.docChanged ||
-    update.selectionSet ||
-    update.viewportChanged ||
-    update.geometryChanged ||
-    update.focusChanged ||
-    assignmentAt(update.startState).verseLines !== assignmentAt(update.state).verseLines,
+  update: (update) => {
+    const moved =
+      update.docChanged ||
+      update.viewportChanged ||
+      update.geometryChanged ||
+      assignmentAt(update.startState).verseLines !== assignmentAt(update.state).verseLines;
+    if (moved) boxesMeasured.delete(update.view);
+    return moved || update.selectionSet || update.focusChanged;
+  },
   markers: (view) => {
     if (!isVerseLines(view.state)) return [];
-    const structure = structureAt(view.state);
-    const doc = docText(view.state);
-    const scroller = view.scrollDOM.getBoundingClientRect();
-    const baseLeft = scroller.left - view.scrollDOM.scrollLeft * view.scaleX;
-    const baseTop = scroller.top - view.scrollDOM.scrollTop * view.scaleY;
-    const sample = view.contentDOM.querySelector<HTMLElement>(".usfm-verse-line");
-    if (sample === null) return [];
-    const style = getComputedStyle(sample);
-    const hang = parseFloat(style.paddingInlineStart);
-    const pad = parseFloat(style.getPropertyValue("--verse-box-pad")) || 24;
-    const gap = parseFloat(style.getPropertyValue("--verse-box-gap")) || 8;
-    const lineBox = sample.getBoundingClientRect();
-    const caret = view.state.selection.main.head;
-    const caretVerse = verseIndexAt(structure, caret);
-    const { from: shownFrom, to: shownTo } = view.viewport;
-    const rects: { left: number; top: number; width: number; bottom: number; active: boolean }[] =
-      [];
-    for (let k = 0; k < structure.verses.length; k++) {
-      const verse = structure.verses[k];
-      const end = Math.max(verseEnd(structure, doc, k), verse.contentFrom);
-      if (end < shownFrom || verse.markerFrom > shownTo) continue;
-      const start = view.coordsAtPos(verse.markerFrom, 1);
-      const last = view.coordsAtPos(end, -1);
-      if (start === null || last === null) continue;
-      const left = lineBox.left + hang - pad;
-      const right = lineBox.right;
-      rects.push({
-        left: (left - baseLeft) / view.scaleX,
-        top: (start.top - pad - baseTop) / view.scaleY,
-        width: (right - left) / view.scaleX,
-        bottom: (Math.max(last.bottom, start.bottom) + pad - baseTop) / view.scaleY,
-        active: k === caretVerse && view.hasFocus,
-      });
-    }
-    // A verse that starts mid-line in the file sits closer to the one before;
-    // its neighbour's box stops short so the two never touch.
-    return rects.map((rect, i) => {
-      const next = rects[i + 1];
-      const bottom = next === undefined ? rect.bottom : Math.min(rect.bottom, next.top - gap);
-      return new VerseBox(rect.left, rect.top, rect.width, bottom - rect.top, rect.active);
-    });
+    const caretVerse = verseIndexAt(structureAt(view.state), view.state.selection.main.head);
+    // The caret moved and nothing else: the same boxes, the ring on another.
+    const measured = boxesMeasured.get(view) ?? measureBoxes(view);
+    // Nothing measured yet (no verse line drawn) is asked again next time.
+    if (measured.length > 0) boxesMeasured.set(view, measured);
+    return measured.map(
+      ({ k, left, top, width, height }) =>
+        new VerseBox(left, top, width, height, k === caretVerse && view.hasFocus),
+    );
   },
 });
+
+interface MeasuredBox {
+  readonly k: number;
+  readonly left: number;
+  readonly top: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+/**
+ * The boxes as last measured, per view, until the text, the viewport, the
+ * geometry or the mode changes. Measuring reads layout, so a caret move that
+ * re-measured every visible verse cost a layout a keystroke.
+ */
+const boxesMeasured = new WeakMap<EditorView, readonly MeasuredBox[]>();
+
+const measureBoxes = (view: EditorView): readonly MeasuredBox[] => {
+  const structure = structureAt(view.state);
+  const doc = docText(view.state);
+  const scroller = view.scrollDOM.getBoundingClientRect();
+  const baseLeft = scroller.left - view.scrollDOM.scrollLeft * view.scaleX;
+  const baseTop = scroller.top - view.scrollDOM.scrollTop * view.scaleY;
+  const sample = view.contentDOM.querySelector<HTMLElement>(".usfm-verse-line");
+  if (sample === null) return [];
+  const style = getComputedStyle(sample);
+  const hang = parseFloat(style.paddingInlineStart);
+  const pad = parseFloat(style.getPropertyValue("--verse-box-pad")) || 24;
+  const gap = parseFloat(style.getPropertyValue("--verse-box-gap")) || 8;
+  const lineBox = sample.getBoundingClientRect();
+  const { from: shownFrom, to: shownTo } = view.viewport;
+  const rects: { k: number; left: number; top: number; width: number; bottom: number }[] = [];
+  for (let k = 0; k < structure.verses.length; k++) {
+    const verse = structure.verses[k];
+    if (verse.markerFrom > shownTo) break;
+    // Ended before the viewport: `verseEnd` walks the lines, so it is asked only near it.
+    if ((structure.verses[k + 1]?.markerFrom ?? Infinity) < shownFrom) continue;
+    const end = Math.max(verseEnd(structure, doc, k), verse.contentFrom);
+    if (end < shownFrom) continue;
+    const start = view.coordsAtPos(verse.markerFrom, 1);
+    const last = view.coordsAtPos(end, -1);
+    if (start === null || last === null) continue;
+    const left = lineBox.left + hang - pad;
+    const right = lineBox.right;
+    rects.push({
+      k,
+      left: (left - baseLeft) / view.scaleX,
+      top: (start.top - pad - baseTop) / view.scaleY,
+      width: (right - left) / view.scaleX,
+      bottom: (Math.max(last.bottom, start.bottom) + pad - baseTop) / view.scaleY,
+    });
+  }
+  // A verse that starts mid-line in the file sits closer to the one before;
+  // its neighbour's box stops short so the two never touch.
+  return rects.map((rect, i) => {
+    const next = rects[i + 1];
+    const bottom = next === undefined ? rect.bottom : Math.min(rect.bottom, next.top - gap);
+    return {
+      k: rect.k,
+      left: rect.left,
+      top: rect.top,
+      width: rect.width,
+      height: bottom - rect.top,
+    };
+  });
+};
 
 /** Everything line-by-line adds besides its keys and its layout. */
 export const verseLineBehaviour: Extension = [
