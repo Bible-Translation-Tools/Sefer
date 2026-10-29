@@ -2,14 +2,14 @@
 id: 06b5c571-fd15-40fd-964e-3262496bf295
 title: "Import from Word or LibreOffice"
 kind: plan
-status: planned
+status: in-progress
 created: 2026-10-29
 updated: 2026-10-29
 sha: ba71ba91
 tags: [import]
 ---
 
-A translator who drafted in Word or LibreOffice brings that draft into a book: a chapter, a range of chapters, or the whole book. The reading is done by the new package `@sefer/document-import` (`packages/document-import`, built 2026-10-29). This plan covers the part inside Sefer: the command, the dialog, the preview, and the one undoable edit. Will ruled on every question on 2026-10-29; the answers are on the questions below. It is built on a branch of its own once other work clears.
+A translator who drafted in Word or LibreOffice brings that draft into a book: a chapter, a range of chapters, or the whole book. The reading is done by the new package `@sefer/document-import` (`packages/document-import`, built 2026-10-29). This plan covers the part inside Sefer: the command, the dialog, the preview, and the one undoable edit. Will ruled on every question on 2026-10-29; the answers are on the questions below. Built on the branch `import-document` (2026-10-29); what changed from this plan on the way is under "As built".
 
 > I would just want this buried in a menu for like import from Word, and then we'd probably want some sort of modal to pop up […] makes them explicitly pick the scope, i.e., the book and or chapters
 
@@ -79,23 +79,30 @@ flowchart LR
 
 <Files id="footprint">
 ```
-+ src/core/documentImport/
-+ src/core/documentImport/splice.ts -- replace the scope's chapters; header and other chapters untouched
-+ src/core/documentImport/importPreview.ts -- render → splice → (overlay) → FormatPreview-shaped changes; applyImport
-~ src/core/galley/galley.ts -- expose the engine's overlayText on GalleyService
-~ src/core/fixes/fixes.ts -- overlayTexts(galley, targetText, sourceText, opts): overlayBook's pattern with a text target
++ src/core/documentImport/importPreview.ts -- splice the scope's chapters, (overlay), one change, lost verses; applyImport; chapterWordOf
+~ src/core/fixes/fixes.ts -- overlayText(galley, targetText, sourceText, opts), sharing overlayBook's helper
 + src/app/ui/import/ImportDocumentDialog.tsx -- file, scope, switches from report.found, Advanced, preview
-+ src/app/ui/import/ImportPreview.tsx -- the result in a read-only editor view, with the USFM / plain toggle
-+ src/app/ui/primitives/ChapterScope.tsx -- book + chapters, accepts a citation (parseCitation)
+~ src/app/ProjectContext.tsx -- importOpen / setImportOpen, beside the palette's
+~ src/routes/_app.tsx -- mounts the dialog beside the palette
 ~ src/app/commands.ts -- import.document: palette only, when hasBook; lazy-loads the package and opens the dialog
 ~ src/app/messages/en.json -- dialog copy (Paraglide)
 ~ package.json -- @sefer/document-import: workspace:*
 ~ documentation/architecture/landing.md -- a "documents into a book" section beside the import sources
-~ documentation/services.md -- the import row
++ agents/skills/verify-sefer/features/import-document.md -- how to drive and prove it
 ```
 </Files>
 
 My estimate is 800 to 1,200 lines on the Sefer side. The package is about 1,800.
+
+## As built (2026-10-29)
+
+- **The open book only.** The import goes into the book that is open; a citation naming another book says "Open JUD first". That keeps "existing books only" without reaching books the editor has not opened.
+- **No new engine door.** `galley.overlay` already answers edits against the target text, so `overlayText` in `src/core/fixes/fixes.ts` applies them to the spliced text; `GalleyService` is unchanged. `overlayBook` shares the same register-overlay-remove helper.
+- **No new picker or preview component.** The Chapters box reads through `shell.location` (the same `parseCitation` the sidebar search uses), and the preview is the existing `ExcerptReader` over the replaced chapters.
+- **Chapter words** default to "chapter" plus the book's own `\cl`, as ruled; Advanced overrides them.
+- Walked end to end on the Web fixture with a generated Philemon `.docx`: [the feature file](../../agents/skills/verify-sefer/features/import-document.md).
+
+<Question id="chunks">The overlay carries paragraph and poetry markers only (the engine's default set, "no titles"), so a book's `\s5` chunk markers inside the replaced chapters are lost: importing all of Titus over the ULB keeps its 9 `\p` but drops 22 `\s5`. Should "Try to keep this book's paragraphing" carry `\s5` too (`markers` can name it), or is losing chunk markers on a whole-chapter replace right?</Question>
 
 ## Questions
 
