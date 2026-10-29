@@ -43,35 +43,38 @@ export const previewImport = (
   const incoming = split(imported);
   const inScope = (n: number) => chapters === undefined || (n >= chapters.from && n <= chapters.to);
 
-  const replaced = [...incoming.chapters.keys()].filter(inScope);
+  const replaced = [...new Set(incoming.blocks.map((b) => b.n))].filter(inScope);
   const wanted =
     chapters === undefined
       ? replaced
       : Array.from({ length: chapters.to - chapters.from + 1 }, (_, i) => chapters.from + i);
-  const absent = wanted.filter((n) => !incoming.chapters.has(n) && current.chapters.has(n));
+  const held = new Set(current.blocks.map((b) => b.n));
+  const absent = wanted.filter((n) => !replaced.includes(n) && held.has(n));
 
-  const empty = current.chapters.size === 0 && current.header.trim() === "";
+  const empty = current.blocks.length === 0 && current.header.trim() === "";
+  const parts = merge(current.blocks, incoming.blocks, replaced);
   const header = empty ? incoming.header : current.header;
-  const merged = new Map(current.chapters);
-  for (const n of replaced) merged.set(n, incoming.chapters.get(n)!);
-  const body = [...merged.keys()]
-    .sort((a, b) => a - b)
-    .map((n) => withNewline(merged.get(n)!))
-    .join("");
-  const spliced = withNewline(header) + body;
+  const spliced = join(header, parts);
 
-  const overlaid = keepParagraphing && replaced.some((n) => current.chapters.has(n));
-  let text = spliced;
+  let overlaid = keepParagraphing && replaced.some((n) => held.has(n));
+  let final = parts;
   if (overlaid) {
     const laid = overlayText(galley, spliced, source.text);
     if (Result.isFailure(laid)) return Result.fail({ description: laid.failure.description });
-    text = laid.success;
+    // Only the replaced chapters take the overlay's result: it is not idempotent,
+    // and the chapters left alone must stay byte for byte as they were.
+    const blocks = split(laid.success).blocks;
+    if (blocks.length === parts.length && blocks.every((b, i) => b.n === parts[i].n)) {
+      final = parts.map((part, i) => (part.ours ? { ...part, text: blocks[i].text } : part));
+    } else {
+      overlaid = false;
+    }
   }
+  const text = join(header, final);
 
-  const after = split(text);
   const lost = replaced.flatMap((n) => {
-    const kept = new Set(versesOf(after.chapters.get(n) ?? ""));
-    return versesOf(current.chapters.get(n) ?? "")
+    const kept = new Set(versesOf(final.find((p) => p.n === n && p.ours)?.text ?? ""));
+    return versesOf(current.blocks.find((b) => b.n === n)?.text ?? "")
       .filter((v) => !kept.has(v))
       .map((v) => `${n}:${v}`);
   });
@@ -113,27 +116,70 @@ export const chapterWordOf = (text: string): string | undefined => {
   return word === "" ? undefined : word;
 };
 
-const CHAPTER = /^\\c\s+(\d+)/gm;
+// A chapter marker wherever it stands, line start or not.
+const CHAPTER = /(?<=^|\s)\\c\s+(\d+)/g;
+
+interface Block {
+  readonly n: number;
+  /** From its `\c` up to the next `\c`, exactly as written. */
+  readonly text: string;
+}
+
+interface Part extends Block {
+  /** Taken from the document; otherwise the book's own block, untouched. */
+  readonly ours: boolean;
+}
 
 function split(text: string) {
   const starts = [...text.matchAll(CHAPTER)];
-  const chapters = new Map<number, string>();
-  starts.forEach((m, i) => {
-    const end = i + 1 < starts.length ? starts[i + 1].index : text.length;
-    const n = Number(m[1]);
-    // A repeated chapter number keeps its first block; the rest stays in it as text.
-    if (!chapters.has(n)) chapters.set(n, text.slice(m.index, end));
-    else chapters.set(n, chapters.get(n)! + text.slice(m.index, end));
+  const blocks: Block[] = starts.map((m, i) => ({
+    n: Number(m[1]),
+    text: text.slice(m.index, i + 1 < starts.length ? starts[i + 1].index : text.length),
+  }));
+  return { header: starts.length > 0 ? text.slice(0, starts[0].index) : text, blocks };
+}
+
+// The book's chapters in the book's own order. A replaced chapter takes the
+// first block with its number (a repeat later on is the book's and stays); a
+// chapter only the document has goes before the first higher-numbered one.
+function merge(book: readonly Block[], document: readonly Block[], replaced: readonly number[]) {
+  const theirs = (n: number) =>
+    document
+      .filter((b) => b.n === n)
+      .map((b) => b.text)
+      .join("");
+  const parts: Part[] = [];
+  const placed = new Set<number>();
+  for (const block of book) {
+    if (replaced.includes(block.n) && !placed.has(block.n)) {
+      parts.push({ n: block.n, text: theirs(block.n), ours: true });
+      placed.add(block.n);
+    } else {
+      parts.push({ ...block, ours: false });
+    }
+  }
+  for (const n of [...replaced].sort((a, b) => a - b)) {
+    if (placed.has(n)) continue;
+    const at = parts.findIndex((p) => p.n > n);
+    parts.splice(at < 0 ? parts.length : at, 0, { n, text: theirs(n), ours: true });
+  }
+  return parts;
+}
+
+// The book's own text is joined as it was; a line break is added only where a
+// block from the document would otherwise run on from the text before it.
+function join(header: string, parts: readonly Part[]) {
+  let text = header;
+  parts.forEach((part, i) => {
+    const touches = part.ours || parts[i - 1]?.ours === true;
+    if (touches && text !== "" && !/\s$/.test(text)) text += "\n";
+    text += part.text;
   });
-  return { header: starts.length > 0 ? text.slice(0, starts[0].index) : text, chapters };
+  return text;
 }
 
 function versesOf(chapter: string) {
   return [...chapter.matchAll(/\\v\s+(\S+)/g)].map((m) => m[1]);
-}
-
-function withNewline(text: string) {
-  return text === "" || text.endsWith("\n") ? text : `${text}\n`;
 }
 
 function stripId(header: string) {
@@ -144,6 +190,9 @@ function oneChange(before: string, after: string): readonly Change[] {
   if (before === after) return [];
   let start = 0;
   while (start < before.length && start < after.length && before[start] === after[start]) start++;
+  // Never split a surrogate pair: a boundary just after a high surrogate, or
+  // just before a low one, moves outward to take the whole character.
+  if (start > 0 && isHigh(before.charCodeAt(start - 1))) start--;
   let end = 0;
   while (
     end < before.length - start &&
@@ -151,5 +200,9 @@ function oneChange(before: string, after: string): readonly Change[] {
     before[before.length - 1 - end] === after[after.length - 1 - end]
   )
     end++;
+  if (end > 0 && isLow(before.charCodeAt(before.length - end))) end--;
   return [{ from: start, to: before.length - end, insert: after.slice(start, after.length - end) }];
 }
+
+const isHigh = (code: number) => code >= 0xd800 && code <= 0xdbff;
+const isLow = (code: number) => code >= 0xdc00 && code <= 0xdfff;
