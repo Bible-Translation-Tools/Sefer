@@ -4,7 +4,7 @@ title: "Chapter labels: a Sefer rule, a fix and a workflow"
 kind: idea
 status: planned
 created: 2026-10-20
-updated: 2026-10-22
+updated: 2026-10-29
 sha: 1584e9b
 tags: [findings]
 ---
@@ -158,4 +158,16 @@ Both directions: per-chapter to one `\cl Psalm` before `\c 1`, and back.
 <Question id="default">On by default, or a toggle in Proofreading settings for teams that never typeset?</Question>
 
 <Followup id="build">Build after the tutorials and the localization research (Will, 2026-10-22: "I will hold off one second on getting it built").</Followup>
+
+## Built (2026-10-29, branch editor/keymaps-chapter-labels)
+
+Will's rulings that day changed the shape: the dialog opens from a chapter's title, not from a finding, and it works per book.
+
+- **The editor** names a chapter from any `\cl` inside the chapter's span (the parse's chapter rows), never "the line after `\c`". Only the `\c` line and the label lines are hidden; the title is drawn on the `\c` line, so a `\s` between them stays visible and reachable. The label lines take edits only from the dialog (`project.chapterLabels` in `HEADING_WRITERS`).
+- **The rule** is `src/core/rules/chapterLabels.ts`: every `\cl` off the parse's tokens, shaped `word-number`, `number-word` or `other` against its chapter's number; `standardize(book, word)` writes or rewrites one book label before `\c 1` and takes out the chapter labels that are that word and their number. Labels written as words and stray numbers are kept; a book whose numbers come first ("3 Sura") has its words rewritten in place instead.
+- **The dialog** (`src/app/ui/rules/ChapterLabels.tsx`): one row per book with labels, its words with counts (most used first), "Another word", "Leave as it is", and a "Use for every book" box at the top. Labels kept as written are listed under their book. Standardize is one cross-book edit (`chapterLabels.standardize`), one Undo.
+
+<Followup id="findings">Not built yet: the inline marks and Findings-panel entries for mixed or stray labels (the rule's `judge`, above).</Followup>
+
+<Followup id="multibuffer">The "kept as written" list is plain text; Will suggested a clipped read-only multibuffer of those lines.</Followup>
 

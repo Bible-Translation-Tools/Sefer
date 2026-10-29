@@ -24,6 +24,7 @@ import { useShell } from "../ProjectContext";
 import { shellKeys } from "../settings";
 import { allow, checkLabel, fineHere, flaggedText, turnOff } from "../suppressAnswers";
 import { LineMenu, type LineMenuAt } from "./LineMenu";
+import { ChapterLabelsDialog } from "./rules/ChapterLabels";
 import { useAlignedGroup } from "./workspace/aligned";
 import { nameBlock } from "./workspace/blockNames";
 import { metadataOf } from "./workspace/project";
@@ -115,6 +116,7 @@ export function BookEditor(props: BookEditorProps) {
   const [lineMenu, setLineMenu] = createSignal<LineMenuAt | undefined>(undefined, {
     name: "lineMenu",
   });
+  const [labelsOpen, setLabelsOpen] = createSignal(false, { name: "chapterLabelsOpen" });
   const [host, setHost] = createSignal<HTMLDivElement | undefined>(undefined, {
     name: "editorHost",
   });
@@ -172,6 +174,9 @@ export function BookEditor(props: BookEditorProps) {
 
       if (remembered !== undefined) editor.resume(remembered);
 
+      // A chapter's title opens its labels, project-wide (ui/rules/ChapterLabels.tsx).
+      const untitle = editor.onChapterTitle(() => setLabelsOpen(true));
+
       setBound(editor);
 
       const leave = aligned?.join({ editor, book: bookId });
@@ -179,6 +184,7 @@ export function BookEditor(props: BookEditorProps) {
       // Returned, not onCleanup: a Solid 2 effect's callback has no owner (NO_OWNER_CLEANUP).
       return () => {
         leave?.();
+        untitle();
         unwatch();
         shell.noteCaret(undefined);
         Effect.runFork(Fiber.interrupt(ghosting));
@@ -260,6 +266,10 @@ export function BookEditor(props: BookEditorProps) {
             {(at) => <LineMenu editor={editor()} at={at} onClose={() => setLineMenu(undefined)} />}
           </Show>
         )}
+      </Show>
+      {/* Mounted only while open: each opening starts from the books as they are. */}
+      <Show when={labelsOpen()}>
+        <ChapterLabelsDialog open onOpenChange={setLabelsOpen} />
       </Show>
     </div>
   );

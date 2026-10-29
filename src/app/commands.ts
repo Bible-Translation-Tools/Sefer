@@ -4,10 +4,12 @@ import type { UseNavigateResult } from "@tanstack/solid-router";
 import { Effect, Option, Result, type Scope } from "effect";
 import { createSignal } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import { applyFormat, applyOverlay, formatBook, overlayBook } from "#core/fixes/fixes";
 import { makeMultiBook } from "#core/multibook/multibook";
 import { Observability, type ObservabilityService } from "#core/observability";
 import type { Project } from "#core/project/project";
+import { chapterLabelsOf, standardize } from "#core/rules/chapterLabels";
 
 import { personAuthor } from "./author";
 import { contentHostFor } from "./endpoints";
@@ -839,6 +841,41 @@ const overlayProject = (bridge: ShellBridge, multibook: Helpers["multibook"]) =>
       yield* showWhatNeedsText(bridge, focused, done);
     else bridge.report(done);
   });
+/**
+ * The chapter labels dialog's one action: each chosen book's labels made one
+ * word (`standardize`, core/rules/chapterLabels.ts), computed from the book's
+ * held parse at the moment of the press and refused for a book whose parse is
+ * older than its text. One cross-book edit, so one Undo.
+ */
+const chapterLabelCommands = (bridge: ShellBridge, h: Helpers) => [
+  registerCommand({
+    id: "chapterLabels.standardize",
+    title: t("Standardize chapter labels"),
+    when: h.hasProject,
+    run: (argument) => {
+      if (!(argument instanceof Map)) return;
+      const analyses = bridge.services.projectAnalysis;
+      let stale = false;
+      const operation = h.multibook.runAcrossBooks("chapterLabels", (book) => {
+        const word: unknown = argument.get(book.id);
+        if (typeof word !== "string" || word.trim() === "") return null;
+        const held = analyses.analysis(book.id);
+        if (Option.isNone(held) || !analyses.fresh(book.id, book.source().stamp)) {
+          stale = true;
+          return null;
+        }
+        return standardize(chapterLabelsOf(held.value.analysis), word.trim());
+      });
+      if (operation === null) {
+        bridge.report(stale ? m.chapter_labels_stale() : m.chapter_labels_nothing());
+        return;
+      }
+      bridge.changed({ kind: "book.apply", books: operation.books });
+      bridge.report(m.chapter_labels_done({ count: operation.books.length }));
+    },
+  }),
+];
+
 const overlayCommands = (bridge: ShellBridge, h: Helpers) => {
   const { hasBook, hasProject } = h;
   return [
@@ -884,6 +921,7 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
     ...insertCommands(h),
     ...formatCommands(bridge, h),
     ...overlayCommands(bridge, h),
+    ...chapterLabelCommands(bridge, h),
   ];
 
   return () => {
