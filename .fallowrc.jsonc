@@ -15,6 +15,8 @@
     // `pnpm editor:bench` serves this page by config path; nothing imports it.
     "packages/editor/bench/vite.config.ts",
     "packages/editor/bench/main.ts",
+    // Run with `node --test` by the verify-document-import skill; nothing imports it.
+    "packages/document-import/src/faithful.verify.ts",
   ],
   // The planning site (planning/) is its own workspace with its own checks
   // (astro check, pnpm plans check), as it is for oxlint and oxfmt.

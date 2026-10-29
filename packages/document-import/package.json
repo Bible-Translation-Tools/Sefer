@@ -1,0 +1,30 @@
+{
+  "name": "@sefer/document-import",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Reads a Word (.docx) or OpenDocument (.odt) translation draft and renders it as USFM, faithfully: the document's own paragraphs, verse numbers, footnotes and comments, with a report of every guess. Framework-free; runs in the browser and in Node.",
+  "bin": {
+    "document-import": "src/cli.ts"
+  },
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "verify": "node --test src/faithful.verify.ts"
+  },
+  "dependencies": {
+    "fflate": "^0.8.3"
+  },
+  "devDependencies": {
+    "@xmldom/xmldom": "^0.9.12"
+  },
+  "peerDependencies": {
+    "@xmldom/xmldom": "^0.9.8"
+  },
+  "peerDependenciesMeta": {
+    "@xmldom/xmldom": {
+      "optional": true
+    }
+  }
+}
