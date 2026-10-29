@@ -48,7 +48,7 @@ The generated half looks after itself; the judgement half does not. When a gate 
 | oxlint warnings | 0 | `pnpm lint` fails on any, every commit |
 | fallow dead code (`pnpm deadcode`) | 0 issue(s) | every deploy; advisory on branches |
 | fallow duplication | 1.7% in 64 clone group(s) | none — advisory |
-| suppression comments | 85 | each listed below with its reason |
+| suppression comments | 117 | each listed below with its reason |
 
 ### Oxlint warnings, by rule and file
 
@@ -62,6 +62,38 @@ None.
 | `src/app/locale.ts` | `oxlint-disable-next-line` | solid/reactivity |
 | `src/app/paraglide/messages.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/_index.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/block_name_d.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/block_name_ip.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/block_name_iq.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/block_name_li.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/block_name_m.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/block_name_nb.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/block_name_p.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/block_name_pi.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/block_name_q.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/block_name_q1.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/block_name_q2.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/block_name_q3.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/block_name_q4.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/block_name_r.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/block_name_s.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/block_name_s1.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/block_name_s2.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/block_name_s3.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/block_name_s4.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/editor_attributes_hint.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/editor_attributes_key_locked.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/editor_attributes_none.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/editor_attributes_read_only.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/editor_chapter_label.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/editor_chip_page_break.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/editor_chip_published_as.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/editor_empty_chapter_prompt.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/editor_verse_label.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/editor_verse_menu_add_verse_after.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/editor_verse_menu_change_number.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/editor_verse_menu_remove_marker.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/editor_verse_menu_verse_number.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/landing_clone_from_link.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/landing_clone_repository.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/landing_drop_hint.js` | `eslint-disable` | — |
