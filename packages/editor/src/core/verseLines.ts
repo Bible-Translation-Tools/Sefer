@@ -9,7 +9,13 @@ import {
   Transaction,
   type TransactionSpec,
 } from "@codemirror/state";
-import { EditorView, type KeyBinding, type LayerMarker, layer } from "@codemirror/view";
+import {
+  EditorView,
+  type KeyBinding,
+  type LayerMarker,
+  layer,
+  RectangleMarker,
+} from "@codemirror/view";
 
 import { docText, structureAt, type DocStructure } from "./docStructure";
 import type { DocLine, VerseRow } from "./fold";
@@ -725,6 +731,57 @@ const verseBoxes = layer({
   },
 });
 
+/**
+ * The selection, drawn inside the verse's box. CodeMirror's own spans a
+ * wrapped line edge to edge of the editor, past the box on both sides; this
+ * draws the same rectangles cut to the text's column, and the stylesheet
+ * hides CodeMirror's here. A selection never leaves its verse
+ * (`selectionStaysInVerse`), so one column fits it.
+ */
+const verseSelection = layer({
+  above: false,
+  class: "usfm-verse-selection",
+  update: (update) =>
+    update.docChanged ||
+    update.selectionSet ||
+    update.viewportChanged ||
+    update.geometryChanged ||
+    update.focusChanged,
+  markers: (view) => {
+    if (!isVerseLines(view.state) || view.state.selection.ranges.every((r) => r.empty)) return [];
+    const sample = view.contentDOM.querySelector<HTMLElement>(".usfm-verse-line");
+    if (sample === null) return [];
+    const style = getComputedStyle(sample);
+    const line = sample.getBoundingClientRect();
+    const scroller = view.scrollDOM.getBoundingClientRect();
+    const baseLeft = scroller.left - view.scrollDOM.scrollLeft * view.scaleX;
+    const columnLeft = (line.left + parseFloat(style.paddingLeft) - baseLeft) / view.scaleX;
+    const columnRight = (line.right - parseFloat(style.paddingRight) - baseLeft) / view.scaleX;
+    const cut: RectangleMarker[] = [];
+    for (const range of view.state.selection.ranges) {
+      if (range.empty) continue;
+      for (const rect of RectangleMarker.forRange(view, "cm-selectionBackground", range)) {
+        const left = Math.max(rect.left, columnLeft);
+        const right = Math.min(
+          rect.width === null ? columnRight : rect.left + rect.width,
+          columnRight,
+        );
+        if (right > left)
+          cut.push(
+            new RectangleMarker(
+              "cm-selectionBackground",
+              left,
+              rect.top,
+              right - left,
+              rect.height,
+            ),
+          );
+      }
+    }
+    return cut;
+  },
+});
+
 interface MeasuredBox {
   readonly k: number;
   readonly left: number;
@@ -793,6 +850,8 @@ const measureBoxes = (view: EditorView): readonly MeasuredBox[] => {
 /** Everything line-by-line adds besides its keys and its layout. */
 export const verseLineBehaviour: Extension = [
   lineByLineClass,
+  // Before the boxes: CodeMirror stacks a layer under the text higher the earlier it comes.
+  verseSelection,
   verseBoxes,
   chapterHeadingsAreFixed,
   pressesAboveTitlesStayBehind,

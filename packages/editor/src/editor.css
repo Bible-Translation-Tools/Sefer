@@ -235,6 +235,11 @@
 .cm-mode-regular .cm-line {
   padding: 0;
 }
+/* Line by line draws the selection inside the verse's box (`verseSelection`,
+   core/verseLines.ts); CodeMirror's own runs past the box on both sides. */
+.cm-mode-regular.cm-line-by-line .cm-selectionLayer {
+  display: none;
+}
 
 /* The reading's indents, in one unit (unitless, so the small verse number and
    the text it sits in measure alike). A paragraph's first line, a poetry level,
