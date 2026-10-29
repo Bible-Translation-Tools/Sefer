@@ -13,7 +13,7 @@ import { assignmentAt } from "./registry";
  *
  * "A line" is the block the caret is in, whole, wherever in it the caret
  * sits; a selection changes every block it touches. Level 3 and 4 exist only
- * in a chapter that already has a `\q3` or `\q4`. USFM mode keeps raw Tab, and
+ * in a book that already has a `\q3` or `\q4`. USFM mode keeps raw Tab, and
  * Form Mode and tables keep their own (they are bound ahead of this).
  */
 
@@ -28,33 +28,32 @@ const levelOf = (kind: string): number | null => {
   return q[1] === "" ? 1 : Number(q[1]);
 };
 
-const chapterSpan = (structure: DocStructure, pos: number): { from: number; to: number } => {
-  let from = 0;
-  let to = Number.MAX_SAFE_INTEGER;
-  for (const c of structure.chapters) {
-    if (c.from <= pos) from = c.from;
-    else {
-      to = c.from;
-      break;
-    }
-  }
-  return { from, to };
-};
+/**
+ * The book's habits: its deepest level in use, and whether it spells level 1
+ * bare (`\q`). One scan per document, kept with its structure: Tab and the
+ * line menu ask on every press.
+ */
+interface Habits {
+  readonly max: number;
+  readonly bare: boolean;
+}
 
-/** The chapter's habits: its deepest level in use, and whether it spells level 1 bare (`\q`). */
-const chapterHabits = (structure: DocStructure, pos: number) => {
-  const { from, to } = chapterSpan(structure, pos);
+const habitsSeen = new WeakMap<DocStructure, Habits>();
+
+const bookHabits = (structure: DocStructure): Habits => {
+  const seen = habitsSeen.get(structure);
+  if (seen !== undefined) return seen;
   let deepest = 0;
   let bare = false;
   const blocks = structure.blocks;
   for (let i = 0; i < blocks.length; i++) {
-    const at = blocks.fromAt(i);
-    if (at < from || at >= to) continue;
     const kind = blocks.at(i).kind;
     if (kind === "q") bare = true;
     deepest = Math.max(deepest, levelOf(kind) ?? 0);
   }
-  return { max: Math.max(BASE_MAX, deepest), bare };
+  const habits = { max: Math.max(BASE_MAX, deepest), bare };
+  habitsSeen.set(structure, habits);
+  return habits;
 };
 
 const spell = (level: number, bare: boolean): string =>
@@ -104,7 +103,7 @@ const shift =
       const level = levelOf(b.kind);
       const head = b.lines[0];
       if (level === null || head === undefined || head.marker === null) continue;
-      const { max, bare } = chapterHabits(structure, b.from);
+      const { max, bare } = bookHabits(structure);
       const next = Math.min(max, Math.max(0, level + step));
       if (next === level) continue;
       changes.push(remark(b, spell(next, bare)));
@@ -133,7 +132,7 @@ const stepOutOfEmptyPoetry: StateCommand = ({ state, dispatch }) => {
   const level = levelOf(b.kind);
   if (level === null || level === 0) return false;
   if (state.doc.sliceString(b.contentFrom, b.to).trim() !== "") return false;
-  const { bare } = chapterHabits(structure, b.from);
+  const { bare } = bookHabits(structure);
   dispatch(
     state.update({
       changes: remark(b, spell(level - 1, bare)),
@@ -162,7 +161,7 @@ const stepOutAtLineStart: StateCommand = ({ state, dispatch }) => {
   if (level === null || level === 0) return false;
   const before = state.doc.sliceString(b.contentFrom, sel.from);
   if (!/^\s*(\\v([ \t]+[\w-]*)?[ \t]*)?$/.test(before)) return false;
-  const { bare } = chapterHabits(structure, b.from);
+  const { bare } = bookHabits(structure);
   dispatch(
     state.update({
       changes: remark(b, spell(level - 1, bare)),
@@ -182,9 +181,10 @@ export const poetryLevelKeys = (): readonly KeyBinding[] => [
 ];
 
 /**
- * The kinds a line can be turned into from its menu: the paragraph family and
- * the poetry levels the chapter allows. Each is one marker name for another,
- * so the line's words never move.
+ * The kinds a line can be from its menu: a paragraph flush (`\m`) or indented
+ * (`\p`), and the poetry levels the book allows; no list items (Will,
+ * 2026-10-29). Lines of the wider family (`\pi`, `\li`) can be turned into
+ * them. Each is one marker name for another, so the line's words never move.
  */
 const TURNABLE = new Set(["p", "m", "pi", "q", "q1", "q2", "q3", "q4", "li", "li1"]);
 
@@ -202,9 +202,9 @@ export function lineKindAt(state: EditorState, offset: number): LineKind | null 
   const b = blockAt(structure, offset);
   if (b === null || b.lines[0]?.marker == null) return null;
   if (!TURNABLE.has(b.kind)) return { kind: b.kind, choices: [] };
-  const { max, bare } = chapterHabits(structure, b.from);
+  const { max, bare } = bookHabits(structure);
   const poetry = [1, 2, 3, 4].filter((level) => level <= max).map((level) => spell(level, bare));
-  return { kind: b.kind, choices: ["p", "m", "pi", ...poetry, "li"] };
+  return { kind: b.kind, choices: ["m", "p", ...poetry] };
 }
 
 /** Turns the line at an offset into another kind, as one Undo step; null when it cannot. */
