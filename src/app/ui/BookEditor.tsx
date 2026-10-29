@@ -30,6 +30,7 @@ import { ChapterLabelsDialog } from "./rules/ChapterLabels";
 import { findingMessage } from "./rules/labelMessages";
 import { useAlignedGroup } from "./workspace/aligned";
 import { nameBlock } from "./workspace/blockNames";
+import { expectedVersesFor } from "./workspace/expectedVerses";
 import { metadataOf } from "./workspace/project";
 
 import "@sefer/editor/editor.css";
@@ -39,6 +40,18 @@ export interface BookEditorProps {
 }
 
 type Shell = ReturnType<typeof useShell>;
+
+/** Once a session: someone typing USFM into Refine is told USFM mode is there. */
+let suggestedUsfm = false;
+const suggestUsfmMode = (shell: Shell): void => {
+  if (suggestedUsfm) return;
+  suggestedUsfm = true;
+  toasts.info({
+    title: m.typed_usfm_title(),
+    message: m.typed_usfm_message(),
+    action: { label: m.typed_usfm_switch(), onPress: () => shell.setMode("usfm") },
+  });
+};
 
 /** A differing chapter label's answers: the dialog, or fine here, or its word fine in every book. */
 function labelAnswers(shell: Shell, finding: Finding, openLabels: () => void): CorpusAction[] {
@@ -206,6 +219,8 @@ export function BookEditor(props: BookEditorProps) {
 
       const { ghosting, pairing, shortcuts } = watchSettings(shell, editor);
 
+      const untyped = editor.onTypedUsfm(() => suggestUsfmMode(shell));
+
       const unwatch = editor.onViewport((where) => {
         if (where !== null)
           shell.noteChapterAtTop(where.ordinal, {
@@ -230,6 +245,7 @@ export function BookEditor(props: BookEditorProps) {
       return () => {
         leave?.();
         untitle();
+        untyped();
         unwatch();
         shell.noteCaret(undefined);
         Effect.runFork(Fiber.interrupt(ghosting));
@@ -259,6 +275,11 @@ export function BookEditor(props: BookEditorProps) {
       else editor.setPolicy(editorPolicy("regular"));
       editor.setChapter(chapter);
     },
+  );
+
+  createEffect(
+    () => ({ editor: bound(), expected: expectedVersesFor(bookId) }),
+    ({ editor, expected }) => editor?.setExpectedVerses(expected ?? new Map()),
   );
 
   createEffect(

@@ -1,4 +1,9 @@
-import { mountReference, type PairedRange, type ReferenceMount } from "@sefer/editor";
+import {
+  expectedVersesOf,
+  mountReference,
+  type PairedRange,
+  type ReferenceMount,
+} from "@sefer/editor";
 import type { JSX } from "@solidjs/web";
 import { Effect, Fiber, Option, Result, Stream } from "effect";
 import X from "lucide-solid/icons/x";
@@ -31,6 +36,7 @@ import { shellKeys } from "../../settings";
 import { IconButton } from "../primitives";
 import { useAlignedGroup } from "./aligned";
 import { bookName } from "./books";
+import { supplyExpectedVerses } from "./expectedVerses";
 import { FollowToggle } from "./FollowToggle";
 import { metadataOf } from "./project";
 
@@ -189,8 +195,10 @@ export function ReferencePane(props: ReferencePaneProps) {
 
   // onCleanup in the component body: one inside an effect callback never runs (NO_OWNER_CLEANUP).
   let gone = false;
+  let unsupply: (() => void) | undefined;
   onCleanup(() => {
     gone = true;
+    unsupply?.();
   });
   const loading = services.composition.observability.operation("reference.load", {
     "book.id": bookId,
@@ -221,6 +229,7 @@ export function ReferencePane(props: ReferencePaneProps) {
       const skeleton = skeletonOf(text);
       cut();
       setSourceSkeleton(skeleton);
+      unsupply = supplyExpectedVerses(bookId, expectedVersesOf(text));
       loading.end("passed", {
         "reference.outcome": "text",
         "reference.chars": text.length,

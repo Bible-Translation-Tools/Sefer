@@ -46,9 +46,9 @@ The generated half looks after itself; the judgement half does not. When a gate 
 | --- | --- | --- |
 | oxlint errors | 0 | `pnpm lint`, every commit |
 | oxlint warnings | 0 | `pnpm lint` fails on any, every commit |
-| fallow dead code (`pnpm deadcode`) | 0 issue(s) | every deploy; advisory on branches |
-| fallow duplication | 1.6% in 64 clone group(s) | none — advisory |
-| suppression comments | 143 | each listed below with its reason |
+| fallow dead code (`pnpm deadcode`) | 1 issue(s) | every deploy; advisory on branches |
+| fallow duplication | 1.6% in 63 clone group(s) | none — advisory |
+| suppression comments | 146 | each listed below with its reason |
 
 ### Oxlint warnings, by rule and file
 
@@ -186,6 +186,9 @@ None.
 | `src/app/paraglide/messages/sidebar_show_key_terms.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/sidebar_show_results.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/sidebar_show_suggestions.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/typed_usfm_message.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/typed_usfm_switch.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/typed_usfm_title.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/writer_languages_loading.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/writer_languages_placeholder.js` | `eslint-disable` | — |
 | `src/app/paraglide/registry.js` | `eslint-disable` | — |

@@ -1941,3 +1941,18 @@
 .cm-diff-card .cm-scroller {
   overflow: hidden;
 }
+
+/* USFM typed in Refine, before it is written (`typedUsfm`): where it will go, in the USFM colours. */
+.cm-typed-usfm {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
+  font-style: normal;
+  color: var(--usfm-marker);
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  border-radius: 3px;
+  padding-inline: 2px;
+}
+.cm-typed-usfm-wrong {
+  color: #c62828;
+  text-decoration: wavy underline;
+}

@@ -121,7 +121,10 @@ const shift =
     return true;
   };
 
-/** Enter on an empty poetry line steps it out a level: `\q2` → `\q1`, `\q1` → `\p`. */
+/** Before a line's first word: nothing, or only the verse number that opens it. */
+const NO_WORDS_YET = /^\s*(\\v([ \t]+[\w-]*)?[ \t]*)?$/;
+
+/** Enter on an empty poetry line (a verse number alone still counts as empty) leaves poetry: `\q2` → `\p`. */
 const stepOutOfEmptyPoetry: StateCommand = ({ state, dispatch }) => {
   if (!inRefine(state)) return false;
   const sel = state.selection.main;
@@ -131,11 +134,10 @@ const stepOutOfEmptyPoetry: StateCommand = ({ state, dispatch }) => {
   if (b === null) return false;
   const level = levelOf(b.kind);
   if (level === null || level === 0) return false;
-  if (state.doc.sliceString(b.contentFrom, b.to).trim() !== "") return false;
-  const { bare } = bookHabits(structure);
+  if (!NO_WORDS_YET.test(state.doc.sliceString(b.contentFrom, b.to))) return false;
   dispatch(
     state.update({
-      changes: remark(b, spell(level - 1, bare)),
+      changes: remark(b, FLOOR),
       annotations: trusted.of("poetry-level"),
       userEvent: "input.usfm.reparent",
       scrollIntoView: true,
@@ -145,9 +147,9 @@ const stepOutOfEmptyPoetry: StateCommand = ({ state, dispatch }) => {
 };
 
 /**
- * Backspace at the very start of a poetry line steps it out a level, as Word
- * takes a bullet off before it joins lines: `\q2` → `\q1` → `\p`, and only
- * then does Backspace join the line above. "The start" is anywhere before the
+ * Backspace at the very start of a poetry line leaves poetry, as Word takes a
+ * bullet off before it joins lines: `\q2` → `\p`, and only then does
+ * Backspace join the line above. "The start" is anywhere before the
  * line's first word: before, inside or after a verse number opening the line.
  */
 const stepOutAtLineStart: StateCommand = ({ state, dispatch }) => {
@@ -160,11 +162,10 @@ const stepOutAtLineStart: StateCommand = ({ state, dispatch }) => {
   const level = levelOf(b.kind);
   if (level === null || level === 0) return false;
   const before = state.doc.sliceString(b.contentFrom, sel.from);
-  if (!/^\s*(\\v([ \t]+[\w-]*)?[ \t]*)?$/.test(before)) return false;
-  const { bare } = bookHabits(structure);
+  if (!NO_WORDS_YET.test(before)) return false;
   dispatch(
     state.update({
-      changes: remark(b, spell(level - 1, bare)),
+      changes: remark(b, FLOOR),
       annotations: trusted.of("poetry-level"),
       userEvent: "input.usfm.reparent",
       scrollIntoView: true,

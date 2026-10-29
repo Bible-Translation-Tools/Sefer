@@ -4,7 +4,7 @@ title: "Tab and Enter for poetry levels in Refine"
 kind: plan
 status: in-progress
 created: 2026-10-27
-updated: 2026-10-28
+updated: 2026-10-29
 sha: b4bbf347
 tags: [editor]
 ---
@@ -83,3 +83,22 @@ The guiding rule:
 <Followup id="also-wanted">Verse error handling and a simple context menu, alongside this prototype.</Followup>
 
 <Question id="paisano-review">Paisano: this changes `guardedEnter` (core/input.ts) and adds key handling in `@sefer/editor`. Built as a prototype on the designer's branch; review the behaviour above separately from the code. Thomas wants to play with it to make sure it feels right.</Question>
+
+## 2026-10-29: out of poetry in one step
+
+Stepping out one level at a time was too slow in practice:
+
+> I'm having trouble getting back out of the poetry line easily. Shift Tab isn't super familiar to me
+
+Enter on an empty poetry line (a verse number alone counts as empty) and Backspace at a poetry
+line's start now go straight to `\p`, whatever the level. Tab and Shift-Tab still move one level.
+
+## Typed USFM in Refine
+
+A typed `\` used to be refused. It now starts a marker shown inline; Space or Enter writes it
+when Refine can take it (`\v N`, any paragraph or poetry marker), and the app suggests USFM
+mode once a session. Anything else stays marked wrong until Backspace or Escape.
+
+<Question id="typed-character-markers">Typed character markers (`\nd`, `\wj`): an empty pair is no caret stop, so the caret settles outside it. Wrap the word before the caret instead, or a selection, or leave them to USFM mode?</Question>
+
+<Question id="expected-verses-beyond">Numbers past the reference's last verse now stay words. Should going past it also show a finding ("Psalm 23 has 6 verses in the reference")?</Question>

@@ -5,13 +5,16 @@ import { type EditorView, keymap, type KeyBinding } from "@codemirror/view";
 import { caretLineBoundary, extendCaret, moveCaret, moveCaretByWord } from "./caret";
 import { guardedBackspace, guardedDelete, mergeParagraphBackwards } from "./deletion";
 import { PAINT_PORT, planAt, structureAt } from "./editorState";
+import { expectedVersesField } from "./expectedVerses";
 import { guardedEnter, setBlockMarker } from "./input";
 import { insertFootnote, insertParagraph, insertPoetry, insertVerse } from "./insert";
 import { traceFor } from "./instrument";
+import { pastedTextFollowsTheRules } from "./pastedText";
 import { poetryLevelKeys } from "./poetryLevels";
 import { preferenceOn, type PreferenceKey } from "./preferences";
 import { tableKeys } from "./tableCommands";
-import { verseLineBehaviour, verseLineKeys } from "./verseLines";
+import { typedUsfmBehaviour, typedUsfmKeys } from "./typedUsfm";
+import { unverseKeys, verseLineBehaviour, verseLineKeys } from "./verseLines";
 
 /**
  * Every key the editor binds, in one place: mode × preference × key → action.
@@ -123,6 +126,15 @@ export function usfmKeys(): readonly KeyBinding[] {
 
 export const KEY_BUNDLES: readonly KeyBundle[] = [
   {
+    id: "typedUsfm",
+    summary:
+      "A typed backslash starts a marker shown in place; Space or Enter writes it, Backspace shortens it, Escape drops it (typedUsfm.ts).",
+    modes: ["reading"],
+    keys: typedUsfmKeys,
+    behaviour: typedUsfmBehaviour,
+    precedence: "highest",
+  },
+  {
     id: "tables",
     summary: "Tab and Shift-Tab walk a table's cells; Backspace or Delete takes an empty row.",
     modes: ["reading"],
@@ -141,7 +153,7 @@ export const KEY_BUNDLES: readonly KeyBundle[] = [
   {
     id: "poetryLevels",
     summary:
-      "Tab and Shift-Tab move a line between paragraph and poetry levels; Enter on an empty poetry line or Backspace at its start steps out.",
+      "Tab and Shift-Tab move a line one poetry level; Enter on an empty poetry line or Backspace at its start leaves poetry for \\p.",
     modes: ["reading"],
     keys: poetryLevelKeys,
     precedence: "highest",
@@ -149,10 +161,11 @@ export const KEY_BUNDLES: readonly KeyBundle[] = [
   {
     id: "verseShortcuts",
     summary:
-      'Typing "1", "1.", "v1" or "verse 1" then a space writes that verse when it is the next one the chapter lacks (typedVerseNumbers, verseLines.ts).',
+      'Typing "1", "1.", "v1" or "verse 1" then a space writes that verse when it is the next one or within the reference\'s count, never a duplicate (typedVerseNumbers, verseLines.ts); pasted text the same (pastedText.ts). Backspace just after a verse\'s number in Reading takes the verse back to the number.',
     modes: ["reading", "form"],
     preference: "verseShortcuts",
-    keys: () => [],
+    keys: unverseKeys,
+    behaviour: [expectedVersesField, pastedTextFollowsTheRules],
     precedence: "highest",
   },
   {

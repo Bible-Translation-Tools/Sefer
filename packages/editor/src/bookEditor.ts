@@ -15,6 +15,7 @@ import {
   attributesAt,
 } from "./core/attributes";
 import { structureAt } from "./core/editorState";
+import { setExpectedVerses, type ExpectedVerses } from "./core/expectedVerses";
 import { type Figure, figuresIn } from "./core/figures";
 import { frontMatterCard } from "./core/frontmatter";
 import { annotateOpen } from "./core/instrument";
@@ -24,6 +25,7 @@ import { lineKindAt, turnLineInto, type LineKind } from "./core/poetryLevels";
 import { changePreferences, editorPreferences, type EditorPreferences } from "./core/preferences";
 import { deleteColumn, deleteRow, insertColumn, insertRow } from "./core/tableCommands";
 import { span } from "./core/timing";
+import { onTypedUsfm } from "./core/typedUsfm";
 import { type UnsupportedMarkup, unsupportedMarkup } from "./core/unsupported";
 import { addVerseAfter, removeVerseMarker, renumberVerse, verseAt } from "./core/verseCommands";
 import { chapterTitleAction } from "./core/verseLines";
@@ -131,6 +133,13 @@ export interface BookEditorMount extends EditorHandle {
    * False when there is no verse there, or `number` is no verse number.
    */
   renumberVerse(offset: number, number: string): boolean;
+  /**
+   * How many verses each chapter is expected to have (`expectedVersesOf` a
+   * reference text): typed and pasted numbers past a chapter's last verse stay words.
+   */
+  setExpectedVerses(expected: ExpectedVerses): void;
+  /** Called with each marker written by typing USFM in Refine (`v`, `q2`). Returns the detach. */
+  onTypedUsfm(listener: (marker: string) => void): () => void;
   /** The line (block) at an offset: its marker and what Refine may turn it into; null elsewhere. */
   lineKindAt(offset: number): LineKind | null;
   /** Turns the line at an offset into another kind (`turnable` choices only), as one Undo step. */
@@ -473,6 +482,9 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
     insertTableColumn: (offset: number, side: "before" | "after") =>
       run(insertColumn(created.state, offset, side)),
     deleteTableColumn: (offset: number) => run(deleteColumn(created.state, offset)),
+    setExpectedVerses: (expected: ExpectedVerses) =>
+      created.dispatch({ effects: setExpectedVerses.of(expected) }),
+    onTypedUsfm: (listener: (marker: string) => void) => onTypedUsfm(created, listener),
     lineKindAt: (offset: number) => lineKindAt(created.state, offset),
     turnLineInto: (offset: number, kind: string) => run(turnLineInto(created.state, offset, kind)),
     renumberVerse: (offset: number, number: string) =>

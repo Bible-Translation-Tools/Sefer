@@ -7,6 +7,7 @@ import {
   type Extension,
   Facet,
   Transaction,
+  type StateCommand,
   type TransactionSpec,
 } from "@codemirror/state";
 import {
@@ -18,6 +19,7 @@ import {
 } from "@codemirror/view";
 
 import { docText, structureAt, type DocStructure } from "./docStructure";
+import { expectedLastVerse } from "./expectedVerses";
 import type { DocLine, VerseRow } from "./fold";
 import { isVisual, modeFacet, trusted } from "./kernel";
 import { preferenceOn } from "./preferences";
@@ -347,19 +349,57 @@ const caretBesideEmptyChapterVerse = EditorState.transactionFilter.of((tr) => {
 });
 
 /** "1", "1.", "v1", "v 1", "verse 1" at the end of what is before the caret, as its own word. */
-const TYPED_VERSE = /(^|\s)((?:verse\s*|v\s*)?(\d{1,3})\.?)$/i;
-/** A marker (and its number) just before: `\\v 4 ` is USFM already, not a typed number. */
-const MARKER_BEFORE = /\\[A-Za-z]+\d*(?:\s+[\d-]+)?\s*$/;
-/** Just after `\\v N`, its own number again: the reader retyping what is shown. */
-const SAME_VERSE_BEFORE = /\\v\s+(\d+)\s*$/;
+const TYPED_VERSE = /(^|\s)((verse\s*|v\s*)?(\d{1,3})\.?)$/i;
+
+/**
+ * What verse numbers may come next at `pos`: the one past the verse before it
+ * in its chapter (1 before any), the numbers the chapter already has, and the
+ * chapter's expected last verse when the host said (`expectedVerses`).
+ */
+export function versesAround(
+  state: EditorState,
+  pos: number,
+): { readonly next: number; readonly taken: ReadonlySet<number>; readonly last?: number } {
+  const structure = structureAt(state);
+  const chapter = structure.chapters.findLast((row) => row.from <= pos);
+  const start = chapter?.from ?? 0;
+  const end = chapter?.to ?? state.doc.length;
+  const taken = new Set<number>();
+  let previous = 0;
+  for (const verse of structure.verses) {
+    if (verse.markerFrom < start || verse.markerFrom > end) continue;
+    const last = Number((verse.num ?? "").split("-").pop());
+    if (!Number.isFinite(last)) continue;
+    taken.add(last);
+    if (verse.markerFrom < pos) previous = last;
+  }
+  return { next: previous + 1, taken, last: expectedLastVerse(state, pos) };
+}
+
+/**
+ * Whether a typed number becomes a verse, given what is around it
+ * (`versesAround`). Never a number the chapter already has: that stays as
+ * typed. Otherwise the next verse in order always does, and so does any
+ * number within the chapter's expected verses (the reference's count), out
+ * of order or not. With no count, only the next one; "v7" or "verse 7" is
+ * always a verse. Where it is typed does not matter.
+ */
+export function becomesAVerse(
+  around: ReturnType<typeof versesAround>,
+  number: number,
+  prefixed: boolean,
+): boolean {
+  if (number < 1 || around.taken.has(number)) return false;
+  if (prefixed || number === around.next) return true;
+  return around.last !== undefined && number <= around.last;
+}
 
 /**
  * Verse numbers typed the way people write them without USFM — "1", "1.",
  * "v1", "v 1", "verse 1" — become a verse (`\\v N`) on the space after them,
- * but only for the verse that comes next in this chapter (the one after the
- * caret's verse, or 1 before any) and only when the chapter has no such verse
- * yet. "7000" in chapter 3, a number out of order, or "12" in "12 disciples"
- * at verse 4 stay words. Undo takes the verse back to what was typed. Refine
+ * when `becomesAVerse` says so: the next verse in order, or any number
+ * within the chapter's expected verses, never one it already has. Undo, or
+ * Backspace after the number, takes the verse back to what was typed. Refine
  * and line by line; USFM is typed as USFM.
  */
 const typedVerseNumbers = EditorView.inputHandler.of((view, from, to, text) => {
@@ -370,31 +410,8 @@ const typedVerseNumbers = EditorView.inputHandler.of((view, from, to, text) => {
   const typed = TYPED_VERSE.exec(before);
   if (typed === null) return false;
   const tokenFrom = line.from + typed.index + typed[1].length;
-  const ahead = before.slice(0, tokenFrom - line.from);
-  const number = Number(typed[3]);
-  const same = SAME_VERSE_BEFORE.exec(ahead);
-  if (same !== null && Number(same[1]) === number) {
-    // "1 " typed straight after the `\\v 1` an empty chapter just wrote: already that verse.
-    view.dispatch({
-      changes: { from: tokenFrom, to: from },
-      selection: EditorSelection.cursor(tokenFrom),
-      userEvent: "input.type",
-    });
-    return true;
-  }
-  if (MARKER_BEFORE.test(ahead)) return false;
-  const structure = structureAt(view.state);
-  const chapter = structure.chapters.findLast((row) => row.from <= from);
-  const start = chapter?.from ?? 0;
-  const end = chapter?.to ?? view.state.doc.length;
-  let previous = 0;
-  for (const verse of structure.verses) {
-    if (verse.markerFrom < start || verse.markerFrom > end) continue;
-    const last = Number((verse.num ?? "").split("-").pop());
-    if (Number.isFinite(last) && last === number) return false;
-    if (verse.markerFrom < from && Number.isFinite(last)) previous = last;
-  }
-  if (number !== previous + 1) return false;
+  const number = Number(typed[4]);
+  if (!becomesAVerse(versesAround(view.state, from), number, typed[3] !== undefined)) return false;
   const insert = `\\v ${number} `;
   view.dispatch({
     changes: { from: tokenFrom, to: from, insert },
@@ -404,6 +421,35 @@ const typedVerseNumbers = EditorView.inputHandler.of((view, from, to, text) => {
   });
   return true;
 });
+
+/**
+ * Backspace just after a verse's number, in Refine, takes the verse back to
+ * the number it was typed as: `\\v 2 ` loses its `\\v ` and the 2 stays as a
+ * word, as Word's Backspace undoes an autocorrect. A second Backspace then
+ * deletes the digit like any other. Line by line keeps its numbers locked.
+ */
+const unverseTheNumber: StateCommand = ({ state, dispatch }) => {
+  if (!isVisual(state) || assignmentAt(state).verseLines) return false;
+  const sel = state.selection.main;
+  if (!sel.empty) return false;
+  const verse = structureAt(state).verses.find(
+    (row) => row.num !== null && sel.from >= row.numTo && sel.from <= row.contentFrom,
+  );
+  if (verse === undefined || sel.from === verse.numFrom) return false;
+  dispatch(
+    state.update({
+      changes: { from: verse.markerFrom, to: verse.numFrom },
+      annotations: trusted.of("unverse"),
+      userEvent: "delete.usfm.unverse",
+      scrollIntoView: true,
+    }),
+  );
+  return true;
+};
+
+export const unverseKeys = (): readonly KeyBinding[] => [
+  { key: "Backspace", run: unverseTheNumber },
+];
 
 /** `cm-line-by-line` and `cm-number-menus` on the editor, for what the stylesheet does only there. */
 const lineByLineClass = EditorView.editorAttributes.of((view) => {
