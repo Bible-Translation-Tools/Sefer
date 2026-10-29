@@ -133,20 +133,43 @@ export const overlayBook = (
   opts?: OverlayOptions,
 ): Result.Result<FormatPreview, Unsupported> => {
   const source = book.source();
+  return Result.map(overlayEdits(galley, source.text, sourceText, opts), (edits) => ({
+    bookId: book.id,
+    changes: edits,
+    stamp: source.stamp,
+    empty: edits.length === 0,
+  }));
+};
+
+/** The target text with the source's structure laid over it: what `overlayBook` would make the book. */
+export const overlayText = (
+  galley: GalleyService,
+  targetText: string,
+  sourceText: string,
+  opts?: OverlayOptions,
+): Result.Result<string, Unsupported> =>
+  Result.map(overlayEdits(galley, targetText, sourceText, opts), (edits) => {
+    let text = targetText;
+    for (const edit of [...edits].reverse()) {
+      text = text.slice(0, edit.from) + edit.insert + text.slice(edit.to);
+    }
+    return text;
+  });
+
+// Both texts are registered under fixed ids for the one overlay and removed again.
+const overlayEdits = (
+  galley: GalleyService,
+  targetText: string,
+  sourceText: string,
+  opts?: OverlayOptions,
+): Result.Result<readonly Change[], Unsupported> => {
   try {
-    galley.update(OVERLAY_TARGET, source.text);
+    galley.update(OVERLAY_TARGET, targetText);
     galley.updateReference(OVERLAY_SOURCE, sourceText, true);
     const overlaid = galley.overlay(OVERLAY_TARGET, OVERLAY_SOURCE, opts);
-    return Result.succeed({
-      bookId: book.id,
-      changes: overlaid.edits.map((edit) => ({
-        from: edit.from,
-        to: edit.to,
-        insert: edit.insert,
-      })),
-      stamp: source.stamp,
-      empty: overlaid.edits.length === 0,
-    });
+    return Result.succeed(
+      overlaid.edits.map((edit) => ({ from: edit.from, to: edit.to, insert: edit.insert })),
+    );
   } catch (error) {
     return Result.fail(
       new Unsupported({
