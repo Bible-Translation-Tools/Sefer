@@ -1,4 +1,5 @@
 import { type EditorState, Facet } from "@codemirror/state";
+import { EditorView } from "@codemirror/view";
 
 /**
  * Every phrase the package draws, by key, in English. A host translates them
@@ -16,6 +17,9 @@ export const PHRASES = {
   "verseMenu.verseNumber": "Verse number",
   "verseMenu.removeMarker": "Remove verse marker",
   "verseMenu.addVerseAfter": "Add verse after",
+  "verseLines.verse": "Verse",
+  "verseLines.chapter": "Chapter",
+  "emptyChapter.prompt": "Click here to start editing {title}",
 } as const;
 
 export type PhraseKey = keyof typeof PHRASES;
@@ -51,17 +55,41 @@ export interface EditorWords {
     marker: string | null,
     context: { readonly closing: boolean },
   ) => string | undefined;
-  /** A phrase of the package's UI, by key (`PHRASES`). */
-  readonly phrase?: (key: PhraseKey) => string | undefined;
+  /**
+   * A phrase of the package's UI, by key (`PHRASES`), with its placeholders'
+   * values (`{title}` is `values.title`).
+   */
+  readonly phrase?: (
+    key: PhraseKey,
+    values: Readonly<Record<string, string>>,
+  ) => string | undefined;
 }
 
 export const editorWords = Facet.define<EditorWords, EditorWords>({
   combine: (values) => values[0] ?? {},
 });
 
-/** A UI phrase in the host's words, or English. */
-export const phrase = (state: EditorState, key: PhraseKey): string =>
-  state.facet(editorWords).phrase?.(key) ?? PHRASES[key];
+/** A UI phrase in the host's words, or English, its placeholders filled. */
+export const phrase = (
+  state: EditorState,
+  key: PhraseKey,
+  values: Readonly<Record<string, string>> = {},
+): string =>
+  state.facet(editorWords).phrase?.(key, values) ??
+  PHRASES[key].replace(/\{(\w+)\}/g, (all, name: string) => values[name] ?? all);
+
+/** A CSS string literal: the phrase quoted, its quotes and backslashes escaped. */
+const cssString = (text: string): string => `"${text.replace(/["\\]/g, "\\$&")}"`;
+
+/**
+ * The words the stylesheet draws itself ("Verse 1", "Chapter 2", as `::before`
+ * content), handed to it as custom properties in the host's words.
+ */
+export const drawnWords = EditorView.editorAttributes.of((view) => ({
+  style:
+    `--usfm-verse-label: ${cssString(phrase(view.state, "verseLines.verse"))}; ` +
+    `--usfm-chapter-label: ${cssString(phrase(view.state, "verseLines.chapter"))}`,
+}));
 
 /** A marker in the host's words, or English: `\tr` is "table row", `\fig*` "figure end". */
 export const markerWords = (

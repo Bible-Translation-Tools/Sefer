@@ -16,6 +16,7 @@ import { Show, createEffect, createRenderEffect, createSignal, untrack } from "s
 
 import { stale, type Finding } from "#core/findings/finding";
 
+import { editorWords } from "../editorWords";
 import { reportEdits } from "../editReports";
 import { t } from "../i18n";
 import { textDirection } from "../language";
@@ -128,6 +129,7 @@ export function BookEditor(props: BookEditorProps) {
         emptyBlocks: settings.get(keys.annotateEmptyParagraphs),
         pairBlocks: settings.get(keys.pairBlocks),
         features: editorFeatures(),
+        words: editorWords,
       });
 
       const supply = (): void => {

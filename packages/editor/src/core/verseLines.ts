@@ -469,11 +469,13 @@ const scanChapterTitles = (doc: string, structure: DocStructure): ChapterTitles 
  * markers and blank lines, up to the next chapter or the end. `at` is the end
  * of its heading's last line, where the empty state is drawn and where a
  * click starts the text; `title` is how the chapter is named on screen — its
- * own label, else the book's label or "Chapter" and the number.
+ * own label, else the book's label and the number; absent when neither is
+ * there, and the host's word for "Chapter" names it with `number`.
  */
 export interface EmptyChapter {
   readonly at: number;
-  readonly title: string;
+  readonly title?: string;
+  readonly number: string;
   /** Where its leftover markers end: the newline before the next chapter, or the end. */
   readonly to: number;
   /**
@@ -507,7 +509,7 @@ const scanEmptyChapters = (doc: string, structure: DocStructure): readonly Empty
     const end = chapters[k + 1]?.from ?? doc.length;
     const number = /\\c\s+(\S+)/.exec(doc.slice(line.from, line.to))?.[1] ?? "";
     let at = line.to;
-    let title = `${bookLabel === "" ? "Chapter" : bookLabel} ${number}`;
+    let title = bookLabel === "" ? undefined : `${bookLabel} ${number}`;
     // Its own label, on the line straight after (blank lines aside), names it and ends the heading.
     const rest = doc.slice(line.to, end);
     const own = /^\s*\\cl[ \t]+([^\n]*)/.exec(rest);
@@ -534,7 +536,13 @@ const scanEmptyChapters = (doc: string, structure: DocStructure): readonly Empty
       };
       break;
     }
-    found.push(field === undefined ? { at, title, to } : { at, title, to, field });
+    found.push({
+      at,
+      number,
+      to,
+      ...(title === undefined ? {} : { title }),
+      ...(field === undefined ? {} : { field }),
+    });
   });
   return found;
 };

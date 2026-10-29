@@ -25,7 +25,7 @@ import { deleteColumn, deleteRow, insertColumn, insertRow } from "./core/tableCo
 import { span } from "./core/timing";
 import { type UnsupportedMarkup, unsupportedMarkup } from "./core/unsupported";
 import { addVerseAfter, removeVerseMarker, renumberVerse, verseAt } from "./core/verseCommands";
-import { type EditorWords, editorWords } from "./core/words";
+import { drawnWords, type EditorWords, editorWords } from "./core/words";
 import type { EditorFeature } from "./features";
 import { handleFor, markMoved, type EditorHandle } from "./handle";
 import { annotateRepaint } from "./observability";
@@ -314,6 +314,7 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
         attributeActivation,
         ...(options.features ?? []),
         ...(options.words === undefined ? [] : [editorWords.of(options.words)]),
+        drawnWords,
         EditorView.updateListener.of((update) => {
           const listeners = activateListeners.get(book);
           if (listeners === undefined || listeners.size === 0) return;

@@ -24,7 +24,7 @@ import type { DocPlan, PlanSpan, ResolvedSlot } from "./plan";
 import type { WidgetKey } from "./registry";
 import { chipRenderer, markupOf } from "./unsupported";
 import { chapterTitles, emptyChapters, keptAsReading, type KeptAsReading } from "./verseLines";
-import { markerWords } from "./words";
+import { markerWords, phrase } from "./words";
 
 class JoinWidget extends WidgetType {
   readonly glyph: string;
@@ -98,7 +98,8 @@ class EmptyChapterVerseWidget extends WidgetType {
 
 class EmptyChapterWidget extends WidgetType {
   constructor(
-    readonly title: string,
+    readonly title: string | undefined,
+    readonly number: string,
     readonly writes?: { readonly from: number; readonly to: number },
   ) {
     super();
@@ -106,6 +107,7 @@ class EmptyChapterWidget extends WidgetType {
   eq(other: EmptyChapterWidget) {
     return (
       other.title === this.title &&
+      other.number === this.number &&
       other.writes?.from === this.writes?.from &&
       other.writes?.to === this.writes?.to
     );
@@ -113,7 +115,8 @@ class EmptyChapterWidget extends WidgetType {
   toDOM(view: EditorView) {
     const span = document.createElement("span");
     span.className = "usfm-chap-empty";
-    span.textContent = `Click here to start editing ${this.title}`;
+    const title = this.title ?? `${phrase(view.state, "verseLines.chapter")} ${this.number}`;
+    span.textContent = phrase(view.state, "emptyChapter.prompt", { title });
     const writes = this.writes;
     if (writes !== undefined) {
       span.prepend(emptyChapterVerse());
@@ -1090,8 +1093,8 @@ function hideEmptyChapters(
     }
     const ghost =
       kept === undefined
-        ? new EmptyChapterWidget(empty.title, { from: empty.at, to: empty.to })
-        : new EmptyChapterWidget(empty.title);
+        ? new EmptyChapterWidget(empty.title, empty.number, { from: empty.at, to: empty.to })
+        : new EmptyChapterWidget(empty.title, empty.number);
     const at = kept === undefined ? empty.at : kept.from;
     // Number, caret, ghost: the number before the caret's position, the words after it.
     if (kept !== undefined)
