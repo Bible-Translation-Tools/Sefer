@@ -1,5 +1,4 @@
 import {
-  ChangeSet,
   EditorSelection,
   type EditorState,
   type Extension,
@@ -13,9 +12,8 @@ import { Decoration, EditorView, type KeyBinding, WidgetType } from "@codemirror
 import { MARKERS, MarkerKind } from "@sefer/text/engine/analysis";
 
 import { planAt, structureAt } from "../editorState";
-import { guardedEnter } from "../input";
-import { blockAt, isVisual, trusted } from "../kernel";
-import { remark } from "../poetryLevels";
+import { guardedEnter, setBlockMarker } from "../input";
+import { isVisual, trusted } from "../kernel";
 import { assignmentAt } from "../registry";
 
 /**
@@ -115,23 +113,19 @@ function written(state: EditorState, at: number, typed: string): Transaction | n
   const name = /^\\([A-Za-z]+\d*)$/.exec(typed)?.[1];
   if (name === undefined || NOT_IN_A_CHAPTER.test(name)) return null;
   if (rowNamed(name)?.kind !== MarkerKind.Paragraph) return null;
-  // The canonical Enter, then its new line's marker renamed, as the line menu
-  // renames one: where a line may break, and how its spaces split, are Enter's.
+  // The canonical Enter, then the canonical marker change on its new line:
+  // where a line may break, and how its spaces split, are Enter's to say.
   const split = run(guardedEnter(structureAt, planAt), state);
   if (split === null) return null;
-  const line = blockAt(structureAt(split.state), split.state.selection.main.head);
-  const rename =
-    line === null || line.kind === name
-      ? ChangeSet.empty(split.state.doc.length)
-      : ChangeSet.of(remark(line, name), split.state.doc.length);
+  const marked = run(setBlockMarker(structureAt, name), split.state);
   return state.update({
-    changes: split.changes.compose(rename),
-    selection: split.state.selection.map(rename),
+    changes: marked === null ? split.changes : split.changes.compose(marked.changes),
+    selection: (marked ?? split).state.selection,
     effects: [compose.of(null), typedMarker.of(name)],
     annotations: trusted.of("typed-usfm"),
     userEvent: "input.usfm.typed",
     scrollIntoView: true,
-    // Enter's own step was judged by the transaction filters as it was made.
+    // Each step was judged by the transaction filters as it was made.
     filter: false,
   });
 }

@@ -324,7 +324,17 @@ export function setBlockMarker(structureAt: GetStructure, marker: string): State
     const changes = opensAParagraph(head)
       ? { from: head.from, to: head.contentFrom, insert: `\\${marker} ` }
       : { from: head.from, to: head.from, insert: `\\${marker}${nl(state)}` };
-    dispatch(state.update({ changes, userEvent: "input.usfm.reparent", scrollIntoView: true }));
+    // Trusted, as Tab's and the line menu's renames are: the marker is hidden
+    // markup in Refine, and refuseKeystrokesInsideHiddenMarkup drops an
+    // untrusted change to it without a word.
+    dispatch(
+      state.update({
+        changes,
+        annotations: trusted.of("set-block-marker"),
+        userEvent: "input.usfm.reparent",
+        scrollIntoView: true,
+      }),
+    );
     return true;
   };
 }
