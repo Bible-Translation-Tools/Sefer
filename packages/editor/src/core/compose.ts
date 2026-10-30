@@ -156,7 +156,14 @@ const pressesOutsideTextLetGo = ViewPlugin.define((view) => {
     if (target === null) return;
     const onText =
       view.contentDOM.contains(target) && target.closest(".cm-line, .cm-widgetBuffer") !== null;
-    if (onText || target.closest(".cm-tooltip, .cm-panels, .cm-gutters") !== null) return;
+    // A diff's change bars and the earlier wording they open are the diff's to
+    // answer (`recipes/diffView.ts`, `hunkClicks`), not a press off the text.
+    if (
+      onText ||
+      target.closest(".cm-tooltip, .cm-panels, .cm-gutters, [data-diff-bar], [data-diff-was]") !==
+        null
+    )
+      return;
     if (view.dom.contains(target)) {
       if (target === view.scrollDOM && event.offsetX >= view.scrollDOM.clientWidth) return; // the scrollbar
       event.preventDefault();
