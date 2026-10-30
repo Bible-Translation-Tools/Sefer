@@ -88,7 +88,8 @@ const touchedBlocks = (state: EditorState, structure: DocStructure): Block[] => 
 };
 
 /** Rewrites only the marker's name: `\q1` → `\q2`, its spacing and words untouched. */
-const remark = (b: Block, kind: string) => {
+/** A block's marker renamed in place (`\\q1` → `\\p`): its line and its words never move. */
+export const remark = (b: Block, kind: string) => {
   const from = b.lines[0]?.from ?? b.from;
   return { from: from + 1, to: from + 1 + b.kind.length, insert: kind };
 };
