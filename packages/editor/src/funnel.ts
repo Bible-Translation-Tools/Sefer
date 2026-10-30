@@ -2,10 +2,10 @@ import { Annotation, type ChangeSet, type EditorState, type Text } from "@codemi
 import type { Origin, Receipt, Refusal } from "@sefer/text/book";
 import type { Change } from "@sefer/text/source";
 
-import type { DocStructure } from "./core/docStructure";
-import type { Tracer } from "./core/instrument";
+import type { Tracer } from "./core/instrument/instrument";
 import type { Mode } from "./core/kernel";
-import type { AssignmentDelta } from "./core/registry";
+import type { DocStructure } from "./core/model/docStructure";
+import type { AssignmentDelta } from "./core/model/registry";
 
 /**
  * "This transaction is the canonical text coming back to me; do not resubmit

@@ -9,23 +9,23 @@ import {
 } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 
-import type { Analyze } from "../core/analyzer";
 import { type EditorOptions, type RuleName, usfmEditorHeadless } from "../core/compose";
-import type { BuildOpts } from "../core/decorations";
-import { DEFAULT_BUILD_OPTS, isInvisible } from "../core/decorations";
 import { decoField, optsFacet, pickField } from "../core/editorState";
-import { isInsignificantWhitespace } from "../core/exceptions";
+import { isInsignificantWhitespace } from "../core/guards/positions";
+import { type TraceSink, traceSink } from "../core/instrument/trace";
 import { type Mode, modeFacet, newlineIsABreak } from "../core/kernel";
 import { usfmKeys } from "../core/keymaps";
-import { type AssignmentDelta, assignment } from "../core/registry";
-import { type TraceSink, traceSink } from "../core/trace";
+import type { Analyze } from "../core/model/analyzer";
+import { type AssignmentDelta, assignment } from "../core/model/registry";
+import type { BuildOpts } from "../core/paint/decorations";
+import { DEFAULT_BUILD_OPTS, isInvisible } from "../core/paint/decorations";
 
 export const DEFAULT_OPTS = DEFAULT_BUILD_OPTS;
 
 export { annotateEmptyBlocks, blockNamer, emptyBlocks } from "../recipes/emptyBlocks";
 
 export interface SurfaceOptions {
-  /** The engine, per state. See `packages/editor/src/core/analyzer.ts`. */
+  /** The engine, per state. See `packages/editor/src/core/model/analyzer.ts`. */
   analyze: Analyze;
   mode?: Mode;
   opts?: Partial<BuildOpts>;

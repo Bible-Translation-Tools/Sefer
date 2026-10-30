@@ -2,8 +2,8 @@ import { type ChangeSpec, type EditorState, StateEffect } from "@codemirror/stat
 import { EditorView } from "@codemirror/view";
 import { MARKER_ATTRIBUTES, MARKERS, MarkerKind } from "@sefer/text/engine/analysis";
 
-import { docText, lineIndexAt, structureAt } from "./docStructure";
 import { figureAt } from "./figures";
+import { docText, lineIndexAt, structureAt } from "./model/docStructure";
 
 /** One attribute: `who="Paul"`, or a bare default value (`\w grace|grace\w*`) with no name. */
 export interface Attribute {

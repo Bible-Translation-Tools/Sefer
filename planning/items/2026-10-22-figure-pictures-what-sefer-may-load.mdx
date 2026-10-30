@@ -17,7 +17,7 @@ source: conversation 2026-10-22, after figures were drawn on the editor bench
 ## The answer
 
 **Script injection: no.** The figure's picture is built with the DOM, not HTML
-(`FigureWidget` in `packages/editor/src/core/decorations.ts`: `createElement("img")`, then
+(`FigureWidget` in `packages/editor/src/core/paint/decorations.ts`: `createElement("img")`, then
 `image.src`; labels and tooltips through `textContent` and `title`). Nothing in the editor package
 or Sefer uses `innerHTML`. A hostile `src` cannot run code from an `<img>`: browsers do not run a
 `javascript:` URL there, and an SVG loaded as an image runs no script. Attribute values in the

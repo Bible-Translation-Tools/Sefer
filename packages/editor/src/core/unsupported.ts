@@ -1,8 +1,8 @@
 import { type EditorState, Facet } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 
-import { docText, lineIndexAt, structureAt } from "./docStructure";
 import { isVisual } from "./kernel";
+import { docText, lineIndexAt, structureAt } from "./model/docStructure";
 import { markerWords } from "./words";
 
 /**

@@ -16,11 +16,11 @@ import {
   RectangleMarker,
 } from "@codemirror/view";
 
-import { docText, structureAt, type DocStructure } from "./docStructure";
-import type { DocLine, VerseRow } from "./fold";
 import { typedVerseNumbers } from "./inputRules/verseNumbers";
 import { isVisual, modeFacet, trusted } from "./kernel";
-import { assignmentAt, isContainerClass } from "./registry";
+import { docText, structureAt, type DocStructure } from "./model/docStructure";
+import type { DocLine, VerseRow } from "./model/fold";
+import { assignmentAt, isContainerClass } from "./model/registry";
 
 /** The verse the caret is in: the last one whose marker starts at or before it, or -1 before the first. */
 export const verseIndexAt = (structure: DocStructure, pos: number): number => {

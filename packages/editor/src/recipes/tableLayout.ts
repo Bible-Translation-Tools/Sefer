@@ -13,7 +13,7 @@ import {
   type ViewUpdate,
 } from "@codemirror/view";
 
-import { docText, structureAt } from "../core/docStructure";
+import { docText, structureAt } from "../core/model/docStructure";
 
 /**
  * Tables' columns, aligned: loaded only when a book has a table (`tables`).

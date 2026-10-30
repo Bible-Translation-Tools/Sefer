@@ -13,14 +13,14 @@ import {
 } from "@sefer/text/engine/analysis";
 import type { SourceStamp } from "@sefer/text/source";
 
-import { analyzed, analyzer } from "../core/analyzer";
-import { structureAt } from "../core/docStructure";
-import { docText } from "../core/docStructure";
 import { PAINT_PORT } from "../core/editorState";
 import { carryForward } from "../core/forward";
-import { reportOutcome } from "../core/instrument";
+import { reportOutcome } from "../core/instrument/instrument";
+import { span } from "../core/instrument/timing";
 import { trusted } from "../core/kernel";
-import { span } from "../core/timing";
+import { analyzed, analyzer } from "../core/model/analyzer";
+import { structureAt } from "../core/model/docStructure";
+import { docText } from "../core/model/docStructure";
 import {
   chapterTitles,
   leaveNumbersToTheMenu,

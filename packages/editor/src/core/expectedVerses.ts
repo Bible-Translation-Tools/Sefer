@@ -1,6 +1,6 @@
 import { StateEffect, StateField, type EditorState } from "@codemirror/state";
 
-import { structureAt } from "./docStructure";
+import { structureAt } from "./model/docStructure";
 
 /**
  * How many verses each chapter is expected to have, by chapter number (`"23"`

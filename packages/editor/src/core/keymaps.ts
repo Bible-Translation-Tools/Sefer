@@ -3,18 +3,18 @@ import { type EditorState, type Extension, Prec } from "@codemirror/state";
 import { type EditorView, keymap, type KeyBinding } from "@codemirror/view";
 
 import { caretLineBoundary, extendCaret, moveCaret, moveCaretByWord } from "./caret";
-import { guardedBackspace, guardedDelete, mergeParagraphBackwards } from "./deletion";
+import { insertFootnote, insertParagraph, insertPoetry, insertVerse } from "./commands/insert";
+import { poetryLevelKeys } from "./commands/poetryLevels";
+import { tableKeys } from "./commands/tableCommands";
 import { PAINT_PORT, planAt, structureAt } from "./editorState";
 import { expectedVersesField } from "./expectedVerses";
-import { guardedEnter, setBlockMarker } from "./input";
+import { guardedBackspace, guardedDelete, mergeParagraphBackwards } from "./guards/deletion";
+import { guardedEnter, setBlockMarker } from "./guards/input";
 import { plainPasteFollowsTyping } from "./inputRules/plainPaste";
 import { typedMarkerBehaviour, typedMarkerKeys } from "./inputRules/typedMarker";
 import { verseNumberKeys } from "./inputRules/verseNumbers";
-import { insertFootnote, insertParagraph, insertPoetry, insertVerse } from "./insert";
-import { traceFor } from "./instrument";
-import { poetryLevelKeys } from "./poetryLevels";
+import { traceFor } from "./instrument/instrument";
 import { preferenceOn, type PreferenceKey } from "./preferences";
-import { tableKeys } from "./tableCommands";
 import { verseLineBehaviour, verseLineKeys } from "./verseLines";
 
 /**
@@ -62,7 +62,7 @@ const traced =
  * The caret's motion keys over the stops (`stops.ts`): arrows, Home/End, word
  * jumps, Shift-extend. The canonical editor's, and a satellite's too — a
  * surface over part of a book moves exactly as the book does, and its range
- * then pulls the result in (`recipes/satellite.ts`).
+ * then pulls the result in (`surfaces/satellite.ts`).
  */
 export function motionKeys(): readonly KeyBinding[] {
   const move = (right: boolean) =>

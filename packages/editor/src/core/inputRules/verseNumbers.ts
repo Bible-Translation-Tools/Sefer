@@ -2,11 +2,11 @@ import { isolateHistory } from "@codemirror/commands";
 import { EditorSelection, type EditorState, type StateCommand } from "@codemirror/state";
 import { EditorView, type KeyBinding } from "@codemirror/view";
 
-import { structureAt } from "../docStructure";
 import { expectedLastVerse } from "../expectedVerses";
 import { isVisual, modeFacet, trusted } from "../kernel";
+import { structureAt } from "../model/docStructure";
+import { assignmentAt } from "../model/registry";
 import { preferenceOn } from "../preferences";
-import { assignmentAt } from "../registry";
 
 /**
  * Verse numbers written the way people write them without USFM, as input

@@ -8,9 +8,14 @@ import {
 } from "@codemirror/state";
 import { EditorView, showTooltip, type Tooltip } from "@codemirror/view";
 
-import { structureAt } from "../core/docStructure";
-import type { VerseRow } from "../core/fold";
-import { addVerseAfter, nextNumber, removeVerseMarker, renumberVerse } from "../core/verseCommands";
+import {
+  addVerseAfter,
+  nextNumber,
+  removeVerseMarker,
+  renumberVerse,
+} from "../core/commands/verseCommands";
+import { structureAt } from "../core/model/docStructure";
+import type { VerseRow } from "../core/model/fold";
 import {
   hasVerseMenu,
   numbersHaveMenus,
@@ -24,7 +29,7 @@ import { phrase } from "../core/words";
  * The verse number's menu, an opt-in feature (`editorFeatures`): a press on a
  * verse number opens it, with the number's findings, Change number, Remove
  * verse marker and Add verse after. The edits are the plain commands in
- * `core/verseCommands.ts`; this is one UI over them.
+ * `core/commands/verseCommands.ts`; this is one UI over them.
  */
 const openVerseMenu = StateEffect.define<number | null>();
 

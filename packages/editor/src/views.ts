@@ -1,10 +1,10 @@
 import type { EditorState, Extension, TransactionSpec } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
-import { anchorFrom, setPick } from "./core/clip";
-import { structureAt } from "./core/docStructure";
+import { anchorFrom, setPick } from "./core/guards/clip";
 import { type Mode, modeFacet } from "./core/kernel";
-import { PROJECTIONS, assignment, type AssignmentDelta } from "./core/registry";
+import { structureAt } from "./core/model/docStructure";
+import { PROJECTIONS, assignment, type AssignmentDelta } from "./core/model/registry";
 
 /** The projection names `PROJECTIONS` defines. */
 export type ProjectionName = keyof typeof PROJECTIONS | (string & {});

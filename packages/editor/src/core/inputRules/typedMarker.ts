@@ -12,9 +12,9 @@ import { Decoration, EditorView, type KeyBinding, WidgetType } from "@codemirror
 import { MARKERS, MarkerKind } from "@sefer/text/engine/analysis";
 
 import { planAt, structureAt } from "../editorState";
-import { guardedEnter, setBlockMarker } from "../input";
+import { guardedEnter, setBlockMarker } from "../guards/input";
 import { isVisual, trusted } from "../kernel";
-import { assignmentAt } from "../registry";
+import { assignmentAt } from "../model/registry";
 
 /**
  * USFM typed straight into Refine. A backslash starts a marker being typed: it

@@ -70,7 +70,7 @@ out of the step machine, which is now built.
 
 The second already is one verse per line. For the first, the mode draws a break before each `\v`
 that does not start a line: the editor's existing `BreakWidget`
-(`packages/editor/src/core/decorations.ts`), which already draws paragraph breaks that are not in
+(`packages/editor/src/core/paint/decorations.ts`), which already draws paragraph breaks that are not in
 the text. No newline is written; the text and its offsets stay as they are.
 
 **What shows:** the verse number (locked, as today) and the verse text. Everything else between
@@ -337,13 +337,13 @@ handling by mode is the same work as the Enter question, and the tests belong on
 
 **An empty note gets a body part, on Sefer's side** (was kitchen ask 6; kitchen pushed it back
 2026-10-20, Will agreed). Onion does not build note parts: Sefer does, in `notePartsOf`
-(`packages/editor/src/core/cst.ts:382`), walking the CST and tagging tokens. An empty
+(`packages/editor/src/core/model/cst.ts:382`), walking the CST and tagging tokens. An empty
 `\ft \f*` has no text token, so no BODY part comes out. A zero-width token in onion would break
 the rule that tokens tile the source, and every consumer would pay for it.
 
 The fact is already in the tree: a body marker followed directly by the closer. `notePartsOf`
 emits a zero-width BODY part at the end of that marker (`\fr` and `\xt` the same way), and the
-carve-out in `packages/editor/src/core/sealed.ts` (an insertion at a one-position surface) goes.
+carve-out in `packages/editor/src/core/guards/sealed.ts` (an insertion at a one-position surface) goes.
 
 Check while there: everything that reads `NotePart` copes with a zero-width part. Painting
 skips it (CodeMirror cannot mark an empty range); `owned.ts`'s editable spans and the note

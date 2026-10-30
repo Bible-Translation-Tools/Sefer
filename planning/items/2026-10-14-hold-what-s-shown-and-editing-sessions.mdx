@@ -36,7 +36,7 @@ approve", the disk-vs-working baseline Review already uses.
 
 **Built since (2026-10-15):** a card can hold its own session. `mountCard({ session: true })`
 keeps the inverse of that card's edits, so Key terms' Cancel undoes only what was typed in the
-card, never someone else's edit (`packages/editor/src/recipes/card.ts`). Undo history itself is
+card, never someone else's edit (`packages/editor/src/surfaces/card.ts`). Undo history itself is
 still global.
 
 <Question id="history">Global undo with a prominent button, per-card history, or PR #5's buffer in front of the buffer?</Question>

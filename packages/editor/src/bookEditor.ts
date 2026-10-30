@@ -14,20 +14,25 @@ import {
   type AttributedMarkup,
   attributesAt,
 } from "./core/attributes";
+import { lineKindAt, turnLineInto, type LineKind } from "./core/commands/poetryLevels";
+import { deleteColumn, deleteRow, insertColumn, insertRow } from "./core/commands/tableCommands";
+import {
+  addVerseAfter,
+  removeVerseMarker,
+  renumberVerse,
+  verseAt,
+} from "./core/commands/verseCommands";
 import { structureAt } from "./core/editorState";
 import { setExpectedVerses, type ExpectedVerses } from "./core/expectedVerses";
 import { type Figure, figuresIn } from "./core/figures";
 import { frontMatterCard } from "./core/frontmatter";
 import { typedMarker } from "./core/inputRules/typedMarker";
-import { annotateOpen } from "./core/instrument";
+import { annotateOpen } from "./core/instrument/instrument";
+import { keystrokeMeter } from "./core/instrument/meter";
+import { span } from "./core/instrument/timing";
 import { trusted } from "./core/kernel";
-import { keystrokeMeter } from "./core/meter";
-import { lineKindAt, turnLineInto, type LineKind } from "./core/poetryLevels";
 import { changePreferences, editorPreferences, type EditorPreferences } from "./core/preferences";
-import { deleteColumn, deleteRow, insertColumn, insertRow } from "./core/tableCommands";
-import { span } from "./core/timing";
 import { type UnsupportedMarkup, unsupportedMarkup } from "./core/unsupported";
-import { addVerseAfter, removeVerseMarker, renumberVerse, verseAt } from "./core/verseCommands";
 import { chapterTitleAction } from "./core/verseLines";
 import { drawnWords, type EditorWords, editorWords } from "./core/words";
 import type { EditorFeature } from "./features";
@@ -36,8 +41,8 @@ import { annotateRepaint } from "./observability";
 import { annotateEmptyBlocks, blockNamer, showEmptyBlocks } from "./recipes/emptyBlocks";
 import { flash, flashing } from "./recipes/flash";
 import { showCorpusFindings, type CorpusFinding } from "./recipes/lint";
-import { noteBookIs } from "./recipes/noteEditor";
 import { pairingHere, showBlockPairs } from "./recipes/pairing";
+import { noteBookIs } from "./surfaces/noteEditor";
 import { pickChapter, policyKey, policyView, type EditorPolicy } from "./views";
 
 /**

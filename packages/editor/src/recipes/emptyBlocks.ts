@@ -9,8 +9,8 @@ import { Decoration, type DecorationSet, EditorView, WidgetType } from "@codemir
 
 import { structureAt, structureField } from "../core/editorState";
 import { isVisual, modeFacet } from "../core/kernel";
-import type { ClassKey } from "../core/registry";
-import { renderRangeAt, renderRangeField } from "../core/render";
+import type { ClassKey } from "../core/model/registry";
+import { renderRangeAt, renderRangeField } from "../core/paint/render";
 import { emptyChapters } from "../core/verseLines";
 
 type BlockNamer = (marker: string) => string;
@@ -94,7 +94,7 @@ function ghosts(state: EditorState): DecorationSet {
   const windowRange = renderRangeAt(state) ?? { from: 0, to: state.doc.length };
   const name = state.facet(blockNamer);
   // An empty chapter's markers are hidden behind its empty state, which names
-  // nothing: no ghost there either (`hideEmptyChapters`, core/decorations.ts).
+  // nothing: no ghost there either (`hideEmptyChapters`, core/paint/decorations.ts).
   const silent = emptyChapters(state.doc.toString(), structure);
   const hidden = (at: number): boolean => silent.some((c) => at > c.at && at <= c.to);
   const main = state.selection.main;

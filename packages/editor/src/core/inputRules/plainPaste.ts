@@ -1,11 +1,11 @@
 import { ChangeSet, EditorSelection, EditorState, type Extension } from "@codemirror/state";
 
-import { structureAt } from "../docStructure";
-import { blockKindForEnter } from "../exceptions";
+import { blockKindForEnter } from "../guards/positions";
+import { noteTr } from "../instrument/trace";
 import { blockAt, isTrusted, isVisual, nl } from "../kernel";
+import { structureAt } from "../model/docStructure";
+import { assignmentAt } from "../model/registry";
 import { preferenceOn } from "../preferences";
-import { assignmentAt } from "../registry";
-import { noteTr } from "../trace";
 import { isVerseNumber, versesAround } from "./verseNumbers";
 
 /** A number as people write a verse's: "4", "4.", "v4", "verse 4", followed by a space. */
