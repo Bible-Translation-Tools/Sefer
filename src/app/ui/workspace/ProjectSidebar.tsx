@@ -1,21 +1,17 @@
 import { chaptersAddress, introAddress } from "@sefer/text/location/address";
 import { useNavigate, useRouterState } from "@tanstack/solid-router";
-import { Option } from "effect";
 import ArrowRight from "lucide-solid/icons/arrow-right";
-import BookIcon from "lucide-solid/icons/book";
 import ChevronDown from "lucide-solid/icons/chevron-down";
-import ChevronRight from "lucide-solid/icons/chevron-right";
 import Library from "lucide-solid/icons/library";
 import Plus from "lucide-solid/icons/plus";
 import SearchIcon from "lucide-solid/icons/search";
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 
-import { tocViewOf } from "#core/galley";
-
 import { t } from "../../i18n";
 import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
 import { Badge, Button, Input } from "../primitives";
+import { BookChaptersRow, chaptersOf, type ChapterTile } from "./BookChapters";
 import { bookName, testamentOf, type Testament } from "./books";
 import { metadataOf, projectLanguage, projectName } from "./project";
 import { chapterOf, typedChapter } from "./typedPlace";
@@ -26,34 +22,9 @@ interface Row {
   readonly testament: Testament;
 }
 
-interface Chapter {
-  readonly index: number;
-  readonly label: string;
-  readonly intro: boolean;
-}
-
 type Shell = ReturnType<typeof useShell>;
 
-function chaptersOf(shell: Shell, id: string): readonly Chapter[] {
-  if (shell.focused()?.id === id) {
-    const rows: Chapter[] = [];
-    shell.outline().forEach((chapter, index) => {
-      if (chapter.label !== "") rows.push({ index, label: chapter.label, intro: false });
-      else if (index === 0 && chapter.to > chapter.from)
-        rows.push({ index, label: t("Intro"), intro: true });
-    });
-    return rows;
-  }
-  const held = Option.getOrUndefined(shell.services.projectAnalysis.analysis(id));
-  if (held === undefined) return [];
-  return tocViewOf(held.analysis).chapters.flatMap((chapter): Chapter[] => {
-    if (chapter.number > 0)
-      return [{ index: chapter.number, label: String(chapter.number), intro: false }];
-    return chapter.to > chapter.from ? [{ index: 0, label: t("Intro"), intro: true }] : [];
-  });
-}
-
-function openChapter(shell: Shell, id: string, chapter: Chapter): void {
+function openChapter(shell: Shell, id: string, chapter: ChapterTile): void {
   if (shell.focused()?.id === id) shell.showChapter(chapter.index);
   else if (chapter.intro) shell.showReference(introAddress(id));
   else shell.showReference(chaptersAddress(id, chapter.index));
@@ -79,7 +50,7 @@ function BookRow(props: {
   const shell = useShell();
   const focused = (): boolean => shell.focused()?.id === props.row.id;
   const chapters = createMemo(
-    (): readonly Chapter[] => {
+    (): readonly ChapterTile[] => {
       if (!props.open) return [];
       // The grid starts at chapter 1: no Intro tile. Open question for the
       // developer — see planning/items/2026-10-19-intro-tile-in-the-chapter-grid.mdx.
@@ -90,46 +61,18 @@ function BookRow(props: {
     { name: "sidebarChapters" },
   );
   return (
-    <li>
-      <button
-        type="button"
-        data-testid={`sidebar-book-${props.row.id}`}
-        data-book={props.row.id}
-        data-focused={focused() ? "" : undefined}
-        aria-expanded={props.open ? "true" : "false"}
-        class="flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-lg p-3 text-start text-small font-medium transition-colors data-focused:text-brand not-data-focused:text-sidebar-on-surface not-data-focused:hover:bg-sidebar-surface-hover"
-        onClick={() => props.onToggle()}
-      >
-        <BookIcon size={20} aria-hidden="true" class="shrink-0" />
-        <span class="min-w-0 flex-1 truncate">{props.row.name}</span>
-        <span aria-hidden="true" class="shrink-0">
-          <Show when={props.open} fallback={<ChevronRight size={14} />}>
-            <ChevronDown size={14} />
-          </Show>
-        </span>
-      </button>
-
-      <Show when={props.open && chapters().length > 0}>
-        <ol class="grid grid-cols-[repeat(auto-fill,minmax(3.75rem,1fr))] gap-px px-3 pt-1 pb-3">
-          <For each={chapters()}>
-            {(chapter) => (
-              <li>
-                <button
-                  type="button"
-                  data-chapter={chapter.index}
-                  data-testid={`chapter-tile-${chapter.intro ? "intro" : chapter.label}`}
-                  data-current={focused() && props.current === chapter.index ? "" : undefined}
-                  class="h-12 w-full cursor-pointer truncate rounded-lg border px-3 text-center text-small font-medium tabular-nums transition-colors data-current:border-brand data-current:bg-surface-primary data-current:font-semibold data-current:text-brand not-data-current:border-transparent not-data-current:text-on-surface-secondary not-data-current:hover:bg-surface-canvas"
-                  onClick={() => openChapter(shell, props.row.id, chapter)}
-                >
-                  {chapter.label}
-                </button>
-              </li>
-            )}
-          </For>
-        </ol>
-      </Show>
-    </li>
+    <BookChaptersRow
+      id={props.row.id}
+      name={props.row.name}
+      open={props.open}
+      marked={focused()}
+      chapters={chapters()}
+      chosen={(chapter) => focused() && props.current === chapter.index}
+      onToggle={props.onToggle}
+      onChapter={(chapter) => openChapter(shell, props.row.id, chapter)}
+      bookTestId={`sidebar-book-${props.row.id}`}
+      chapterTestId={(chapter) => `chapter-tile-${chapter.intro ? "intro" : chapter.label}`}
+    />
   );
 }
 
