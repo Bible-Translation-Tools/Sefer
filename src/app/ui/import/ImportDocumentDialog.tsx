@@ -1,10 +1,13 @@
 import type { Reading, Rendered, Settings, VerseMode } from "@sefer/document-import";
-import { editorPolicy, type EditorBook } from "@sefer/editor";
+import { editorPolicy } from "@sefer/editor";
+import type { Book } from "@sefer/text/book";
+import { chaptersAddress } from "@sefer/text/location/address";
 import { Result } from "effect";
 import FileUp from "lucide-solid/icons/file-up";
 import Info from "lucide-solid/icons/info";
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 
+import { diffSkeleton } from "#core/diff/skeleton";
 import {
   applyImport,
   chapterWordOf,
@@ -14,8 +17,12 @@ import {
 
 import { m } from "../../paraglide/messages";
 import { useServices, useShell } from "../../ProjectContext";
+import { BookDiff, changed } from "../diff";
 import { ExcerptReader } from "../excerpts/ExcerptReader";
-import { Button, Dialog, Input, Select, Switch, Tooltip } from "../primitives";
+import { Button, Dialog, Input, SegmentedControl, Select, Switch, Tooltip } from "../primitives";
+import { BookChaptersRow, chaptersOf, type ChapterTile } from "../workspace/BookChapters";
+import { bookName } from "../workspace/books";
+import { metadataOf } from "../workspace/project";
 
 type DocumentImport = typeof import("@sefer/document-import");
 
@@ -47,6 +54,15 @@ type SwitchKey = (typeof SWITCHES)[number]["key"];
 
 const VERSE_MODES: readonly VerseMode[] = ["superscript", "marked", "lineStart", "perLine", "any"];
 
+/** How the preview shows the result: as read, as USFM, or against the book now. */
+type View = "text" | "usfm" | "changes";
+
+type Target =
+  | { readonly ok: true; readonly book: Book; readonly chapters: ImportChapters }
+  | { readonly ok: false; readonly message: string };
+
+const escaped = (word: string) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 const modeLabel = (mode: VerseMode) =>
   ({
     superscript: m.import_document_mode_superscript(),
@@ -62,20 +78,24 @@ export function ImportDocumentDialog(props: {
 }) {
   const shell = useShell();
   return (
-    <Show when={props.open ? shell.focused() : undefined}>
-      {(book) => <ImportInto book={book()} onClose={props.onClose} />}
+    <Show when={props.open && shell.project() !== undefined}>
+      <ImportInto onClose={props.onClose} />
     </Show>
   );
 }
 
-function ImportInto(props: { readonly book: EditorBook; readonly onClose: () => void }) {
+function ImportInto(props: { readonly onClose: () => void }) {
   const shell = useShell();
   const services = useServices();
   const [loaded, setLoaded] = createSignal<Loaded | undefined>(undefined, { name: "importLoaded" });
   const [problem, setProblem] = createSignal("", { name: "importProblem" });
+  // Typed ("TIT 2-3") or picked from the books: the one source of where the import goes.
   const [scope, setScope] = createSignal("", { name: "importScope" });
   const [keep, setKeep] = createSignal(true, { name: "importKeep" });
-  const [usfm, setUsfm] = createSignal(shell.mode() === "usfm", { name: "importUsfm" });
+  const [keepFront, setKeepFront] = createSignal(true, { name: "importKeepFront" });
+  const [view, setView] = createSignal<View>(shell.mode() === "usfm" ? "usfm" : "text", {
+    name: "importView",
+  });
   const [off, setOff] = createSignal<ReadonlySet<SwitchKey>>(new Set(), { name: "importOff" });
   const [verses, setVerses] = createSignal<VerseMode | "auto">("auto", { name: "importVerses" });
   const [words, setWords] = createSignal("", { name: "importWords" });
@@ -92,18 +112,92 @@ function ImportInto(props: { readonly book: EditorBook; readonly onClose: () => 
       return () => clearTimeout(timer);
     },
   );
-  // The book went away (project closed) with the dialog open: close it, so it
-  // does not come back unasked with the next book.
+  // The project went away with the dialog open: close it, so it does not
+  // come back unasked with the next project.
   onCleanup(() => props.onClose());
 
-  const bookHasText = () => /\\c\s+\d/.test(props.book.source().text);
+  const books = createMemo(
+    () => {
+      const project = shell.project();
+      const metadata = metadataOf(project);
+      return (project?.books ?? []).map((book) => ({ book, name: bookName(book.id, metadata) }));
+    },
+    { name: "importBooks" },
+  );
+
+  // The one project book the document's opening lines name, as a whole word
+  // ("MASTER Titus", "Psalms draft"); none, or more than one, is no guess.
+  const named = createMemo(
+    () => {
+      const doc = loaded();
+      if (doc === undefined) return undefined;
+      const opening = doc.reading.paragraphs
+        .slice(0, 3)
+        .flatMap((p) => p.inlines.map((i) => (i.kind === "text" ? i.text : " ")))
+        .join(" ");
+      const found = books().filter(({ book, name }) =>
+        [name, book.id].some((word) =>
+          new RegExp(String.raw`(^|[^\p{L}\p{N}])${escaped(word)}($|[^\p{L}\p{N}])`, "iu").test(
+            opening,
+          ),
+        ),
+      );
+      return found.length === 1 ? found[0].book : undefined;
+    },
+    { name: "importNamed" },
+  );
+
+  // Where the import goes and which chapters: the typed or picked scope, else
+  // the book the document names, else the open book; whole. Any book in the
+  // project; it need not be open.
+  const target = createMemo(
+    (): Target => {
+      const text = scopeSettled().trim();
+      if (text === "") {
+        const open = shell.focused()?.id;
+        const book = named() ?? books().find((row) => row.book.id === open)?.book;
+        return book === undefined
+          ? { ok: false, message: m.import_document_choose_book() }
+          : { ok: true, book, chapters: undefined };
+      }
+      const citation = shell.location.read(text);
+      if (!citation.ok) return { ok: false, message: m.import_document_scope_problem({ text }) };
+      const address = citation.addresses[0];
+      const book = books().find(
+        (row) => row.book.id.toUpperCase() === address.book.toUpperCase(),
+      )?.book;
+      if (book === undefined) {
+        return {
+          ok: false,
+          message: m.import_document_scope_not_in_project({ book: address.book }),
+        };
+      }
+      if (address.kind === "chapters")
+        return { ok: true, book, chapters: { from: address.from, to: address.to } };
+      if (address.kind === "verses") {
+        return {
+          ok: true,
+          book,
+          chapters: { from: address.from.chapter, to: address.to.chapter },
+        };
+      }
+      return { ok: true, book, chapters: undefined };
+    },
+    { name: "importTarget" },
+  );
+  const book = (): Book | undefined => {
+    const chosen = target();
+    return chosen.ok ? chosen.book : undefined;
+  };
+
+  const bookHasText = () => /\\c\s+\d/.test(book()?.source().text ?? "");
   const chapterWords = () => {
     const typed = wordsSettled()
       .split(",")
       .map((w) => w.trim())
       .filter((w) => w !== "");
     if (typed.length > 0) return typed;
-    const own = chapterWordOf(props.book.source().text);
+    const own = chapterWordOf(book()?.source().text ?? "");
     return own === undefined ? ["chapter"] : ["chapter", own];
   };
 
@@ -129,7 +223,7 @@ function ImportInto(props: { readonly book: EditorBook; readonly onClose: () => 
   };
 
   const base = (): Settings => ({
-    book: props.book.id,
+    book: book()?.id,
     verses: verses(),
     chapterWords: chapterWords(),
   });
@@ -155,36 +249,14 @@ function ImportInto(props: { readonly book: EditorBook; readonly onClose: () => 
     { name: "importRendered" },
   );
 
-  const chapters = createMemo(
-    ():
-      | { readonly ok: true; readonly chapters: ImportChapters }
-      | { readonly ok: false; readonly message: string } => {
-      const text = scopeSettled().trim();
-      if (text === "") return { ok: true, chapters: undefined };
-      const citation = shell.location.read(text);
-      if (!citation.ok) return { ok: false, message: m.import_document_scope_problem({ text }) };
-      const address = citation.addresses[0];
-      if (address.book.toUpperCase() !== props.book.id.toUpperCase()) {
-        return { ok: false, message: m.import_document_scope_other_book({ book: address.book }) };
-      }
-      if (address.kind === "chapters")
-        return { ok: true, chapters: { from: address.from, to: address.to } };
-      if (address.kind === "verses") {
-        return { ok: true, chapters: { from: address.from.chapter, to: address.to.chapter } };
-      }
-      return { ok: true, chapters: undefined };
-    },
-    { name: "importChapters" },
-  );
-
   const preview = createMemo(
     () => {
       const out = rendered();
-      const range = chapters();
-      if (out === undefined || !range.ok) return undefined;
-      return previewImport(services.galley, props.book, out.usfm, range.chapters, {
+      const chosen = target();
+      if (out === undefined || !chosen.ok) return undefined;
+      return previewImport(services.galley, chosen.book, out.usfm, chosen.chapters, {
         keepParagraphing: keep() && bookHasText(),
-        keepFrontMatter: true,
+        keepFrontMatter: keepFront(),
       });
     },
     { name: "importPreview" },
@@ -201,7 +273,7 @@ function ImportInto(props: { readonly book: EditorBook; readonly onClose: () => 
   const shown = createMemo(
     () => {
       const p = ready();
-      if (p === undefined) return undefined;
+      if (p === undefined || view() === "changes") return undefined;
       const first = Math.min(...p.replaced);
       const last = Math.max(...p.replaced);
       const from = p.text.search(new RegExp(String.raw`^\\c\s+${first}\b`, "m"));
@@ -214,18 +286,92 @@ function ImportInto(props: { readonly book: EditorBook; readonly onClose: () => 
     { name: "importShown" },
   );
 
+  // The book now against the book after the import, as Review shows a book:
+  // the whole of it, opened at the first change.
+  const changes = createMemo(
+    () => {
+      const p = ready();
+      const into = book();
+      if (p === undefined || into === undefined || view() !== "changes") return undefined;
+      const before = into.source().text;
+      const skeleton = diffSkeleton(services.galley, into.id, before, p.text);
+      if (Result.isFailure(skeleton)) return undefined;
+      const units = skeleton.success.units;
+      return {
+        sides: {
+          bookId: into.id,
+          baselineText: before,
+          currentText: p.text,
+          baseline: services.galley.analyzeText(before, "import-before"),
+          current: services.galley.analyzeText(p.text, "import-preview"),
+        },
+        units,
+        initial: units.find(changed),
+      };
+    },
+    { name: "importChanges" },
+  );
+
   const run = () => {
     const p = ready();
     const doc = loaded();
-    if (p === undefined || doc === undefined) return;
-    const applied = applyImport(p, props.book);
+    const into = book();
+    if (p === undefined || doc === undefined || into === undefined) return;
+    const applied = applyImport(p, into);
     if (Result.isFailure(applied)) {
       shell.report(m.import_document_refused({ reason: applied.failure.description }));
       return;
     }
-    shell.changed({ kind: "book.apply", books: [props.book.id] });
+    shell.changed({ kind: "book.apply", books: [into.id] });
     shell.report(m.import_document_done({ chapters: p.replaced.join(", "), file: doc.name }));
     props.onClose();
+    // Into a book that is not open: go there, so the result is what you see.
+    if (shell.focused()?.id !== into.id)
+      shell.showReference(chaptersAddress(into.id, Math.min(...p.replaced)));
+  };
+
+  // The books as the sidebar lists them: open one to pick its chapters.
+  // Unset, the row open is the target's; null, the person closed them all.
+  const [openPicked, setOpenRow] = createSignal<string | null | undefined>(undefined, {
+    name: "importOpenRow",
+  });
+  const openRow = (): string | undefined => {
+    const picked = openPicked();
+    return picked === undefined ? book()?.id : (picked ?? undefined);
+  };
+  let anchor: number | undefined;
+  const chosen = (id: string, tile: ChapterTile): boolean => {
+    const t = target();
+    if (!t.ok || t.book.id !== id) return false;
+    return (
+      t.chapters === undefined || (tile.index >= t.chapters.from && tile.index <= t.chapters.to)
+    );
+  };
+  const pickBook = (id: string) => {
+    setOpenRow(openRow() === id ? null : id);
+    if (book()?.id !== id) {
+      anchor = undefined;
+      setScope(id);
+    }
+  };
+  // A chapter alone; with Shift and a chapter already picked, the range
+  // between; the one picked chapter again, the whole book.
+  const pickChapter = (id: string, tile: ChapterTile, event: MouseEvent) => {
+    const t = target();
+    const same = t.ok && t.book.id === id;
+    if (event.shiftKey && same && anchor !== undefined) {
+      const from = Math.min(anchor, tile.index);
+      const to = Math.max(anchor, tile.index);
+      setScope(from === to ? `${id} ${from}` : `${id} ${from}-${to}`);
+      return;
+    }
+    if (same && t.chapters?.from === tile.index && t.chapters.to === tile.index) {
+      anchor = undefined;
+      setScope(id);
+      return;
+    }
+    anchor = tile.index;
+    setScope(`${id} ${tile.index}`);
   };
 
   const summary = () => {
@@ -239,8 +385,8 @@ function ImportInto(props: { readonly book: EditorBook; readonly onClose: () => 
     const report = rendered()?.report;
     const p = preview();
     const out: string[] = [];
-    const range = chapters();
-    if (!range.ok) out.push(range.message);
+    const chosen = target();
+    if (!chosen.ok) out.push(chosen.message);
     if (report === undefined) return out;
     if (report.found.trackedChanges > 0)
       out.push(m.import_document_tracked({ count: report.found.trackedChanges }));
@@ -260,6 +406,8 @@ function ImportInto(props: { readonly book: EditorBook; readonly onClose: () => 
       if (v.absent.length > 0)
         out.push(m.import_document_absent({ chapters: v.absent.join(", ") }));
       if (v.frontSkipped) out.push(m.import_document_front_skipped());
+      if (v.labelsKept.length > 0)
+        out.push(m.import_document_labels_kept({ chapters: v.labelsKept.join(", ") }));
       if (v.replaced.length > 0 && v.changes.length === 0) out.push(m.import_document_unchanged());
     }
     return out;
@@ -276,7 +424,7 @@ function ImportInto(props: { readonly book: EditorBook; readonly onClose: () => 
         if (!open) props.onClose();
       }}
       title={m.import_document_title()}
-      class="w-[min(60rem,94vw)]"
+      class="w-[96vw]! max-w-[110rem]"
       footer={
         <>
           <Button variant="tertiary" onClick={props.onClose}>
@@ -293,8 +441,8 @@ function ImportInto(props: { readonly book: EditorBook; readonly onClose: () => 
         </>
       }
     >
-      <div class="grid gap-4 md:grid-cols-[17rem_1fr]" data-import-document>
-        <div class="flex flex-col gap-3">
+      <div class="grid h-[76vh] gap-4 md:grid-cols-[20rem_1fr]" data-import-document>
+        <div class="flex min-h-0 flex-col gap-3 overflow-y-auto pe-1">
           <input
             ref={setInput}
             type="file"
@@ -322,11 +470,36 @@ function ImportInto(props: { readonly book: EditorBook; readonly onClose: () => 
               <span class="text-small font-medium">{m.import_document_scope()}</span>
               <Input
                 value={scope()}
-                placeholder={m.import_document_scope_hint({ book: props.book.id })}
+                placeholder={m.import_document_scope_hint({ book: book()?.id ?? "TIT" })}
                 data-import-document-scope
                 onInput={(event) => setScope(event.currentTarget.value)}
               />
             </label>
+            <ul
+              class="max-h-72 shrink-0 overflow-y-auto rounded-lg border border-surface-border"
+              aria-label={m.import_document_books()}
+              data-import-document-books
+            >
+              <For each={books()}>
+                {(row) => (
+                  <BookChaptersRow
+                    id={row.book.id}
+                    name={row.name}
+                    open={openRow() === row.book.id}
+                    marked={book()?.id === row.book.id}
+                    chapters={
+                      openRow() === row.book.id
+                        ? chaptersOf(shell, row.book.id).filter((tile) => !tile.intro)
+                        : []
+                    }
+                    chosen={(tile) => chosen(row.book.id, tile)}
+                    toggles
+                    onToggle={() => pickBook(row.book.id)}
+                    onChapter={(tile, event) => pickChapter(row.book.id, tile, event)}
+                  />
+                )}
+              </For>
+            </ul>
             <Show when={bookHasText()}>
               <div class="flex items-center gap-2">
                 <Switch checked={keep()} onChange={setKeep} label={m.import_document_keep()} />
@@ -334,6 +507,19 @@ function ImportInto(props: { readonly book: EditorBook; readonly onClose: () => 
                   <Info
                     class="size-4 text-on-surface-tertiary"
                     aria-label={m.import_document_keep_tip()}
+                  />
+                </Tooltip>
+              </div>
+              <div class="flex items-center gap-2">
+                <Switch
+                  checked={keepFront()}
+                  onChange={setKeepFront}
+                  label={m.import_document_keep_front()}
+                />
+                <Tooltip label={m.import_document_keep_front_tip()}>
+                  <Info
+                    class="size-4 text-on-surface-tertiary"
+                    aria-label={m.import_document_keep_front_tip()}
                   />
                 </Tooltip>
               </div>
@@ -381,6 +567,9 @@ function ImportInto(props: { readonly book: EditorBook; readonly onClose: () => 
                     placeholder={chapterWords().join(", ")}
                     onInput={(event) => setWords(event.currentTarget.value)}
                   />
+                  <span class="text-on-surface-tertiary">
+                    {m.import_document_chapter_words_tip()}
+                  </span>
                 </label>
               </div>
             </details>
@@ -392,24 +581,56 @@ function ImportInto(props: { readonly book: EditorBook; readonly onClose: () => 
             </ul>
           </Show>
         </div>
-        <div class="flex min-w-0 flex-col gap-2">
+        <div class="flex min-h-0 min-w-0 flex-col gap-2">
+          <Show when={ready()}>
+            <SegmentedControl<View>
+              size="sm"
+              label={m.import_document_view()}
+              value={view()}
+              onChange={setView}
+              class="self-start"
+              items={[
+                { value: "text", label: m.import_document_view_text() },
+                { value: "usfm", label: m.import_document_usfm() },
+                { value: "changes", label: m.import_document_view_changes() },
+              ]}
+            />
+          </Show>
           <Show when={shown()}>
-            {(view) => (
-              <>
-                <Switch checked={usfm()} onChange={setUsfm} label={m.import_document_usfm()} />
-                <div
-                  class="max-h-[60vh] overflow-auto rounded-lg border border-surface-border"
-                  data-import-document-preview
-                >
-                  <ExcerptReader
-                    analysis={view().analysis}
-                    span={view().span}
-                    policy={editorPolicy(usfm() ? "usfm" : "regular")}
-                    marks={[]}
-                    label="import-preview"
-                  />
-                </div>
-              </>
+            {(shownView) => (
+              <div
+                class="min-h-0 flex-1 overflow-auto rounded-lg border border-surface-border"
+                data-import-document-preview
+              >
+                <ExcerptReader
+                  analysis={shownView().analysis}
+                  span={shownView().span}
+                  policy={editorPolicy(view() === "usfm" ? "usfm" : "regular")}
+                  marks={[]}
+                  label="import-preview"
+                />
+              </div>
+            )}
+          </Show>
+          <Show when={changes()}>
+            {(diff) => (
+              <div
+                class="flex min-h-0 flex-1 flex-col rounded-lg border border-surface-border"
+                data-import-document-changes
+              >
+                <BookDiff
+                  class="min-h-0 flex-1"
+                  sides={diff().sides}
+                  units={diff().units}
+                  split={false}
+                  usfm={false}
+                  controls={undefined}
+                  currentLabel={m.import_document_changes_after()}
+                  baselineLabel={m.import_document_changes_now()}
+                  observability={services.composition.observability}
+                  initial={diff().initial}
+                />
+              </div>
             )}
           </Show>
         </div>

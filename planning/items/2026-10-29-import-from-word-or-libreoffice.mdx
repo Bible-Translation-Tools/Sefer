@@ -4,7 +4,7 @@ title: "Import from Word or LibreOffice"
 kind: plan
 status: in-progress
 created: 2026-10-29
-updated: 2026-10-29
+updated: 2026-10-30
 sha: ba71ba91
 tags: [import]
 ---
@@ -84,7 +84,7 @@ flowchart LR
 + src/app/ui/import/ImportDocumentDialog.tsx -- file, scope, switches from report.found, Advanced, preview
 ~ src/app/ProjectContext.tsx -- importOpen / setImportOpen, beside the palette's
 ~ src/routes/_app.tsx -- mounts the dialog beside the palette
-~ src/app/commands.ts -- import.document: palette only, when hasBook; lazy-loads the package and opens the dialog
+~ src/app/commands.ts -- import.document: palette only, when a project is open; lazy-loads the package and opens the dialog
 ~ src/app/messages/en.json -- dialog copy (Paraglide)
 ~ package.json -- @sefer/document-import: workspace:*
 ~ documentation/architecture/landing.md -- a "documents into a book" section beside the import sources
@@ -96,11 +96,15 @@ My estimate is 800 to 1,200 lines on the Sefer side. The package is about 1,800.
 
 ## As built (2026-10-29)
 
-- **The open book only.** The import goes into the book that is open; a citation naming another book says "Open JUD first". That keeps "existing books only" without reaching books the editor has not opened.
+- **Any book in the project** (Will, 2026-10-30, reversing "the open book only"): the book picker or a typed citation names it; unchosen, it is the one project book the document's opening lines name, else the open book. Importing into a book that is not open goes there.
 - **No new engine door.** `galley.overlay` already answers edits against the target text, so `overlayText` in `src/core/fixes/fixes.ts` applies them to the spliced text; `GalleyService` is unchanged. `overlayBook` shares the same register-overlay-remove helper.
-- **No new picker or preview component.** The Chapters box reads through `shell.location` (the same `parseCitation` the sidebar search uses), and the preview is the existing `ExcerptReader` over the replaced chapters.
-- **Chapter words** default to "chapter" plus the book's own `\cl`, as ruled; Advanced overrides them.
-- Walked end to end on the Web fixture with a generated Philemon `.docx`: [the feature file](../../agents/skills/verify-sefer/features/import-document.md).
+- **No new picker or preview component.** The Chapters box reads through `shell.location` (the same `parseCitation` the sidebar search uses); under it, the sidebar's own book and chapter rows (`BookChaptersRow`, pulled out of `ProjectSidebar` into `src/app/ui/workspace/BookChapters.tsx`) write the same box. The preview is the existing `ExcerptReader` over the replaced chapters (Text, USFM), or Review's `BookDiff` over the whole book (Changes, Will 2026-10-30, reversing "no comparison in the dialog").
+- **Front matter and chapter labels** (Will, 2026-10-30): "Keep this book's front matter", on by default, keeps the book's header; off, the document's text before chapter 1 replaces it under the book's `\id`. A replaced chapter keeps the book's `\cl` when the document gives it none.
+- **The import was refused across chapter headings** (Will's Titus, 2026-10-30): `chapterHeadingsAreFixed` let only its own writers touch a heading, so any trusted apply crossing `\c 2` was dropped without a word. The Book now marks a host's trusted apply (`fromHost`), the rule lets it by, and a refusal names the rule.
+- **Chapter words** default to "chapter" plus the book's own `\cl`, as ruled; Advanced overrides them. A chapter also starts where verse 1 comes again (Will: "Sensible signal yes"), so a wrong word only leaves the label line in the text.
+- Walked end to end on the Web fixture with a generated Philemon `.docx` (2026-10-29) and a Psalms 1–3 one into Psalms with Philemon open (2026-10-30): [the feature file](../../agents/skills/verify-sefer/features/import-document.md).
+
+<Followup id="poetry-mid-verse">With "Try to keep this book's paragraphing" on, Psalm 1's breaks inside a verse (`\q2`) still come out joined (the Changes view shows it); the engine overlay keeps breaks at verse boundaries here, not inside one. Ask the galley maintainer, or accept.</Followup>
 
 <Question id="chunks">The overlay carries paragraph and poetry markers only (the engine's default set, "no titles"), so a book's `\s5` chunk markers inside the replaced chapters are lost: importing all of Titus over the ULB keeps its 9 `\p` but drops 22 `\s5`. Should "Try to keep this book's paragraphing" carry `\s5` too (`markers` can name it), or is losing chunk markers on a whole-chapter replace right?</Question>
 

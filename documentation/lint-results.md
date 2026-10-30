@@ -48,7 +48,7 @@ The generated half looks after itself; the judgement half does not. When a gate 
 | oxlint warnings | 0 | `pnpm lint` fails on any, every commit |
 | fallow dead code (`pnpm deadcode`) | 0 issue(s) | every deploy; advisory on branches |
 | fallow duplication | 1.6% in 64 clone group(s) | none — advisory |
-| suppression comments | 184 | each listed below with its reason |
+| suppression comments | 195 | each listed below with its reason |
 
 ### Oxlint warnings, by rule and file
 
@@ -123,8 +123,13 @@ None.
 | `src/app/paraglide/messages/import_document_absent.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_advanced.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_bold.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/import_document_books.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_cancel.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/import_document_changes_after.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/import_document_changes_now.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/import_document_chapter_words_tip.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_chapter_words.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/import_document_choose_book.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_choose.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_command.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_done.js` | `eslint-disable` | — |
@@ -134,8 +139,11 @@ None.
 | `src/app/paraglide/messages/import_document_headings.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_import.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_italic.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/import_document_keep_front_tip.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/import_document_keep_front.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_keep_tip.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_keep.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/import_document_labels_kept.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_lists.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_lost.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_missing.js` | `eslint-disable` | — |
@@ -150,7 +158,7 @@ None.
 | `src/app/paraglide/messages/import_document_poetry.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_refused.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_scope_hint.js` | `eslint-disable` | — |
-| `src/app/paraglide/messages/import_document_scope_other_book.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/import_document_scope_not_in_project.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_scope_problem.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_scope.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_skipped.js` | `eslint-disable` | — |
@@ -161,6 +169,9 @@ None.
 | `src/app/paraglide/messages/import_document_unreadable.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_usfm.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_verses.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/import_document_view_changes.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/import_document_view_text.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/import_document_view.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/landing_clone_from_link.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/landing_clone_repository.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/landing_drop_hint.js` | `eslint-disable` | — |

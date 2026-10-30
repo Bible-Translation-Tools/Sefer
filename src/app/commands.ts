@@ -390,12 +390,13 @@ const saveCommands = (bridge: ShellBridge, h: Helpers) => {
 
 // The palette only, until the designer places it (2026-10-29).
 const importCommands = (bridge: ShellBridge, h: Helpers) => {
-  const { hasBook } = h;
+  const { hasProject } = h;
   return [
     registerCommand({
       id: "import.document",
       title: m.import_document_command(),
-      when: hasBook,
+      // Any book in the project takes it; none need be open.
+      when: hasProject,
       run: () => bridge.setImportOpen(true),
     }),
   ];
