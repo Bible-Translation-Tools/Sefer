@@ -24,7 +24,7 @@ import { Button, Dialog, Input, SegmentedControl, Select, Switch, Tooltip } from
 import { toLayout } from "../review/reader/helpers";
 import { createMeasure } from "../review/reader/measure";
 import { ViewMenu } from "../review/reader/ReaderToolbar";
-import { AUTO_SPLIT_PX, FILTERS, type Filter, type Layout } from "../review/reader/types";
+import { AUTO_SPLIT_PX, type Layout } from "../review/reader/types";
 import { BookChaptersRow, chaptersOf, type ChapterTile } from "../workspace/BookChapters";
 import { bookName } from "../workspace/books";
 import { metadataOf } from "../workspace/project";
@@ -38,20 +38,64 @@ interface Loaded {
 }
 
 // One switch per kind of guess the document gave occasion for: on is the
-// importer's default, off its quieter alternative.
+// importer's default, off its quieter alternative. The count is how many the
+// document has; the tip says what on and off do.
 const SWITCHES = [
-  { key: "poetry", found: "poetry", off: "unwrap", label: m.import_document_poetry },
-  { key: "headings", found: "headings", off: "rem", label: m.import_document_headings },
-  { key: "front", found: "front", off: "drop", label: m.import_document_front },
-  { key: "notes", found: "notes", off: "drop", label: m.import_document_notes },
-  { key: "italic", found: "italic", off: "unwrap", label: m.import_document_italic },
-  { key: "bold", found: "bold", off: "unwrap", label: m.import_document_bold },
-  { key: "lists", found: "lists", off: "unwrap", label: m.import_document_lists },
+  {
+    key: "poetry",
+    found: "poetry",
+    off: "unwrap",
+    label: m.import_document_poetry,
+    tip: m.import_document_poetry_tip,
+  },
+  {
+    key: "headings",
+    found: "headings",
+    off: "rem",
+    label: m.import_document_headings,
+    tip: m.import_document_headings_tip,
+  },
+  {
+    key: "front",
+    found: "front",
+    off: "drop",
+    label: m.import_document_front,
+    tip: m.import_document_front_tip,
+  },
+  {
+    key: "notes",
+    found: "notes",
+    off: "drop",
+    label: m.import_document_notes,
+    tip: m.import_document_notes_tip,
+  },
+  {
+    key: "italic",
+    found: "italic",
+    off: "unwrap",
+    label: m.import_document_italic,
+    tip: m.import_document_italic_tip,
+  },
+  {
+    key: "bold",
+    found: "bold",
+    off: "unwrap",
+    label: m.import_document_bold,
+    tip: m.import_document_bold_tip,
+  },
+  {
+    key: "lists",
+    found: "lists",
+    off: "unwrap",
+    label: m.import_document_lists,
+    tip: m.import_document_lists_tip,
+  },
   {
     key: "styleMarkers",
     found: "styleMarkers",
     off: "unwrap",
     label: m.import_document_style_markers,
+    tip: m.import_document_style_markers_tip,
   },
 ] as const;
 
@@ -100,7 +144,6 @@ function ImportInto(props: { readonly onClose: () => void }) {
   const [keepFront, setKeepFront] = createSignal(true, { name: "importKeepFront" });
   const [view, setView] = createSignal<View>("result", { name: "importView" });
   const [usfm, setUsfm] = createSignal(shell.mode() === "usfm", { name: "importUsfm" });
-  const [filter, setFilter] = createSignal<Filter>("all", { name: "importFilter" });
   // Review's layout setting: side by side or one text is the reader's habit, not the screen's.
   const layoutKey = shellKeys(services.settings).reviewLayout;
   const [layout, setLayoutSignal] = createSignal<Layout>(
@@ -316,8 +359,7 @@ function ImportInto(props: { readonly onClose: () => void }) {
       const before = into.source().text;
       const skeleton = diffSkeleton(services.galley, into.id, before, p.text);
       if (Result.isFailure(skeleton)) return undefined;
-      const shows = FILTERS[filter()];
-      const units = skeleton.success.units.filter((unit) => !changed(unit) || shows(unit));
+      const units = skeleton.success.units;
       return {
         sides: {
           bookId: into.id,
@@ -584,16 +626,21 @@ function ImportInto(props: { readonly onClose: () => void }) {
             </Show>
             <For each={SWITCHES.filter((s) => (found()?.found[s.found] ?? 0) > 0)}>
               {(s) => (
-                <Switch
-                  checked={!off().has(s.key)}
-                  onChange={(on) => {
-                    const next = new Set(off());
-                    if (on) next.delete(s.key);
-                    else next.add(s.key);
-                    setOff(next);
-                  }}
-                  label={s.label({ count: found()?.found[s.found] ?? 0 })}
-                />
+                <div class="flex items-center gap-2">
+                  <Switch
+                    checked={!off().has(s.key)}
+                    onChange={(on) => {
+                      const next = new Set(off());
+                      if (on) next.delete(s.key);
+                      else next.add(s.key);
+                      setOff(next);
+                    }}
+                    label={s.label({ count: found()?.found[s.found] ?? 0 })}
+                  />
+                  <Tooltip label={s.tip()}>
+                    <Info class="size-4 text-on-surface-tertiary" aria-label={s.tip()} />
+                  </Tooltip>
+                </div>
               )}
             </For>
             <details class="text-small">
@@ -656,8 +703,6 @@ function ImportInto(props: { readonly onClose: () => void }) {
                 toolbar={
                   view() === "changes"
                     ? {
-                        filter: filter(),
-                        onFilter: setFilter,
                         layout: layout(),
                         onLayout: setLayout,
                         usfm: usfm(),

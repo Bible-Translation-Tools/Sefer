@@ -229,9 +229,9 @@ const paintField = StateField.define<Painted>({
     for (const effect of tr.effects) {
       if (effect.is(setPaint)) next = painted(tr.state, effect.value, next.open);
       if (effect.is(toggleHunk)) {
-        const open = new Set(next.open);
-        if (open.has(effect.value)) open.delete(effect.value);
-        else open.add(effect.value);
+        // One earlier wording open at a time: opening one closes the last
+        // (Will, 2026-10-30, "if you open up a bunch of them, it gets really busy").
+        const open = new Set(next.open.has(effect.value) ? [] : [effect.value]);
         next = { ...next, open, opened: decorateHunks(tr.state, next.hunks, open) };
       }
     }

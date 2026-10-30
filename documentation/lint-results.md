@@ -48,7 +48,7 @@ The generated half looks after itself; the judgement half does not. When a gate 
 | oxlint warnings | 0 | `pnpm lint` fails on any, every commit |
 | fallow dead code (`pnpm deadcode`) | 0 issue(s) | every deploy; advisory on branches |
 | fallow duplication | 1.6% in 64 clone group(s) | none — advisory |
-| suppression comments | 194 | each listed below with its reason |
+| suppression comments | 202 | each listed below with its reason |
 
 ### Oxlint warnings, by rule and file
 
@@ -122,6 +122,7 @@ None.
 | `src/app/paraglide/messages/editor_verse_menu_verse_number.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_absent.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_advanced.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/import_document_bold_tip.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_bold.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_books.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_cancel.js` | `eslint-disable` | — |
@@ -135,15 +136,19 @@ None.
 | `src/app/paraglide/messages/import_document_done.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_found.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_front_skipped.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/import_document_front_tip.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_front.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/import_document_headings_tip.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_headings.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_import.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/import_document_italic_tip.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_italic.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_keep_front_tip.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_keep_front.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_keep_tip.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_keep.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_labels_kept.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/import_document_lists_tip.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_lists.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_lost.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_missing.js` | `eslint-disable` | — |
@@ -153,8 +158,10 @@ None.
 | `src/app/paraglide/messages/import_document_mode_marked.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_mode_per_line.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_mode_superscript.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/import_document_notes_tip.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_notes.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_nothing.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/import_document_poetry_tip.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_poetry.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_refused.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_scope_hint.js` | `eslint-disable` | — |
@@ -162,6 +169,7 @@ None.
 | `src/app/paraglide/messages/import_document_scope_problem.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_scope.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_skipped.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/import_document_style_markers_tip.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_style_markers.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_title.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_tracked.js` | `eslint-disable` | — |
