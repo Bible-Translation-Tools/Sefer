@@ -8,11 +8,11 @@ import {
   type ViewUpdate,
 } from "@codemirror/view";
 
-import { blockHost } from "./blockHost";
-import { pickField, visibleClipAt } from "./clip";
-import { structureField, type DocStructure } from "./docStructure";
-import { inPlaceWords } from "./inPlace";
+import { pickField, visibleClipAt } from "./guards/clip";
 import { isVisual, modeFacet, trusted } from "./kernel";
+import { structureField, type DocStructure } from "./model/docStructure";
+import { blockHost } from "./paint/blockHost";
+import { inPlaceWords } from "./paint/inPlace";
 import { phrase } from "./words";
 
 const FRONT_MARKERS = [

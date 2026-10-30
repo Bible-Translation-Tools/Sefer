@@ -2,11 +2,11 @@ import { Facet, type EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { Category, CloseReason, MARKERS, MarkerKind } from "@sefer/text/engine/analysis";
 
-import { scanCst, type CstScan, type NodeFacts } from "./cst";
-import { docText, structureAt } from "./docStructure";
 import { isVisual } from "./kernel";
-import { isMapped, opensBlock } from "./mapping";
-import { assignmentAt } from "./registry";
+import { scanCst, type CstScan, type NodeFacts } from "./model/cst";
+import { docText, structureAt } from "./model/docStructure";
+import { isMapped, opensBlock } from "./model/mapping";
+import { assignmentAt } from "./model/registry";
 
 /**
  * What a copy puts on the clipboard, Word's way: the words a reader sees as

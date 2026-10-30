@@ -1,7 +1,6 @@
 import {
   editorFeatures,
   editorPolicy,
-  expectedVersesOf,
   type EditorWords,
   type PhraseKey,
   mountBookEditor,
@@ -362,7 +361,7 @@ const open = (edited: BenchText, beside?: BenchText): void => {
   });
 
   // Sefer counts a chapter's verses from its reference text; so does the bench.
-  if (beside !== undefined) editor.setExpectedVerses(expectedVersesOf(canonical(beside.text)));
+  if (beside !== undefined) editor.setExpectedVerses(engine.lastVerses(`${beside.name}#reference`));
   // Where Sefer suggests USFM mode to someone typing USFM in Refine.
   editor.onTypedUsfm((marker) =>
     append(

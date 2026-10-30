@@ -2,17 +2,17 @@ import { history } from "@codemirror/commands";
 import { EditorState, type Extension, Transaction } from "@codemirror/state";
 import { Decoration, EditorView, ViewPlugin, drawSelection } from "@codemirror/view";
 
-import { type Analyze, analyzed, analyzer } from "./analyzer";
 import { clipboardHandlers } from "./clipboard";
-import { buildStructure } from "./docStructure";
 import { decoField, pickField, structureField, usfmModeProjection } from "./editorState";
-import { traceFor, type TraceVerdict } from "./instrument";
+import { HOOK, PHASES, type ParserPort, type PhaseRule, type RuleName } from "./guards/pipeline";
+import { traceFor, type TraceVerdict } from "./instrument/instrument";
+import { span } from "./instrument/timing";
 import type { ChangeRule, TransactionRule } from "./kernel";
 import { commandsLayer } from "./keymaps";
-import { HOOK, PHASES, type ParserPort, type PhaseRule, type RuleName } from "./phases";
-import { renderRangeField, renderWindow } from "./render";
+import { type Analyze, analyzed, analyzer } from "./model/analyzer";
+import { buildStructure } from "./model/docStructure";
+import { renderRangeField, renderWindow } from "./paint/render";
 import { scrollGuard } from "./scroll";
-import { span } from "./timing";
 
 export type { RuleName };
 

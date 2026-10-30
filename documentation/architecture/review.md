@@ -419,7 +419,7 @@ edits for that unit over the live text, `galley.mergeSplices`, applied
 through `book.apply` as one Undo step; nothing else moves). Every
 card's current side, and the whole book's, edits the real Book on a
 double-click or Edit, with the diff as a plugin on it (`liveDiff` in
-`packages/editor/src/recipes/diffView.ts`). So "take theirs, then fix the comma" is a
+`packages/editor/src/surfaces/diffView.ts`). So "take theirs, then fix the comma" is a
 click and some typing, the way a Find card is. A taken unit keeps its card,
 washed, its button pressed and reading "Taken from the file"; pressing it
 again puts it back, which merges the ORIGINAL's unit into the live text,

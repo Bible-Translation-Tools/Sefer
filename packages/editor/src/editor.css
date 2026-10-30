@@ -1025,7 +1025,7 @@
 }
 
 /* Reading and line by line name each chapter once (`nameChapters`,
-   core/decorations.ts), with plenty of room after the last verse of the one before. */
+   core/paint/decorations.ts), with plenty of room after the last verse of the one before. */
 /* Below, half the room above: apart from the text, still plainly its title. */
 .cm-mode-regular .usfm-chap {
   padding-top: 4em;
@@ -1068,7 +1068,7 @@
   padding-bottom: 1.25em;
 }
 
-/* An empty chapter's empty state (`EmptyChapterWidget`, core/decorations.ts):
+/* An empty chapter's empty state (`EmptyChapterWidget`, core/paint/decorations.ts):
    ghost text where the caret waits, like a placeholder; clickable only where
    there is no paragraph to type in. */
 .cm-mode-regular .usfm-chap-empty {
@@ -1550,7 +1550,7 @@
    because it is the same idea at book scale.
    --------------------------------------------------------------------------- */
 /* Around every block widget's own element: its margins are inside the box
-   CodeMirror measures (`core/blockHost.ts`). */
+   CodeMirror measures (`core/paint/blockHost.ts`). */
 .cm-block-host {
   display: flow-root;
 }
@@ -1614,7 +1614,7 @@
 }
 
 /* ---------------------------------------------------------------------------
-   The engine's diff drawn on the reading (`recipes/diffView.ts`), for the
+   The engine's diff drawn on the reading (`surfaces/diffView.ts`), for the
    playground's "In the editor" experiment. A unit's tint is a line class; a
    changed word a mark; a removed word, inline, struck through; a removed unit
    a block. The severity surfaces are not used — a change is not a judgement.
@@ -1700,7 +1700,7 @@
   text-decoration: none;
 }
 /* A one-text review drawn as Zed draws hunks (`DiffHunk` in
-   recipes/diffView.ts): the final text, and a bar beside each changed unit's
+   surfaces/diffView.ts): the final text, and a bar beside each changed unit's
    own rows. The hit area is wider than the stroke. Click the bar, or the
    verse number, to open the other side's wording at the verse. */
 .cm-diff-bars {
@@ -1929,7 +1929,7 @@
   overflow: hidden;
 }
 
-/* USFM typed in Refine, before it is written (`typedUsfm`): where it will go, in the USFM colours. */
+/* USFM typed in Refine, before it is written (`inputRules/typedMarker.ts`): where it will go, in the USFM colours. */
 .cm-typed-usfm {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.85em;

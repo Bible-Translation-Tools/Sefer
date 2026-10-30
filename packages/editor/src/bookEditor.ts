@@ -14,22 +14,28 @@ import {
   type AttributedMarkup,
   attributesAt,
 } from "./core/attributes";
-import { chapterWordHost, type ChapterWordScope } from "./core/chapterWord";
+import { footnoteAt } from "./core/commands/insert";
+import { lineKindAt, turnLineInto, type LineKind } from "./core/commands/poetryLevels";
+import { deleteColumn, deleteRow, insertColumn, insertRow } from "./core/commands/tableCommands";
+import {
+  addVerseAfter,
+  removeVerseMarker,
+  renumberVerse,
+  verseAt,
+} from "./core/commands/verseCommands";
 import { structureAt } from "./core/editorState";
 import { setExpectedVerses, type ExpectedVerses } from "./core/expectedVerses";
 import { type Figure, figuresIn } from "./core/figures";
 import { frontMatterCard } from "./core/frontmatter";
-import { footnoteAt } from "./core/insert";
-import { annotateOpen } from "./core/instrument";
+import { typedMarker } from "./core/inputRules/typedMarker";
+import { annotateOpen } from "./core/instrument/instrument";
+import { keystrokeMeter } from "./core/instrument/meter";
+import { span } from "./core/instrument/timing";
 import { trusted } from "./core/kernel";
-import { keystrokeMeter } from "./core/meter";
-import { lineKindAt, turnLineInto, type LineKind } from "./core/poetryLevels";
+import { type Keybinding, userKeybindings } from "./core/keymaps";
+import { chapterWordHost, type ChapterWordScope } from "./core/paint/chapterWord";
 import { changePreferences, editorPreferences, type EditorPreferences } from "./core/preferences";
-import { deleteColumn, deleteRow, insertColumn, insertRow } from "./core/tableCommands";
-import { span } from "./core/timing";
-import { onTypedUsfm } from "./core/typedUsfm";
 import { type UnsupportedMarkup, unsupportedMarkup } from "./core/unsupported";
-import { addVerseAfter, removeVerseMarker, renumberVerse, verseAt } from "./core/verseCommands";
 import { drawnWords, type EditorWords, editorWords } from "./core/words";
 import type { EditorFeature } from "./features";
 import { handleFor, markMoved, type EditorHandle } from "./handle";
@@ -37,8 +43,8 @@ import { annotateRepaint } from "./observability";
 import { annotateEmptyBlocks, blockNamer, showEmptyBlocks } from "./recipes/emptyBlocks";
 import { flash, flashing } from "./recipes/flash";
 import { showCorpusFindings, type CorpusFinding } from "./recipes/lint";
-import { noteBookIs } from "./recipes/noteEditor";
 import { pairingHere, showBlockPairs } from "./recipes/pairing";
+import { noteBookIs } from "./surfaces/noteEditor";
 import { pickChapter, policyKey, policyView, type EditorPolicy } from "./views";
 
 /**
@@ -87,6 +93,8 @@ export interface BookEditorOptions {
   readonly words?: EditorWords;
   /** The editor's switches (`EditorPreferences`); any left out take their defaults. Each mount's own, changed live by `setPreferences`. */
   readonly preferences?: Partial<EditorPreferences>;
+  /** Key bindings over the defaults, as VS Code's keybindings.json (`keymaps.ts`). */
+  readonly keybindings?: readonly Keybinding[];
 }
 
 /** One mark the linter draws: the engine's and the host's (`setHostDiagnostics`) as one set. */
@@ -135,8 +143,8 @@ export interface BookEditorMount extends EditorHandle {
    */
   renumberVerse(offset: number, number: string): boolean;
   /**
-   * How many verses each chapter is expected to have (`expectedVersesOf` a
-   * reference text): typed and pasted numbers past a chapter's last verse stay words.
+   * How many verses each chapter is expected to have (a reference text's last
+   * verse per chapter): typed and pasted numbers past a chapter's last verse stay words.
    */
   setExpectedVerses(expected: ExpectedVerses): void;
   /** Called with each marker written by typing USFM in Refine (`v`, `q2`). Returns the detach. */
@@ -203,6 +211,7 @@ const mountedConfig = new WeakMap<
 
 const activateListeners = new WeakMap<EditorBook, Set<(target: AttributedMarkup | null) => void>>();
 const caretListeners = new WeakMap<EditorBook, Set<(head: number) => void>>();
+const typedListeners = new WeakMap<EditorBook, Set<(marker: string) => void>>();
 
 const drawnListeners = new WeakMap<EditorBook, Set<() => void>>();
 
@@ -345,13 +354,17 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
         drawnWords,
         ...(options.onChapterWord === undefined ? [] : [chapterWordHost.of(options.onChapterWord)]),
         editorPreferences(options.preferences),
+        userKeybindings.of(options.keybindings ?? []),
         EditorView.updateListener.of((update) => {
-          const listeners = activateListeners.get(book);
-          if (listeners === undefined || listeners.size === 0) return;
+          const activated = activateListeners.get(book);
+          const typed = typedListeners.get(book);
           for (const tr of update.transactions)
-            for (const effect of tr.effects)
+            for (const effect of tr.effects) {
               if (effect.is(activateMarkup))
-                for (const listener of listeners) listener(effect.value);
+                for (const listener of activated ?? []) listener(effect.value);
+              if (effect.is(typedMarker))
+                for (const listener of typed ?? []) listener(effect.value);
+            }
         }),
         ...(options.blockName === undefined ? [] : [blockNamer.of(options.blockName)]),
         annotateEmptyBlocks(options.emptyBlocks === true),
@@ -480,7 +493,11 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
     deleteTableColumn: (offset: number) => run(deleteColumn(created.state, offset)),
     setExpectedVerses: (expected: ExpectedVerses) =>
       created.dispatch({ effects: setExpectedVerses.of(expected) }),
-    onTypedUsfm: (listener: (marker: string) => void) => onTypedUsfm(created, listener),
+    onTypedUsfm: (listener: (marker: string) => void) => {
+      const held = listenersOf(typedListeners, book);
+      held.add(listener);
+      return () => held.delete(listener);
+    },
     lineKindAt: (offset: number) => lineKindAt(created.state, offset),
     turnLineInto: (offset: number, kind: string) => run(turnLineInto(created.state, offset, kind)),
     addFootnote: (offset?: number) => run(footnoteAt(created.state, offset)),

@@ -1,7 +1,7 @@
 import { type EditorState, type Extension, StateField } from "@codemirror/state";
 import { showTooltip, type Tooltip } from "@codemirror/view";
 
-import { footnoteAt } from "../core/insert";
+import { footnoteAt } from "../core/commands/insert";
 import { isVisual } from "../core/kernel";
 
 /**

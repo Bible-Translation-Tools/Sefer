@@ -9,7 +9,7 @@ export { type Where } from "./recipes/whereAmI";
 export { type EditorBook } from "./book";
 export { seatBook } from "./seat";
 export { type Following } from "./funnel";
-export { type EditorAction } from "./core/actions";
+export { type EditorAction } from "./core/commands/actions";
 export { type Attribute, type AttributedMarkup } from "./core/attributes";
 export {
   attributePopover,
@@ -25,11 +25,11 @@ export {
   type FiguresOptions,
 } from "./features";
 export { type Figure } from "./core/figures";
-export { type LineKind } from "./core/poetryLevels";
-export { expectedVersesOf, type ExpectedVerses } from "./core/expectedVerses";
+export { type LineKind } from "./core/commands/poetryLevels";
+export type { ExpectedVerses } from "./core/expectedVerses";
 export { type UnsupportedMarkup } from "./core/unsupported";
 export { PHRASES, type EditorWords, type PhraseKey } from "./core/words";
-export { KEY_BUNDLES, type EditorMode, type KeyBundle } from "./core/keymaps";
+export { KEY_BUNDLES, type EditorMode, type KeyBundle, type Keybinding } from "./core/keymaps";
 export { DEFAULT_PREFERENCES, type EditorPreferences } from "./core/preferences";
 
 export {
@@ -45,25 +45,25 @@ export {
   type CardMount,
   type CardOptions,
   type CardSession,
-} from "./recipes/card";
-export { mountReader, type ReaderMount } from "./recipes/reader";
-export { mountStamp } from "./recipes/stamp";
+} from "./surfaces/card";
+export { mountReader, type ReaderMount } from "./surfaces/reader";
+export { mountStamp } from "./surfaces/stamp";
 export {
   mountDiffView,
   type DiffHunk,
   type DiffPaint,
   type DiffViewMount,
-} from "./recipes/diffView";
-export { mountReference, type ReferenceMount } from "./recipes/reference";
+} from "./surfaces/diffView";
+export { mountReference, type ReferenceMount } from "./surfaces/reference";
 export { type PairedRange } from "./recipes/pairing";
-export { type MarkedRange } from "./recipes/satellite";
+export { type MarkedRange } from "./surfaces/satellite";
 
-export { createAlignedGroup, revealEditorInBand, type AlignedGroup } from "./recipes/align";
+export { createAlignedGroup, revealEditorInBand, type AlignedGroup } from "./surfaces/align";
 
 export { editorPolicy, policyKey, type EditorPolicy, type ProjectionName } from "./views";
 
-export { anchorFrom } from "./core/clip";
-export { type ChapterRow } from "./core/docStructure";
+export { anchorFrom } from "./core/guards/clip";
+export { type ChapterRow } from "./core/model/docStructure";
 
 export { type CorpusAction, type CorpusFinding } from "./recipes/lint";
 

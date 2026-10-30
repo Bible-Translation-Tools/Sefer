@@ -6,7 +6,7 @@ import {
 } from "@codemirror/state";
 import { type Command, Direction, EditorView } from "@codemirror/view";
 
-import type { DocStructure } from "./docStructure";
+import { note, noteTr } from "./instrument/trace";
 import {
   type GetStructure,
   type PaintPort,
@@ -14,8 +14,8 @@ import {
   isVisual,
   type TransactionRule,
 } from "./kernel";
-import { alignedOnACluster, stopsIn, type SettleDirection } from "./stops";
-import { note, noteTr } from "./trace";
+import type { DocStructure } from "./model/docStructure";
+import { alignedOnACluster, stopsIn, type SettleDirection } from "./paint/stops";
 
 export function lawfulStop(
   state: EditorState,
