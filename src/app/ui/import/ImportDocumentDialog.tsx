@@ -312,6 +312,24 @@ function ImportInto(props: { readonly onClose: () => void }) {
     { name: "importRendered" },
   );
 
+  // Whether the document's lines before its first verse reach the import: not
+  // when they all stand before its first chapter and the book keeps its own
+  // front matter, which leaves them out whatever their switch says.
+  const frontCounts = createMemo(
+    () => {
+      const doc = loaded();
+      const out = rendered();
+      if (doc === undefined || out === undefined) return false;
+      if (!keepFront()) return true;
+      const after = (usfm: string) => usfm.slice(Math.max(usfm.search(/\\c\s/), 0));
+      const without = doc.lib.render(doc.reading, { ...base(), front: "drop" }).usfm;
+      return (
+        after(without) !== after(doc.lib.render(doc.reading, { ...base(), front: "rem" }).usfm)
+      );
+    },
+    { name: "importFrontCounts" },
+  );
+
   const preview = createMemo(
     () => {
       const out = rendered();
@@ -339,7 +357,10 @@ function ImportInto(props: { readonly onClose: () => void }) {
       if (p === undefined || view() === "changes") return undefined;
       const first = Math.min(...p.replaced);
       const last = Math.max(...p.replaced);
-      const from = p.text.search(new RegExp(String.raw`^\\c\s+${first}\b`, "m"));
+      // The book's opening lines too, where they are part of what to look at:
+      // always as USFM, and whenever the document's front matter replaces them.
+      const head = usfm() || !keepFront();
+      const from = head ? 0 : p.text.search(new RegExp(String.raw`^\\c\s+${first}\b`, "m"));
       const next = [...p.text.matchAll(/^\\c\s+(\d+)/gm)].find((c) => Number(c[1]) > last);
       return {
         analysis: services.galley.analyzeText(p.text, "import-preview"),
@@ -629,6 +650,7 @@ function ImportInto(props: { readonly onClose: () => void }) {
                 <div class="flex items-center gap-2">
                   <Switch
                     checked={!off().has(s.key)}
+                    disabled={s.key === "front" && !frontCounts()}
                     onChange={(on) => {
                       const next = new Set(off());
                       if (on) next.delete(s.key);
