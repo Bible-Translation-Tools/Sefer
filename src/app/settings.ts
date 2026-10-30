@@ -398,7 +398,7 @@ const editorBehaviourRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
     key: keys.verseShortcuts,
     label: "Verse shortcuts",
     description:
-      'Typing "1", "1.", "v1" or "verse 1" and then a space starts that verse, when it is the next verse the chapter is missing. Turn this off to keep such numbers as words.',
+      'Typing "1", "1.", "v1" or "verse 1" and then a space starts that verse, when it is the next verse or within the reference\'s count for the chapter, and never one the chapter already has. Pasted text follows the same rule, and Backspace just after a verse\'s number turns it back into the number. Turn this off to keep such numbers as words.',
     kind: "boolean",
     group: "editor",
   },
