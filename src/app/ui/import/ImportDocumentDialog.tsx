@@ -2,7 +2,7 @@ import type { Reading, Rendered, Settings, VerseMode } from "@sefer/document-imp
 import { editorPolicy } from "@sefer/editor";
 import type { Book } from "@sefer/text/book";
 import { chaptersAddress } from "@sefer/text/location/address";
-import { Result } from "effect";
+import { Effect, Result } from "effect";
 import FileUp from "lucide-solid/icons/file-up";
 import Info from "lucide-solid/icons/info";
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
@@ -17,9 +17,14 @@ import {
 
 import { m } from "../../paraglide/messages";
 import { useServices, useShell } from "../../ProjectContext";
+import { shellKeys } from "../../settings";
 import { BookDiff, changed } from "../diff";
 import { ExcerptReader } from "../excerpts/ExcerptReader";
 import { Button, Dialog, Input, SegmentedControl, Select, Switch, Tooltip } from "../primitives";
+import { toLayout } from "../review/reader/helpers";
+import { createMeasure } from "../review/reader/measure";
+import { ViewMenu } from "../review/reader/ReaderToolbar";
+import { AUTO_SPLIT_PX, FILTERS, type Filter, type Layout } from "../review/reader/types";
 import { BookChaptersRow, chaptersOf, type ChapterTile } from "../workspace/BookChapters";
 import { bookName } from "../workspace/books";
 import { metadataOf } from "../workspace/project";
@@ -54,8 +59,8 @@ type SwitchKey = (typeof SWITCHES)[number]["key"];
 
 const VERSE_MODES: readonly VerseMode[] = ["superscript", "marked", "lineStart", "perLine", "any"];
 
-/** How the preview shows the result: as read, as USFM, or against the book now. */
-type View = "text" | "usfm" | "changes";
+/** The preview: the replaced chapters as they will read, or the whole book before against after. */
+type View = "result" | "changes";
 
 type Target =
   | { readonly ok: true; readonly book: Book; readonly chapters: ImportChapters }
@@ -93,9 +98,24 @@ function ImportInto(props: { readonly onClose: () => void }) {
   const [scope, setScope] = createSignal("", { name: "importScope" });
   const [keep, setKeep] = createSignal(true, { name: "importKeep" });
   const [keepFront, setKeepFront] = createSignal(true, { name: "importKeepFront" });
-  const [view, setView] = createSignal<View>(shell.mode() === "usfm" ? "usfm" : "text", {
-    name: "importView",
-  });
+  const [view, setView] = createSignal<View>("result", { name: "importView" });
+  const [usfm, setUsfm] = createSignal(shell.mode() === "usfm", { name: "importUsfm" });
+  const [filter, setFilter] = createSignal<Filter>("all", { name: "importFilter" });
+  // Review's layout setting: side by side or one text is the reader's habit, not the screen's.
+  const layoutKey = shellKeys(services.settings).reviewLayout;
+  const [layout, setLayoutSignal] = createSignal<Layout>(
+    toLayout(services.settings.get(layoutKey)),
+    { name: "importLayout" },
+  );
+  const setLayout = (value: Layout) => {
+    setLayoutSignal(value);
+    void services.run(Effect.result(services.settings.set(layoutKey, value)));
+  };
+  const [width, setWidth] = createSignal(0, { name: "importWidth" });
+  const measure = createMeasure(setWidth);
+  const split = () => layout() === "split" || (layout() === "auto" && width() >= AUTO_SPLIT_PX);
+  // The book list follows what is typed in the Chapters box, not what a pick wrote there.
+  const [typed, setTyped] = createSignal(false, { name: "importTyped" });
   const [off, setOff] = createSignal<ReadonlySet<SwitchKey>>(new Set(), { name: "importOff" });
   const [verses, setVerses] = createSignal<VerseMode | "auto">("auto", { name: "importVerses" });
   const [words, setWords] = createSignal("", { name: "importWords" });
@@ -296,7 +316,8 @@ function ImportInto(props: { readonly onClose: () => void }) {
       const before = into.source().text;
       const skeleton = diffSkeleton(services.galley, into.id, before, p.text);
       if (Result.isFailure(skeleton)) return undefined;
-      const units = skeleton.success.units;
+      const shows = FILTERS[filter()];
+      const units = skeleton.success.units.filter((unit) => !changed(unit) || shows(unit));
       return {
         sides: {
           bookId: into.id,
@@ -351,8 +372,31 @@ function ImportInto(props: { readonly onClose: () => void }) {
     setOpenRow(openRow() === id ? null : id);
     if (book()?.id !== id) {
       anchor = undefined;
-      setScope(id);
+      pick(id);
     }
+  };
+  const pick = (text: string) => {
+    setTyped(false);
+    setScope(text);
+  };
+  // The books the typed text could mean, as the sidebar's search finds them;
+  // every book while nothing is typed, or after a pick.
+  const listed = createMemo(
+    () => {
+      const text = scope().trim();
+      if (!typed() || text === "") return books();
+      const wanted = new Set(shell.location.books(text));
+      return books().filter((row) => wanted.has(row.book.id));
+    },
+    { name: "importListed" },
+  );
+  // Enter takes the box now, not after the pause; a word that names no
+  // chapters yet takes the first book it could mean.
+  const enter = () => {
+    const text = scope().trim();
+    const first = listed()[0]?.book.id;
+    if (text !== "" && !shell.location.read(text).ok && first !== undefined) pick(first);
+    else setScopeSettled(scope());
   };
   // A chapter alone; with Shift and a chapter already picked, the range
   // between; the one picked chapter again, the whole book.
@@ -362,16 +406,16 @@ function ImportInto(props: { readonly onClose: () => void }) {
     if (event.shiftKey && same && anchor !== undefined) {
       const from = Math.min(anchor, tile.index);
       const to = Math.max(anchor, tile.index);
-      setScope(from === to ? `${id} ${from}` : `${id} ${from}-${to}`);
+      pick(from === to ? `${id} ${from}` : `${id} ${from}-${to}`);
       return;
     }
     if (same && t.chapters?.from === tile.index && t.chapters.to === tile.index) {
       anchor = undefined;
-      setScope(id);
+      pick(id);
       return;
     }
     anchor = tile.index;
-    setScope(`${id} ${tile.index}`);
+    pick(`${id} ${tile.index}`);
   };
 
   const summary = () => {
@@ -442,7 +486,7 @@ function ImportInto(props: { readonly onClose: () => void }) {
       }
     >
       <div class="grid h-[76vh] gap-4 md:grid-cols-[20rem_1fr]" data-import-document>
-        <div class="flex min-h-0 flex-col gap-3 overflow-y-auto pe-1">
+        <div class="flex min-h-0 flex-col gap-3 overflow-y-auto p-1">
           <input
             ref={setInput}
             type="file"
@@ -472,7 +516,21 @@ function ImportInto(props: { readonly onClose: () => void }) {
                 value={scope()}
                 placeholder={m.import_document_scope_hint({ book: book()?.id ?? "TIT" })}
                 data-import-document-scope
-                onInput={(event) => setScope(event.currentTarget.value)}
+                onInput={(event) => {
+                  setTyped(true);
+                  setScope(event.currentTarget.value);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    enter();
+                  } else if (event.key === "Escape" && scope() !== "") {
+                    // Escape clears the box first, and only then closes the dialog.
+                    event.preventDefault();
+                    event.stopPropagation();
+                    pick("");
+                  }
+                }}
               />
             </label>
             <ul
@@ -480,7 +538,7 @@ function ImportInto(props: { readonly onClose: () => void }) {
               aria-label={m.import_document_books()}
               data-import-document-books
             >
-              <For each={books()}>
+              <For each={listed()}>
                 {(row) => (
                   <BookChaptersRow
                     id={row.book.id}
@@ -583,18 +641,32 @@ function ImportInto(props: { readonly onClose: () => void }) {
         </div>
         <div class="flex min-h-0 min-w-0 flex-col gap-2">
           <Show when={ready()}>
-            <SegmentedControl<View>
-              size="sm"
-              label={m.import_document_view()}
-              value={view()}
-              onChange={setView}
-              class="self-start"
-              items={[
-                { value: "text", label: m.import_document_view_text() },
-                { value: "usfm", label: m.import_document_usfm() },
-                { value: "changes", label: m.import_document_view_changes() },
-              ]}
-            />
+            <div class="flex items-center gap-2">
+              <SegmentedControl<View>
+                size="sm"
+                label={m.import_document_view()}
+                value={view()}
+                onChange={setView}
+                items={[
+                  { value: "result", label: m.import_document_view_result() },
+                  { value: "changes", label: m.import_document_view_changes() },
+                ]}
+              />
+              <ViewMenu
+                toolbar={
+                  view() === "changes"
+                    ? {
+                        filter: filter(),
+                        onFilter: setFilter,
+                        layout: layout(),
+                        onLayout: setLayout,
+                        usfm: usfm(),
+                        onUsfm: setUsfm,
+                      }
+                    : { usfm: usfm(), onUsfm: setUsfm }
+                }
+              />
+            </div>
           </Show>
           <Show when={shown()}>
             {(shownView) => (
@@ -605,7 +677,7 @@ function ImportInto(props: { readonly onClose: () => void }) {
                 <ExcerptReader
                   analysis={shownView().analysis}
                   span={shownView().span}
-                  policy={editorPolicy(view() === "usfm" ? "usfm" : "regular")}
+                  policy={editorPolicy(usfm() ? "usfm" : "regular")}
                   marks={[]}
                   label="import-preview"
                 />
@@ -614,16 +686,13 @@ function ImportInto(props: { readonly onClose: () => void }) {
           </Show>
           <Show when={changes()}>
             {(diff) => (
-              <div
-                class="flex min-h-0 flex-1 flex-col rounded-lg border border-surface-border"
-                data-import-document-changes
-              >
+              <div class="flex min-h-0 flex-1 flex-col" ref={measure} data-import-document-changes>
                 <BookDiff
                   class="min-h-0 flex-1"
                   sides={diff().sides}
                   units={diff().units}
-                  split={false}
-                  usfm={false}
+                  split={split()}
+                  usfm={usfm()}
                   controls={undefined}
                   currentLabel={m.import_document_changes_after()}
                   baselineLabel={m.import_document_changes_now()}

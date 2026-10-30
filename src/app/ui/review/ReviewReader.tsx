@@ -25,6 +25,7 @@ import { createPrepared } from "./reader/createPrepared";
 import { createSeats } from "./reader/createSeats";
 import { DecideAll } from "./reader/DecideAll";
 import { chaptersOf, chapterWords, labelOf, toLayout } from "./reader/helpers";
+import { createMeasure } from "./reader/measure";
 import { ReaderToolbar } from "./reader/ReaderToolbar";
 import {
   AUTO_SPLIT_PX,
@@ -274,20 +275,6 @@ const createSections = (prepared: Accessor<readonly Prepared[]>) =>
         })),
     { name: "reviewSections" },
   );
-
-function createMeasure(setWidth: (width: number) => void): (element: HTMLDivElement) => void {
-  let observer: ResizeObserver | undefined;
-  const measure = (element: HTMLDivElement): void => {
-    observer?.disconnect();
-    observer = new ResizeObserver((entries) => {
-      const box = entries[0]?.contentRect;
-      if (box !== undefined && box.width > 0) setWidth(box.width);
-    });
-    observer.observe(element);
-  };
-  onCleanup(() => observer?.disconnect());
-  return measure;
-}
 
 function ReaderToolbarView(props: { readonly reader: ReaderModel }): JSX.Element {
   return (
