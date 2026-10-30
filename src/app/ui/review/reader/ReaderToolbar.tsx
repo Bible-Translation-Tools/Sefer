@@ -33,7 +33,21 @@ interface ReaderToolbarProps {
   readonly decideAll?: JSX.Element;
 }
 
-function ViewMenu(props: { readonly toolbar: ReaderToolbarProps }) {
+/**
+ * How a diff is shown: which changes, side by side or one text, and USFM
+ * markup. Review's, and the Word importer's; a section whose setting is not
+ * given is left out.
+ */
+export interface ViewSettings {
+  readonly filter?: Filter;
+  readonly onFilter?: (filter: Filter) => void;
+  readonly layout?: Layout;
+  readonly onLayout?: (layout: Layout) => void;
+  readonly usfm: boolean;
+  readonly onUsfm: (on: boolean) => void;
+}
+
+export function ViewMenu(props: { readonly toolbar: ViewSettings }) {
   return (
     <Menu
       label={t("View")}
@@ -44,44 +58,48 @@ function ViewMenu(props: { readonly toolbar: ReaderToolbarProps }) {
         <Button size="sm" variant="tertiary" data-review-view>
           <Columns2 aria-hidden="true" />
 
-          {viewLabel(props.toolbar.filter)}
+          {viewLabel(props.toolbar.filter ?? "all")}
           <ChevronDown aria-hidden="true" />
         </Button>
       }
     >
-      <MenuLabel>{t("Show")}</MenuLabel>
-      <For each={["all", "words", "formatting"] as const}>
-        {(value) => (
-          <MenuRadio
-            checked={props.toolbar.filter === value}
-            data-review-filter={value}
-            onSelect={() => props.toolbar.onFilter(value)}
-          >
-            {filterLabel(value)}
-          </MenuRadio>
-        )}
-      </For>
-      <MenuSeparator />
-      <MenuLabel>{t("Layout")}</MenuLabel>
-      <MenuRadio
-        checked={props.toolbar.layout === "auto"}
-        onSelect={() => props.toolbar.onLayout("auto")}
-      >
-        {t("Side by side when there is room")}
-      </MenuRadio>
-      <MenuRadio
-        checked={props.toolbar.layout === "split"}
-        onSelect={() => props.toolbar.onLayout("split")}
-      >
-        {t("Side by side")}
-      </MenuRadio>
-      <MenuRadio
-        checked={props.toolbar.layout === "unified"}
-        onSelect={() => props.toolbar.onLayout("unified")}
-      >
-        {t("One text, changes marked")}
-      </MenuRadio>
-      <MenuSeparator />
+      <Show when={props.toolbar.filter !== undefined}>
+        <MenuLabel>{t("Show")}</MenuLabel>
+        <For each={["all", "words", "formatting"] as const}>
+          {(value) => (
+            <MenuRadio
+              checked={props.toolbar.filter === value}
+              data-review-filter={value}
+              onSelect={() => props.toolbar.onFilter?.(value)}
+            >
+              {filterLabel(value)}
+            </MenuRadio>
+          )}
+        </For>
+        <MenuSeparator />
+      </Show>
+      <Show when={props.toolbar.layout !== undefined}>
+        <MenuLabel>{t("Layout")}</MenuLabel>
+        <MenuRadio
+          checked={props.toolbar.layout === "auto"}
+          onSelect={() => props.toolbar.onLayout?.("auto")}
+        >
+          {t("Side by side when there is room")}
+        </MenuRadio>
+        <MenuRadio
+          checked={props.toolbar.layout === "split"}
+          onSelect={() => props.toolbar.onLayout?.("split")}
+        >
+          {t("Side by side")}
+        </MenuRadio>
+        <MenuRadio
+          checked={props.toolbar.layout === "unified"}
+          onSelect={() => props.toolbar.onLayout?.("unified")}
+        >
+          {t("One text, changes marked")}
+        </MenuRadio>
+        <MenuSeparator />
+      </Show>
       <MenuCheckbox checked={props.toolbar.usfm} onChange={props.toolbar.onUsfm}>
         {t("Show USFM markup")}
       </MenuCheckbox>

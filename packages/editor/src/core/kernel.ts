@@ -29,6 +29,14 @@ export const trusted = Annotation.define<string>();
 export const isTrusted = (tr: { annotation: (a: typeof trusted) => string | undefined }) =>
   tr.annotation(trusted) !== undefined;
 
+/**
+ * On a trusted `Book.apply` the host made from outside the editor — a previewed
+ * import or overlay, a Review apply, a recovery, a sync hand-over. Not a
+ * keystroke: the editor's own trusted edits (a guarded Backspace) never carry
+ * it, so a rule that keeps keystrokes off something can still let these by.
+ */
+export const fromHost = Annotation.define<true>();
+
 export type Mode = "regular" | "usfm";
 
 export const modeFacet = Facet.define<Mode, Mode>({ combine: (v) => v[0] ?? "regular" });

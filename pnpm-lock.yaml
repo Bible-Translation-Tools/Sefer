@@ -130,6 +130,9 @@ importers:
       '@corvu-next/tooltip':
         specifier: 0.1.5
         version: 0.1.5(@solidjs/web@2.0.0-rc.9(solid-js@2.0.0-rc.9))(solid-js@2.0.0-rc.9)
+      '@sefer/document-import':
+        specifier: workspace:*
+        version: link:packages/document-import
       '@sefer/editor':
         specifier: workspace:*
         version: link:packages/editor

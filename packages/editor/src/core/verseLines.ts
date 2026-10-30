@@ -10,7 +10,8 @@ import {
 } from "@codemirror/state";
 import { EditorView, type LayerMarker, layer, RectangleMarker } from "@codemirror/view";
 
-import { isVisual, modeFacet, trusted } from "./kernel";
+import { noteTr } from "./instrument/trace";
+import { fromHost, isVisual, modeFacet, trusted } from "./kernel";
 import { docText, structureAt, type DocStructure } from "./model/docStructure";
 import type { DocLine, VerseRow } from "./model/fold";
 import { assignmentAt, isContainerClass } from "./model/registry";
@@ -542,8 +543,11 @@ const chapterHeadingsAreFixed = EditorState.transactionFilter.of((tr) => {
   if (tr.startState.facet(modeFacet) !== "regular") return tr;
   // Trusted edits pass only from what writes headings or empty chapters on
   // purpose; a guarded Backspace is trusted too, and is exactly what must not reach a title.
+  // A host's trusted apply (an import, a Review apply, a recovery) was
+  // previewed or decided whole, and replaces headings as the person chose.
   const seal = tr.annotation(trusted);
   if (seal !== undefined && HEADING_WRITERS.has(seal)) return tr;
+  if (tr.annotation(fromHost) === true) return tr;
   const doc = docText(tr.startState);
   const structure = structureAt(tr.startState);
   const headings = chapterHeadings(doc, structure);
@@ -564,7 +568,14 @@ const chapterHeadingsAreFixed = EditorState.transactionFilter.of((tr) => {
         if (fromA === toA ? fromA > r.from && fromA < r.to : fromA < r.to && toA > r.from)
           touches = true;
     });
-    if (touches) return [];
+    if (touches) {
+      noteTr(tr, {
+        rule: "chapterHeadingsAreFixed",
+        verdict: "refused",
+        detail: "the edit touches a chapter's heading, which only its own writers change",
+      });
+      return [];
+    }
   }
   if (!tr.selection) return tr;
   const range = tr.selection.main;
@@ -601,6 +612,9 @@ export interface ChapterTitleAction {
 export const chapterTitleAction = Facet.define<ChapterTitleAction, ChapterTitleAction | undefined>({
   combine: (values) => values[0],
 });
+
+/** The words of a chapter's title: the hover underline's selectors in editor.css. */
+const TITLE_WORDS = ".usfm-chap-label, .usfm-chap-named .usfm-num-c";
 
 /** Views whose last press landed on a chapter's title the host wants: the release runs it. */
 const titlePressed = new WeakSet<EditorView>();
@@ -645,7 +659,10 @@ const pressesAboveTitlesStayBehind = EditorView.domEventHandlers({
     const box = line.getBoundingClientRect();
     const titleTop = box.top + parseFloat(getComputedStyle(line).paddingTop);
     if (event.clientY >= titleTop) {
-      // The title itself: the host's, when it wants it (`titlesAreTheHosts`).
+      // The title's words themselves, what underlines on hover (editor.css,
+      // `cm-titles-open`), are the host's when it wants them
+      // (`titlesAreTheHosts`); the rest of the line is only a line.
+      if (target?.closest(TITLE_WORDS) == null) return false;
       const action = view.state.facet(chapterTitleAction);
       if (action === undefined || !action.wants()) return false;
       event.preventDefault();

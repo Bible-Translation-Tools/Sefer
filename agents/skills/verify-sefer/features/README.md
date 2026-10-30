@@ -35,6 +35,9 @@ left out.
 - [Translation Notes](./translation-notes.md): choosing and downloading notes in
   the reference column, notes following the caret. Needs the network.
 - [Find](./find.md): searching the project, and searching the notes beside it.
+- [Import from Word or LibreOffice](./import-document.md): a `.docx` or `.odt`
+  into the open book, previewed, one Undo. The fixture is enough with a
+  generated document.
 
 Not mapped yet: Findings, Key terms (`/terms`), Suggestions, Cloud sync
 (needs a WACS account), import from a folder or zip, the character inventory.

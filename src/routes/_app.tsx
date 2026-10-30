@@ -7,6 +7,7 @@ import { readyShell, useShell, useShellState } from "#app/ProjectContext";
 import { SIDEBAR_WIDTH } from "#app/settings";
 import { TourOutlet } from "#app/tour/TourOutlet";
 import { CommandPalette } from "#app/ui/CommandPalette";
+import { ImportDocumentDialog } from "#app/ui/import/ImportDocumentDialog";
 import { PageDoor, Resizable, Toaster, cx } from "#app/ui/primitives";
 import { AppBar } from "#app/ui/workspace/AppBar";
 import { BackToEditor } from "#app/ui/workspace/BackToEditor";
@@ -144,6 +145,14 @@ function Chrome() {
           <CommandPalette
             open={ready().paletteOpen()}
             onClose={() => ready().setPaletteOpen(false)}
+          />
+        )}
+      </Show>
+      <Show when={shell()}>
+        {(ready) => (
+          <ImportDocumentDialog
+            open={ready().importOpen()}
+            onClose={() => ready().setImportOpen(false)}
           />
         )}
       </Show>

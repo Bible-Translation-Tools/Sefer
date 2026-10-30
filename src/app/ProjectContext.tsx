@@ -127,6 +127,8 @@ export interface Shell {
   readonly report: (message: string) => void;
   readonly paletteOpen: Accessor<boolean>;
   readonly setPaletteOpen: (open: boolean) => void;
+  readonly importOpen: Accessor<boolean>;
+  readonly setImportOpen: (open: boolean) => void;
 
   readonly findingCounts: Accessor<{ readonly errors: number; readonly warnings: number }>;
 
@@ -224,6 +226,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
   };
 
   const [paletteOpen, setPaletteOpen] = createSignal(false, { name: "paletteOpen" });
+  const [importOpen, setImportOpen] = createSignal(false, { name: "importOpen" });
   const [cursor, setCursor] = createSignal(0, { name: "findingCursor" });
   const [reveal, setReveal] = createSignal<Reveal | undefined>(undefined, { name: "reveal" });
 
@@ -380,6 +383,10 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     setPaletteOpen: (open) => {
       setPaletteOpen(open);
     },
+    importOpen,
+    setImportOpen: (open) => {
+      setImportOpen(open);
+    },
     findingCounts,
     summaryOf,
     bookCensus,
@@ -425,6 +432,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     navigate,
     openProject,
     setPaletteOpen: shell.setPaletteOpen,
+    setImportOpen: shell.setImportOpen,
     sidebarOpen: shell.sidebarOpen,
     setSidebarOpen: shell.setSidebarOpen,
     aim,
