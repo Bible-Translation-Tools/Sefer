@@ -1,12 +1,12 @@
 import { ChangeSet, EditorSelection, EditorState, type Extension } from "@codemirror/state";
 
-import { structureAt } from "./docStructure";
-import { blockKindForEnter } from "./exceptions";
-import { blockAt, isTrusted, isVisual, nl } from "./kernel";
-import { preferenceOn } from "./preferences";
-import { assignmentAt } from "./registry";
-import { noteTr } from "./trace";
-import { becomesAVerse, versesAround } from "./verseLines";
+import { structureAt } from "../docStructure";
+import { blockKindForEnter } from "../exceptions";
+import { blockAt, isTrusted, isVisual, nl } from "../kernel";
+import { preferenceOn } from "../preferences";
+import { assignmentAt } from "../registry";
+import { noteTr } from "../trace";
+import { isVerseNumber, versesAround } from "./verseNumbers";
 
 /** A number as people write a verse's: "4", "4.", "v4", "verse 4", followed by a space. */
 const WRITTEN_VERSE = /(verse\s*|v\s*)?(\d{1,3})\.?(?=[ \t])/gi;
@@ -16,14 +16,14 @@ const WRITTEN_VERSE = /(verse\s*|v\s*)?(\d{1,3})\.?(?=[ \t])/gi;
  * are Enter: each starts a new line of the kind the paste lands in (`\p`, or
  * `\q1` inside poetry). Its verse numbers are typed numbers: one becomes a
  * verse (`\v N`) only where typing it would (`typedVerseNumbers`): a number
- * `becomesAVerse` takes: the next in order, or one in the chapter's expected
+ * `isVerseNumber` takes: the next in order, or one in the chapter's expected
  * verses, never a duplicate. "He fed 5000" pasted stays words.
  *
  * Only plain text: Sefer's own copied USFM has its paste rules
  * (`pasteChange`), a paste with a backslash in it is markup and is judged as
  * such, and line by line flattens a paste to one line (`pasteAsOneLine`).
  */
-export function shapePastedText(
+function shapePastedText(
   state: EditorState,
   at: number,
   text: string,
@@ -47,7 +47,7 @@ export function shapePastedText(
     const prev = before.slice(-1);
     if (prev !== "" && !/\s/.test(prev)) continue;
     const number = Number(match[2]);
-    if (!becomesAVerse({ ...around, next, taken }, number, match[1] !== undefined)) continue;
+    if (!isVerseNumber({ ...around, next, taken }, number, match[1] !== undefined)) continue;
     out += `${shaped.slice(from, i)}\\v ${number}`;
     from = i + match[0].length;
     taken.add(number);
@@ -57,7 +57,7 @@ export function shapePastedText(
   return { insert: out + shaped.slice(from), verses };
 }
 
-export const pastedTextFollowsTheRules: Extension = EditorState.transactionFilter.of((tr) => {
+export const plainPasteFollowsTyping: Extension = EditorState.transactionFilter.of((tr) => {
   if (!tr.docChanged || !tr.isUserEvent("input.paste") || isTrusted(tr)) return tr;
   const state = tr.startState;
   if (!isVisual(state) || assignmentAt(state).verseLines) return tr;
@@ -81,7 +81,7 @@ export const pastedTextFollowsTheRules: Extension = EditorState.transactionFilte
   });
   if (!shapedAny) return tr;
   noteTr(tr, {
-    rule: "pastedTextFollowsTheRules",
+    rule: "plainPasteFollowsTyping",
     verdict: "rewrote",
     detail: `line breaks became lines; ${verses} number(s) became verses`,
   });

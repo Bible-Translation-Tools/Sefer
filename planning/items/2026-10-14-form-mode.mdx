@@ -291,7 +291,7 @@ Paisano has concerns about edge cases; left as is until he weighs in.
   Paisano: Thomas, 2026-10-27, asked for "macros" for the ways people mark verses without USFM:
   "1", "1.", "verse 1", "v1" — "if the order makes sense and is in the bounds of the chapter
   (obviously if the user types 7000, we shouldn't add a verse 7000)". Built as
-  `typedVerseNumbers` (packages/editor/src/core/verseLines.ts): on the space after such a word,
+  `typedVerseNumbers` (packages/editor/src/core/inputRules/verseNumbers.ts): on the space after such a word,
   in Refine and Form Mode, it becomes `\v N` only when N is the next verse after the caret's
   (1 before any) and the chapter has no verse N yet; Undo gives the typed number back. "Bounds"
   is only "the next one", since nothing here knows a chapter's real verse count — should it read

@@ -7,14 +7,15 @@ import { guardedBackspace, guardedDelete, mergeParagraphBackwards } from "./dele
 import { PAINT_PORT, planAt, structureAt } from "./editorState";
 import { expectedVersesField } from "./expectedVerses";
 import { guardedEnter, setBlockMarker } from "./input";
+import { plainPasteFollowsTyping } from "./inputRules/plainPaste";
+import { typedMarkerBehaviour, typedMarkerKeys } from "./inputRules/typedMarker";
+import { verseNumberKeys } from "./inputRules/verseNumbers";
 import { insertFootnote, insertParagraph, insertPoetry, insertVerse } from "./insert";
 import { traceFor } from "./instrument";
-import { pastedTextFollowsTheRules } from "./pastedText";
 import { poetryLevelKeys } from "./poetryLevels";
 import { preferenceOn, type PreferenceKey } from "./preferences";
 import { tableKeys } from "./tableCommands";
-import { typedUsfmBehaviour, typedUsfmKeys } from "./typedUsfm";
-import { unverseKeys, verseLineBehaviour, verseLineKeys } from "./verseLines";
+import { verseLineBehaviour, verseLineKeys } from "./verseLines";
 
 /**
  * Every key the editor binds, in one place: mode × preference × key → action.
@@ -126,12 +127,12 @@ export function usfmKeys(): readonly KeyBinding[] {
 
 export const KEY_BUNDLES: readonly KeyBundle[] = [
   {
-    id: "typedUsfm",
+    id: "typedMarkers",
     summary:
-      "A typed backslash starts a marker shown in place; Space or Enter writes it, Backspace shortens it, Escape drops it (typedUsfm.ts).",
+      "A typed backslash starts a marker shown in place; Space or Enter writes it, Backspace shortens it, Escape drops it (inputRules/typedMarker.ts).",
     modes: ["reading"],
-    keys: typedUsfmKeys,
-    behaviour: typedUsfmBehaviour,
+    keys: typedMarkerKeys,
+    behaviour: typedMarkerBehaviour,
     precedence: "highest",
   },
   {
@@ -161,11 +162,11 @@ export const KEY_BUNDLES: readonly KeyBundle[] = [
   {
     id: "verseShortcuts",
     summary:
-      'Typing "1", "1.", "v1" or "verse 1" then a space writes that verse when it is the next one or within the reference\'s count, never a duplicate (typedVerseNumbers, verseLines.ts); pasted text the same (pastedText.ts). Backspace just after a verse\'s number in Reading takes the verse back to the number.',
+      'Typing "1", "1.", "v1" or "verse 1" then a space writes that verse when it is the next one or within the reference\'s count, never a duplicate (inputRules/verseNumbers.ts); pasted text the same (inputRules/plainPaste.ts). Backspace just after a verse\'s number in Reading takes the verse back to the number.',
     modes: ["reading", "form"],
     preference: "verseShortcuts",
-    keys: unverseKeys,
-    behaviour: [expectedVersesField, pastedTextFollowsTheRules],
+    keys: verseNumberKeys,
+    behaviour: [expectedVersesField, plainPasteFollowsTyping],
     precedence: "highest",
   },
   {

@@ -1942,7 +1942,7 @@
   overflow: hidden;
 }
 
-/* USFM typed in Refine, before it is written (`typedUsfm`): where it will go, in the USFM colours. */
+/* USFM typed in Refine, before it is written (`inputRules/typedMarker.ts`): where it will go, in the USFM colours. */
 .cm-typed-usfm {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.85em;

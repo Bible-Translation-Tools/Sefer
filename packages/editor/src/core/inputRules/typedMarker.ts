@@ -11,10 +11,10 @@ import {
 import { Decoration, EditorView, type KeyBinding, WidgetType } from "@codemirror/view";
 import { MARKERS, MarkerKind } from "@sefer/text/engine/analysis";
 
-import { planAt, structureAt } from "./editorState";
-import { guardedEnter, setBlockMarker } from "./input";
-import { isVisual, trusted } from "./kernel";
-import { assignmentAt } from "./registry";
+import { planAt, structureAt } from "../editorState";
+import { guardedEnter, setBlockMarker } from "../input";
+import { isVisual, trusted } from "../kernel";
+import { assignmentAt } from "../registry";
 
 /**
  * USFM typed straight into Refine. A backslash starts a marker being typed: it
@@ -162,7 +162,7 @@ const typing = EditorView.inputHandler.of((view, from, to, text) => {
 });
 
 /** Backspace, Escape and Enter while a marker is being typed; each declines otherwise. */
-export const typedUsfmKeys = (): readonly KeyBinding[] => [
+export const typedMarkerKeys = (): readonly KeyBinding[] => [
   {
     key: "Backspace",
     run: (view) => {
@@ -193,4 +193,4 @@ export const typedUsfmKeys = (): readonly KeyBinding[] => [
 ];
 
 /** The marker being typed, and the typing that grows it. */
-export const typedUsfmBehaviour: Extension = [composingField, Prec.highest(typing)];
+export const typedMarkerBehaviour: Extension = [composingField, Prec.highest(typing)];
