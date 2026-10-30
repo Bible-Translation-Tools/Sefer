@@ -5,11 +5,11 @@ kind: plan
 status: planned
 created: 2026-10-29
 updated: 2026-10-29
-sha: f03d30c9
+sha: ba71ba91
 tags: [import]
 ---
 
-A translator who drafted in Word or LibreOffice brings that draft into a book: a chapter, a range of chapters, or the whole book. The reading is done by the new package `@sefer/document-import` (`packages/document-import`, built 2026-10-29). This plan covers the part inside Sefer: the menu item, the dialog, the preview, and the one undoable edit.
+A translator who drafted in Word or LibreOffice brings that draft into a book: a chapter, a range of chapters, or the whole book. The reading is done by the new package `@sefer/document-import` (`packages/document-import`, built 2026-10-29). This plan covers the part inside Sefer: the command, the dialog, the preview, and the one undoable edit. Will ruled on every question on 2026-10-29; the answers are on the questions below. It is built on a branch of its own once other work clears.
 
 > I would just want this buried in a menu for like import from Word, and then we'd probably want some sort of modal to pop up […] makes them explicitly pick the scope, i.e., the book and or chapters
 
@@ -17,12 +17,12 @@ A translator who drafted in Word or LibreOffice brings that draft into a book: a
 
 ## What changes for a translator
 
-1. **Import from Word or LibreOffice…** appears in the command palette and in the book screen's menu.
+1. **Import from Word or LibreOffice…** is in the command palette only, until the designer decides where else it lives.
 2. A dialog asks for the file, then shows what was found: chapters and verse counts, missing verses, numbers left as text, tracked changes still in the file.
-3. They pick the **scope**: the book, and all of it or some chapters. Typing a citation such as `TIT 2-3` works too. It starts as the focused book and the chapters the document holds.
-4. **Keep this book's paragraphing** is ticked when the scope already has text. Unticked, the document's own paragraphs, poetry and headings are used.
+3. They pick the **scope**: the book, and all of it or some chapters. Typing a citation such as `TIT 2-3` works too, through the address parser we already have (`parseCitation`, `packages/text/src/location/citation.ts`). It starts as the focused book and the chapters the document holds. Only books the project already has can be chosen.
+4. **Try to keep this book's paragraphing** is ticked when the scope already has text. Its tooltip: *Keeps the paragraph markers where they were, wherever that can be determined.* Underneath, it is an overlay applied after rendering: the book as it was before is the source, and the rendered document is the target. Unticked, the document's own paragraphs, poetry and headings are used.
 5. Switches appear only for what the document actually has: poetry, headings, footnotes, italic, bold, lists, text before verse 1. **Advanced** adds how verse numbers are written, the chapter words, and marker renames.
-6. The preview shows the result and updates as they tick. **Import** makes one edit, and one Undo takes it back. Nothing is written to disk until **Record a version**, as for every other edit.
+6. The preview shows the result and updates as they tick. It has the same USFM / plain toggle as the editor, starting from the editor's current mode (`shell.mode()`). **Import** makes one edit, and one Undo takes it back. Nothing is written to disk until **Record a version**, as for every other edit.
 
 <Mock id="dialog" height={300}>
 <div style="font: 13px system-ui; padding: 12px; display: grid; grid-template-columns: 260px 1fr; gap: 12px; color: var(--color-fg, #222)">
@@ -30,12 +30,14 @@ A translator who drafted in Word or LibreOffice brings that draft into a book: a
     <strong>Import from Word or LibreOffice</strong>
     <div>master-titus.docx · <span style="opacity:.7">46 verses in 3 chapters</span></div>
     <label>Scope <input value="TIT 1-3" style="width: 90px" /></label>
-    <label><input type="checkbox" checked /> Keep this book's paragraphing</label>
+    <label title="Keeps the paragraph markers where they were, wherever that can be determined."><input type="checkbox" checked /> Try to keep this book's paragraphing ⓘ</label>
     <div style="opacity:.7">Found: 1 line before verse 1 · no footnotes · no comments</div>
     <label><input type="checkbox" checked /> Text before verse 1 as \rem</label>
     <details><summary>Advanced</summary>Verse numbers: superscript (detected) · Chapter words: chapter</details>
     <button>Import 3 chapters</button>
   </div>
+  <div style="display: grid; gap: 6px; align-content: start">
+  <div><label><input type="checkbox" checked /> USFM</label> <span style="opacity:.7">(starts from the editor's mode)</span></div>
   <pre style="margin: 0; padding: 8px; background: rgba(0,0,0,.04); overflow: hidden">\c 1
 \p
 \v 1 Paul, a servant of God and an apostle…
@@ -43,6 +45,7 @@ A translator who drafted in Word or LibreOffice brings that draft into a book: a
 \v 3 and at the proper time, revealed his word…
 \p
 \v 4 To Titus, a true child according to…</pre>
+  </div>
 </div>
 </Mock>
 
@@ -56,7 +59,7 @@ flowchart LR
   F[file bytes] -->|readDocument, once| R[Reading]
   R -->|render settings| U[USFM + report]
   U --> S[splice: the scope's chapters replaced in the current text]
-  S -->|keep paragraphing| O[overlay: the current text's paragraph markers onto the spliced text]
+  S -->|try to keep paragraphing| O[overlay: the text before as source, the spliced text as target]
   S -->|use the document's| P[preview]
   O --> P
   P -->|Import| E[book.apply, origin import: one edit, one undo]
@@ -64,8 +67,12 @@ flowchart LR
 </Mermaid>
 
 - **Lazy.** The command's `run` does `await import("@sefer/document-import")`, so neither the package nor `fflate` is in the main bundle. XML is read with the webview's own `DOMParser`; `@xmldom/xmldom` is for Node only, and the package keeps it out of browser builds.
-- **Splice** (core, framework-free): the scope's chapters in the current text are replaced by the same-numbered chapters of the rendered USFM. Everything outside the scope is left alone, header included. A book with no text gets the rendered USFM with its own `\id`.
-- **Overlay** reuses the galley overlay behind `overlay.*` (`overlayBook` in `src/core/fixes/fixes.ts`). It needs a variant that takes a target *text* instead of a Book, because the target is the spliced text and not yet the book. The current text is the source, and the overlay is limited to paragraph markers and scoped per chapter. Poetry lines the document does not split are left as the overlay leaves them, with empty slots the translator deletes or fills.
+- **Splice** (core, framework-free): the scope's chapters in the current text are replaced by the same-numbered chapters of the rendered USFM. Everything outside the scope is left alone, header included. A book with no text gets the rendered USFM with its own `\id`. Creating a book the project does not have is the caller's job, and for now Sefer offers only books that exist:
+
+  ```ts
+  // TODO: WHEN WANTING DRAFTING, remove: let the scope name a book the project lacks, and create it.
+  ```
+- **Overlay** uses the galley engine's own `overlayText(targetId, sourceId, opts)`, which already overlays any two registered texts and returns the resulting string (`galley/pkg-web/usfm_galley.d.ts`). Sefer's `GalleyService` wraps `overlay` but not `overlayText` yet, so the one engine-side change is exposing it, and `overlayBook`'s register-then-remove pattern is reused with the spliced text as the target. The current text is the source, and the overlay is limited to paragraph markers and scoped per chapter. Poetry lines the document does not split are left as the overlay leaves them, with empty slots the translator deletes or fills.
 - **Apply** is one `book.apply` from the current text to the final text, with origin `"import"`, so Undo and the backup journal treat it like any other edit.
 
 <Source path="src/core/fixes/fixes.ts" lines="126-160" />
@@ -75,11 +82,12 @@ flowchart LR
 + src/core/documentImport/
 + src/core/documentImport/splice.ts -- replace the scope's chapters; header and other chapters untouched
 + src/core/documentImport/importPreview.ts -- render → splice → (overlay) → FormatPreview-shaped changes; applyImport
-~ src/core/fixes/fixes.ts -- overlayText(galley, targetText, sourceText, opts): overlayBook without the Book
+~ src/core/galley/galley.ts -- expose the engine's overlayText on GalleyService
+~ src/core/fixes/fixes.ts -- overlayTexts(galley, targetText, sourceText, opts): overlayBook's pattern with a text target
 + src/app/ui/import/ImportDocumentDialog.tsx -- file, scope, switches from report.found, Advanced, preview
-+ src/app/ui/import/ImportPreview.tsx -- the result in a read-only editor view
++ src/app/ui/import/ImportPreview.tsx -- the result in a read-only editor view, with the USFM / plain toggle
 + src/app/ui/primitives/ChapterScope.tsx -- book + chapters, accepts a citation (parseCitation)
-~ src/app/commands.ts -- import.document: when hasBook; lazy-loads the package and opens the dialog
+~ src/app/commands.ts -- import.document: palette only, when hasBook; lazy-loads the package and opens the dialog
 ~ src/app/messages/en.json -- dialog copy (Paraglide)
 ~ package.json -- @sefer/document-import: workspace:*
 ~ documentation/architecture/landing.md -- a "documents into a book" section beside the import sources
@@ -91,17 +99,17 @@ My estimate is 800 to 1,200 lines on the Sefer side. The package is about 1,800.
 
 ## Questions
 
-<Question id="trust">An import is a whole-chapter replace that the translator has previewed. Should it be trusted, as `overlay` and `format` are (`trustedBy("import")`), or judged by the keyboard rules like a paste? Trusted is simpler and matches overlay. Judged would refuse an import whose result breaks a rule, and the dialog would then need to say why.</Question>
+<Question id="trust" answer="Trusted, as overlay and format are.">An import is a whole-chapter replace that the translator has previewed. Should it be trusted, as `overlay` and `format` are (`trustedBy("import")`), or judged by the keyboard rules like a paste? Trusted is simpler and matches overlay. Judged would refuse an import whose result breaks a rule, and the dialog would then need to say why.</Question>
 
-<Question id="missing">Verses the scope has but the document does not: the import replaces whole chapters, so those verses disappear. That is faithful to the document, and the preview lists them. Is that right, or should there be a "keep verses the document lacks" switch?</Question>
+<Question id="missing" answer="Whole replacement for now: verses the document lacks go, and the preview lists them.">Verses the scope has but the document does not: the import replaces whole chapters, so those verses disappear. That is faithful to the document, and the preview lists them. Is that right, or should there be a "keep verses the document lacks" switch?</Question>
 
-<Question id="offset">A document with no chapter labels reads as chapter 1. If the translator scopes it to chapter 4, should Sefer map the document's chapter 1 to 4 (a "document starts at chapter N" setting), or only ever match chapters by number?</Question>
+<Question id="offset" answer="No offset setting; chapters match by number. A \cl in the book's front matter usually names the chapter word already, so Sefer passes it to render as chapterWords.">A document with no chapter labels reads as chapter 1. If the translator scopes it to chapter 4, should Sefer map the document's chapter 1 to 4 (a "document starts at chapter N" setting), or only ever match chapters by number?</Question>
 
-<Question id="new-book">A scope naming a book the project does not have yet: create the book file from the rendered USFM, or refuse until the book exists? Creating books is where Create stops today ([landing](../../documentation/architecture/landing.md)).</Question>
+<Question id="new-book" answer="Only books the project already has, for now, behind a TODO: WHEN WANTING DRAFTING, remove. Creating a new book is the caller's job when that day comes.">A scope naming a book the project does not have yet: create the book file from the rendered USFM, or refuse until the book exists? Creating books is where Create stops today ([landing](../../documentation/architecture/landing.md)).</Question>
 
-<Question id="preview">Is the preview the result alone, in a read-only editor view, or the Review screen's verse-aligned comparison of current against result? The comparison is more useful when "Keep this book's paragraphing" is ticked, but it costs more.</Question>
+<Question id="preview" answer="The result alone, with the USFM / plain toggle. No comparison in the dialog: Save and Review already shows the change as a diff after the import.">Is the preview the result alone, in a read-only editor view, or the Review screen's verse-aligned comparison of current against result? The comparison is more useful when "Keep this book's paragraphing" is ticked, but it costs more.</Question>
 
-<Question id="where">Where else does the command show up besides the palette: the book screen's toolbar menu, the landing screen's import hub, or both?</Question>
+<Question id="where" answer="The command palette only, until the designer decides.">Where else does the command show up besides the palette: the book screen's toolbar menu, the landing screen's import hub, or both?</Question>
 
 ## Follow-ups
 
