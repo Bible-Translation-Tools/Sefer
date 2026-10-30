@@ -1,5 +1,4 @@
 import type { EditorState, StateCommand, TransactionSpec } from "@codemirror/state";
-import type { KeyBinding } from "@codemirror/view";
 
 import { blockAt, isVisual, trusted } from "../kernel";
 import { structureAt, type Block, type DocStructure } from "../model/docStructure";
@@ -174,12 +173,13 @@ const stepOutAtLineStart: StateCommand = ({ state, dispatch }) => {
   return true;
 };
 
-export const poetryLevelKeys = (): readonly KeyBinding[] => [
-  { key: "Backspace", run: stepOutAtLineStart },
-  { key: "Tab", run: shift(1) },
-  { key: "Shift-Tab", run: shift(-1) },
-  { key: "Enter", run: stepOutOfEmptyPoetry },
-];
+/** The commands, by id; their keys are `keymaps.ts`'s. */
+export const poetryLevelCommands = {
+  "poetry.leaveAtLineStart": stepOutAtLineStart,
+  "poetry.indent": shift(1),
+  "poetry.outdent": shift(-1),
+  "poetry.leaveEmptyLine": stepOutOfEmptyPoetry,
+};
 
 /**
  * The kinds a line can be from its menu: a paragraph flush (`\m`) or indented

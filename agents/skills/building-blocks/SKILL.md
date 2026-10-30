@@ -89,21 +89,24 @@ text".
 `createMemo(() => book.source().text)`; an effect that re-derives something
 from the whole text on every keystroke.
 
-## 7. Editor behaviour is a bundle; its guards are the pipeline
+## 7. Editor behaviour is a command bound to a key; its guards are the pipeline
 
-`packages/editor/src/core/keymaps.ts` (`KEY_BUNDLES`): every key and typing
-rule, by mode and preference, in precedence order. A preference turns a
-bundle's keys off. Transaction rules (what an edit may do) live in
-`core/guards/` and run in the order `core/guards/pipeline.ts` gives.
-Editor-composed edits that the guards would otherwise refuse carry
-`trusted.of("<name>")` (`core/kernel.ts`). This is the editor's annotation,
-not the Book's `trustedBy`, and it marks an edit the editor composed itself
-(`remark` in `core/commands/poetryLevels.ts`, `setBlockMarker` in
-`core/guards/input.ts`).
+`packages/editor/src/core/keymaps.ts` reads like VS Code's keymap: each bundle
+owns commands by id (`edit.enter`, `verseNumber.accept`) and binds them to
+keys as `{ key, command }`, by mode, preference and precedence. A host lays
+its own bindings over the defaults (`userKeybindings`). A new gesture is a
+command with an id and a default binding, so a person can rebind it later.
+Transaction rules (what an edit may do) live in `core/guards/` and run in the
+order `core/guards/pipeline.ts` gives. Editor-composed edits that the guards
+would otherwise refuse carry `trusted.of("<name>")` (`core/kernel.ts`). This
+is the editor's annotation, not the Book's `trustedBy`, and it marks an edit
+the editor composed itself (`remark` in `core/commands/poetryLevels.ts`,
+`setBlockMarker` in `core/guards/input.ts`).
 
-**Smell:** a `keydown` listener on the DOM; an untrusted edit to hidden
-markup in Refine, which `refuseKeystrokesInsideHiddenMarkup` drops silently.
-That is why `setBlockMarker` did nothing in Refine until PR 11.
+**Smell:** a `keydown` listener on the DOM; an input handler that hard-codes
+the key it waits for (`text === " "`); an untrusted edit to hidden markup in
+Refine, which `refuseKeystrokesInsideHiddenMarkup` drops silently. That is
+why `setBlockMarker` did nothing in Refine until PR 11.
 
 ## 8. Reuse the canonical command
 

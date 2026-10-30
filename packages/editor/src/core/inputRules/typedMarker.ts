@@ -8,7 +8,7 @@ import {
   StateField,
   type Transaction,
 } from "@codemirror/state";
-import { Decoration, EditorView, type KeyBinding, WidgetType } from "@codemirror/view";
+import { type Command, Decoration, EditorView, WidgetType } from "@codemirror/view";
 import { MARKERS, MarkerKind } from "@sefer/text/engine/analysis";
 
 import { planAt, structureAt } from "../editorState";
@@ -19,7 +19,7 @@ import { assignmentAt } from "../model/registry";
 /**
  * USFM typed straight into Refine. A backslash starts a marker being typed: it
  * shows where it will go, in the USFM colours, and is not in the text yet.
- * Space (or Enter) writes it when it is a marker Refine can take:
+ * Space or Enter (`typedMarker.accept`) writes it when it is a marker Refine can take:
  *
  * - `\v 4` — a verse, numbered as typed;
  * - a paragraph, poetry or heading marker (`\p`, `\q2`, `\s1`) — Enter at the
@@ -152,8 +152,6 @@ const typing = EditorView.inputHandler.of((view, from, to, text) => {
     return true;
   }
   if (from !== held.at || to !== from) return false;
-  // `\v` takes its number after a space; any other marker is done at the space.
-  if (text === " " && !/^\\v$/.test(held.text)) return commit(view, held);
   if (/^[A-Za-z0-9 *+-]+$/.test(text)) {
     view.dispatch({ effects: compose.of({ at: held.at, text: held.text + text, wrong: false }) });
     return true;
@@ -161,36 +159,32 @@ const typing = EditorView.inputHandler.of((view, from, to, text) => {
   return false;
 });
 
-/** Backspace, Escape and Enter while a marker is being typed; each declines otherwise. */
-export const typedMarkerKeys = (): readonly KeyBinding[] => [
-  {
-    key: "Backspace",
-    run: (view) => {
-      const held = view.state.field(composingField, false) ?? null;
-      if (held === null) return false;
-      const text = held.text.slice(0, -1);
-      view.dispatch({
-        effects: compose.of(text === "" ? null : { at: held.at, text, wrong: false }),
-      });
-      return true;
-    },
+/**
+ * The commands, by id; their keys are `keymaps.ts`'s (Space and Enter accept,
+ * Backspace shortens, Escape drops). Each declines when no marker is being
+ * typed, and `accept` declines on a bare `\\v`, whose number comes after a space.
+ */
+export const typedMarkerCommands: Readonly<Record<string, Command>> = {
+  "typedMarker.accept": (view) => {
+    const held = view.state.field(composingField, false) ?? null;
+    if (held === null || held.text === "\\v") return false;
+    return commit(view, held);
   },
-  {
-    key: "Escape",
-    run: (view) => {
-      if ((view.state.field(composingField, false) ?? null) === null) return false;
-      view.dispatch({ effects: compose.of(null) });
-      return true;
-    },
+  "typedMarker.shorten": (view) => {
+    const held = view.state.field(composingField, false) ?? null;
+    if (held === null) return false;
+    const text = held.text.slice(0, -1);
+    view.dispatch({
+      effects: compose.of(text === "" ? null : { at: held.at, text, wrong: false }),
+    });
+    return true;
   },
-  {
-    key: "Enter",
-    run: (view) => {
-      const held = view.state.field(composingField, false) ?? null;
-      return held === null ? false : commit(view, held);
-    },
+  "typedMarker.cancel": (view) => {
+    if ((view.state.field(composingField, false) ?? null) === null) return false;
+    view.dispatch({ effects: compose.of(null) });
+    return true;
   },
-];
+};
 
 /** The marker being typed, and the typing that grows it. */
 export const typedMarkerBehaviour: Extension = [composingField, Prec.highest(typing)];

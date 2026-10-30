@@ -15,7 +15,7 @@ const WRITTEN_VERSE = /(verse\s*|v\s*)?(\d{1,3})\.?(?=[ \t])/gi;
  * Plain text pasted in Refine follows the rules typing does. Its line breaks
  * are Enter: each starts a new line of the kind the paste lands in (`\p`, or
  * `\q1` inside poetry). Its verse numbers are typed numbers: one becomes a
- * verse (`\v N`) only where typing it would (`typedVerseNumbers`): a number
+ * verse (`\v N`) only where typing it would (`verseNumber.accept`): a number
  * `isVerseNumber` takes: the next in order, or one in the chapter's expected
  * verses, never a duplicate. "He fed 5000" pasted stays words.
  *

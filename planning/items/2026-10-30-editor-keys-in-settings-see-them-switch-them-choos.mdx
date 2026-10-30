@@ -16,39 +16,47 @@ Will, 2026-10-30, reviewing PR 11 (typed USFM, verse numbers by order and range)
 
 > we don't have those keybindings from commit the other day actually available in settings do we?
 
-## Today
+Will, on the shape:
 
-Every key the editor binds is one table, `KEY_BUNDLES` in
-`packages/editor/src/core/keymaps.ts`: bundles by mode, precedence, and the
-preference that turns a bundle off. Settings shows one of them, the
-**Verse shortcuts** switch (`editor.verseShortcuts`, `src/app/settings.ts`).
-Nothing lists the keys, nothing rebinds them, and typed markers (`\q2 `) have
-no switch at all.
+> it should become a key binding even if we don't have the settings up yet. So, the plan should be to expose those settings and wire them together. So, for now, if we only have defaults, that's okay, but architecturally, it should read like VS Code how it reads its key map, for example, to actions.
 
-The keys that accept an input rule are written into the rules:
+> I think the default is spacer enter as he has it is fine,
 
-- a typed verse number is accepted by **Space** (`typedVerseNumbers`,
-  `core/inputRules/verseNumbers.ts`, an input handler on `" "`);
-- a typed marker by **Space or Enter** (`core/inputRules/typedMarker.ts`);
-- Backspace just after a verse number takes it back to a word.
+## Built (2026-10-30, on design/editor-rules)
 
-<Followup id="stale-copy">
+`packages/editor/src/core/keymaps.ts` now reads as VS Code's keymap: every
+binding is `{ key, command }`, a command is the editor's action by id
+(`edit.enter`, `verseNumber.accept`, `typedMarker.accept`, `poetry.indent`),
+and each bundle owns its commands. The accept keys are bindings like any other:
+**Space** for a typed verse number, **Space or Enter** for a typed marker.
+
+A host lays its own bindings over the defaults through `userKeybindings`
+(`mountBookEditor`'s `keybindings` option): `{ key, command }` adds,
+`{ key, command: "-id" }` takes a default away, as keybindings.json does. A
+binding keeps the precedence and preference of the bundle owning its command.
+No host passes any yet, so the defaults are all there is.
+
+A key bound to a printable character (Space) also runs when the character
+arrives as input with no keydown (Android's soft keyboards).
+
+<Followup id="stale-copy" done>
   The Verse shortcuts description in `src/app/settings.ts` still says "when it is the next verse the
   chapter is missing". Since PR 11, a number within the reference's verse count counts too, and pasted
   text and Backspace follow the same switch. The copy is now wrong, not just unpolished.
 </Followup>
 
-## The shape this could take
+## What is left: Settings
 
 1. **See them.** A read-only "Keyboard" section in Settings drawn from
-   `KEY_BUNDLES`: each bundle's summary, its keys, the modes it acts in.
-   The table already carries everything but key labels.
-2. **Switch them.** A preference per bundle that has a reason to be off:
-   typed markers, poetry levels.
-3. **Choose the accept key.** A preference for the key that accepts an input
-   rule (Space, Tab), read by the rules instead of the literal `" "`.
+   `KEY_BUNDLES`: each bundle's summary, its commands and their keys, the
+   modes it acts in.
+2. **Change them.** A setting holding the person's bindings (keybindings.json's
+   shape), handed to the mount as `keybindings`; a change reconfigures the
+   facet live, as preferences do.
+3. **Switch bundles off.** A preference per bundle that has a reason to be
+   off: typed markers, poetry levels.
 
-<Question id="accept-key">
+<Question id="accept-key" answer="Space or Enter by default, as the designer has it (Will, 2026-10-30); any key once Settings can rebind.">
   Which keys should a person be able to choose to accept a typed verse number or marker: Space only,
   or also Tab? Tab already walks table cells and empty verses and moves poetry levels.
 </Question>

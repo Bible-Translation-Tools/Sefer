@@ -1,6 +1,5 @@
 import { isolateHistory } from "@codemirror/commands";
 import { EditorSelection, type EditorState, type StateCommand } from "@codemirror/state";
-import { EditorView, type KeyBinding } from "@codemirror/view";
 
 import { expectedLastVerse } from "../expectedVerses";
 import { isVisual, modeFacet, trusted } from "../kernel";
@@ -63,31 +62,36 @@ export function isVerseNumber(
 
 /**
  * Verse numbers typed the way people write them without USFM — "1", "1.",
- * "v1", "v 1", "verse 1" — become a verse (`\\v N`) on the space after them,
+ * "v1", "v 1", "verse 1" — become a verse (`\\v N`) on the key after them
+ * (`verseNumber.accept`, bound to Space by default),
  * when `isVerseNumber` says so: the next verse in order, or any number
  * within the chapter's expected verses, never one it already has. Undo, or
  * Backspace after the number, takes the verse back to what was typed. Refine
  * and line by line; USFM is typed as USFM.
  */
-export const typedVerseNumbers = EditorView.inputHandler.of((view, from, to, text) => {
-  if (text !== " " || from !== to || view.state.facet(modeFacet) !== "regular") return false;
-  if (!preferenceOn(view.state, "verseShortcuts")) return false;
-  const line = view.state.doc.lineAt(from);
-  const before = view.state.doc.sliceString(line.from, from);
+const acceptTypedVerseNumber: StateCommand = ({ state, dispatch }) => {
+  const sel = state.selection.main;
+  if (!sel.empty || state.facet(modeFacet) !== "regular") return false;
+  if (!preferenceOn(state, "verseShortcuts")) return false;
+  const from = sel.from;
+  const line = state.doc.lineAt(from);
+  const before = state.doc.sliceString(line.from, from);
   const typed = TYPED_VERSE.exec(before);
   if (typed === null) return false;
   const tokenFrom = line.from + typed.index + typed[1].length;
   const number = Number(typed[4]);
-  if (!isVerseNumber(versesAround(view.state, from), number, typed[3] !== undefined)) return false;
+  if (!isVerseNumber(versesAround(state, from), number, typed[3] !== undefined)) return false;
   const insert = `\\v ${number} `;
-  view.dispatch({
-    changes: { from: tokenFrom, to: from, insert },
-    selection: EditorSelection.cursor(tokenFrom + insert.length),
-    annotations: [trusted.of("typed-verse"), isolateHistory.of("before")],
-    userEvent: "input.type.verse",
-  });
+  dispatch(
+    state.update({
+      changes: { from: tokenFrom, to: from, insert },
+      selection: EditorSelection.cursor(tokenFrom + insert.length),
+      annotations: [trusted.of("typed-verse"), isolateHistory.of("before")],
+      userEvent: "input.type.verse",
+    }),
+  );
   return true;
-});
+};
 
 /**
  * Backspace just after a verse's number, in Refine, takes the verse back to
@@ -114,6 +118,8 @@ const numberBackToAWord: StateCommand = ({ state, dispatch }) => {
   return true;
 };
 
-export const verseNumberKeys = (): readonly KeyBinding[] => [
-  { key: "Backspace", run: numberBackToAWord },
-];
+/** The commands, by id; their keys are `keymaps.ts`'s. */
+export const verseNumberCommands = {
+  "verseNumber.accept": acceptTypedVerseNumber,
+  "verseNumber.backToWord": numberBackToAWord,
+};

@@ -8,15 +8,8 @@ import {
   Transaction,
   type TransactionSpec,
 } from "@codemirror/state";
-import {
-  EditorView,
-  type KeyBinding,
-  type LayerMarker,
-  layer,
-  RectangleMarker,
-} from "@codemirror/view";
+import { EditorView, type LayerMarker, layer, RectangleMarker } from "@codemirror/view";
 
-import { typedVerseNumbers } from "./inputRules/verseNumbers";
 import { isVisual, modeFacet, trusted } from "./kernel";
 import { docText, structureAt, type DocStructure } from "./model/docStructure";
 import type { DocLine, VerseRow } from "./model/fold";
@@ -98,20 +91,19 @@ const verseFinish: VerseMove = (structure, doc, here) =>
   here >= 0 ? verseEnd(structure, doc, here) : undefined;
 
 /**
- * Line-by-line's keys (the form-mode plan's table): Enter and Shift-Enter step
+ * Line-by-line's commands (the form-mode plan's table; their keys are
+ * `keymaps.ts`'s): Enter and Shift-Enter step
  * a verse, Tab and Shift-Tab step to an empty verse, Home and End stay inside
  * the verse. Nothing here edits; a key with nowhere to go is consumed.
  */
-export function verseLineKeys(): readonly KeyBinding[] {
-  return [
-    { key: "Enter", run: inVerseLines(nextVerse) },
-    { key: "Shift-Enter", run: inVerseLines(previousVerse) },
-    { key: "Tab", run: inVerseLines(nextEmptyVerse) },
-    { key: "Shift-Tab", run: inVerseLines(previousEmptyVerse) },
-    { key: "Home", run: inVerseLines(verseStart) },
-    { key: "End", run: inVerseLines(verseFinish) },
-  ];
-}
+export const verseLineCommands = {
+  "verse.next": inVerseLines(nextVerse),
+  "verse.previous": inVerseLines(previousVerse),
+  "verse.nextEmpty": inVerseLines(nextEmptyVerse),
+  "verse.previousEmpty": inVerseLines(previousEmptyVerse),
+  "verse.start": inVerseLines(verseStart),
+  "verse.end": inVerseLines(verseFinish),
+};
 
 const isVerseLines = (state: EditorState): boolean => assignmentAt(state).verseLines;
 
@@ -871,7 +863,6 @@ export const verseLineBehaviour: Extension = [
   emptiedChaptersKeepVerseOne,
   typeIntoEmptyChapter,
   caretBesideEmptyChapterVerse,
-  typedVerseNumbers,
   typeIntoEmptyVerse,
   labelsStayPut,
   pasteAsOneLine,

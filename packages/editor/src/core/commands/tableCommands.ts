@@ -1,5 +1,5 @@
 import { EditorSelection, type EditorState, type TransactionSpec } from "@codemirror/state";
-import type { EditorView, KeyBinding } from "@codemirror/view";
+import type { Command, EditorView } from "@codemirror/view";
 
 import { isVisual, trusted } from "../kernel";
 import { docText, structureAt } from "../model/docStructure";
@@ -200,9 +200,9 @@ function takeEmptyRow(view: EditorView): boolean {
   return true;
 }
 
-export const tableKeys = (): readonly KeyBinding[] => [
-  { key: "Tab", run: (view) => walkCells(view, 1) },
-  { key: "Shift-Tab", run: (view) => walkCells(view, -1) },
-  { key: "Backspace", run: takeEmptyRow },
-  { key: "Delete", run: takeEmptyRow },
-];
+/** The commands, by id; their keys are `keymaps.ts`'s. */
+export const tableCommands: Readonly<Record<string, Command>> = {
+  "table.nextCell": (view) => walkCells(view, 1),
+  "table.previousCell": (view) => walkCells(view, -1),
+  "table.deleteEmptyRow": takeEmptyRow,
+};

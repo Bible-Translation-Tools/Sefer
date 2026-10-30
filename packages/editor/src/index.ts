@@ -29,7 +29,7 @@ export { type LineKind } from "./core/commands/poetryLevels";
 export type { ExpectedVerses } from "./core/expectedVerses";
 export { type UnsupportedMarkup } from "./core/unsupported";
 export { PHRASES, type EditorWords, type PhraseKey } from "./core/words";
-export { KEY_BUNDLES, type EditorMode, type KeyBundle } from "./core/keymaps";
+export { KEY_BUNDLES, type EditorMode, type KeyBundle, type Keybinding } from "./core/keymaps";
 export { DEFAULT_PREFERENCES, type EditorPreferences } from "./core/preferences";
 
 export {

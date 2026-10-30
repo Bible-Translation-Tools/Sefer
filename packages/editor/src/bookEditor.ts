@@ -31,6 +31,7 @@ import { annotateOpen } from "./core/instrument/instrument";
 import { keystrokeMeter } from "./core/instrument/meter";
 import { span } from "./core/instrument/timing";
 import { trusted } from "./core/kernel";
+import { type Keybinding, userKeybindings } from "./core/keymaps";
 import { changePreferences, editorPreferences, type EditorPreferences } from "./core/preferences";
 import { type UnsupportedMarkup, unsupportedMarkup } from "./core/unsupported";
 import { chapterTitleAction } from "./core/verseLines";
@@ -85,6 +86,8 @@ export interface BookEditorOptions {
   readonly words?: EditorWords;
   /** The editor's switches (`EditorPreferences`); any left out take their defaults. Each mount's own, changed live by `setPreferences`. */
   readonly preferences?: Partial<EditorPreferences>;
+  /** Key bindings over the defaults, as VS Code's keybindings.json (`keymaps.ts`). */
+  readonly keybindings?: readonly Keybinding[];
 }
 
 /** One mark the linter draws: the engine's and the host's (`setHostDiagnostics`) as one set. */
@@ -350,6 +353,7 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
           },
         }),
         editorPreferences(options.preferences),
+        userKeybindings.of(options.keybindings ?? []),
         EditorView.updateListener.of((update) => {
           const activated = activateListeners.get(book);
           const typed = typedListeners.get(book);
