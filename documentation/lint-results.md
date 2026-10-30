@@ -48,7 +48,7 @@ The generated half looks after itself; the judgement half does not. When a gate 
 | oxlint warnings | 0 | `pnpm lint` fails on any, every commit |
 | fallow dead code (`pnpm deadcode`) | 0 issue(s) | every deploy; advisory on branches |
 | fallow duplication | 1.6% in 64 clone group(s) | none — advisory |
-| suppression comments | 195 | each listed below with its reason |
+| suppression comments | 194 | each listed below with its reason |
 
 ### Oxlint warnings, by rule and file
 
@@ -167,10 +167,9 @@ None.
 | `src/app/paraglide/messages/import_document_tracked.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_unchanged.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_unreadable.js` | `eslint-disable` | — |
-| `src/app/paraglide/messages/import_document_usfm.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_verses.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_view_changes.js` | `eslint-disable` | — |
-| `src/app/paraglide/messages/import_document_view_text.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/import_document_view_result.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/import_document_view.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/landing_clone_from_link.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/landing_clone_repository.js` | `eslint-disable` | — |

@@ -681,6 +681,9 @@ export const chapterTitleAction = Facet.define<ChapterTitleAction, ChapterTitleA
   combine: (values) => values[0],
 });
 
+/** The words of a chapter's title: the hover underline's selectors in editor.css. */
+const TITLE_WORDS = ".usfm-chap-label, .usfm-chap-named .usfm-num-c";
+
 /** Views whose last press landed on a chapter's title the host wants: the release runs it. */
 const titlePressed = new WeakSet<EditorView>();
 
@@ -724,7 +727,10 @@ const pressesAboveTitlesStayBehind = EditorView.domEventHandlers({
     const box = line.getBoundingClientRect();
     const titleTop = box.top + parseFloat(getComputedStyle(line).paddingTop);
     if (event.clientY >= titleTop) {
-      // The title itself: the host's, when it wants it (`titlesAreTheHosts`).
+      // The title's words themselves, what underlines on hover (editor.css,
+      // `cm-titles-open`), are the host's when it wants them
+      // (`titlesAreTheHosts`); the rest of the line is only a line.
+      if (target?.closest(TITLE_WORDS) == null) return false;
       const action = view.state.facet(chapterTitleAction);
       if (action === undefined || !action.wants()) return false;
       event.preventDefault();
