@@ -1,4 +1,4 @@
-import type { StateCommand } from "@codemirror/state";
+import type { StateCommand, TransactionSpec } from "@codemirror/state";
 import { EditorState } from "@codemirror/state";
 
 import { chapterContaining } from "./clip";
@@ -189,5 +189,22 @@ export function insertFootnote(): StateCommand {
       }),
     );
     return true;
+  };
+}
+
+/**
+ * An empty footnote where Refine asked for one: at the end of the selection
+ * when there is one (the words it is about stay in the text), else at
+ * `offset`, else at the caret. Inserting it opens it for typing at its letter
+ * (`recipes/noteEditor.ts`).
+ */
+export function footnoteAt(state: EditorState, offset?: number): TransactionSpec {
+  const sel = state.selection.main;
+  const covers = offset === undefined || (offset >= sel.from && offset <= sel.to);
+  const at = !sel.empty && covers ? sel.to : (offset ?? sel.head);
+  return {
+    changes: { from: at, insert: `${NOTE_OPEN}${NOTE_CLOSE}` },
+    selection: { anchor: at },
+    userEvent: "input.usfm.footnote",
   };
 }

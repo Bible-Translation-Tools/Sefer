@@ -17,6 +17,10 @@ const PHRASES: Readonly<Record<PhraseKey, (values: Readonly<Record<string, strin
   "verseLines.verse": () => m.editor_verse_label(),
   "verseLines.chapter": () => m.editor_chapter_label(),
   "emptyChapter.prompt": (values) => m.editor_empty_chapter_prompt({ title: values.title ?? "" }),
+  "chapterWord.ask": (values) => m.editor_chapter_word_ask({ word: values.word ?? "" }),
+  "chapterWord.book": () => m.editor_chapter_word_book(),
+  "chapterWord.all": () => m.editor_chapter_word_all(),
+  "bookName.placeholder": () => m.editor_book_name_placeholder(),
 };
 
 /** The editor's words in the interface language; a screen remounts when it changes. */

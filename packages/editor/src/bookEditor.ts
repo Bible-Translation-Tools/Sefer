@@ -14,10 +14,12 @@ import {
   type AttributedMarkup,
   attributesAt,
 } from "./core/attributes";
+import { chapterWordHost, type ChapterWordScope } from "./core/chapterWord";
 import { structureAt } from "./core/editorState";
 import { setExpectedVerses, type ExpectedVerses } from "./core/expectedVerses";
 import { type Figure, figuresIn } from "./core/figures";
 import { frontMatterCard } from "./core/frontmatter";
+import { footnoteAt } from "./core/insert";
 import { annotateOpen } from "./core/instrument";
 import { trusted } from "./core/kernel";
 import { keystrokeMeter } from "./core/meter";
@@ -28,7 +30,6 @@ import { span } from "./core/timing";
 import { onTypedUsfm } from "./core/typedUsfm";
 import { type UnsupportedMarkup, unsupportedMarkup } from "./core/unsupported";
 import { addVerseAfter, removeVerseMarker, renumberVerse, verseAt } from "./core/verseCommands";
-import { chapterTitleAction } from "./core/verseLines";
 import { drawnWords, type EditorWords, editorWords } from "./core/words";
 import type { EditorFeature } from "./features";
 import { handleFor, markMoved, type EditorHandle } from "./handle";
@@ -72,6 +73,12 @@ export interface BookEditorOptions {
    * the book's first mount.
    */
   readonly features?: readonly EditorFeature[];
+  /**
+   * A new word typed into a chapter's title ("Psalm" for "Chapter"), with
+   * where the person chose it should go: this book or every book. Without
+   * it the editor asks nothing and writes the word as this book's label.
+   */
+  readonly onChapterWord?: (word: string, scope: ChapterWordScope) => void;
   /**
    * The words the editor shows, in the host's language: what a marker is
    * called (the chips) and every UI phrase (`PHRASES`). Anything left out is
@@ -120,12 +127,6 @@ export interface BookEditorMount extends EditorHandle {
    * is let go), whether or not the default popover is showing. Returns the detach.
    */
   onActivate(listener: (target: AttributedMarkup | null) => void): () => void;
-  /**
-   * Called when a chapter's title is pressed in Reading or Form Mode (Sefer
-   * opens its chapter labels dialog). While anyone listens, the press is
-   * theirs and the caret stays put. Returns the detach.
-   */
-  onChapterTitle(listener: () => void): () => void;
   /** Gives `target` these attributes, as one Undo step. */
   setAttributes(target: AttributedMarkup, attributes: readonly Attribute[]): void;
   /**
@@ -144,6 +145,12 @@ export interface BookEditorMount extends EditorHandle {
   lineKindAt(offset: number): LineKind | null;
   /** Turns the line at an offset into another kind (`turnable` choices only), as one Undo step. */
   turnLineInto(offset: number, kind: string): boolean;
+  /**
+   * An empty footnote at the selection's end when the selection covers
+   * `offset` (or there is no offset), else at `offset`; it opens for typing
+   * at its letter, and goes again if closed with no text.
+   */
+  addFootnote(offset?: number): boolean;
   /** Removes the marker of the verse at an offset; its text joins the verse before. */
   removeVerseMarker(offset: number): boolean;
   /** Adds an empty verse after the one at an offset, numbered one past it, with the caret in it. */
@@ -195,7 +202,6 @@ const mountedConfig = new WeakMap<
 >();
 
 const activateListeners = new WeakMap<EditorBook, Set<(target: AttributedMarkup | null) => void>>();
-const titleListeners = new WeakMap<EditorBook, Set<() => void>>();
 const caretListeners = new WeakMap<EditorBook, Set<(head: number) => void>>();
 
 const drawnListeners = new WeakMap<EditorBook, Set<() => void>>();
@@ -337,12 +343,7 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
         ...(options.features ?? []),
         ...(options.words === undefined ? [] : [editorWords.of(options.words)]),
         drawnWords,
-        chapterTitleAction.of({
-          wants: () => (titleListeners.get(book)?.size ?? 0) > 0,
-          run: () => {
-            for (const listener of titleListeners.get(book) ?? []) listener();
-          },
-        }),
+        ...(options.onChapterWord === undefined ? [] : [chapterWordHost.of(options.onChapterWord)]),
         editorPreferences(options.preferences),
         EditorView.updateListener.of((update) => {
           const listeners = activateListeners.get(book);
@@ -460,11 +461,6 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
       held.add(listener);
       return () => held.delete(listener);
     },
-    onChapterTitle: (listener: () => void) => {
-      const held = listenersOf(titleListeners, book);
-      held.add(listener);
-      return () => held.delete(listener);
-    },
     setAttributes: (target: AttributedMarkup, attributes: readonly Attribute[]) => {
       created.dispatch({
         changes: attributeChange(target, attributes),
@@ -487,6 +483,7 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
     onTypedUsfm: (listener: (marker: string) => void) => onTypedUsfm(created, listener),
     lineKindAt: (offset: number) => lineKindAt(created.state, offset),
     turnLineInto: (offset: number, kind: string) => run(turnLineInto(created.state, offset, kind)),
+    addFootnote: (offset?: number) => run(footnoteAt(created.state, offset)),
     renumberVerse: (offset: number, number: string) =>
       run(renumberVerse(created.state, verseAt(created.state, offset), number)),
     removeVerseMarker: (offset: number) =>

@@ -187,7 +187,7 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
     annotateEmptyParagraphs: settings.register(
       "editor.annotateEmptyParagraphs",
       Schema.Boolean,
-      true,
+      false,
     ),
     enableReplaceAll: settings.register("find.enableReplaceAll", Schema.Boolean, false),
     showGatewayProjects: settings.register("projects.showGateways", Schema.Boolean, false),

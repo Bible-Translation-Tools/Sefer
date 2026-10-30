@@ -23,7 +23,7 @@ const WRITTEN_VERSE = /(verse\s*|v\s*)?(\d{1,3})\.?(?=[ \t])/gi;
  * (`pasteChange`), a paste with a backslash in it is markup and is judged as
  * such, and line by line flattens a paste to one line (`pasteAsOneLine`).
  */
-export function shapePastedText(
+function shapePastedText(
   state: EditorState,
   at: number,
   text: string,

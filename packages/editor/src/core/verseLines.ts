@@ -703,46 +703,6 @@ const chapterHeadingsAreFixed = EditorState.transactionFilter.of((tr) => {
 });
 
 /**
- * What a click on a chapter's title does, from the host: Sefer opens its
- * chapter labels dialog there. While it `wants` the title, the press is its
- * and the caret stays put; the action runs on the release (`titlesAreTheHosts`).
- */
-export interface ChapterTitleAction {
-  readonly wants: () => boolean;
-  readonly run: () => void;
-}
-
-export const chapterTitleAction = Facet.define<ChapterTitleAction, ChapterTitleAction | undefined>({
-  combine: (values) => values[0],
-});
-
-/** Views whose last press landed on a chapter's title the host wants: the release runs it. */
-const titlePressed = new WeakSet<EditorView>();
-
-/**
- * The release of a press on a title runs the host's action. The release, not
- * the click: the line can be redrawn between press and release, and then the
- * browser sends no click; and the release comes after the pointer-up a dialog
- * listens for, so the dialog it opens stays open.
- */
-/** `cm-titles-open` while the host wants presses on titles: the stylesheet shows them as links. */
-const titlesOpenClass = EditorView.editorAttributes.of((view) =>
-  view.state.facet(modeFacet) === "regular" &&
-  view.state.facet(chapterTitleAction)?.wants() === true
-    ? { class: "cm-titles-open" }
-    : null,
-);
-
-const titlesAreTheHosts = EditorView.domEventHandlers({
-  mouseup(_event, view) {
-    if (!titlePressed.has(view)) return false;
-    titlePressed.delete(view);
-    view.state.facet(chapterTitleAction)?.run();
-    return true;
-  },
-});
-
-/**
  * The room above a chapter's title is the title line's own padding, so a
  * press there would land on the heading and be carried on into the new
  * chapter. It belongs to the chapter before: the caret goes to the line just
@@ -751,21 +711,14 @@ const titlesAreTheHosts = EditorView.domEventHandlers({
  */
 const pressesAboveTitlesStayBehind = EditorView.domEventHandlers({
   mousedown(event, view) {
-    titlePressed.delete(view);
     if (event.button !== 0 || view.state.facet(modeFacet) !== "regular") return false;
     const target = event.target instanceof Element ? event.target : null;
     const line = target?.closest(".usfm-chap");
     if (line === null || line === undefined || !view.contentDOM.contains(line)) return false;
     const box = line.getBoundingClientRect();
     const titleTop = box.top + parseFloat(getComputedStyle(line).paddingTop);
-    if (event.clientY >= titleTop) {
-      // The title itself: the host's, when it wants it (`titlesAreTheHosts`).
-      const action = view.state.facet(chapterTitleAction);
-      if (action === undefined || !action.wants()) return false;
-      event.preventDefault();
-      titlePressed.add(view);
-      return true;
-    }
+    // The title itself is typed into where it reads (`ChapterWordWidget`, decorations.ts).
+    if (event.clientY >= titleTop) return false;
     const at = view.posAtDOM(line);
     const heading = chapterHeadings(docText(view.state), structureAt(view.state)).find(
       (h) => at >= h.from && at <= h.to,
@@ -972,8 +925,6 @@ export const verseLineBehaviour: Extension = [
   verseBoxes,
   chapterHeadingsAreFixed,
   pressesAboveTitlesStayBehind,
-  titlesAreTheHosts,
-  titlesOpenClass,
   emptiedChaptersKeepVerseOne,
   typeIntoEmptyChapter,
   caretBesideEmptyChapterVerse,

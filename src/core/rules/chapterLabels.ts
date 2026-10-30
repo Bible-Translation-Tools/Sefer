@@ -146,7 +146,7 @@ export const chapterLabelsOf = (analysis: Analysis): BookLabels => {
  * chapters read it: a chapter's own "word + number" label, else the book
  * label, which names every chapter without a label of its own.
  */
-export const wordsOf = (book: BookLabels): ReadonlyMap<string, number> => {
+const wordsOf = (book: BookLabels): ReadonlyMap<string, number> => {
   const counts = new Map<string, number>();
   const named = new Set<number>();
   for (const label of book.labels)
@@ -159,10 +159,6 @@ export const wordsOf = (book: BookLabels): ReadonlyMap<string, number> => {
   }
   return new Map([...counts].sort((a, b) => b[1] - a[1]));
 };
-
-/** A book's labels that are its own words ("Psalm One") or a stray number: shown, never changed. */
-export const keptAsWritten = (book: BookLabels): readonly ChapterLabel[] =>
-  book.labels.filter((label) => label.scope === "chapter" && label.shape === "other");
 
 /**
  * The edit that makes a book's chapters read `word`: one book label before

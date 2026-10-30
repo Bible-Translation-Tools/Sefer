@@ -156,7 +156,9 @@ const pressesOutsideTextLetGo = ViewPlugin.define((view) => {
     if (target === null) return;
     const onText =
       view.contentDOM.contains(target) && target.closest(".cm-line, .cm-widgetBuffer") !== null;
-    if (onText || target.closest(".cm-tooltip, .cm-panels, .cm-gutters") !== null) return;
+    // Block widgets (a chapter's notes) and an open note answer their own presses.
+    const own = ".cm-tooltip, .cm-panels, .cm-gutters, .cm-block-host, .usfm-note-pop";
+    if (onText || target.closest(own) !== null) return;
     if (view.dom.contains(target)) {
       if (target === view.scrollDOM && event.offsetX >= view.scrollDOM.clientWidth) return; // the scrollbar
       event.preventDefault();

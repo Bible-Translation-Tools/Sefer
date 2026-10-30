@@ -16,8 +16,8 @@ import { t } from "../../i18n";
 import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
 import { Badge, Button, Input } from "../primitives";
-import { bookName, testamentOf, type Testament } from "./books";
-import { metadataOf, projectLanguage, projectName } from "./project";
+import { shownBookName, testamentOf, type Testament } from "./books";
+import { projectLanguage, projectName } from "./project";
 import { chapterOf, typedChapter } from "./typedPlace";
 
 interface Row {
@@ -146,10 +146,9 @@ export function ProjectSidebar() {
     (): readonly Row[] => {
       const project = shell.project();
       if (project === undefined) return [];
-      const metadata = metadataOf(project);
       return project.books.map((book) => ({
         id: book.id,
-        name: bookName(book.id, metadata),
+        name: shownBookName(shell, book.id),
         testament: testamentOf(book.id),
       }));
     },

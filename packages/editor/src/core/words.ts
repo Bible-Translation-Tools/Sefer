@@ -20,6 +20,10 @@ export const PHRASES = {
   "verseLines.verse": "Verse",
   "verseLines.chapter": "Chapter",
   "emptyChapter.prompt": "Click here to start editing {title}",
+  "chapterWord.ask": "Call every chapter “{word}” in",
+  "chapterWord.book": "This book",
+  "chapterWord.all": "All books",
+  "bookName.placeholder": "Add book name",
 } as const;
 
 export type PhraseKey = keyof typeof PHRASES;

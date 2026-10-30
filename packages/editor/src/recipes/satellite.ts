@@ -38,6 +38,16 @@ const initialRange = Facet.define<{ from: number; to: number }, { from: number; 
   combine: (v) => v[0] ?? { from: 0, to: 0 },
 });
 
+/**
+ * A satellite whose range is exactly the words it edits (a note's text):
+ * its edges are where typing goes, so they are never settled inward. Without
+ * it the end of a note, just before `\f*`, is no stop, and the caret placed
+ * there slid back a letter.
+ */
+export const edgesAreStops = Facet.define<boolean, boolean>({
+  combine: (values) => values.some(Boolean),
+});
+
 const scope = StateField.define<{ from: number; to: number }>({
   create: (state) => state.facet(initialRange),
   update(range, tr) {
@@ -59,8 +69,16 @@ const structured = (state: EditorState): boolean =>
 
 const settleAsTheBookDoes = settleTheCaretOnALegalPosition(structureAt, PAINT_PORT);
 
+/** In a satellite whose edges are stops, a caret on one of them is where typing goes. */
+const onOwnEdges = (state: EditorState): boolean => {
+  if (!state.facet(edgesAreStops)) return false;
+  const range = satelliteRange(state);
+  const sel = state.selection.main;
+  return range !== null && sel.empty && (sel.head === range.from || sel.head === range.to);
+};
+
 const caretSettled: Extension = EditorState.transactionFilter.of((tr) =>
-  tr.docChanged || !structured(tr.state) ? tr : settleAsTheBookDoes(tr),
+  tr.docChanged || !structured(tr.state) || onOwnEdges(tr.state) ? tr : settleAsTheBookDoes(tr),
 );
 
 const rangeEdgesSettled: Extension = EditorState.transactionFilter.of((tr) => {
@@ -74,6 +92,7 @@ const rangeEdgesSettled: Extension = EditorState.transactionFilter.of((tr) => {
   const lo = Math.min(sel.anchor, sel.head);
   const hi = Math.max(sel.anchor, sel.head);
   if (lo > windowRange.from && hi < edge) return tr;
+  if (tr.state.facet(edgesAreStops) && lo >= windowRange.from && hi <= edge) return tr;
   const stops = stopsIn(tr.state, structureAt(tr.state), PAINT_PORT);
   const inward = (pos: number, toward: "forward" | "backward", limit: number): number => {
     if (stops.isStop(pos)) return pos;

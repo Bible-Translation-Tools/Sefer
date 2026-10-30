@@ -17,6 +17,7 @@ import { Show, createEffect, createRenderEffect, createSignal, untrack } from "s
 import { m } from "#app/paraglide/messages";
 import { stale, type Finding } from "#core/findings/finding";
 
+import { runCommand } from "../commands";
 import { editorWords } from "../editorWords";
 import { reportEdits } from "../editReports";
 import { t } from "../i18n";
@@ -26,7 +27,6 @@ import { shellKeys } from "../settings";
 import { allow, checkLabel, fineHere, flaggedText, turnOff } from "../suppressAnswers";
 import { LineMenu, type LineMenuAt } from "./LineMenu";
 import { toasts } from "./primitives";
-import { ChapterLabelsDialog } from "./rules/ChapterLabels";
 import { findingMessage } from "./rules/labelMessages";
 import { useAlignedGroup } from "./workspace/aligned";
 import { nameBlock } from "./workspace/blockNames";
@@ -54,10 +54,9 @@ const suggestUsfmMode = (shell: Shell): void => {
 };
 
 /** A differing chapter label's answers: the dialog, or fine here, or its word fine in every book. */
-function labelAnswers(shell: Shell, finding: Finding, openLabels: () => void): CorpusAction[] {
+function labelAnswers(shell: Shell, finding: Finding): CorpusAction[] {
   const word = finding.values?.word ?? "";
   return [
-    { name: m.chapter_labels_review(), run: openLabels },
     { name: m.chapter_labels_fine_here(), run: () => fineHere(shell, finding) },
     ...(finding.suppression?.everywhere === undefined
       ? []
@@ -81,12 +80,7 @@ function labelAnswers(shell: Shell, finding: Finding, openLabels: () => void): C
   ];
 }
 
-function watchCorpus(
-  shell: Shell,
-  editor: BookEditorMount,
-  book: EditorBook,
-  openLabels: () => void,
-) {
+function watchCorpus(shell: Shell, editor: BookEditorMount, book: EditorBook) {
   const answersTo = (finding: Finding): readonly CorpusAction[] | undefined => {
     if (finding.producer !== "sous") return undefined;
     const check = checkLabel(finding);
@@ -114,7 +108,7 @@ function watchCorpus(
         list.push({
           ...finding,
           message: findingMessage(finding),
-          actions: labelAnswers(shell, finding, openLabels),
+          actions: labelAnswers(shell, finding),
         });
     editor.setHostDiagnostics(list);
     annotateRepaint({
@@ -172,7 +166,6 @@ export function BookEditor(props: BookEditorProps) {
   const [lineMenu, setLineMenu] = createSignal<LineMenuAt | undefined>(undefined, {
     name: "lineMenu",
   });
-  const [labelsOpen, setLabelsOpen] = createSignal(false, { name: "chapterLabelsOpen" });
   const [host, setHost] = createSignal<HTMLDivElement | undefined>(undefined, {
     name: "editorHost",
   });
@@ -195,7 +188,14 @@ export function BookEditor(props: BookEditorProps) {
         emptyBlocks: settings.get(keys.annotateEmptyParagraphs),
         pairBlocks: settings.get(keys.pairBlocks),
         preferences: { verseShortcuts: settings.get(keys.verseShortcuts) },
-        features: editorFeatures(),
+        features: editorFeatures({ footnoteLabel: m.editor_footnote_button() }),
+        // A new word typed into a chapter's title, for this book or every book
+        // (core/rules/chapterLabels.ts, `standardize`).
+        onChapterWord: (word, scope) => {
+          const books =
+            scope === "book" ? [bookId] : (shell.project()?.books ?? []).map((b) => b.id);
+          runCommand("chapterLabels.standardize", new Map(books.map((id) => [id, word])));
+        },
         words: editorWords,
       });
 
@@ -213,9 +213,7 @@ export function BookEditor(props: BookEditorProps) {
         shell.changed({ kind: "book.apply", books: [book.id] });
       });
 
-      const { watching, unsuppressing } = watchCorpus(shell, editor, book, () =>
-        setLabelsOpen(true),
-      );
+      const { watching, unsuppressing } = watchCorpus(shell, editor, book);
 
       const { ghosting, pairing, shortcuts } = watchSettings(shell, editor);
 
@@ -234,9 +232,6 @@ export function BookEditor(props: BookEditorProps) {
 
       if (remembered !== undefined) editor.resume(remembered);
 
-      // A chapter's title opens its labels, project-wide (ui/rules/ChapterLabels.tsx).
-      const untitle = editor.onChapterTitle(() => setLabelsOpen(true));
-
       setBound(editor);
 
       const leave = aligned?.join({ editor, book: bookId });
@@ -244,7 +239,6 @@ export function BookEditor(props: BookEditorProps) {
       // Returned, not onCleanup: a Solid 2 effect's callback has no owner (NO_OWNER_CLEANUP).
       return () => {
         leave?.();
-        untitle();
         untyped();
         unwatch();
         shell.noteCaret(undefined);
@@ -332,10 +326,6 @@ export function BookEditor(props: BookEditorProps) {
             {(at) => <LineMenu editor={editor()} at={at} onClose={() => setLineMenu(undefined)} />}
           </Show>
         )}
-      </Show>
-      {/* Mounted only while open: each opening starts from the books as they are. */}
-      <Show when={labelsOpen()}>
-        <ChapterLabelsDialog open onOpenChange={setLabelsOpen} />
       </Show>
     </div>
   );

@@ -55,10 +55,8 @@
   --editor-muted: var(--on-surface-secondary);
   --editor-meta: var(--on-surface-tertiary);
   --editor-rule: var(--surface-border);
-  --editor-note: var(--on-surface-secondary);
   --editor-word-line: var(--surface-border);
   --editor-word-hover: var(--surface-secondary);
-  --editor-note-hover: var(--surface-secondary);
   --editor-focus-bg: color-mix(in srgb, var(--brand-base) 10%, transparent);
   --editor-focus-bar: var(--brand-base);
   /* The paired verse or block. Stronger than the arrival focus it started as,
@@ -198,10 +196,8 @@
   font-size: var(--text-small);
   line-height: 1.6;
 }
-/* 1.5rem each side is the findings layer's gutter: its marks sit 6–16px in
-   from the edge (recipes/findingMarks.ts), so a pane narrower than the 50rem
-   column must not run the text under them. Symmetric, so the column stays
-   centred. */
+/* 1.5rem each side, so a pane narrower than the 50rem column does not run
+   the text to its edges. Symmetric, so the column stays centred. */
 .cm-mode-regular .cm-content {
   margin: 0 auto;
   /* 3rem a side: the text's own 1.5rem, and the 1.5rem the panel no longer
@@ -481,6 +477,14 @@
   color: var(--editor-link);
   user-select: none;
   cursor: pointer;
+  /* Bracketed, [a], so it reads apart from a verse number and is a wider target. */
+  padding: 0 0.15em;
+}
+.cm-mode-regular .usfm-caller::before {
+  content: "[";
+}
+.cm-mode-regular .usfm-caller::after {
+  content: "]";
 }
 .cm-mode-regular .usfm-caller-x {
   color: var(--editor-link-x);
@@ -490,8 +494,11 @@
   margin: 1.2em auto 2.2em;
   padding-top: 0.7em;
   border-top: 1px solid var(--editor-rule);
-  font: 400 13px/1.55 var(--font-ui);
-  color: var(--editor-note);
+  /* The scripture's own type: the notes read as part of the text. */
+  font-family: var(--font-scripture);
+  font-size: var(--editor-font-size, 18px);
+  line-height: 1.72;
+  color: var(--editor-ink);
   text-indent: 0;
 }
 .cm-mode-regular .usfm-note {
@@ -499,15 +506,22 @@
   gap: 0.45em;
   padding: 0.12em 0;
 }
+/* The letter, drawn as a verse number is (`.usfm-num-v`). */
 .cm-mode-regular .usfm-note-mark {
-  color: var(--editor-link);
-  font-weight: 600;
-  font-size: 0.85em;
-  padding-top: 0.15em;
+  font: 700 0.66em/1 var(--font-ui);
+  vertical-align: super;
+  color: var(--editor-accent);
+  align-self: flex-start;
+  padding-top: 0.35em;
 }
+/* The note's place (`Luke 3:4`), the link back up to its letter. */
 .cm-mode-regular .usfm-note-ref {
-  color: var(--editor-faint);
+  font-weight: 700;
   white-space: nowrap;
+  cursor: pointer;
+}
+.cm-mode-regular .usfm-note-ref:hover {
+  text-decoration: underline;
 }
 /* A note with no text yet. An empty inline span is zero pixels wide, so the
    one target that means "let me write this" was unclickable on exactly the
@@ -779,11 +793,12 @@
   color: var(--editor-open-fg);
   padding: 0.1em 0.2em;
 }
-.cm-mode-regular .usfm-note {
-  cursor: pointer;
-}
-.cm-mode-regular .usfm-note:hover {
-  background: var(--editor-note-hover);
+/* The same width the note's editor takes (`.usfm-note-edit` below), so the
+   words wrap at the same place reading and editing. */
+.cm-mode-regular .usfm-note-body {
+  flex: 1 1 auto;
+  min-width: 12ch;
+  cursor: text;
 }
 
 .cm-mode-regular .cm-gutters {
@@ -961,6 +976,12 @@
   user-select: none;
   cursor: default;
 }
+/* A note's text in a note's own editor: the type around it, so editing a
+   note at the chapter's foot changes nothing about how it looks. */
+.cm-mode-regular .cm-note .usfm-ft {
+  font: inherit;
+  color: inherit;
+}
 .cm-mode-regular .usfm-ft {
   color: var(--editor-ink);
   font:
@@ -1010,8 +1031,15 @@
   padding-top: 4em;
   padding-bottom: 2em;
 }
-.cm-mode-regular .usfm-chap-named .usfm-num-c::before {
-  content: var(--usfm-chapter-label, "Chapter") " ";
+/* The word before the number ("Chapter", "Psalm"), typed into where it
+   reads (`ChapterWordWidget`, core/decorations.ts). */
+.cm-mode-regular .usfm-chap-word-wrap {
+  position: relative;
+}
+.cm-mode-regular .usfm-chap-word-wrap:not(.usfm-chap-word-line) {
+  font: 700 1.6em/1 var(--font-scripture);
+  color: var(--editor-accent);
+  letter-spacing: -0.02em;
 }
 .cm-mode-regular .usfm-chap-named .usfm-num-c {
   font-size: 1.6em;
@@ -1019,21 +1047,13 @@
 /* A title whose label reads differently from the rest (`flaggedTitles`,
    recipes/lint.ts): the info squiggle its hidden label line cannot show. */
 .cm-mode-regular .usfm-chap-flagged .usfm-chap-label,
+.cm-mode-regular .usfm-chap-flagged .usfm-chap-word,
 .cm-mode-regular .usfm-chap-flagged .usfm-num-c {
   text-decoration: underline wavy;
   text-decoration-thickness: 1px;
   text-decoration-skip-ink: none;
   text-decoration-color: var(--brand-base);
   text-underline-offset: 0.15em;
-}
-/* A title the host opens (Sefer's chapter labels dialog) reads as a link. */
-.cm-mode-regular.cm-titles-open .usfm-chap .usfm-chap-label,
-.cm-mode-regular.cm-titles-open .usfm-chap-named .usfm-num-c {
-  cursor: pointer;
-}
-.cm-mode-regular.cm-titles-open .usfm-chap .usfm-chap-label:hover,
-.cm-mode-regular.cm-titles-open .usfm-chap-named .usfm-num-c:hover {
-  text-decoration: underline;
 }
 /* The chapter has its own label: the number's line is hidden and the label,
    drawn on it, is the chapter's title. */
@@ -1185,14 +1205,6 @@
   font-style: normal;
 }
 
-/* The row a followed caller landed on. A brief tint, not a permanent mark:
-   it answers "which one" and then gets out of the way. */
-.cm-mode-regular .usfm-note-found {
-  background: var(--surface-highlight);
-  border-radius: 4px;
-  transition: background 220ms ease-out;
-}
-
 /* The note being edited in place: a satellite over the note's own span, in the
    row's slot. It has no card of its own — the row IS the card — so the view
    inside it drops the page's chrome the way an excerpt does. */
@@ -1228,8 +1240,9 @@
   vertical-align: top;
 }
 
-.cm-mode-regular .usfm-note-editing .usfm-note-body,
-.cm-mode-regular .usfm-note-editing .usfm-note-ref {
+/* Editing a note at the chapter's foot swaps its text for the same text,
+   typeable: the mark and the reference stay where they are. */
+.cm-mode-regular .usfm-note-editing .usfm-note-body {
   display: none;
 }
 
@@ -1248,18 +1261,14 @@
   cursor: pointer;
   vertical-align: top;
 }
+.cm-mode-regular .usfm-note-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
 .cm-mode-regular .usfm-note-done:hover {
   background: var(--button-secondary-surface-hover);
 }
-/* The note being edited. The one literal colour the palette port left behind
-   in regular mode: a hard-coded amber that stayed light-mode amber on a dark
-   card. It is the warning line at half strength, so it follows the theme like
-   every other ring on this surface. */
-.cm-mode-regular .usfm-note-editing {
-  outline: 1px solid color-mix(in srgb, var(--editor-warn-line) 50%, transparent);
-  border-radius: 2px;
-}
-
 /* The box grows with what is typed into it, and never scrolls inside itself.
    It was a fixed `inline-block` with CodeMirror's own scroller in it, so a
    note of two sentences was a keyhole with a scrollbar. `height: auto` lets
@@ -1441,28 +1450,6 @@
 .cm-host .cm-editor .cm-lintRange-active {
   background-color: color-mix(in srgb, var(--brand-base) 20%, transparent);
   border-radius: 2px;
-}
-
-/* A finding's mark at the left edge, level with its row (recipes/findingMarks):
-   colour and shape (circle, triangle, square) for scanning; a finding is acted
-   on where it is drawn. */
-.cm-host .cm-editor .cm-finding-dots {
-  pointer-events: none;
-}
-.cm-host .cm-editor .cm-finding-dot {
-  mask-position: center;
-  mask-repeat: no-repeat;
-  mask-size: contain;
-  background-color: var(--brand-base);
-  mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect x="5" y="5" width="30" height="30" rx="6" fill="black"/></svg>');
-}
-.cm-host .cm-editor .cm-finding-dot-error {
-  background-color: var(--on-surface-error);
-  mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><circle cx="20" cy="20" r="16" fill="black"/></svg>');
-}
-.cm-host .cm-editor .cm-finding-dot-warning {
-  background-color: var(--on-surface-warning);
-  mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><path d="M20 3 L38 36 L2 36 Z" fill="black"/></svg>');
 }
 
 /* The lint panel (the `F8`/"open diagnostics" list at the bottom). */
@@ -1955,4 +1942,172 @@
 .cm-typed-usfm-wrong {
   color: #c62828;
   text-decoration: wavy underline;
+}
+
+/* A note opened from its letter in the text (recipes/noteEditor.ts): the
+   note's own editor in a popover under the letter. */
+.cm-mode-regular .usfm-note-pop {
+  position: absolute;
+  z-index: 20;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: min(400px, calc(100% - 16px));
+  padding: 10px 12px;
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  background: var(--surface-primary);
+  color: var(--on-surface-primary);
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.16);
+  font: 400 14px/1.5 var(--font-ui);
+}
+.cm-mode-regular .usfm-note-pop .usfm-note-edit {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+/* The popover's buttons are md (48px, 14px type, 20px icons), on their own
+   row under the note so the text keeps the width (Thomas, 2026-10-30). */
+.cm-mode-regular .usfm-note-pop {
+  flex-wrap: wrap;
+  align-items: center;
+}
+.cm-mode-regular .usfm-note-pop .usfm-note-done {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  margin-left: 0;
+  padding: 0 16px;
+  font: 500 14px/1 var(--font-ui);
+  border-radius: 8px;
+}
+.cm-mode-regular .usfm-note-pop .usfm-note-remove-pop {
+  margin-left: auto;
+}
+.cm-mode-regular .usfm-note-pop .usfm-note-save svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* The Footnote button over a selection (recipes/footnoteButton.ts). */
+.cm-host .cm-editor .cm-tooltip.usfm-footnote-button,
+.cm-host .cm-editor .cm-tooltip:has(> .usfm-footnote-button) {
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  background: var(--surface-primary);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.14);
+  overflow: hidden;
+}
+.cm-host .cm-editor .usfm-footnote-button button {
+  min-height: 48px;
+  padding: 0 16px;
+  border: 0;
+  background: transparent;
+  color: var(--on-surface-primary);
+  font: 500 14px/1 var(--font-ui);
+  cursor: pointer;
+}
+.cm-host .cm-editor .usfm-footnote-button button:hover {
+  background: var(--surface-highlight);
+}
+
+/* A note's Remove at the chapter's foot: quiet until the row is pointed at
+   or being edited, so a list of notes reads as text. */
+.cm-mode-regular .usfm-note-remove {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  margin-inline-start: 0.5em;
+  padding: 0 0.4em;
+  border: 0;
+  background: transparent;
+  color: var(--editor-faint);
+  font: 400 12px/1.72 var(--font-ui);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+.cm-mode-regular .usfm-note:hover .usfm-note-remove,
+.cm-mode-regular .usfm-note-editing .usfm-note-remove,
+.cm-mode-regular .usfm-note-remove:focus-visible {
+  opacity: 1;
+}
+.cm-mode-regular .usfm-note-remove:hover {
+  color: var(--on-surface-error);
+  text-decoration: underline;
+}
+
+/* The verse a note's reference went back to, lit and then let go (recipes/noteEditor.ts). */
+.cm-mode-regular .usfm-verse-flash {
+  border-radius: 2px;
+  animation: usfm-verse-flash 1.6s ease-out forwards;
+}
+@keyframes usfm-verse-flash {
+  0%,
+  60% {
+    background-color: rgb(255 214 102 / 0.45);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+/* Words typed into where they read (core/inPlace.ts): no box, no change of
+   look; the caret is the only sign, and a hover a faint underline. */
+.cm-mode-regular .usfm-in-place {
+  outline: none;
+  cursor: text;
+  border-radius: 2px;
+}
+.cm-mode-regular .usfm-in-place:hover:not(:focus) {
+  text-decoration: underline dotted;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.15em;
+}
+.cm-mode-regular .usfm-in-place:empty::before {
+  content: attr(data-placeholder);
+  color: var(--editor-faint);
+}
+
+/* A new chapter word asks once: this book, or every book (core/chapterWord.ts). */
+.cm-mode-regular .usfm-chapter-ask {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 8px);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 8px 16px;
+  white-space: nowrap;
+  font: 400 14px/1.4 var(--font-ui);
+  letter-spacing: 0;
+  color: var(--on-surface-primary);
+  background: var(--surface-primary);
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.16);
+}
+.cm-mode-regular .usfm-chapter-ask button {
+  min-height: 48px;
+  padding: 0 16px;
+  font: 500 14px/1 var(--font-ui);
+  color: var(--button-secondary-on-surface);
+  background: var(--surface-primary);
+  border: 1px solid var(--button-secondary-border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.cm-mode-regular .usfm-chapter-ask button:hover {
+  background: var(--button-secondary-surface-hover);
+}
+
+/* The book's name at the top of the text (`BookNameWidget`, core/frontmatter.ts):
+   the book's main title, typed into where it reads. */
+.cm-mode-regular .usfm-book-name {
+  max-width: var(--editor-measure);
+  margin: 0 auto;
+  padding: 1.5em 0 0;
+  font: 700 2em/1.2 var(--font-scripture);
+  color: var(--editor-ink);
+  letter-spacing: -0.01em;
 }

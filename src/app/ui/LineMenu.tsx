@@ -3,7 +3,7 @@ import { For, Show } from "solid-js";
 
 import { m } from "#app/paraglide/messages";
 
-import { Menu, MenuLabel, MenuRadio, MenuSeparator } from "./primitives";
+import { Menu, MenuItem, MenuLabel, MenuRadio, MenuSeparator } from "./primitives";
 import { nameBlock } from "./workspace/blockNames";
 
 /** Where the menu was asked for: the press's point, and the line under it. */
@@ -17,7 +17,8 @@ export interface LineMenuAt {
 /**
  * The editor's right-click menu, after Notion's: what this line is, and what
  * it can turn into. Turning only renames the line's marker, so its words stay
- * where they are. Opened at the press's point by an invisible anchor there.
+ * where they are. Add footnote puts a note at the end of the selection, or at
+ * the press. Opened at the press's point by an invisible anchor there.
  */
 export function LineMenu(props: {
   readonly editor: BookEditorMount;
@@ -41,6 +42,13 @@ export function LineMenu(props: {
         fitViewport
         trigger={<span class="block size-px" aria-hidden="true" />}
       >
+        <MenuItem
+          data-testid="line-menu-footnote"
+          onSelect={() => props.editor.addFootnote(props.at.offset)}
+        >
+          {m.line_menu_footnote()}
+        </MenuItem>
+        <MenuSeparator />
         <MenuLabel>{m.line_menu_current()}</MenuLabel>
         <p class="px-3 pb-2 text-small font-semibold text-on-surface-primary" data-line-kind>
           {nameBlock(props.at.line.kind)}

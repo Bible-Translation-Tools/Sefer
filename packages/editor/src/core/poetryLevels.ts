@@ -1,18 +1,26 @@
-import type { EditorState, StateCommand, TransactionSpec } from "@codemirror/state";
+import {
+  type ChangeSpec,
+  EditorSelection,
+  type EditorState,
+  type StateCommand,
+  type TransactionSpec,
+} from "@codemirror/state";
 import type { KeyBinding } from "@codemirror/view";
 
 import { structureAt, type Block, type DocStructure } from "./docStructure";
-import { blockAt, isVisual, trusted } from "./kernel";
+import { blockAt, isVisual, nl, trusted } from "./kernel";
 import { assignmentAt } from "./registry";
 
 /**
  * Poetry levels in Refine, the way Word indents a list: Tab moves the line one
  * level in (`\p` → `\q1` → `\q2`), Shift-Tab one level out, and Enter on an
- * empty poetry line, or Backspace at a poetry line's start, steps out a level. Only the
- * line's marker is rewritten; no tab character is ever written.
+ * empty poetry line, or Backspace at a poetry line's start, steps out one
+ * level (`\q2` → `\q1` → `\p`). No tab character is ever written.
  *
- * "A line" is the block the caret is in, whole, wherever in it the caret
- * sits; a selection changes every block it touches. Level 3 and 4 exist only
+ * Tab moves only the verse the caret is in (Thomas, 2026-10-30): a line of
+ * several verses is split around it, the verse on a line of its own at the
+ * new level and the verses after it on a new line of the old kind. A
+ * selection over several lines moves each line it touches, whole. Level 3 and 4 exist only
  * in a book that already has a `\q3` or `\q4`. USFM mode keeps raw Tab, and
  * Form Mode and tables keep their own (they are bound ahead of this).
  */
@@ -98,8 +106,32 @@ const shift =
   ({ state, dispatch }) => {
     if (!inRefine(state)) return false;
     const structure = structureAt(state);
+    const touched = touchedBlocks(state, structure);
+    const only = touched.length === 1 ? touched[0] : undefined;
+    if (only !== undefined && state.selection.ranges.length === 1) {
+      const level = levelOf(only.kind);
+      if (level !== null && only.lines[0]?.marker != null) {
+        const { max, bare } = bookHabits(structure);
+        const next = Math.min(max, Math.max(0, level + step));
+        if (next === level) return true;
+        const split = splitAroundVerse(state, only, state.selection.main.head, spell(next, bare));
+        if (split !== null) {
+          const changes = state.changes(split);
+          dispatch(
+            state.update({
+              changes,
+              selection: EditorSelection.cursor(changes.mapPos(state.selection.main.head, 1)),
+              annotations: trusted.of("poetry-level"),
+              userEvent: "input.usfm.reparent",
+              scrollIntoView: true,
+            }),
+          );
+          return true;
+        }
+      }
+    }
     const changes = [];
-    for (const b of touchedBlocks(state, structure)) {
+    for (const b of touched) {
       const level = levelOf(b.kind);
       const head = b.lines[0];
       if (level === null || head === undefined || head.marker === null) continue;
@@ -121,10 +153,42 @@ const shift =
     return true;
   };
 
+/**
+ * The changes that put the verse holding `at` on a line of its own as `kind`,
+ * the verses after it on a new line of the block's old kind; null when the
+ * block holds one verse or fewer (then the marker alone is rewritten).
+ */
+function splitAroundVerse(
+  state: EditorState,
+  b: Block,
+  at: number,
+  kind: string,
+): ChangeSpec[] | null {
+  const text = state.doc.sliceString(b.contentFrom, b.to);
+  const starts = [b.contentFrom];
+  for (const match of text.matchAll(/\\v[ \t]/g)) {
+    const pos = b.contentFrom + match.index;
+    if (pos > b.contentFrom) starts.push(pos);
+  }
+  if (starts.length < 2) return null;
+  const i = starts.findLastIndex((start) => start <= at);
+  const from = starts[i] ?? b.contentFrom;
+  const to = starts[i + 1];
+  // A break replaces the spaces or line break before it: `a \v 2` → `a` / `\q1 \v 2`.
+  const breakAt = (pos: number, marker: string): ChangeSpec => {
+    let start = pos;
+    while (start > b.contentFrom && /\s/.test(state.doc.sliceString(start - 1, start))) start--;
+    return { from: start, to: pos, insert: `${nl(state)}\\${marker} ` };
+  };
+  const changes: ChangeSpec[] = [i === 0 ? remark(b, kind) : breakAt(from, kind)];
+  if (to !== undefined) changes.push(breakAt(to, b.kind));
+  return changes;
+}
+
 /** Before a line's first word: nothing, or only the verse number that opens it. */
 const NO_WORDS_YET = /^\s*(\\v([ \t]+[\w-]*)?[ \t]*)?$/;
 
-/** Enter on an empty poetry line (a verse number alone still counts as empty) leaves poetry: `\q2` → `\p`. */
+/** Enter on an empty poetry line (a verse number alone still counts as empty) steps out one level: `\q2` → `\q1` → `\p`. */
 const stepOutOfEmptyPoetry: StateCommand = ({ state, dispatch }) => {
   if (!inRefine(state)) return false;
   const sel = state.selection.main;
@@ -137,7 +201,7 @@ const stepOutOfEmptyPoetry: StateCommand = ({ state, dispatch }) => {
   if (!NO_WORDS_YET.test(state.doc.sliceString(b.contentFrom, b.to))) return false;
   dispatch(
     state.update({
-      changes: remark(b, FLOOR),
+      changes: remark(b, spell(level - 1, bookHabits(structure).bare)),
       annotations: trusted.of("poetry-level"),
       userEvent: "input.usfm.reparent",
       scrollIntoView: true,
@@ -147,8 +211,8 @@ const stepOutOfEmptyPoetry: StateCommand = ({ state, dispatch }) => {
 };
 
 /**
- * Backspace at the very start of a poetry line leaves poetry, as Word takes a
- * bullet off before it joins lines: `\q2` → `\p`, and only then does
+ * Backspace at the very start of a poetry line steps out one level, as Word
+ * takes a bullet off before it joins lines: `\q2` → `\q1` → `\p`, and only then does
  * Backspace join the line above. "The start" is anywhere before the
  * line's first word: before, inside or after a verse number opening the line.
  */
@@ -165,7 +229,7 @@ const stepOutAtLineStart: StateCommand = ({ state, dispatch }) => {
   if (!NO_WORDS_YET.test(before)) return false;
   dispatch(
     state.update({
-      changes: remark(b, FLOOR),
+      changes: remark(b, spell(level - 1, bookHabits(structure).bare)),
       annotations: trusted.of("poetry-level"),
       userEvent: "input.usfm.reparent",
       scrollIntoView: true,

@@ -16,9 +16,11 @@ import {
 } from "@sefer/text/engine/analysis";
 
 import { blockHost } from "./blockHost";
+import { chapterWordTyped, writeOwnLabel } from "./chapterWord";
 import { lineIndexAt, type DocStructure, type NoteRange } from "./docStructure";
 import { figureSource } from "./figures";
 import type { DocLine, WordRange } from "./fold";
+import { inPlaceWords } from "./inPlace";
 import { trusted } from "./kernel";
 import type { DocPlan, PlanSpan, ResolvedSlot } from "./plan";
 import type { WidgetKey } from "./registry";
@@ -341,7 +343,7 @@ class CallerWidget extends WidgetType {
     span.className = `usfm-caller usfm-caller-${this.kind}`;
     span.dataset["noteAt"] = String(this.at);
     span.textContent = this.mark;
-    span.title = "click to read this note at the foot of the chapter";
+    span.title = "click to read or edit this note";
     span.onmousedown = (e) => {
       e.preventDefault();
       toggleNote(view, this.at, "caller");
@@ -360,6 +362,29 @@ export function noteApparatusText(doc: string, note: NoteRange, part: number): s
 }
 
 const EMPTY_NOTE_BODY = "Add note text";
+
+/** The book's short name, as its running header gives it: `\h`, else `\toc2`, else `\id`'s code. */
+const bookNameOf = (doc: string): string =>
+  (/\\h[ \t]+([^\n\\]+)/.exec(doc) ??
+    /\\toc2[ \t]+([^\n\\]+)/.exec(doc) ??
+    /\\id[ \t]+(\S+)/.exec(doc))?.[1]?.trim() ?? "";
+
+/**
+ * Where a note is, as a reader cites it: `Luke 3:4`. The note's row shows it
+ * as the link back to its letter, whatever its own `\fr` says.
+ */
+export function noteReference(doc: string, structure: DocStructure, at: number): string {
+  const chapter = structure.chapters.findLast((row) => row.from <= at);
+  const c =
+    chapter === undefined
+      ? undefined
+      : /^\\c[ \t]+(\d+)/.exec(doc.slice(chapter.from, chapter.from + 16))?.[1];
+  const verse = structure.verses.findLast(
+    (row) => row.markerFrom <= at && (chapter === undefined || row.markerFrom >= chapter.from),
+  )?.num;
+  const place = c === undefined ? (verse ?? "") : verse == null ? c : `${c}:${verse}`;
+  return [bookNameOf(doc), place].filter((part) => part !== "").join(" ");
+}
 
 /**
  * Paints one apparatus row's body span.
@@ -399,12 +424,16 @@ class NotesWidget extends WidgetType {
       const row = document.createElement("div");
       row.className = "usfm-note";
       row.dataset.noteRow = String(n.from);
-      row.title = "click the note to edit it, or its number to go back to the text";
+      row.title = "click the note to edit it, or its reference to go back to the text";
       row.onmousedown = (e) => {
         // SAFETY: a mousedown on a rendered row always targets an element inside it; `closest` is the only thing read from it.
         const target = e.target as HTMLElement;
         if (target.closest(".usfm-note-edit") || target.closest(".usfm-note-done")) return;
         e.preventDefault();
+        if (target.closest(".usfm-note-remove") !== null) {
+          toggleNote(view, n.from, "remove");
+          return;
+        }
         toggleNote(view, n.from, target.closest(".usfm-note-body") === null ? "back" : "edit");
       };
       for (const [cls, text] of [
@@ -422,6 +451,11 @@ class NotesWidget extends WidgetType {
       const slot = document.createElement("span");
       slot.className = "usfm-note-edit";
       row.append(slot);
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "usfm-note-remove";
+      remove.textContent = "Remove";
+      row.append(remove);
       box.append(row);
     }
     return blockHost(box);
@@ -454,11 +488,12 @@ class NotesWidget extends WidgetType {
 /**
  * What a reader meant by clicking a note.
  *
- * `caller` is a click on the superscript in the text — follow it down to the
- * apparatus. `back` is a click on a row's mark or its reference — go back up to
+ * `caller` is a click on the superscript in the text — open the note in a
+ * popover there. `back` is a click on a row's mark or its reference — go back up to
  * the caller. `edit` is a click on a row's BODY — open it for typing.
+ * `remove` is its Remove button — take the note out.
  */
-export type NoteGesture = "caller" | "back" | "edit";
+export type NoteGesture = "caller" | "back" | "edit" | "remove";
 
 let toggleNote: (view: EditorView, at: number, how: NoteGesture) => void = () => {};
 export function setNoteToggler(toggle: typeof toggleNote) {
@@ -891,7 +926,7 @@ export function buildRegular(
         widget: new NotesWidget(
           ap.notes.map((n) => ({
             mark: n.mark,
-            ref: noteApparatusText(doc, n, NOTE_PART.ORIGIN),
+            ref: noteReference(doc, structure, n.from),
             body: noteApparatusText(doc, n, NOTE_PART.BODY),
             from: n.from,
           })),
@@ -1070,10 +1105,20 @@ function nameChapters(
     for (const label of chapter.labels)
       if (doc.slice(label.contentFrom, label.to).trim() !== "")
         hides.push({ from: Math.max(0, label.from - 1), to: label.to });
-    if (chapter.own === undefined) add.push({ from: line.from, to: line.from, deco: namedDeco });
-    else titled.push({ at: line.from, to: line.to, own: chapter.own });
+    if (chapter.own === undefined) {
+      add.push({ from: line.from, to: line.from, deco: namedDeco });
+      // The word before the number, typed into where it reads (`chapterWordTyped`).
+      const row = structure.chapters.find((c) => c.from >= line.from && c.from <= line.to);
+      if (row !== undefined && row.label !== "")
+        add.push({
+          from: row.labelFrom,
+          to: row.labelFrom,
+          deco: Decoration.widget({ widget: new ChapterWordWidget(bookLabel), side: -1 }),
+        });
+    } else titled.push({ at: line.from, to: line.to, own: chapter.own });
   }
   for (const title of titled) hides.push({ from: title.at, to: title.to });
+  wordLines(doc, structure, bookLabel, add, outside);
   if (hides.length === 0) return;
   // Hides already inside one (the marker, the number) and a hidden line's own
   // line class go first: of two that overlap only the earlier is kept.
@@ -1094,28 +1139,115 @@ function nameChapters(
     add.push({
       from: title.to,
       to: title.to,
-      deco: Decoration.widget({ widget: new ChapterTitleWidget(title.own), side: 1 }),
+      deco: Decoration.widget({ widget: new ChapterTitleWidget(title.own, title.at), side: 1 }),
     });
   }
 }
 
-/** A chapter's own label, drawn as its title on its `\\c` line. */
+/**
+ * The book's own `\\cl` line, before its first chapter: its word typed into
+ * where it reads, as on a title, asking this book or every book.
+ */
+function wordLines(
+  doc: string,
+  structure: DocStructure,
+  bookLabel: string,
+  add: Pending[],
+  outside: (from: number, to: number) => boolean,
+): void {
+  if (bookLabel === "") return;
+  const first = structure.chapters.find((row) => row.label !== "")?.from ?? doc.length;
+  for (const line of structure.lines) {
+    if (line.from >= first) break;
+    if (line.marker !== "cl" || line.to <= line.contentFrom) continue;
+    if (outside(line.contentFrom, line.to)) continue;
+    for (let k = add.length - 1; k >= 0; k--)
+      if (add[k].from >= line.contentFrom && add[k].to <= line.to && add[k].to > add[k].from)
+        add.splice(k, 1);
+    add.push({
+      from: line.contentFrom,
+      to: line.to,
+      deco: Decoration.replace({ widget: new ChapterWordWidget(bookLabel, false) }),
+    });
+  }
+}
+
+/** A chapter's own label, drawn as its title on its `\\c` line, and typed into there. */
 class ChapterTitleWidget extends WidgetType {
-  constructor(readonly words: string) {
+  constructor(
+    readonly words: string,
+    readonly at: number,
+  ) {
     super();
   }
   eq(other: ChapterTitleWidget) {
-    return other.words === this.words;
+    return other.words === this.words && other.at === this.at;
   }
-  toDOM() {
-    const span = document.createElement("span");
-    span.className = "usfm-chap-label";
-    span.textContent = this.words;
-    return span;
+  toDOM(view: EditorView) {
+    // Wrapped: CodeMirror makes a widget's own root not editable.
+    const wrap = document.createElement("span");
+    // "icipandwa 1", "Psalm 3": the book's word and the number. Only the word
+    // is typed into, and a new one asks this book or every book.
+    const split = /^(.*\S)\s+(\p{Nd}+)$/u.exec(this.words);
+    if (split !== null) {
+      const word = split[1];
+      wrap.className = "usfm-chap-label";
+      const span = inPlaceWords({
+        value: word,
+        className: "usfm-chap-label-word",
+        commit: (typed) => chapterWordTyped(view, typed, span, () => (span.textContent = word)),
+      });
+      wrap.style.position = "relative";
+      wrap.append(span, ` ${split[2]}`);
+      return wrap;
+    }
+    wrap.append(
+      inPlaceWords({
+        value: this.words,
+        className: "usfm-chap-label",
+        commit: (typed, span) => {
+          if (typed === "") span.textContent = this.words;
+          else writeOwnLabel(view, this.at, typed);
+        },
+      }),
+    );
+    return wrap;
   }
-  /** A press on the words is the title's (`titlesAreTheHosts`), not swallowed by the widget. */
   ignoreEvent() {
-    return false;
+    return true;
+  }
+}
+
+/**
+ * The book's word for its chapters ("Chapter", "Psalm"), before a chapter's
+ * number, typed into where it reads: a new word asks this book or every book.
+ */
+class ChapterWordWidget extends WidgetType {
+  constructor(
+    readonly bookLabel: string,
+    readonly beforeNumber = true,
+  ) {
+    super();
+  }
+  eq(other: ChapterWordWidget) {
+    return other.bookLabel === this.bookLabel && other.beforeNumber === this.beforeNumber;
+  }
+  toDOM(view: EditorView) {
+    const value = this.bookLabel === "" ? phrase(view.state, "verseLines.chapter") : this.bookLabel;
+    const wrap = document.createElement("span");
+    wrap.className = "usfm-chap-word-wrap";
+    const span = inPlaceWords({
+      value,
+      className: "usfm-chap-word",
+      commit: (typed) => chapterWordTyped(view, typed, span, () => (span.textContent = value)),
+    });
+    wrap.append(span);
+    if (this.beforeNumber) wrap.append(" ");
+    else wrap.classList.add("usfm-chap-word-line");
+    return wrap;
+  }
+  ignoreEvent() {
+    return true;
   }
 }
 

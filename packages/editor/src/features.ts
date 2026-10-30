@@ -2,6 +2,7 @@ import type { Extension } from "@codemirror/state";
 
 import { attributePopover } from "./recipes/attributePopover";
 import { type FigureSource, type FiguresOptions, figures } from "./recipes/figures";
+import { footnoteButton } from "./recipes/footnoteButton";
 import { type ChipRenderer, markupChips } from "./recipes/markupChips";
 import { tables } from "./recipes/tables";
 import { verseMenu } from "./recipes/verseMenu";
@@ -30,6 +31,8 @@ export {
 export interface FeatureOptions {
   readonly figures?: FiguresOptions;
   readonly chips?: ChipRenderer;
+  /** The selection's Footnote button, in the host's words. */
+  readonly footnoteLabel?: string;
 }
 
 /** Every feature, as Sefer mounts the editor: CodeMirror's `basicSetup`, for this editor. */
@@ -39,4 +42,5 @@ export const editorFeatures = (options: FeatureOptions = {}): readonly EditorFea
   figures(options.figures),
   tables(),
   markupChips(options.chips),
+  footnoteButton(options.footnoteLabel),
 ];
