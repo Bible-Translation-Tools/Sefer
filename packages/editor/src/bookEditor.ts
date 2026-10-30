@@ -134,8 +134,8 @@ export interface BookEditorMount extends EditorHandle {
    */
   renumberVerse(offset: number, number: string): boolean;
   /**
-   * How many verses each chapter is expected to have (`expectedVersesOf` a
-   * reference text): typed and pasted numbers past a chapter's last verse stay words.
+   * How many verses each chapter is expected to have (a reference text's last
+   * verse per chapter): typed and pasted numbers past a chapter's last verse stay words.
    */
   setExpectedVerses(expected: ExpectedVerses): void;
   /** Called with each marker written by typing USFM in Refine (`v`, `q2`). Returns the detach. */

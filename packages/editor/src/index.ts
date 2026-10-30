@@ -26,7 +26,7 @@ export {
 } from "./features";
 export { type Figure } from "./core/figures";
 export { type LineKind } from "./core/poetryLevels";
-export { expectedVersesOf, type ExpectedVerses } from "./core/expectedVerses";
+export type { ExpectedVerses } from "./core/expectedVerses";
 export { type UnsupportedMarkup } from "./core/unsupported";
 export { PHRASES, type EditorWords, type PhraseKey } from "./core/words";
 export { KEY_BUNDLES, type EditorMode, type KeyBundle } from "./core/keymaps";
