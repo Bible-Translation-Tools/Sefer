@@ -19,9 +19,10 @@ import {
 
 import { docText, structureAt, type DocStructure } from "./docStructure";
 import type { DocLine, VerseRow } from "./fold";
-import { isVisual, modeFacet, trusted } from "./kernel";
+import { fromHost, isVisual, modeFacet, trusted } from "./kernel";
 import { preferenceOn } from "./preferences";
 import { assignmentAt, isContainerClass } from "./registry";
+import { noteTr } from "./trace";
 
 /** The verse the caret is in: the last one whose marker starts at or before it, or -1 before the first. */
 export const verseIndexAt = (structure: DocStructure, pos: number): number => {
@@ -610,8 +611,11 @@ const chapterHeadingsAreFixed = EditorState.transactionFilter.of((tr) => {
   if (tr.startState.facet(modeFacet) !== "regular") return tr;
   // Trusted edits pass only from what writes headings or empty chapters on
   // purpose; a guarded Backspace is trusted too, and is exactly what must not reach a title.
+  // A host's trusted apply (an import, a Review apply, a recovery) was
+  // previewed or decided whole, and replaces headings as the person chose.
   const seal = tr.annotation(trusted);
   if (seal !== undefined && HEADING_WRITERS.has(seal)) return tr;
+  if (tr.annotation(fromHost) === true) return tr;
   const doc = docText(tr.startState);
   const structure = structureAt(tr.startState);
   const headings = chapterHeadings(doc, structure);
@@ -632,7 +636,14 @@ const chapterHeadingsAreFixed = EditorState.transactionFilter.of((tr) => {
         if (fromA === toA ? fromA > r.from && fromA < r.to : fromA < r.to && toA > r.from)
           touches = true;
     });
-    if (touches) return [];
+    if (touches) {
+      noteTr(tr, {
+        rule: "chapterHeadingsAreFixed",
+        verdict: "refused",
+        detail: "the edit touches a chapter's heading, which only its own writers change",
+      });
+      return [];
+    }
   }
   if (!tr.selection) return tr;
   const range = tr.selection.main;

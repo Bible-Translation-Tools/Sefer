@@ -38,7 +38,7 @@ import { historyLayer, judgeLayer, usfmEditorHeadless } from "./core/compose";
 import { docText, structureAt, type DocStructure } from "./core/docStructure";
 import { traceOf } from "./core/instrument";
 import { clearRefusal, lastRefusal, localTracer, tracer } from "./core/instrument";
-import { modeFacet, trusted } from "./core/kernel";
+import { fromHost, modeFacet, trusted } from "./core/kernel";
 import { assignment } from "./core/registry";
 import { withoutScrolling } from "./core/scroll";
 import {
@@ -267,7 +267,7 @@ export const editorBook = (plain: Book, options: EditorBookOptions): SeatedBook 
   const specFor = (changes: readonly Change[], origin: Origin, trust: Trust, event?: string) => {
     const annotations = [
       originAnnotation.of(origin),
-      ...(trust.trusted ? [trusted.of(trust.by)] : []),
+      ...(trust.trusted ? [trusted.of(trust.by), fromHost.of(true)] : []),
       ...(origin.startsWith("project.") ? [isolateHistory.of("full" as const)] : []),
     ];
     return {
