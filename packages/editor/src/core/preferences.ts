@@ -6,7 +6,7 @@ import { type EditorState, StateEffect, StateField } from "@codemirror/state";
  * each one gates). The host sets them at mount and changes them live.
  */
 export interface EditorPreferences {
-  /** "1", "v1", "verse 1" then a space writes that verse (`typedVerseNumbers`). */
+  /** "1", "v1", "verse 1" then a space writes that verse (`verseNumber.accept`). */
   readonly verseShortcuts: boolean;
 }
 

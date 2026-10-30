@@ -124,5 +124,8 @@
   "chapter_labels_review": "Review chapter labels…",
   "chapter_labels_fine_here": "Fine here",
   "chapter_labels_fine_everywhere": "“{word}” is fine everywhere",
-  "chapter_labels_fine_saved": "Hidden on this device"
+  "chapter_labels_fine_saved": "Hidden on this device",
+  "typed_usfm_title": "You're typing USFM",
+  "typed_usfm_message": "USFM mode shows every marker as you type it.",
+  "typed_usfm_switch": "Switch to USFM"
 }

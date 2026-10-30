@@ -8,9 +8,9 @@ import {
   type ViewUpdate,
 } from "@codemirror/view";
 
-import { blockHost } from "./blockHost";
-import { structureField, type DocStructure } from "./docStructure";
 import { isVisual, modeFacet, trusted } from "./kernel";
+import { structureField, type DocStructure } from "./model/docStructure";
+import { blockHost } from "./paint/blockHost";
 
 const FRONT_MARKERS = [
   "id",

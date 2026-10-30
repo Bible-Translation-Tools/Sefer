@@ -1,6 +1,6 @@
 import type { EditorView } from "@codemirror/view";
 
-import { structureAt } from "../core/docStructure";
+import { structureAt } from "../core/model/docStructure";
 
 /** A chapter, named. What a list of them carries. */
 export interface ChapterName {

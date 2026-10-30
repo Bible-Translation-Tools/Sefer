@@ -4,6 +4,7 @@ import {
   declaredVersion,
   deserialize,
 } from "@wycliffeassociates/scripture-kitchen/reader";
+import { Census } from "@wycliffeassociates/scripture-kitchen/toc-reader";
 import {
   Galley,
   attrs,
@@ -22,6 +23,7 @@ import wasmUrl from "@wycliffeassociates/scripture-kitchen/web/wasm?url";
 export const loadEngine = async (): Promise<{
   analyzeBook: (id: string) => (text: string) => Analysis;
   legacyMarkers: (texts: readonly string[]) => void;
+  lastVerses: (id: string) => ReadonlyMap<string, number>;
 }> => {
   initSync({ module: await (await fetch(wasmUrl)).arrayBuffer() });
   const handle = new Galley();
@@ -54,6 +56,20 @@ export const loadEngine = async (): Promise<{
       setCustomMarkers(
         customMarkers(used ? [{ name: "s5", category: "standalone" }] : [], { relaxZPrefix: true }),
       );
+    },
+    // As Sefer's `lastVerses` (src/app/ui/workspace/expectedVerses.ts): each
+    // chapter's last verse in the census of a text `analyzeBook` has read.
+    lastVerses: (id) => {
+      const out = new Map<string, number>();
+      const census = Census.open(handle.toc(id, { utf16: true }));
+      if (census.bookCount === 0) return out;
+      const book = census.book(0);
+      const rows = book.chapterRows;
+      for (let n = 1; n < book.chapterCount; n++) {
+        const row = rows.seek(n);
+        if (row.number > 0 && row.lastVerse > 0) out.set(String(row.number), row.lastVerse);
+      }
+      return out;
     },
     analyzeBook: (id) => {
       const analyze = analyzeBook(id);

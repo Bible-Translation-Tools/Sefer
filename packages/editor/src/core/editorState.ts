@@ -9,7 +9,9 @@ import {
 import { Decoration, type DecorationSet, EditorView } from "@codemirror/view";
 
 import { canonicalCaret } from "./caret";
-import { editableClipAt, pickField, visibleClipAt, type ClipRange } from "./clip";
+import { editableClipAt, pickField, visibleClipAt, type ClipRange } from "./guards/clip";
+import { type PaintPort, modeFacet } from "./kernel";
+import { docText, structureAt, structureField } from "./model/docStructure";
 import {
   type BuildOpts,
   DEFAULT_BUILD_OPTS,
@@ -17,18 +19,16 @@ import {
   buildUsfm,
   isIsolate,
   isUnit,
-} from "./decorations";
-import { docText, structureAt, structureField } from "./docStructure";
-import { type PaintPort, modeFacet } from "./kernel";
-import { paintOver, type PaintIndex } from "./paint";
-import { renderRangeAt, renderRangeField } from "./render";
+} from "./paint/decorations";
+import { paintOver, type PaintIndex } from "./paint/paint";
+import { renderRangeAt, renderRangeField } from "./paint/render";
 
 export { editableClipAt, pickField, structureAt, structureField, type ClipRange };
 
-import { type DocPlan, resolvePlan } from "./plan";
-import { PROJECTIONS, assignment, assignmentAt } from "./registry";
-import { span } from "./timing";
-import { stateFailed } from "./trace";
+import { span } from "./instrument/timing";
+import { stateFailed } from "./instrument/trace";
+import { PROJECTIONS, assignment, assignmentAt } from "./model/registry";
+import { type DocPlan, resolvePlan } from "./paint/plan";
 
 export const optsFacet = Facet.define<BuildOpts, BuildOpts>({
   combine: (v) => v[0] ?? DEFAULT_BUILD_OPTS,

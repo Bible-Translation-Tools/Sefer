@@ -1,4 +1,3 @@
-import { isolateHistory } from "@codemirror/commands";
 import type { Diagnostic } from "@codemirror/lint";
 import {
   ChangeSet,
@@ -9,19 +8,12 @@ import {
   Transaction,
   type TransactionSpec,
 } from "@codemirror/state";
-import {
-  EditorView,
-  type KeyBinding,
-  type LayerMarker,
-  layer,
-  RectangleMarker,
-} from "@codemirror/view";
+import { EditorView, type LayerMarker, layer, RectangleMarker } from "@codemirror/view";
 
-import { docText, structureAt, type DocStructure } from "./docStructure";
-import type { DocLine, VerseRow } from "./fold";
 import { isVisual, modeFacet, trusted } from "./kernel";
-import { preferenceOn } from "./preferences";
-import { assignmentAt, isContainerClass } from "./registry";
+import { docText, structureAt, type DocStructure } from "./model/docStructure";
+import type { DocLine, VerseRow } from "./model/fold";
+import { assignmentAt, isContainerClass } from "./model/registry";
 
 /** The verse the caret is in: the last one whose marker starts at or before it, or -1 before the first. */
 export const verseIndexAt = (structure: DocStructure, pos: number): number => {
@@ -99,20 +91,19 @@ const verseFinish: VerseMove = (structure, doc, here) =>
   here >= 0 ? verseEnd(structure, doc, here) : undefined;
 
 /**
- * Line-by-line's keys (the form-mode plan's table): Enter and Shift-Enter step
+ * Line-by-line's commands (the form-mode plan's table; their keys are
+ * `keymaps.ts`'s): Enter and Shift-Enter step
  * a verse, Tab and Shift-Tab step to an empty verse, Home and End stay inside
  * the verse. Nothing here edits; a key with nowhere to go is consumed.
  */
-export function verseLineKeys(): readonly KeyBinding[] {
-  return [
-    { key: "Enter", run: inVerseLines(nextVerse) },
-    { key: "Shift-Enter", run: inVerseLines(previousVerse) },
-    { key: "Tab", run: inVerseLines(nextEmptyVerse) },
-    { key: "Shift-Tab", run: inVerseLines(previousEmptyVerse) },
-    { key: "Home", run: inVerseLines(verseStart) },
-    { key: "End", run: inVerseLines(verseFinish) },
-  ];
-}
+export const verseLineCommands = {
+  "verse.next": inVerseLines(nextVerse),
+  "verse.previous": inVerseLines(previousVerse),
+  "verse.nextEmpty": inVerseLines(nextEmptyVerse),
+  "verse.previousEmpty": inVerseLines(previousEmptyVerse),
+  "verse.start": inVerseLines(verseStart),
+  "verse.end": inVerseLines(verseFinish),
+};
 
 const isVerseLines = (state: EditorState): boolean => assignmentAt(state).verseLines;
 
@@ -344,65 +335,6 @@ const caretBesideEmptyChapterVerse = EditorState.transactionFilter.of((tr) => {
   if (chapter?.field === undefined) return tr;
   if (range.head === chapter.field.from && range.assoc === -1) return tr;
   return [tr, { selection: EditorSelection.cursor(chapter.field.from, -1), sequential: true }];
-});
-
-/** "1", "1.", "v1", "v 1", "verse 1" at the end of what is before the caret, as its own word. */
-const TYPED_VERSE = /(^|\s)((?:verse\s*|v\s*)?(\d{1,3})\.?)$/i;
-/** A marker (and its number) just before: `\\v 4 ` is USFM already, not a typed number. */
-const MARKER_BEFORE = /\\[A-Za-z]+\d*(?:\s+[\d-]+)?\s*$/;
-/** Just after `\\v N`, its own number again: the reader retyping what is shown. */
-const SAME_VERSE_BEFORE = /\\v\s+(\d+)\s*$/;
-
-/**
- * Verse numbers typed the way people write them without USFM — "1", "1.",
- * "v1", "v 1", "verse 1" — become a verse (`\\v N`) on the space after them,
- * but only for the verse that comes next in this chapter (the one after the
- * caret's verse, or 1 before any) and only when the chapter has no such verse
- * yet. "7000" in chapter 3, a number out of order, or "12" in "12 disciples"
- * at verse 4 stay words. Undo takes the verse back to what was typed. Refine
- * and line by line; USFM is typed as USFM.
- */
-const typedVerseNumbers = EditorView.inputHandler.of((view, from, to, text) => {
-  if (text !== " " || from !== to || view.state.facet(modeFacet) !== "regular") return false;
-  if (!preferenceOn(view.state, "verseShortcuts")) return false;
-  const line = view.state.doc.lineAt(from);
-  const before = view.state.doc.sliceString(line.from, from);
-  const typed = TYPED_VERSE.exec(before);
-  if (typed === null) return false;
-  const tokenFrom = line.from + typed.index + typed[1].length;
-  const ahead = before.slice(0, tokenFrom - line.from);
-  const number = Number(typed[3]);
-  const same = SAME_VERSE_BEFORE.exec(ahead);
-  if (same !== null && Number(same[1]) === number) {
-    // "1 " typed straight after the `\\v 1` an empty chapter just wrote: already that verse.
-    view.dispatch({
-      changes: { from: tokenFrom, to: from },
-      selection: EditorSelection.cursor(tokenFrom),
-      userEvent: "input.type",
-    });
-    return true;
-  }
-  if (MARKER_BEFORE.test(ahead)) return false;
-  const structure = structureAt(view.state);
-  const chapter = structure.chapters.findLast((row) => row.from <= from);
-  const start = chapter?.from ?? 0;
-  const end = chapter?.to ?? view.state.doc.length;
-  let previous = 0;
-  for (const verse of structure.verses) {
-    if (verse.markerFrom < start || verse.markerFrom > end) continue;
-    const last = Number((verse.num ?? "").split("-").pop());
-    if (Number.isFinite(last) && last === number) return false;
-    if (verse.markerFrom < from && Number.isFinite(last)) previous = last;
-  }
-  if (number !== previous + 1) return false;
-  const insert = `\\v ${number} `;
-  view.dispatch({
-    changes: { from: tokenFrom, to: from, insert },
-    selection: EditorSelection.cursor(tokenFrom + insert.length),
-    annotations: [trusted.of("typed-verse"), isolateHistory.of("before")],
-    userEvent: "input.type.verse",
-  });
-  return true;
 });
 
 /** `cm-line-by-line` and `cm-number-menus` on the editor, for what the stylesheet does only there. */
@@ -931,7 +863,6 @@ export const verseLineBehaviour: Extension = [
   emptiedChaptersKeepVerseOne,
   typeIntoEmptyChapter,
   caretBesideEmptyChapterVerse,
-  typedVerseNumbers,
   typeIntoEmptyVerse,
   labelsStayPut,
   pasteAsOneLine,

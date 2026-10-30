@@ -7,9 +7,9 @@ import {
 } from "@codemirror/state";
 import { Decoration, EditorView, type DecorationSet } from "@codemirror/view";
 
-import type { DocStructure } from "../core/docStructure";
 import { structureAt } from "../core/editorState";
 import { blockAt } from "../core/kernel";
+import type { DocStructure } from "../core/model/docStructure";
 import { blockIsEmpty } from "./emptyBlocks";
 import { rangeDecorations } from "./rangeDecorations";
 

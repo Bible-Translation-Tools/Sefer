@@ -41,7 +41,7 @@ Sefer resolves an address in three hand-rolled ways today:
 ```
 ~ packages/text/src/location/locate.ts -- resolve(toc, address), 418 lines; keep types + tocUnits/addressAt, drop resolve and its helpers
 ~ packages/editor/src/bookEditor.ts -- revealAddress calls resolve; placeOf is a second resolver (chapter label + verse num, by hand)
-~ packages/editor/src/recipes/align.ts -- three resolve calls
+~ packages/editor/src/surfaces/align.ts -- three resolve calls
 ~ src/app/shell/reader.ts -- arriveAt: resolve, then showChapter + aim
 ~ src/core/excerpts/excerpts.ts -- two resolve calls
 ~ src/core/search/expect.ts

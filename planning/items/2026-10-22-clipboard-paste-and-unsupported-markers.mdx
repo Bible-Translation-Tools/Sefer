@@ -135,10 +135,10 @@ The private flavour is what Sefer's own paste prefers; everything else reads the
 
 The paste is still one `input.paste` transaction, so the rules that judge pastes today still
 judge it: `refuseMarkupPastedInsideAWord` and `refusePastesThatWouldAddAChapter`
-(`packages/editor/src/core/input.ts`), and line by line's `pasteAsOneLine`
+(`packages/editor/src/core/guards/input.ts`), and line by line's `pasteAsOneLine`
 (`packages/editor/src/core/verseLines.ts`).
 
-<Source path="packages/editor/src/core/input.ts" lines="209-260" />
+<Source path="packages/editor/src/core/guards/input.ts" lines="209-260" />
 
 ## 4. Milestones
 

@@ -1,6 +1,6 @@
 import { type EditorState, Facet } from "@codemirror/state";
 
-import { docText, structureAt } from "./docStructure";
+import { docText, structureAt } from "./model/docStructure";
 
 /**
  * One figure, `\fig Caption|src="a.jpg" size="col" ref="1.5"\fig*`, as its

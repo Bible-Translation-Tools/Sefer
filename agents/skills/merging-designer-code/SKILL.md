@@ -72,7 +72,7 @@ same formatter or the same state written twice — across his files and against
 what already exists. A second date formatter, a second region list, a second
 download tracker is the common shape.
 
-**Does it reuse the foundations?** `src/app/ui/primitives/` exists so screens
+**Does it reuse the foundations?** [Building blocks](../building-blocks/SKILL.md) is the list: for each new helper, find its row and ask whether the file it names already does this. Beyond that, `src/app/ui/primitives/` exists so screens
 do not rebuild Button, Dialog, Popover, Select, Table, Tooltip, VirtualList.
 A hand-rolled `<div role="button">`, a custom popover, or a raw
 `@corvu/*` import outside `primitives/` is a finding. If a primitive is

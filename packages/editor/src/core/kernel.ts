@@ -12,9 +12,9 @@ import {
   type BlockTable,
   type DocStructure,
   type DocLine,
-} from "./docStructure";
-import type { DocPlan } from "./plan";
-import { isContainerClass } from "./registry";
+} from "./model/docStructure";
+import { isContainerClass } from "./model/registry";
+import type { DocPlan } from "./paint/plan";
 
 export type GetStructure = (s: EditorState) => DocStructure;
 

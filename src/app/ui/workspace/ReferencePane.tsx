@@ -31,6 +31,7 @@ import { shellKeys } from "../../settings";
 import { IconButton } from "../primitives";
 import { useAlignedGroup } from "./aligned";
 import { bookName } from "./books";
+import { lastVerses, supplyExpectedVerses } from "./expectedVerses";
 import { FollowToggle } from "./FollowToggle";
 import { metadataOf } from "./project";
 
@@ -189,8 +190,10 @@ export function ReferencePane(props: ReferencePaneProps) {
 
   // onCleanup in the component body: one inside an effect callback never runs (NO_OWNER_CLEANUP).
   let gone = false;
+  let unsupply: (() => void) | undefined;
   onCleanup(() => {
     gone = true;
+    unsupply?.();
   });
   const loading = services.composition.observability.operation("reference.load", {
     "book.id": bookId,
@@ -221,6 +224,8 @@ export function ReferencePane(props: ReferencePaneProps) {
       const skeleton = skeletonOf(text);
       cut();
       setSourceSkeleton(skeleton);
+      const census = services.galley.toc(paneId);
+      if (census !== undefined) unsupply = supplyExpectedVerses(bookId, lastVerses(census));
       loading.end("passed", {
         "reference.outcome": "text",
         "reference.chars": text.length,

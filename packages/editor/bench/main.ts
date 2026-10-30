@@ -360,6 +360,20 @@ const open = (edited: BenchText, beside?: BenchText): void => {
     );
   });
 
+  // Sefer counts a chapter's verses from its reference text; so does the bench.
+  if (beside !== undefined) editor.setExpectedVerses(engine.lastVerses(`${beside.name}#reference`));
+  // Where Sefer suggests USFM mode to someone typing USFM in Refine.
+  editor.onTypedUsfm((marker) =>
+    append(
+      row(
+        "gesture loose",
+        chip("seq", "typed usfm"),
+        chip("input", `\\${marker}`),
+        "USFM mode is there for this",
+      ),
+    ),
+  );
+
   const analysis = book.structure().analysis;
   if (analysis === null) throw new Error("bench: the engine returned no parse");
   mirror = mountReader({

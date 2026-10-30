@@ -1,8 +1,8 @@
 /**
  * The one bridge from the editor's instrument to Sefer's Observability ring.
  *
- * The editor keeps the instruments it was built with — `core/instrument.ts`
- * (one trace per transaction, the stages in order) and `core/timing.ts` (a
+ * The editor keeps the instruments it was built with — `core/instrument/instrument.ts`
+ * (one trace per transaction, the stages in order) and `core/instrument/timing.ts` (a
  * local span ring). They are deliberately not Effect: they run inside
  * `changeFilter` and `transactionFilter`, on the keystroke path, where a
  * service lookup per rule is not free and where there is no fiber to carry a
@@ -83,7 +83,7 @@ import {
   type TraceEntry,
   type Tracer,
   type TraceVerdict,
-} from "./core/instrument";
+} from "./core/instrument/instrument";
 
 const VERDICT: Readonly<Record<TraceVerdict, RingVerdict>> = {
   refused: "refused",

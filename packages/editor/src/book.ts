@@ -30,16 +30,16 @@ import {
 import type { Change, Source, SourceStamp } from "@sefer/text/source";
 import { Result } from "effect";
 
-import { actionCommand, type EditorAction } from "./core/actions";
-import type { Analyze } from "./core/analyzer";
-import { surfaceRange } from "./core/clip";
 import { clipboardOrigin } from "./core/clipboard";
+import { actionCommand, type EditorAction } from "./core/commands/actions";
 import { historyLayer, judgeLayer, usfmEditorHeadless } from "./core/compose";
-import { docText, structureAt, type DocStructure } from "./core/docStructure";
-import { traceOf } from "./core/instrument";
-import { clearRefusal, lastRefusal, localTracer, tracer } from "./core/instrument";
+import { surfaceRange } from "./core/guards/clip";
+import { traceOf } from "./core/instrument/instrument";
+import { clearRefusal, lastRefusal, localTracer, tracer } from "./core/instrument/instrument";
 import { modeFacet, trusted } from "./core/kernel";
-import { assignment } from "./core/registry";
+import type { Analyze } from "./core/model/analyzer";
+import { docText, structureAt, type DocStructure } from "./core/model/docStructure";
+import { assignment } from "./core/model/registry";
 import { withoutScrolling } from "./core/scroll";
 import {
   changesOf,

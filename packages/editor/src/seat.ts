@@ -7,7 +7,7 @@ import { commandsLayer } from "./core/keymaps";
 import { findingMarks } from "./recipes/findingMarks";
 import { usfmLinter } from "./recipes/lint";
 import { lintHoverGrace } from "./recipes/lintHover";
-import { noteEditing } from "./recipes/noteEditor";
+import { noteEditing } from "./surfaces/noteEditor";
 
 let mountable: Extension | undefined;
 
