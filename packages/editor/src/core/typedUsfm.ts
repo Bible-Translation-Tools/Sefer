@@ -3,13 +3,17 @@ import {
   type EditorState,
   type Extension,
   Prec,
+  type StateCommand,
   StateEffect,
   StateField,
+  type Transaction,
 } from "@codemirror/state";
 import { Decoration, EditorView, type KeyBinding, WidgetType } from "@codemirror/view";
 import { MARKERS, MarkerKind } from "@sefer/text/engine/analysis";
 
-import { isVisual, nl, trusted } from "./kernel";
+import { planAt, structureAt } from "./editorState";
+import { guardedEnter, setBlockMarker } from "./input";
+import { isVisual, trusted } from "./kernel";
 import { assignmentAt } from "./registry";
 
 /**
@@ -18,14 +22,17 @@ import { assignmentAt } from "./registry";
  * Space (or Enter) writes it when it is a marker Refine can take:
  *
  * - `\v 4` — a verse, numbered as typed;
- * - a paragraph or poetry marker (`\p`, `\q2`, `\s1`) — a new line of that kind
- *   from the caret, as Enter makes one.
+ * - a paragraph, poetry or heading marker (`\p`, `\q2`, `\s1`) — Enter at the
+ *   caret, then the new line given that marker, as one Undo step. Not the
+ *   book's header or introduction (`\h`, `\toc1`, `\mt`, `\ip`), which have
+ *   no place in a chapter.
  *
  * Not yet a character marker (`\nd`): its empty pair is no caret stop, so the
  * caret settles outside it and what is typed next misses it. Anything else
  * (`\c`, a note, a character marker, a misspelling) stays on screen marked wrong
- * until Backspace or Escape takes it back. Each marker written tells the host
- * (`onTypedUsfm`), so it can say USFM mode is there for someone who types it.
+ * until Backspace or Escape takes it back. Each marker written carries
+ * `typedMarker`, which the mount hands its host (`onTypedUsfm`), so it can say
+ * USFM mode is there for someone who types it.
  */
 
 interface Composing {
@@ -78,63 +85,62 @@ class TypedMarker extends WidgetType {
 const inRefine = (state: EditorState): boolean =>
   isVisual(state) && !assignmentAt(state).verseLines;
 
-const listeners = new WeakMap<EditorView, Set<(marker: string) => void>>();
-
-/** Called with each marker written by typing USFM in Refine (`v`, `q2`). Returns the detach. */
-export function onTypedUsfm(view: EditorView, listener: (marker: string) => void): () => void {
-  let held = listeners.get(view);
-  if (held === undefined) listeners.set(view, (held = new Set()));
-  held.add(listener);
-  return () => held.delete(listener);
-}
+/** On the transaction that writes a typed marker: its name (`v`, `q2`). */
+export const typedMarker = StateEffect.define<string>();
 
 const rowNamed = (name: string) =>
   MARKERS.find((row) => row.name === name) ??
   MARKERS.find((row) => row.name === name.replace(/\d+$/, ""));
 
-/** What a typed marker writes at `at`, and where the caret goes; null when Refine cannot take it. */
-function written(
-  state: EditorState,
-  at: number,
-  typed: string,
-): { from: number; to: number; insert: string; caret: number; marker: string } | null {
+/** Header and introduction markers: paragraph-kind, but not a line in a chapter. */
+const NOT_IN_A_CHAPTER = /^(h|toc\w*|ide|rem|sts|cl|cd|cp|mte?\d*|i[a-z]+\d*|z\w+)$/;
+
+/** The transaction a typed marker writes; null when Refine cannot take it. */
+function written(state: EditorState, at: number, typed: string): Transaction | null {
   const verse = /^\\v[ \t]+(\d{1,3}[a-z]?(?:-\d{1,3}[a-z]?)?)$/.exec(typed);
-  const before = state.doc.sliceString(Math.max(0, at - 1), at);
   if (verse !== null) {
+    const before = state.doc.sliceString(Math.max(0, at - 1), at);
     const insert = `${before === "" || /\s/.test(before) ? "" : " "}\\v ${verse[1]} `;
-    return { from: at, to: at, insert, caret: at + insert.length, marker: "v" };
+    return state.update({
+      changes: { from: at, insert },
+      selection: EditorSelection.cursor(at + insert.length),
+      effects: [compose.of(null), typedMarker.of("v")],
+      annotations: trusted.of("typed-usfm"),
+      userEvent: "input.usfm.typed",
+      scrollIntoView: true,
+    });
   }
   const name = /^\\([A-Za-z]+\d*)$/.exec(typed)?.[1];
-  if (name === undefined) return null;
-  const row = rowNamed(name);
-  if (row === undefined) return null;
-  if (row.kind === MarkerKind.Paragraph) {
-    let from = at;
-    let to = at;
-    while (from > 0 && /[ \t]/.test(state.doc.sliceString(from - 1, from))) from--;
-    while (to < state.doc.length && /[ \t]/.test(state.doc.sliceString(to, to + 1))) to++;
-    const insert = `${nl(state)}\\${name} `;
-    return { from, to, insert, caret: from + insert.length, marker: name };
-  }
-  return null;
+  if (name === undefined || NOT_IN_A_CHAPTER.test(name)) return null;
+  if (rowNamed(name)?.kind !== MarkerKind.Paragraph) return null;
+  // The canonical Enter, then its new line's marker renamed: where a line may
+  // break, and how its spaces split, are Enter's to say.
+  const split = run(guardedEnter(structureAt, planAt), state);
+  if (split === null) return null;
+  const marked = run(setBlockMarker(structureAt, name), split.state);
+  const last = marked ?? split;
+  return state.update({
+    changes: marked === null ? split.changes : split.changes.compose(marked.changes),
+    selection: last.state.selection,
+    effects: [compose.of(null), typedMarker.of(name)],
+    userEvent: "input.usfm.typed",
+    scrollIntoView: true,
+    // Each step was judged by the transaction filters as it was made.
+    filter: false,
+  });
+}
+
+/** The transaction a command would dispatch, without dispatching it. */
+function run(command: StateCommand, state: EditorState): Transaction | null {
+  let made: Transaction | null = null;
+  command({ state, dispatch: (tr) => (made = tr) });
+  return made;
 }
 
 /** Writes what is being typed, or marks it wrong; true either way, the key is spent. */
 function commit(view: EditorView, held: Composing): boolean {
   const write = written(view.state, held.at, held.text);
-  if (write === null) {
-    view.dispatch({ effects: compose.of({ ...held, wrong: true }) });
-    return true;
-  }
-  view.dispatch({
-    changes: { from: write.from, to: write.to, insert: write.insert },
-    selection: EditorSelection.cursor(write.caret),
-    effects: compose.of(null),
-    annotations: trusted.of("typed-usfm"),
-    userEvent: "input.usfm.typed",
-    scrollIntoView: true,
-  });
-  for (const listener of listeners.get(view) ?? []) listener(write.marker);
+  view.dispatch(write ?? { effects: compose.of({ ...held, wrong: true }) });
   return true;
 }
 

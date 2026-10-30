@@ -25,7 +25,7 @@ import { lineKindAt, turnLineInto, type LineKind } from "./core/poetryLevels";
 import { changePreferences, editorPreferences, type EditorPreferences } from "./core/preferences";
 import { deleteColumn, deleteRow, insertColumn, insertRow } from "./core/tableCommands";
 import { span } from "./core/timing";
-import { onTypedUsfm } from "./core/typedUsfm";
+import { typedMarker } from "./core/typedUsfm";
 import { type UnsupportedMarkup, unsupportedMarkup } from "./core/unsupported";
 import { addVerseAfter, removeVerseMarker, renumberVerse, verseAt } from "./core/verseCommands";
 import { chapterTitleAction } from "./core/verseLines";
@@ -197,6 +197,7 @@ const mountedConfig = new WeakMap<
 const activateListeners = new WeakMap<EditorBook, Set<(target: AttributedMarkup | null) => void>>();
 const titleListeners = new WeakMap<EditorBook, Set<() => void>>();
 const caretListeners = new WeakMap<EditorBook, Set<(head: number) => void>>();
+const typedListeners = new WeakMap<EditorBook, Set<(marker: string) => void>>();
 
 const drawnListeners = new WeakMap<EditorBook, Set<() => void>>();
 
@@ -345,12 +346,15 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
         }),
         editorPreferences(options.preferences),
         EditorView.updateListener.of((update) => {
-          const listeners = activateListeners.get(book);
-          if (listeners === undefined || listeners.size === 0) return;
+          const activated = activateListeners.get(book);
+          const typed = typedListeners.get(book);
           for (const tr of update.transactions)
-            for (const effect of tr.effects)
+            for (const effect of tr.effects) {
               if (effect.is(activateMarkup))
-                for (const listener of listeners) listener(effect.value);
+                for (const listener of activated ?? []) listener(effect.value);
+              if (effect.is(typedMarker))
+                for (const listener of typed ?? []) listener(effect.value);
+            }
         }),
         ...(options.blockName === undefined ? [] : [blockNamer.of(options.blockName)]),
         annotateEmptyBlocks(options.emptyBlocks === true),
@@ -484,7 +488,11 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
     deleteTableColumn: (offset: number) => run(deleteColumn(created.state, offset)),
     setExpectedVerses: (expected: ExpectedVerses) =>
       created.dispatch({ effects: setExpectedVerses.of(expected) }),
-    onTypedUsfm: (listener: (marker: string) => void) => onTypedUsfm(created, listener),
+    onTypedUsfm: (listener: (marker: string) => void) => {
+      const held = listenersOf(typedListeners, book);
+      held.add(listener);
+      return () => held.delete(listener);
+    },
     lineKindAt: (offset: number) => lineKindAt(created.state, offset),
     turnLineInto: (offset: number, kind: string) => run(turnLineInto(created.state, offset, kind)),
     renumberVerse: (offset: number, number: string) =>
