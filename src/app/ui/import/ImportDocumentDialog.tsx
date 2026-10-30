@@ -182,13 +182,10 @@ function ImportInto(props: { readonly book: EditorBook; readonly onClose: () => 
       const out = rendered();
       const range = chapters();
       if (out === undefined || !range.ok) return undefined;
-      return previewImport(
-        services.galley,
-        props.book,
-        out.usfm,
-        range.chapters,
-        keep() && bookHasText(),
-      );
+      return previewImport(services.galley, props.book, out.usfm, range.chapters, {
+        keepParagraphing: keep() && bookHasText(),
+        keepFrontMatter: true,
+      });
     },
     { name: "importPreview" },
   );

@@ -7,10 +7,18 @@ import type { GalleyService } from "../galley";
 
 // A document's USFM brought into an existing book: the scope's chapters are
 // replaced whole, everything else is left as it was, and the result is one
-// change so a single Undo takes it back.
+// change so a single Undo takes it back. A replaced chapter keeps the book's
+// own `\cl` label when the document gives it none (Psalms' "Psalm 3").
 
 /** The chapters to replace; `undefined` is every chapter the document holds. */
 export type ImportChapters = { readonly from: number; readonly to: number } | undefined;
+
+export interface ImportOptions {
+  /** The book's own paragraph and poetry breaks, laid over the replaced chapters. */
+  readonly keepParagraphing: boolean;
+  /** The book's header (`\id`, `\h`, `\toc`, `\mt`), not the document's text before chapter 1. */
+  readonly keepFrontMatter: boolean;
+}
 
 export interface ImportPreview {
   readonly bookId: string;
@@ -25,8 +33,10 @@ export interface ImportPreview {
   readonly absent: readonly number[];
   /** Verses ("2:7") the book had in the replaced chapters that the result does not. */
   readonly lost: readonly string[];
-  /** The document had text before its first chapter, which an existing book keeps its own header for. */
+  /** The document had text before its first chapter, left out because the book keeps its own header. */
   readonly frontSkipped: boolean;
+  /** Chapters whose `\cl` label was the book's, kept because the document gave none. */
+  readonly labelsKept: readonly number[];
   /** Whether the book's paragraphing was laid over the document's. */
   readonly overlaid: boolean;
 }
@@ -36,8 +46,9 @@ export const previewImport = (
   book: Book,
   imported: string,
   chapters: ImportChapters,
-  keepParagraphing: boolean,
+  options: ImportOptions,
 ): Result.Result<ImportPreview, { readonly description: string }> => {
+  const { keepParagraphing, keepFrontMatter } = options;
   const source = book.source();
   const current = split(source.text);
   const incoming = split(imported);
@@ -53,7 +64,13 @@ export const previewImport = (
 
   const empty = current.blocks.length === 0 && current.header.trim() === "";
   const parts = merge(current.blocks, incoming.blocks, replaced);
-  const header = empty ? incoming.header : current.header;
+  // The document's text before chapter 1, under the book's own `\id` line.
+  const theirsAbove = () => {
+    const id = /^\\id\b.*$/m.exec(current.header)?.[0];
+    const rest = stripId(incoming.header).replace(/^\s*\n/, "");
+    return id === undefined ? incoming.header : `${id}\n${rest}`;
+  };
+  const header = empty ? incoming.header : keepFrontMatter ? current.header : theirsAbove();
   const spliced = join(header, parts);
 
   let overlaid = keepParagraphing && replaced.some((n) => held.has(n));
@@ -70,6 +87,16 @@ export const previewImport = (
       overlaid = false;
     }
   }
+  // The book's chapter label, put back where the document gave its chapter none.
+  const labelsKept: number[] = [];
+  final = final.map((part) => {
+    if (!part.ours || CHAPTER_LABEL.test(part.text)) return part;
+    const own = current.blocks.find((b) => b.n === part.n)?.text;
+    const label = own === undefined ? undefined : CHAPTER_LABEL.exec(own)?.[0];
+    if (label === undefined) return part;
+    labelsKept.push(part.n);
+    return { ...part, text: afterChapterLine(part.text, label) };
+  });
   const text = join(header, final);
 
   const lost = replaced.flatMap((n) => {
@@ -87,7 +114,8 @@ export const previewImport = (
     replaced,
     absent,
     lost,
-    frontSkipped: !empty && stripId(incoming.header).trim() !== "",
+    frontSkipped: !empty && keepFrontMatter && stripId(incoming.header).trim() !== "",
+    labelsKept,
     overlaid,
   });
 };
@@ -118,6 +146,16 @@ export const chapterWordOf = (text: string): string | undefined => {
 
 // A chapter marker wherever it stands, line start or not.
 const CHAPTER = /(?<=^|\s)\\c\s+(\d+)/g;
+
+// A chapter's own label line: `\cl Psalm 3`.
+const CHAPTER_LABEL = /^\\cl\b.*$/m;
+
+/** `line` on its own line straight after the block's `\c N` line. */
+function afterChapterLine(block: string, line: string) {
+  const end = block.indexOf("\n");
+  if (end < 0) return `${block}\n${line}\n`;
+  return `${block.slice(0, end + 1)}${line}\n${block.slice(end + 1)}`;
+}
 
 interface Block {
   readonly n: number;
