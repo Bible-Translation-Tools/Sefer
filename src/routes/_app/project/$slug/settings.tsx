@@ -1,5 +1,5 @@
 import type { JSX } from "@solidjs/web";
-import { Link, createFileRoute } from "@tanstack/solid-router";
+import { Link, createFileRoute, useNavigate } from "@tanstack/solid-router";
 import { Effect, Fiber, Result, Stream } from "effect";
 import Minus from "lucide-solid/icons/minus";
 import Plus from "lucide-solid/icons/plus";
@@ -8,11 +8,12 @@ import { For, Show, createSignal, onCleanup, untrack } from "solid-js";
 import { exportDiagnostics } from "#app/diagnostics";
 import { BUILD_ENDPOINTS, endpointsChangedSinceBoot } from "#app/endpoints";
 import { t } from "#app/i18n";
+import { m } from "#app/paraglide/messages";
 import { useShell } from "#app/ProjectContext";
 import { SETTING_GROUPS, shellKeys, shellSettings, type AnyDescriptor } from "#app/settings";
 import { TutorialsCard } from "#app/tour/TutorialsCard";
 import { CloudPanel } from "#app/ui/CloudPanel";
-import { Breadcrumb } from "#app/ui/landing/Breadcrumb";
+import { DesktopDownloadCard } from "#app/ui/DesktopDownloadCard";
 import {
   Button,
   Card,
@@ -23,6 +24,7 @@ import {
   Select,
   Switch,
 } from "#app/ui/primitives";
+import { NAV_ROW, SettingsNav, createSettingsNav } from "#app/ui/SettingsNav";
 import { ShellGate } from "#app/ui/ShellGate";
 import { SourceTextsCard } from "#app/ui/SourceTextsCard";
 import { SousSettingsPanel } from "#app/ui/SousSettingsPanel";
@@ -457,6 +459,10 @@ function PreferencesTab(props: {
 
       <UpdatePanel />
 
+      <Show when={services.hostInfo.kind() === "web"}>
+        <DesktopDownloadCard />
+      </Show>
+
       <CloudPanel root={shell.project()?.root} />
 
       <SourceTextsCard />
@@ -479,57 +485,70 @@ function SettingsPage() {
   const descriptors = shellSettings(services.settings);
   const advancedVisible = createAdvancedVisible(services, keys);
   const model = createSettingsModel(services, keys);
+  const nav = createSettingsNav();
+  const navigate = useNavigate();
 
   return (
-    <main class="min-w-0 max-w-4xl space-y-5 p-6">
-      <Breadcrumb
-        crumbs={[
-          { label: t("Sefer"), to: "/" },
-          { label: t("Projects"), to: "/projects" },
-          { label: t("Settings") },
-        ]}
-      />
-      <PanelHeader
-        title={t("Settings")}
-        subtitle={t("{host} · {storage}", {
-          host: services.hostInfo.kind(),
-          storage: services.storage,
-        })}
-      />
+    <div class="flex items-start gap-8 p-6">
+      <aside
+        class="sticky top-6 max-h-[calc(100dvh-7.5rem)] w-64 shrink-0 self-start overflow-y-auto scrollbar-padded [--scrollbar-thumb:var(--on-surface-tertiary)]"
+        data-settings-nav
+      >
+        <PanelHeader title={t("Settings")} />
+        <nav aria-label={m.settings_nav_label()} class="mt-3">
+          <ul>
+            <li>
+              <SettingsNav
+                nav={nav}
+                showing={tab() === "preferences"}
+                onPick={() =>
+                  navigate({
+                    to: "/project/$slug/settings",
+                    params: { slug: shell.slug() },
+                    search: {},
+                  })
+                }
+              />
+            </li>
+            <For each={SETTINGS_TABS}>
+              {(entry) => (
+                <li>
+                  <Link
+                    to="/project/$slug/settings"
+                    params={{ slug: shell.slug() }}
+                    search={{ tab: entry.id }}
+                    class={NAV_ROW}
+                    aria-current={tab() === entry.id ? "page" : undefined}
+                    data-settings-tab={entry.id}
+                  >
+                    {t(entry.label)}
+                  </Link>
+                </li>
+              )}
+            </For>
+          </ul>
+        </nav>
+      </aside>
 
-      <nav aria-label={t("Settings sections")} class="flex border-b border-surface-border">
-        <For each={SETTINGS_TABS}>
-          {(entry) => (
-            <Link
-              to="/project/$slug/settings"
-              params={{ slug: shell.slug() }}
-              search={entry.id === "preferences" ? {} : { tab: entry.id }}
-              class={TAB}
-              aria-current={tab() === entry.id ? "page" : undefined}
-              data-settings-tab={entry.id}
-            >
-              {t(entry.label)}
-            </Link>
-          )}
-        </For>
-      </nav>
+      <main class="min-w-0 max-w-4xl flex-1 space-y-5">
+        <Show when={tab() === "tutorials"}>
+          <TutorialsCard kind="tutorial" />
+        </Show>
 
-      <Show when={tab() === "tutorials"}>
-        <TutorialsCard kind="tutorial" />
-      </Show>
+        <Show when={tab() === "workflows"}>
+          <TutorialsCard kind="workflow" />
+        </Show>
 
-      <Show when={tab() === "workflows"}>
-        <TutorialsCard kind="workflow" />
-      </Show>
-
-      <Show when={tab() === "preferences"}>
-        <PreferencesTab
-          descriptors={descriptors}
-          advancedVisible={advancedVisible()}
-          model={model}
-        />
-      </Show>
-    </main>
+        {/* Kept mounted on the other tabs: the side menu lists its sections. */}
+        <div class={tab() === "preferences" ? "space-y-5" : "hidden"} ref={nav.watch}>
+          <PreferencesTab
+            descriptors={descriptors}
+            advancedVisible={advancedVisible()}
+            model={model}
+          />
+        </div>
+      </main>
+    </div>
   );
 }
 
@@ -551,18 +570,13 @@ function DiffSample() {
 }
 
 type SettingsTab = "preferences" | "tutorials" | "workflows";
-const SETTINGS_TABS: readonly { readonly id: SettingsTab; readonly label: string }[] = [
-  { id: "preferences", label: "Preferences" },
+const SETTINGS_TABS: readonly {
+  readonly id: Exclude<SettingsTab, "preferences">;
+  readonly label: string;
+}[] = [
   { id: "tutorials", label: "Tutorials" },
   { id: "workflows", label: "Workflows" },
 ];
-
-const TAB = [
-  "border-b-2 px-3 py-2 text-center text-small no-underline transition-colors",
-  "aria-[current=page]:border-brand aria-[current=page]:font-medium aria-[current=page]:text-on-surface-primary",
-  "not-aria-[current=page]:border-transparent not-aria-[current=page]:text-on-surface-tertiary",
-  "not-aria-[current=page]:hover:text-on-surface-secondary",
-].join(" ");
 
 export const Route = createFileRoute("/_app/project/$slug/settings")({
   validateSearch: (search: Record<string, unknown>): { readonly tab?: SettingsTab } =>

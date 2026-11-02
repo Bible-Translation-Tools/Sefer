@@ -208,11 +208,12 @@ export const KEY_BUNDLES: readonly KeyBundle[] = [
   {
     id: "poetryLevels",
     summary:
-      "Tab and Shift-Tab move a line one poetry level; Enter on an empty poetry line or Backspace at its start leaves poetry for \\p.",
+      "Tab and Shift-Tab move a line one poetry level, and so do four spaces at its start; Backspace at its start steps out one level; Enter on an empty poetry line leaves poetry for \\p.",
     modes: ["reading"],
     commands: poetryLevelCommands,
     bindings: [
       { key: "Backspace", command: "poetry.leaveAtLineStart" },
+      { key: "Space", command: "poetry.indentBySpaces" },
       { key: "Tab", command: "poetry.indent" },
       { key: "Shift-Tab", command: "poetry.outdent" },
       { key: "Enter", command: "poetry.leaveEmptyLine" },

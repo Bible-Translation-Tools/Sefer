@@ -17,7 +17,7 @@ export function CloudPanel(props: { readonly root?: string | undefined }) {
   const account = createAccount(useShell());
   return (
     <section class="space-y-3" data-panel="cloud">
-      <PanelHeader level={2} title={t("Cloud")} />
+      <PanelHeader level={2} title={t("Cloud")} door={false} />
       <AccountCard account={account} />
       <SharedProjectCard account={account} root={props.root} />
       <Show when={props.root}>

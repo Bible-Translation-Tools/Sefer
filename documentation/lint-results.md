@@ -47,8 +47,8 @@ The generated half looks after itself; the judgement half does not. When a gate 
 | oxlint errors | 0 | `pnpm lint`, every commit |
 | oxlint warnings | 0 | `pnpm lint` fails on any, every commit |
 | fallow dead code (`pnpm deadcode`) | 0 issue(s) | every deploy; advisory on branches |
-| fallow duplication | 1.6% in 64 clone group(s) | none — advisory |
-| suppression comments | 205 | each listed below with its reason |
+| fallow duplication | 1.6% in 65 clone group(s) | none — advisory |
+| suppression comments | 221 | each listed below with its reason |
 
 ### Oxlint warnings, by rule and file
 
@@ -81,6 +81,7 @@ None.
 | `src/app/paraglide/messages/block_name_s2.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/block_name_s3.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/block_name_s4.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/block_name_sp.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/chapter_labels_book_label.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/chapter_labels_cancel.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/chapter_labels_description.js` | `eslint-disable` | — |
@@ -107,6 +108,18 @@ None.
 | `src/app/paraglide/messages/chapter_labels_use_everywhere.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/chapter_labels_use_most.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/chapter_labels_word_count.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/desktop_download_again.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/desktop_download_button.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/desktop_download_description.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/desktop_download_details.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/desktop_download_done.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/desktop_download_progress.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/desktop_download_recommended.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/desktop_download_title.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/desktop_download_unavailable.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/desktop_platform_linux.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/desktop_platform_mac.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/desktop_platform_windows.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/editor_attributes_hint.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/editor_attributes_key_locked.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/editor_attributes_none.js` | `eslint-disable` | — |
@@ -194,6 +207,8 @@ None.
 | `src/app/paraglide/messages/landing_search_or_link.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/line_menu_current.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/line_menu_fixed.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/line_menu_footnote_add.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/line_menu_footnote_placeholder.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/line_menu_label.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/line_menu_turn_into.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/recovery_quiet.js` | `eslint-disable` | — |
@@ -228,6 +243,7 @@ None.
 | `src/app/paraglide/messages/refine_scope_chapter.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/refine_show_reference.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/settings_language_automatic.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/settings_nav_label.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/sidebar_hide_books.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/sidebar_hide_changes.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/sidebar_hide_history.js` | `eslint-disable` | — |

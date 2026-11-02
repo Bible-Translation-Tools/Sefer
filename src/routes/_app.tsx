@@ -45,7 +45,12 @@ function Workspace() {
   // last project, or draws `EmptyWorkspace` — a skeleton that draws its own
   // sidebar. `/migrate` is building ANOTHER project and has its own book list;
   // the open project's sidebar there was only lost width (Will, 2026-10-07).
-  const here = (): boolean => path() !== "/projects" && path() !== "/" && path() !== "/migrate";
+  // Settings has no use for a book list either; it draws its own section nav.
+  const here = (): boolean =>
+    path() !== "/projects" &&
+    path() !== "/" &&
+    path() !== "/migrate" &&
+    !path().endsWith("/settings");
   const showing = (): boolean => shell.sidebarShowing() && here();
   // The panel's show/hide is the top of the panel itself, and hidden, the
   // panel folds to a rail that still holds it — no border, as wide as the
