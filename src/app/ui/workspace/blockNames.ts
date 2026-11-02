@@ -18,6 +18,7 @@ const NAMES: Readonly<Record<string, () => string>> = {
   s3: () => m.block_name_s3(),
   s4: () => m.block_name_s4(),
   r: () => m.block_name_r(),
+  sp: () => m.block_name_sp(),
   li: () => m.block_name_li(),
   li1: () => m.block_name_li(),
   li2: () => m.block_name_li(),
