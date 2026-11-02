@@ -30,6 +30,9 @@ export function SignInForm(props: {
   const [password, setPassword] = createSignal("", { name: "cloudPassword" });
   const [otp, setOtp] = createSignal("", { name: "cloudOtp" });
 
+  // Blue, and pressable, only once both fields have something in them.
+  const filled = (): boolean => username().trim() !== "" && password() !== "";
+
   const submit = (event: SubmitEvent): void => {
     event.preventDefault();
     props.account.signIn({ username: username(), password: password(), otp: otp() });
@@ -80,9 +83,9 @@ export function SignInForm(props: {
       <ProblemNote text={props.account.problem()} />
       <Button
         type="submit"
-        variant="primary"
+        variant={filled() ? "primary" : "secondary"}
         class="w-full justify-center"
-        disabled={props.account.busy()}
+        disabled={!filled() || props.account.busy()}
       >
         {t("Sign in")}
       </Button>
