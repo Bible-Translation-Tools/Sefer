@@ -1,6 +1,6 @@
-import { makeBook, type Book } from "@sefer/text/book";
-import * as TextResult from "@sefer/text/result";
-import { decode } from "@sefer/text/source";
+import { makeBook, type Book } from "@wycliffeassociates/sefer-text/book";
+import * as TextResult from "@wycliffeassociates/sefer-text/result";
+import { decode } from "@wycliffeassociates/sefer-text/source";
 import { Effect, Result } from "effect";
 import { describe, expect, it } from "vitest";
 

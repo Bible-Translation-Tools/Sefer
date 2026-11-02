@@ -1,6 +1,11 @@
-import type { BookId } from "@sefer/text/book";
-import { addressCode } from "@sefer/text/location/address";
-import { tocUnits, unitAddress, unitIndexAt, type TocView } from "@sefer/text/location/locate";
+import type { BookId } from "@wycliffeassociates/sefer-text/book";
+import { addressCode } from "@wycliffeassociates/sefer-text/location/address";
+import {
+  tocUnits,
+  unitAddress,
+  unitIndexAt,
+  type TocView,
+} from "@wycliffeassociates/sefer-text/location/locate";
 import { Result, Schema } from "effect";
 
 import { ordinalOf, siteIdentityOf } from "../galley";

@@ -1,4 +1,4 @@
-import type { BookId } from "@sefer/text/book";
+import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import { Option } from "effect";
 import { For, Show, createMemo, createSignal } from "solid-js";
 

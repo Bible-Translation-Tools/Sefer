@@ -1,5 +1,5 @@
-import type { BookId } from "@sefer/text/book";
 import type { JSX } from "@solidjs/web";
+import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import { Show, untrack } from "solid-js";
 
 import type { DecisionUnit } from "#core/galley";

@@ -39,7 +39,7 @@ import { UpdatePanel } from "#app/ui/UpdatePanel";
 import type { SettingKey } from "#core/host/settings";
 import { parseTransport } from "#core/remote/transport";
 
-import "@sefer/editor/editor.css";
+import "@wycliffeassociates/sefer-editor/editor.css";
 
 /**
  * The settings screen, under the open project (Will, 2026-10-07: leaving

@@ -1,5 +1,5 @@
-import type { Book, BookId } from "@sefer/text/book";
-import type { SourceStamp } from "@sefer/text/source";
+import type { Book, BookId } from "@wycliffeassociates/sefer-text/book";
+import type { SourceStamp } from "@wycliffeassociates/sefer-text/source";
 import { Effect, Option, Result } from "effect";
 
 import type { Author, CommitId } from "#core/git/git";

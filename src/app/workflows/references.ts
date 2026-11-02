@@ -1,5 +1,5 @@
-import * as TextResult from "@sefer/text/result";
-import { decode } from "@sefer/text/source";
+import * as TextResult from "@wycliffeassociates/sefer-text/result";
+import { decode } from "@wycliffeassociates/sefer-text/source";
 import { Effect, FileSystem, Result } from "effect";
 
 import { ProjectAnalysis, type ReferenceText } from "#core/analysis/projectAnalysis";

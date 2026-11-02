@@ -1,4 +1,4 @@
-import { NOTE_PART } from "@sefer/text/engine/analysis";
+import { NOTE_PART } from "@wycliffeassociates/sefer-text/engine/analysis";
 
 import { armed, span } from "../instrument/timing";
 import { lineIndexAt, type DocStructure } from "../model/docStructure";

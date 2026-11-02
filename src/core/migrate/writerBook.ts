@@ -1,6 +1,6 @@
-import { CANON } from "@sefer/text/location/canon";
-import * as TextResult from "@sefer/text/result";
-import { decode } from "@sefer/text/source";
+import { CANON } from "@wycliffeassociates/sefer-text/location/canon";
+import * as TextResult from "@wycliffeassociates/sefer-text/result";
+import { decode } from "@wycliffeassociates/sefer-text/source";
 import { Effect, FileSystem, Result, Schema } from "effect";
 
 import { joinPath, lastSegment } from "../fileSystem/path";

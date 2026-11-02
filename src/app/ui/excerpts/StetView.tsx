@@ -1,5 +1,5 @@
-import type { EditorBook, Following } from "@sefer/editor";
-import type { BookId } from "@sefer/text/book";
+import type { EditorBook, Following } from "@wycliffeassociates/sefer-editor";
+import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import CheckIcon from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronRight from "lucide-solid/icons/chevron-right";

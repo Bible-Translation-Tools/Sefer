@@ -1,4 +1,4 @@
-import type { BookId } from "@sefer/text/book";
+import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import { Data, Effect, type FileSystem, Option } from "effect";
 
 import type { Galley } from "../galley";

@@ -1,6 +1,6 @@
 import { type ChangeSet, Compartment, EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import { sameSource, type Analysis } from "@sefer/text/engine/analysis";
+import { sameSource, type Analysis } from "@wycliffeassociates/sefer-text/engine/analysis";
 
 import { readingLayer, viewLayer } from "../core/compose";
 import { span } from "../core/instrument/timing";

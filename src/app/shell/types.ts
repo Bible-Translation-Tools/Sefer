@@ -1,5 +1,5 @@
-import type { BookId } from "@sefer/text/book";
 import type { UseNavigateResult } from "@tanstack/solid-router";
+import type { BookId } from "@wycliffeassociates/sefer-text/book";
 
 import type { Project } from "#core/project/project";
 

@@ -1,6 +1,6 @@
-import type { BookId } from "@sefer/text/book";
-import type { TocView } from "@sefer/text/location/locate";
-import type { SourceStamp } from "@sefer/text/source";
+import type { BookId } from "@wycliffeassociates/sefer-text/book";
+import type { TocView } from "@wycliffeassociates/sefer-text/location/locate";
+import type { SourceStamp } from "@wycliffeassociates/sefer-text/source";
 
 import {
   booksByPattern,

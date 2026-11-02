@@ -1,5 +1,5 @@
-import { fold } from "@sefer/text/location/names";
 import type { JSX } from "@solidjs/web";
+import { fold } from "@wycliffeassociates/sefer-text/location/names";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronUp from "lucide-solid/icons/chevron-up";
 import ListTree from "lucide-solid/icons/list-tree";

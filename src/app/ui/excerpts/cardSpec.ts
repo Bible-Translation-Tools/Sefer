@@ -1,6 +1,6 @@
-import type { EditorPolicy } from "@sefer/editor";
-import type { BookId } from "@sefer/text/book";
 import type { JSX } from "@solidjs/web";
+import type { EditorPolicy } from "@wycliffeassociates/sefer-editor";
+import type { BookId } from "@wycliffeassociates/sefer-text/book";
 
 import type { Excerpt, Extent, OutlineRow, BookExcerpts } from "#core/excerpts/excerpts";
 

@@ -1,5 +1,5 @@
-import type { BookId } from "@sefer/text/book";
-import { testamentOf } from "@sefer/text/location/canon";
+import type { BookId } from "@wycliffeassociates/sefer-text/book";
+import { testamentOf } from "@wycliffeassociates/sefer-text/location/canon";
 import { Show } from "solid-js";
 
 import { t } from "../../i18n";

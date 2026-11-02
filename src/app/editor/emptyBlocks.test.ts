@@ -7,9 +7,9 @@ import {
   blockNamer,
   emptyBlocks,
   surface,
-} from "@sefer/editor/testing/harness";
-import { makeBook } from "@sefer/text/book";
-import { decode } from "@sefer/text/source";
+} from "@wycliffeassociates/sefer-editor/testing/harness";
+import { makeBook } from "@wycliffeassociates/sefer-text/book";
+import { decode } from "@wycliffeassociates/sefer-text/source";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 

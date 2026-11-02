@@ -1,5 +1,5 @@
-import { makeBook, type Book } from "@sefer/text/book";
-import { decode, type SourceDecodeError } from "@sefer/text/source";
+import { makeBook, type Book } from "@wycliffeassociates/sefer-text/book";
+import { decode, type SourceDecodeError } from "@wycliffeassociates/sefer-text/source";
 import { Effect, FileSystem, Option, type PlatformError } from "effect";
 
 import { fromResult } from "#core/result";

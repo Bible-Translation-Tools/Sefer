@@ -1,4 +1,3 @@
-import type { Analysis } from "@sefer/text/engine/analysis";
 import {
   attrList,
   declaredVersion,
@@ -13,6 +12,7 @@ import {
   setCustomMarkers,
 } from "@wycliffeassociates/scripture-kitchen/web";
 import wasmUrl from "@wycliffeassociates/scripture-kitchen/web/wasm?url";
+import type { Analysis } from "@wycliffeassociates/sefer-text/engine/analysis";
 
 /**
  * The engine as the bench's host brings it: the galley wasm, one handle, and

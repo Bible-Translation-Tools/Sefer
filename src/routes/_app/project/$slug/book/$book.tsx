@@ -1,5 +1,5 @@
-import type { EditorBook } from "@sefer/editor";
 import { createFileRoute } from "@tanstack/solid-router";
+import type { EditorBook } from "@wycliffeassociates/sefer-editor";
 import PanelLeftClose from "lucide-solid/icons/panel-left-close";
 import PanelLeftOpen from "lucide-solid/icons/panel-left-open";
 import { Show, createEffect, untrack } from "solid-js";

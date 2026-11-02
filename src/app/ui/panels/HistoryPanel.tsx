@@ -1,8 +1,8 @@
-import type { EditorBook } from "@sefer/editor";
-import type { Book, BookId } from "@sefer/text/book";
-import * as TextResult from "@sefer/text/result";
-import { decode, type Source } from "@sefer/text/source";
 import { useNavigate, useSearch } from "@tanstack/solid-router";
+import type { EditorBook } from "@wycliffeassociates/sefer-editor";
+import type { Book, BookId } from "@wycliffeassociates/sefer-text/book";
+import * as TextResult from "@wycliffeassociates/sefer-text/result";
+import { decode, type Source } from "@wycliffeassociates/sefer-text/source";
 import { Effect, Option, Result } from "effect";
 import GitCommitVertical from "lucide-solid/icons/git-commit-vertical";
 import RefreshCw from "lucide-solid/icons/refresh-cw";

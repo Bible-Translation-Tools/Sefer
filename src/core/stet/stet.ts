@@ -1,5 +1,5 @@
-import type { BookId } from "@sefer/text/book";
-import { versesAddress, type Address } from "@sefer/text/location/address";
+import type { BookId } from "@wycliffeassociates/sefer-text/book";
+import { versesAddress, type Address } from "@wycliffeassociates/sefer-text/location/address";
 import { Context, Data, Effect, Option, Result, Schema } from "effect";
 
 const Range = Schema.Tuple([Schema.Number, Schema.Number]);

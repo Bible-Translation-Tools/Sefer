@@ -1,5 +1,5 @@
-import type { Address } from "@sefer/text/location/address";
 import { createFileRoute, useNavigate } from "@tanstack/solid-router";
+import type { Address } from "@wycliffeassociates/sefer-text/location/address";
 import { Effect, Result } from "effect";
 import { createEffect, createMemo, createSignal, Show, untrack } from "solid-js";
 

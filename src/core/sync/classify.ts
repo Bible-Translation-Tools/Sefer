@@ -1,6 +1,11 @@
-import { identifyBook, trustedBy, type Book, type Origin } from "@sefer/text/book";
-import * as Result from "@sefer/text/result";
-import type { SourceStamp } from "@sefer/text/source";
+import {
+  identifyBook,
+  trustedBy,
+  type Book,
+  type Origin,
+} from "@wycliffeassociates/sefer-text/book";
+import * as Result from "@wycliffeassociates/sefer-text/result";
+import type { SourceStamp } from "@wycliffeassociates/sefer-text/source";
 import { Effect, FileSystem, Option } from "effect";
 
 import { Galley, toLf } from "../galley";

@@ -1,6 +1,6 @@
-import type { BookId } from "@sefer/text/book";
-import * as TextResult from "@sefer/text/result";
-import { decode, type Source } from "@sefer/text/source";
+import type { BookId } from "@wycliffeassociates/sefer-text/book";
+import * as TextResult from "@wycliffeassociates/sefer-text/result";
+import { decode, type Source } from "@wycliffeassociates/sefer-text/source";
 import { Effect, Option, Result } from "effect";
 import { createEffect, createSignal, type Accessor } from "solid-js";
 

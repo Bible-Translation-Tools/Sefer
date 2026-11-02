@@ -133,12 +133,6 @@ importers:
       '@sefer/document-import':
         specifier: workspace:*
         version: link:packages/document-import
-      '@sefer/editor':
-        specifier: workspace:*
-        version: link:packages/editor
-      '@sefer/text':
-        specifier: workspace:*
-        version: link:packages/text
       '@solidjs/web':
         specifier: ^2.0.0-rc.9
         version: 2.0.0-rc.9(solid-js@2.0.0-rc.9)
@@ -172,6 +166,12 @@ importers:
       '@wycliffeassociates/scripture-kitchen':
         specifier: 0.1.19
         version: 0.1.19
+      '@wycliffeassociates/sefer-editor':
+        specifier: workspace:*
+        version: link:packages/editor
+      '@wycliffeassociates/sefer-text':
+        specifier: workspace:*
+        version: link:packages/text
       buffer:
         specifier: 6.0.3
         version: 6.0.3
@@ -324,12 +324,12 @@ importers:
       '@codemirror/view':
         specifier: ^6.43.13
         version: 6.43.13
-      '@sefer/text':
-        specifier: workspace:*
-        version: link:../text
       '@wycliffeassociates/scripture-kitchen':
         specifier: 0.1.19
         version: 0.1.19
+      '@wycliffeassociates/sefer-text':
+        specifier: workspace:*
+        version: link:../text
       vitest:
         specifier: 5.0.1
         version: 5.0.1(@types/node@26.6.2)(@vitest/browser-playwright@5.0.1)(@vitest/ui@5.0.1)(jsdom@25.0.1(supports-color@8.1.1))(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))

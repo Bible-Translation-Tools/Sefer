@@ -5,7 +5,7 @@
  * identity, `tsDesktop`, stays the author where it was (Will).
  */
 
-import { decode } from "@sefer/text/source";
+import { decode } from "@wycliffeassociates/sefer-text/source";
 import { Effect } from "effect";
 
 import { Git, type CommitId, type GitError, type Repo, type Signature } from "../git/git";

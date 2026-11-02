@@ -1,5 +1,5 @@
-import type { Book, BookId } from "@sefer/text/book";
-import type { SourceStamp } from "@sefer/text/source";
+import type { Book, BookId } from "@wycliffeassociates/sefer-text/book";
+import type { SourceStamp } from "@wycliffeassociates/sefer-text/source";
 import { Effect, Fiber, Option, Stream } from "effect";
 import { createSignal, createStore, onCleanup, type Accessor } from "solid-js";
 

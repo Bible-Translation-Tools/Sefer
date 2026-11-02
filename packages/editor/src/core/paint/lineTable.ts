@@ -1,4 +1,4 @@
-import { TOKEN } from "@sefer/text/engine/analysis";
+import { TOKEN } from "@wycliffeassociates/sefer-text/engine/analysis";
 
 import { spellingAt } from "../model/cst";
 import {

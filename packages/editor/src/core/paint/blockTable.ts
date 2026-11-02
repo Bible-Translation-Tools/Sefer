@@ -1,4 +1,4 @@
-import { MARKERS } from "@sefer/text/engine/analysis";
+import { MARKERS } from "@wycliffeassociates/sefer-text/engine/analysis";
 
 import { spellingAt } from "../model/cst";
 import { type Block, type BlockTable, type DocLine, type Fold, noRow } from "../model/fold";

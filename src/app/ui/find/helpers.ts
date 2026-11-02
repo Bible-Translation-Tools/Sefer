@@ -1,4 +1,4 @@
-import type { Address } from "@sefer/text/location/address";
+import type { Address } from "@wycliffeassociates/sefer-text/location/address";
 
 import type { BookScopeKind } from "#app/ui/primitives";
 import type { Documents } from "#core/resources/kinds/handle";

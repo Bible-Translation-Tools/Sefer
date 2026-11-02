@@ -1,6 +1,6 @@
-import type { BookId } from "@sefer/text/book";
-import * as TextResult from "@sefer/text/result";
 import { useNavigate, useSearch } from "@tanstack/solid-router";
+import type { BookId } from "@wycliffeassociates/sefer-text/book";
+import * as TextResult from "@wycliffeassociates/sefer-text/result";
 import { Option, Result } from "effect";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronRight from "lucide-solid/icons/chevron-right";

@@ -1,7 +1,7 @@
-import type { Book, BookId } from "@sefer/text/book";
-import { tocViewOf } from "@sefer/text/engine/location";
-import { bookName } from "@sefer/text/location/canon";
-import type { SourceStamp } from "@sefer/text/source";
+import type { Book, BookId } from "@wycliffeassociates/sefer-text/book";
+import { tocViewOf } from "@wycliffeassociates/sefer-text/engine/location";
+import { bookName } from "@wycliffeassociates/sefer-text/location/canon";
+import type { SourceStamp } from "@wycliffeassociates/sefer-text/source";
 import { Context, Duration, Effect, Latch, Layer, Option, PubSub, Scope, Stream } from "effect";
 
 import {

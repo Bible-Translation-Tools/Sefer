@@ -6,14 +6,14 @@ import {
   type DiffPaint,
   type EditorBook,
   type EditorHandle,
-} from "@sefer/editor";
+} from "@wycliffeassociates/sefer-editor";
 import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
 
 import type { Analysis } from "#core/galley";
 import type { DecisionUnit } from "#core/galley/diff";
 import type { ObservabilityService } from "#core/observability";
 
-import "@sefer/editor/editor.css";
+import "@wycliffeassociates/sefer-editor/editor.css";
 
 import { t } from "../../i18n";
 import { cx } from "../primitives";

@@ -1,11 +1,11 @@
+import type { JSX } from "@solidjs/web";
 import {
   mountDiffView,
   mountStamp,
   type CardMount,
   type DiffPaint,
   type EditorBook,
-} from "@sefer/editor";
-import type { JSX } from "@solidjs/web";
+} from "@wycliffeassociates/sefer-editor";
 import CheckIcon from "lucide-solid/icons/check";
 import CodeIcon from "lucide-solid/icons/code";
 import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
@@ -13,7 +13,7 @@ import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js"
 import type { Analysis, MergeSide } from "#core/galley";
 import type { DecisionUnit } from "#core/galley/diff";
 
-import "@sefer/editor/editor.css";
+import "@wycliffeassociates/sefer-editor/editor.css";
 
 import { t } from "../../i18n";
 import { CardActions, type CardAction } from "../multibuffer/CardAction";

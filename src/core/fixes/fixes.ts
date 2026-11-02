@@ -1,6 +1,6 @@
-import { Refusal, trustedBy, type Book, type Receipt } from "@sefer/text/book";
-import * as TextResult from "@sefer/text/result";
-import type { Change, SourceStamp } from "@sefer/text/source";
+import { Refusal, trustedBy, type Book, type Receipt } from "@wycliffeassociates/sefer-text/book";
+import * as TextResult from "@wycliffeassociates/sefer-text/result";
+import type { Change, SourceStamp } from "@wycliffeassociates/sefer-text/source";
 import { Data, Result } from "effect";
 
 import type { Finding } from "../findings/finding";

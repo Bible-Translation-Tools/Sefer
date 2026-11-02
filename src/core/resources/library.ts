@@ -1,6 +1,6 @@
-import { localized } from "@sefer/text/localized";
-import * as TextResult from "@sefer/text/result";
-import { decode } from "@sefer/text/source";
+import { localized } from "@wycliffeassociates/sefer-text/localized";
+import * as TextResult from "@wycliffeassociates/sefer-text/result";
+import { decode } from "@wycliffeassociates/sefer-text/source";
 import {
   Context,
   Data,

@@ -21,7 +21,7 @@ Read only the guidance relevant to the task:
 - [Agent verification](documentation/agents/verification.md): explore the running app, capture evidence, decide what earns a regression test, and measure on a 4× throttled CPU when something feels slow.
 - [Lint results](documentation/lint-results.md): read before adding a suppression comment, changing a gate or a linter's config, or when a gate reports something new; what is gated where, what is deliberately left, and the process for keeping that record true.
 - [Observability](documentation/architecture/observability.md): logs, spans, bounded editor evidence, and platform sinks.
-- [Boundaries](documentation/architecture/boundaries.md): what `src/core` may depend on, the two framework-free workspace packages (`@sefer/text`, the scripture text model; `@sefer/editor`, the editor) and which way dependencies point, and the checks that enforce it.
+- [Boundaries](documentation/architecture/boundaries.md): what `src/core` may depend on, the two framework-free workspace packages (`@wycliffeassociates/sefer-text`, the scripture text model; `@wycliffeassociates/sefer-editor`, the editor) and which way dependencies point, and the checks that enforce it.
 - [Storage](documentation/architecture/storage.md): the `effect/FileSystem` port, its Node and in-memory layers, atomic writes, root scoping, and the contract suite.
 - [Source and Book](documentation/architecture/source.md): canonical UTF-8 text, the `SourceStamp` freshness rule, and the plain in-memory Book.
 - [Application shell](documentation/architecture/shell.md): read before touching `src/app`, `src/routes`, or the design tokens; covers the one services composition, the command registry, the routes, and the single Solid/Book subscription rule.

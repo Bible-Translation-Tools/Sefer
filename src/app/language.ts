@@ -1,4 +1,4 @@
-import { localized } from "@sefer/text/localized";
+import { localized } from "@wycliffeassociates/sefer-text/localized";
 
 import type { ProjectMetadata } from "#core/resources/projectMetadata";
 

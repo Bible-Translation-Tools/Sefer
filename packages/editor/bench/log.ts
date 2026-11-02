@@ -1,4 +1,4 @@
-import type { Change } from "@sefer/text/source";
+import type { Change } from "@wycliffeassociates/sefer-text/source";
 
 /** One rule that did not simply pass: what it decided, and why. */
 export interface Ruling {

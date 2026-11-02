@@ -1,5 +1,5 @@
-import type { Address } from "@sefer/text/location/address";
-import { resolve } from "@sefer/text/location/locate";
+import type { Address } from "@wycliffeassociates/sefer-text/location/address";
+import { resolve } from "@wycliffeassociates/sefer-text/location/locate";
 
 import type { BookText, Occurrence } from "../excerpts/excerpts";
 import { tocViewOf } from "../galley";

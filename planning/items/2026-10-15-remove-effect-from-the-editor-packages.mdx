@@ -2,15 +2,17 @@
 id: 8e6256bf-e140-49f2-b247-9bf9a6cc4e24
 title: "Remove Effect from the editor packages"
 kind: idea
-status: idea
+status: done
 created: 2026-10-15
-updated: 2026-10-15
+updated: 2026-11-02
 sha: c273001
 tags: [editor]
 related: [c8b63600-40a8-4937-bc03-e0264e9a13f0]
 ---
 
-For purity, `@sefer/text` and `@sefer/editor` could stop depending on Effect.
+**Done 2026-11-02** (branch `chore/kitchen-from-nexus`): `@wycliffeassociates/sefer-text/result` is a plain `Result` with Effect's field names, the three errors are `Error` subclasses, the app checks these results with that module's guards and lifts them with `#core/result`'s `fromResult`, and `pnpm boundaries` refuses `effect` in either package. The reason to do it now: the packages are to be published (dashboard-2), and an rc-pinned peer would hold every installing app to Sefer's Effect. The packages were renamed from `@sefer/*` in the same change.
+
+For purity, `@wycliffeassociates/sefer-text` and `@wycliffeassociates/sefer-editor` could stop depending on Effect.
 Today it is a peer dependency of both (2026-10-15).
 
 > Fine for nwo and document in ideas might should remove for purity sake

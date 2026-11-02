@@ -1,4 +1,4 @@
-import { CANON } from "@sefer/text/location/canon";
+import { CANON } from "@wycliffeassociates/sefer-text/location/canon";
 import { Result } from "effect";
 import { stringify as stringifyYaml } from "yaml";
 

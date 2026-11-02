@@ -8,7 +8,7 @@ import {
   SpecContext,
   StructuralWhitespaceRequirement,
   TokenKind,
-} from "@sefer/text/engine/analysis";
+} from "@wycliffeassociates/sefer-text/engine/analysis";
 
 import { type ClassKey, type OwnedSetName, OWNED_SETS } from "./registry";
 

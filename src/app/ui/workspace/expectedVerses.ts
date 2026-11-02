@@ -1,4 +1,4 @@
-import { type ExpectedVerses } from "@sefer/editor";
+import { type ExpectedVerses } from "@wycliffeassociates/sefer-editor";
 import { createSignal } from "solid-js";
 
 import type { BookToc } from "#core/galley";

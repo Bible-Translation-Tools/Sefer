@@ -1,7 +1,7 @@
-import { withoutScrolling } from "@sefer/editor";
-import type { EditorAction, EditorBook, ProjectionName } from "@sefer/editor";
-import * as TextResult from "@sefer/text/result";
 import type { UseNavigateResult } from "@tanstack/solid-router";
+import { withoutScrolling } from "@wycliffeassociates/sefer-editor";
+import type { EditorAction, EditorBook, ProjectionName } from "@wycliffeassociates/sefer-editor";
+import * as TextResult from "@wycliffeassociates/sefer-text/result";
 import { Effect, Option, Result, type Scope } from "effect";
 import { createSignal } from "solid-js";
 

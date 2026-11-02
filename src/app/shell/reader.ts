@@ -1,7 +1,11 @@
-import { anchorFrom, type EditorBook } from "@sefer/editor";
-import type { BookId } from "@sefer/text/book";
-import { addressCode, chaptersAddress, type Address } from "@sefer/text/location/address";
-import { addressAt, resolve } from "@sefer/text/location/locate";
+import { anchorFrom, type EditorBook } from "@wycliffeassociates/sefer-editor";
+import type { BookId } from "@wycliffeassociates/sefer-text/book";
+import {
+  addressCode,
+  chaptersAddress,
+  type Address,
+} from "@wycliffeassociates/sefer-text/location/address";
+import { addressAt, resolve } from "@wycliffeassociates/sefer-text/location/locate";
 import { Effect, Option, Result } from "effect";
 import {
   createEffect,

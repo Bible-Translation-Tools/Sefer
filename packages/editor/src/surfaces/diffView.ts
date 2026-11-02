@@ -12,7 +12,7 @@ import {
   gutter,
   layer,
 } from "@codemirror/view";
-import type { Analysis } from "@sefer/text/engine/analysis";
+import type { Analysis } from "@wycliffeassociates/sefer-text/engine/analysis";
 
 import { readingLayer, viewLayer } from "../core/compose";
 import { span } from "../core/instrument/timing";

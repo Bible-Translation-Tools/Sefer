@@ -1,5 +1,5 @@
-import type { BookId, Receipt } from "@sefer/text/book";
-import type { SourceStamp } from "@sefer/text/source";
+import type { BookId, Receipt } from "@wycliffeassociates/sefer-text/book";
+import type { SourceStamp } from "@wycliffeassociates/sefer-text/source";
 import { Data, Effect } from "effect";
 
 export type CompareSourceKind = "project" | "folder" | (string & {});

@@ -1,4 +1,3 @@
-import type { Analysis, DiagnosticView } from "@sefer/text/engine/analysis";
 import {
   Hits,
   FORMAT_VERSION as FIND_FORMAT_VERSION,
@@ -26,6 +25,7 @@ import {
 import type { BookCensus as BookToc } from "@wycliffeassociates/scripture-kitchen/toc-reader";
 import { Galley as GalleyHandle, initSync } from "@wycliffeassociates/scripture-kitchen/web";
 import * as wasmModule from "@wycliffeassociates/scripture-kitchen/web";
+import type { Analysis, DiagnosticView } from "@wycliffeassociates/sefer-text/engine/analysis";
 import { Context, Data, Effect, Layer, Option, Result } from "effect";
 
 import { Observability, type ObservabilityService } from "../observability";

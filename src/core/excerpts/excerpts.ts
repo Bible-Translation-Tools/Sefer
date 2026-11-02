@@ -1,5 +1,9 @@
-import type { BookId } from "@sefer/text/book";
-import { addressCode, bookAddress, type Address } from "@sefer/text/location/address";
+import type { BookId } from "@wycliffeassociates/sefer-text/book";
+import {
+  addressCode,
+  bookAddress,
+  type Address,
+} from "@wycliffeassociates/sefer-text/location/address";
 import {
   resolve,
   tocUnits,
@@ -7,7 +11,7 @@ import {
   unitIndexAt,
   type TocUnit,
   type TocView,
-} from "@sefer/text/location/locate";
+} from "@wycliffeassociates/sefer-text/location/locate";
 
 import {
   CLASS,

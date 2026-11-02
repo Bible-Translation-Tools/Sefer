@@ -1,8 +1,8 @@
 import type { Reading, Rendered, Settings, VerseMode } from "@sefer/document-import";
-import { editorPolicy } from "@sefer/editor";
-import type { Book } from "@sefer/text/book";
-import { chaptersAddress } from "@sefer/text/location/address";
-import * as TextResult from "@sefer/text/result";
+import { editorPolicy } from "@wycliffeassociates/sefer-editor";
+import type { Book } from "@wycliffeassociates/sefer-text/book";
+import { chaptersAddress } from "@wycliffeassociates/sefer-text/location/address";
+import * as TextResult from "@wycliffeassociates/sefer-text/result";
 import { Effect, Result } from "effect";
 import FileUp from "lucide-solid/icons/file-up";
 import Info from "lucide-solid/icons/info";

@@ -18,7 +18,7 @@
  * source text has 105, and comparing it shows Jude's text in it.
  */
 
-import { CANON } from "@sefer/text/location/canon";
+import { CANON } from "@wycliffeassociates/sefer-text/location/canon";
 import { Result } from "effect";
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 

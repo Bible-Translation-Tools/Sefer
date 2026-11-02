@@ -1,5 +1,5 @@
 import { Facet } from "@codemirror/state";
-import type { Analysis } from "@sefer/text/engine/analysis";
+import type { Analysis } from "@wycliffeassociates/sefer-text/engine/analysis";
 
 import { span } from "../instrument/timing";
 

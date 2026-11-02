@@ -1,7 +1,7 @@
-import { trustedBy, type BookId } from "@sefer/text/book";
-import { addressCode, addressLabel } from "@sefer/text/location/address";
-import { bookName } from "@sefer/text/location/canon";
-import { addressAt } from "@sefer/text/location/locate";
+import { trustedBy, type BookId } from "@wycliffeassociates/sefer-text/book";
+import { addressCode, addressLabel } from "@wycliffeassociates/sefer-text/location/address";
+import { bookName } from "@wycliffeassociates/sefer-text/location/canon";
+import { addressAt } from "@wycliffeassociates/sefer-text/location/locate";
 import { Option, Result } from "effect";
 
 import type { Finding } from "#core/findings/finding";

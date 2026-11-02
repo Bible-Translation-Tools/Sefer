@@ -1,5 +1,5 @@
 {
-  "name": "@sefer/text",
+  "name": "@wycliffeassociates/sefer-text",
   "version": "0.1.0",
   "private": true,
   "description": "Sefer's scripture text model, framework-free: canonical Source and its changes, the Book port, scripture addresses and the citation parser, and the engine's analysis vocabulary.",

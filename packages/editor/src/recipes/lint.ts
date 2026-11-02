@@ -10,8 +10,8 @@ import {
   stampMatches,
   stampOf,
   versionOf,
-} from "@sefer/text/engine/analysis";
-import type { SourceStamp } from "@sefer/text/source";
+} from "@wycliffeassociates/sefer-text/engine/analysis";
+import type { SourceStamp } from "@wycliffeassociates/sefer-text/source";
 
 import { PAINT_PORT } from "../core/editorState";
 import { carryForward } from "../core/forward";

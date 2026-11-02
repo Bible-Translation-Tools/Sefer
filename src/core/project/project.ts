@@ -1,5 +1,10 @@
-import { makeBook, type Book, type BookId, type Receipt } from "@sefer/text/book";
-import type { Change, SourceDecodeError } from "@sefer/text/source";
+import {
+  makeBook,
+  type Book,
+  type BookId,
+  type Receipt,
+} from "@wycliffeassociates/sefer-text/book";
+import type { Change, SourceDecodeError } from "@wycliffeassociates/sefer-text/source";
 import {
   Data,
   Duration,

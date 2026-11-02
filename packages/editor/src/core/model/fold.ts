@@ -1,4 +1,4 @@
-import type { NotePart } from "@sefer/text/engine/analysis";
+import type { NotePart } from "@wycliffeassociates/sefer-text/engine/analysis";
 
 import type { CstScan } from "./cst";
 import type { ClassKey } from "./registry";

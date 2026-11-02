@@ -1,5 +1,5 @@
 {
-  "name": "@sefer/editor",
+  "name": "@wycliffeassociates/sefer-editor",
   "version": "0.1.0",
   "private": true,
   "description": "Sefer's USFM editor, framework-free: CodeMirror over the scripture-kitchen engine, mounted by any host. The host brings its engine build and serves the wasm.",
@@ -23,7 +23,7 @@
     "registry": "https://nexus-registry.walink.org/repository/wa-npm/"
   },
   "scripts": {
-    "build": "pnpm --filter @sefer/text run build && rm -rf dist && tsc -p tsconfig.build.json && cp src/editor.css dist/",
+    "build": "pnpm --filter @wycliffeassociates/sefer-text run build && rm -rf dist && tsc -p tsconfig.build.json && cp src/editor.css dist/",
     "prepack": "pnpm run build"
   },
   "devDependencies": {
@@ -31,8 +31,8 @@
     "@codemirror/lint": "^6.9.7",
     "@codemirror/state": "^6.7.6",
     "@codemirror/view": "^6.43.13",
-    "@sefer/text": "workspace:*",
     "@wycliffeassociates/scripture-kitchen": "0.1.19",
+    "@wycliffeassociates/sefer-text": "workspace:*",
     "vitest": "5.0.1"
   },
   "peerDependencies": {
@@ -40,7 +40,7 @@
     "@codemirror/lint": "^6.9.7",
     "@codemirror/state": "^6.7.6",
     "@codemirror/view": "^6.43.13",
-    "@sefer/text": "workspace:^",
-    "@wycliffeassociates/scripture-kitchen": "^0.1.19"
+    "@wycliffeassociates/scripture-kitchen": "^0.1.19",
+    "@wycliffeassociates/sefer-text": "workspace:^"
   }
 }

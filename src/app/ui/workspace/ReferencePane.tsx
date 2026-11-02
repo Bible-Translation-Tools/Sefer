@@ -1,5 +1,9 @@
-import { mountReference, type PairedRange, type ReferenceMount } from "@sefer/editor";
 import type { JSX } from "@solidjs/web";
+import {
+  mountReference,
+  type PairedRange,
+  type ReferenceMount,
+} from "@wycliffeassociates/sefer-editor";
 import { Effect, Fiber, Option, Result, Stream } from "effect";
 import X from "lucide-solid/icons/x";
 import {
@@ -35,7 +39,7 @@ import { lastVerses, supplyExpectedVerses } from "./expectedVerses";
 import { FollowToggle } from "./FollowToggle";
 import { metadataOf } from "./project";
 
-import "@sefer/editor/editor.css";
+import "@wycliffeassociates/sefer-editor/editor.css";
 
 export interface ReferencePaneProps {
   readonly resource: Resource;

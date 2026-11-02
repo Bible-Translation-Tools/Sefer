@@ -1,5 +1,5 @@
-import type { BookEditorMount, LineKind } from "@sefer/editor";
 import type { JSX } from "@solidjs/web";
+import type { BookEditorMount, LineKind } from "@wycliffeassociates/sefer-editor";
 import Captions from "lucide-solid/icons/captions";
 import Heading from "lucide-solid/icons/heading";
 import Link2 from "lucide-solid/icons/link-2";

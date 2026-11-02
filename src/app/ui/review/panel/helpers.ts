@@ -1,4 +1,4 @@
-import type { BookId } from "@sefer/text/book";
+import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import { Result } from "effect";
 
 import type { DecisionUnit } from "#core/galley";

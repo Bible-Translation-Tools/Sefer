@@ -1,7 +1,7 @@
 // The check runs AFTER the shared project's (Will, 2026-10-02: the Shared project first, the two never in one pass).
 
-import * as TextResult from "@sefer/text/result";
-import { decode } from "@sefer/text/source";
+import * as TextResult from "@wycliffeassociates/sefer-text/result";
+import { decode } from "@wycliffeassociates/sefer-text/source";
 import { Effect, FileSystem, Option, Result } from "effect";
 
 import type { Addr, GalleyService, MergeSide } from "../galley";

@@ -1,4 +1,4 @@
-import type { Address } from "@sefer/text/location/address";
+import type { Address } from "@wycliffeassociates/sefer-text/location/address";
 import { Exit, Option } from "effect";
 import { createEffect, createSignal, untrack } from "solid-js";
 

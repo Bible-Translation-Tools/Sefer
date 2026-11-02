@@ -1,4 +1,4 @@
-import type { BookId } from "@sefer/text/book";
+import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import { createMemo, createSignal, onCleanup, untrack, type Accessor } from "solid-js";
 
 import type { DecisionUnit } from "#core/galley";

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { describesExactly, sameSource, toLf } from "@sefer/text/engine/analysis";
+import { describesExactly, sameSource, toLf } from "@wycliffeassociates/sefer-text/engine/analysis";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 

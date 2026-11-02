@@ -9,7 +9,7 @@ import {
   Transaction,
 } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, keymap } from "@codemirror/view";
-import { Refusal } from "@sefer/text/book";
+import { Refusal } from "@wycliffeassociates/sefer-text/book";
 
 import { settleTheCaretOnALegalPosition } from "../core/caret";
 import { viewLayer } from "../core/compose";

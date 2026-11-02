@@ -1,4 +1,4 @@
-import { identifyBook } from "@sefer/text/book";
+import { identifyBook } from "@wycliffeassociates/sefer-text/book";
 import { Effect, FileSystem } from "effect";
 
 import { Galley, toLf } from "../galley";

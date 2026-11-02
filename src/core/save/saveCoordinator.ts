@@ -1,6 +1,11 @@
-import { trustedBy, type Book, type BookId, type Origin } from "@sefer/text/book";
-import * as TextResult from "@sefer/text/result";
-import { decode, encode, type SourceStamp } from "@sefer/text/source";
+import {
+  trustedBy,
+  type Book,
+  type BookId,
+  type Origin,
+} from "@wycliffeassociates/sefer-text/book";
+import * as TextResult from "@wycliffeassociates/sefer-text/result";
+import { decode, encode, type SourceStamp } from "@wycliffeassociates/sefer-text/source";
 import {
   Context,
   Data,

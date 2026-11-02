@@ -1,5 +1,5 @@
-import type { Book, Receipt } from "@sefer/text/book";
-import * as Result from "@sefer/text/result";
+import type { Book, Receipt } from "@wycliffeassociates/sefer-text/book";
+import * as Result from "@wycliffeassociates/sefer-text/result";
 import { Effect, Layer } from "effect";
 import { expect, test } from "vitest";
 

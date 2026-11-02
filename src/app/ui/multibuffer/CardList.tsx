@@ -1,6 +1,6 @@
-import type { EditorBook } from "@sefer/editor";
-import type { BookId } from "@sefer/text/book";
 import type { JSX } from "@solidjs/web";
+import type { EditorBook } from "@wycliffeassociates/sefer-editor";
+import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import {
   createEffect,
   createMemo,

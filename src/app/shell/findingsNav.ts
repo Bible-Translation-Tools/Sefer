@@ -1,5 +1,5 @@
-import type { EditorBook } from "@sefer/editor";
-import * as TextResult from "@sefer/text/result";
+import type { EditorBook } from "@wycliffeassociates/sefer-editor";
+import * as TextResult from "@wycliffeassociates/sefer-text/result";
 import { Option, Result } from "effect";
 import type { Accessor, Setter } from "solid-js";
 

@@ -5,12 +5,12 @@ import {
   type Following,
   type MarkedRange,
   type ReaderMount,
-} from "@sefer/editor";
+} from "@wycliffeassociates/sefer-editor";
 import { createEffect, createMemo, createSignal, untrack } from "solid-js";
 
 import type { Analysis } from "#core/galley";
 
-import "@sefer/editor/editor.css";
+import "@wycliffeassociates/sefer-editor/editor.css";
 
 export interface ExcerptReaderProps {
   readonly analysis: Analysis;

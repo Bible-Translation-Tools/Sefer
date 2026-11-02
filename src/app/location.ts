@@ -1,8 +1,16 @@
-import type { BookId } from "@sefer/text/book";
-import { addressLabel, type Address } from "@sefer/text/location/address";
-import { citationWords, parseCitation, type Citation } from "@sefer/text/location/citation";
-import { addressAt } from "@sefer/text/location/locate";
-import { booksMatching, nameCatalogue, type NameCatalogue } from "@sefer/text/location/names";
+import type { BookId } from "@wycliffeassociates/sefer-text/book";
+import { addressLabel, type Address } from "@wycliffeassociates/sefer-text/location/address";
+import {
+  citationWords,
+  parseCitation,
+  type Citation,
+} from "@wycliffeassociates/sefer-text/location/citation";
+import { addressAt } from "@wycliffeassociates/sefer-text/location/locate";
+import {
+  booksMatching,
+  nameCatalogue,
+  type NameCatalogue,
+} from "@wycliffeassociates/sefer-text/location/names";
 import { createMemo, type Accessor } from "solid-js";
 
 import { stampMatches, tocViewOf, type Analysis, type EngineStamp } from "#core/galley";

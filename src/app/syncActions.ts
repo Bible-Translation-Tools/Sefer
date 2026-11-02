@@ -1,4 +1,4 @@
-import type { BookId } from "@sefer/text/book";
+import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import { Effect, Option } from "effect";
 
 import { Git, type Author } from "#core/git/git";

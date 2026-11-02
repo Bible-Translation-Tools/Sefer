@@ -1,6 +1,6 @@
-import type { EditorBook } from "@sefer/editor";
-import { trustedBy, type BookId } from "@sefer/text/book";
-import * as TextResult from "@sefer/text/result";
+import type { EditorBook } from "@wycliffeassociates/sefer-editor";
+import { trustedBy, type BookId } from "@wycliffeassociates/sefer-text/book";
+import * as TextResult from "@wycliffeassociates/sefer-text/result";
 import { Effect, Result } from "effect";
 
 import type { DecisionUnit, MergeSide } from "#core/galley";
