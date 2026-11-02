@@ -13,7 +13,6 @@ import type { Sync } from "#core/sync";
 
 import { collaboration } from "../../collaboration";
 import { t } from "../../i18n";
-import { m } from "../../paraglide/messages";
 import type { Shell } from "../../ProjectContext";
 import { syncStatus } from "../../syncStatus";
 import { syncWatch } from "../../syncWatch";
@@ -35,6 +34,7 @@ import {
   type QuickAction,
   type QuickSync,
 } from "./quick";
+import { SignInForm } from "./SignInForm";
 import { WriterSection } from "./WriterSection";
 
 const glyphOf = (sync: Sync | undefined) => {
@@ -267,24 +267,17 @@ const SyncDetails = (props: {
   </div>
 );
 
-const AccountRow = (props: {
-  readonly account: Account;
-  readonly host: string;
-  readonly onSignIn: () => void;
-}) => (
-  <div class="mt-4 border-t border-surface-border pt-3" data-sync-account>
+const AccountRow = (props: { readonly account: Account; readonly host: string }) => (
+  <div
+    class={cx(
+      "mt-4",
+      props.account.session() !== undefined && "border-t border-surface-border pt-3",
+    )}
+    data-sync-account
+  >
     <Show
       when={props.account.session()}
-      fallback={
-        <div class="flex items-center gap-2">
-          <p class="min-w-0 flex-1 text-small text-on-surface-secondary">
-            {m.sync_signed_out({ host: props.host.replace(/^https?:\/\//u, "") })}
-          </p>
-          <Button variant="primary" data-testid="sync-sign-in" onClick={props.onSignIn}>
-            {t("Sign in")}
-          </Button>
-        </div>
-      }
+      fallback={<SignInForm account={props.account} host={props.host} bare />}
     >
       {(held) => (
         <div class="flex items-center gap-2">
@@ -347,11 +340,7 @@ export function SyncPopover(props: { readonly sync: SyncHandle }) {
         {(held) => <SyncDetails held={held()} pop={pop} quick={quick} account={account} />}
       </Show>
 
-      <Show when={account.host}>
-        {(host) => (
-          <AccountRow account={account} host={host()} onSignIn={() => pop.run("sign-in")} />
-        )}
-      </Show>
+      <Show when={account.host}>{(host) => <AccountRow account={account} host={host()} />}</Show>
     </Popover>
   );
 }

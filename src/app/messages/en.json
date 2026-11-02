@@ -204,6 +204,5 @@
   "line_menu_footnote_add": "Add footnote",
   "account_button": "Account",
   "account_signed_in_as": "Signed in as {user}",
-  "cloud_sign_in_from_account": "Sign in from the Account button at the top right to choose a shared project for this one.",
-  "sync_signed_out": "Not signed in to {host}."
+  "cloud_sign_in_from_account": "Sign in from the Account button at the top right to choose a shared project for this one."
 }

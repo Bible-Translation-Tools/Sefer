@@ -576,10 +576,11 @@ not made.
 
 `createAccount` (`src/app/ui/cloud/account.ts`) is the one implementation of "signed in", and one
 account per composition: every caller (the sync popover, `CloudPanel` on `/project/$slug/settings`,
-the app bar) gets the same one, so signing in anywhere shows everywhere. The sign-in itself lives in
-the app bar's Account button (`src/app/ui/workspace/AccountButton.tsx`), a popover with the form or,
-signed in, the person's initials, name and Sign out; the sync popover's Sign in and the quick
-`sign-in` action open it through the account's `panelOpen`. The attach-and-publish half, `SharedProjectCard`
+the app bar) gets the same one, so signing in anywhere shows everywhere. One `SignInForm`
+(`src/app/ui/cloud/SignInForm.tsx`) is drawn in two places: the app bar's Account button
+(`src/app/ui/workspace/AccountButton.tsx`), a popover with the form or, signed in, the person's
+initials, name and Sign out; and the sync popover, under its state when signed out. The quick
+`sign-in` action opens the Account popover through the account's `panelOpen`. The attach-and-publish half, `SharedProjectCard`
 (`src/app/ui/cloud/SharedProjectCard.tsx`), is there too. "Choose a shared project…" is a list you
 type at (`FilterList`) over the repositories the account can write to, and picking a row attaches
 it; the first list is one page of 50, so after a 300 ms pause what was typed is searched on Gitea

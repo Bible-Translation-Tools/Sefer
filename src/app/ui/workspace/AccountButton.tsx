@@ -1,11 +1,12 @@
 import UserIcon from "lucide-solid/icons/user";
-import { Show, createSignal } from "solid-js";
+import { Show } from "solid-js";
 
 import { t } from "../../i18n";
 import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
-import { createAccount, type Account } from "../cloud/account";
-import { Button, IconButton, Input, Popover } from "../primitives";
+import { createAccount } from "../cloud/account";
+import { ProblemNote, SignInForm } from "../cloud/SignInForm";
+import { Button, IconButton, Popover } from "../primitives";
 
 /** Up to two letters for the avatar: the first of each part of the name ("thomas_hajny" → "TH"). */
 const initialsOf = (username: string): string => {
@@ -14,80 +15,6 @@ const initialsOf = (username: string): string => {
     parts.length > 1 ? (parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "") : username.slice(0, 2);
   return letters.toUpperCase();
 };
-
-const ProblemNote = (props: { readonly text: string }) => (
-  <Show when={props.text !== ""}>
-    <p
-      class="rounded-md bg-surface-error px-3 py-2 text-small break-words text-on-surface-error"
-      data-cloud="problem"
-    >
-      {props.text}
-    </p>
-  </Show>
-);
-
-function SignInForm(props: { readonly account: Account; readonly host: string }) {
-  const [username, setUsername] = createSignal("", { name: "cloudUser" });
-  const [password, setPassword] = createSignal("", { name: "cloudPassword" });
-  const [otp, setOtp] = createSignal("", { name: "cloudOtp" });
-
-  const submit = (event: SubmitEvent): void => {
-    event.preventDefault();
-    props.account.signIn({ username: username(), password: password(), otp: otp() });
-    setPassword("");
-    setOtp("");
-  };
-
-  return (
-    <form class="space-y-3" onSubmit={submit} data-cloud="sign-in">
-      <p class="text-small text-on-surface-secondary">
-        {t(
-          "Sign in to {host} to back your work up and share it. Your project is already saved on this device.",
-          { host: props.host.replace(/^https?:\/\//u, "") },
-        )}
-      </p>
-      <Input
-        type="text"
-        wrapperClass="w-full"
-        autocomplete="username"
-        aria-label={t("username")}
-        placeholder={t("username")}
-        value={username()}
-        onInput={(event) => setUsername(event.currentTarget.value)}
-      />
-      <Input
-        type="password"
-        wrapperClass="w-full"
-        autocomplete="current-password"
-        aria-label={t("password")}
-        placeholder={t("password")}
-        value={password()}
-        onInput={(event) => setPassword(event.currentTarget.value)}
-      />
-      <Show when={props.account.otpWanted()}>
-        <Input
-          type="text"
-          inputmode="numeric"
-          wrapperClass="w-full"
-          autocomplete="one-time-code"
-          aria-label={t("one-time code")}
-          placeholder={t("one-time code")}
-          value={otp()}
-          onInput={(event) => setOtp(event.currentTarget.value)}
-        />
-      </Show>
-      <ProblemNote text={props.account.problem()} />
-      <Button
-        type="submit"
-        variant="primary"
-        class="w-full justify-center"
-        disabled={props.account.busy()}
-      >
-        {t("Sign in")}
-      </Button>
-    </form>
-  );
-}
 
 /**
  * The app bar's Account button: the WACS sign-in, wherever you are. Signed
