@@ -24,6 +24,8 @@ import { docText } from "../core/model/docStructure";
 import {
   chapterTitles,
   leaveNumbersToTheMenu,
+  numbersHaveMenus,
+  onNumber,
   removesMarker,
   suggestedNumber,
 } from "../core/verseLines";
@@ -331,6 +333,50 @@ function corpusDiagnostics(
   return out;
 }
 
+const RANK: Readonly<Record<string, number>> = { error: 3, warning: 2, info: 1, hint: 0 };
+
+/**
+ * Where a verse number has a menu (`numbersHaveMenus`), its findings are the
+ * menu's to show (`leaveNumbersToTheMenu`), so they are drawn on the number,
+ * once: on its digits, every one in the worst one's mark (CodeMirror draws
+ * findings on one range as one mark). Drawn where the engine put them instead,
+ * under the hidden marker and delimiter, they were a squiggle and a point
+ * beside the number that no hover explained (Will, 2026-11-02). A number with no
+ * digits (`\v` alone) keeps its point: it has nothing else to mark.
+ */
+function ontoNumbers(state: EditorState, diagnostics: CmDiagnostic[]): CmDiagnostic[] {
+  if (!numbersHaveMenus(state)) return diagnostics;
+  const verses = structureAt(state).verses;
+  const onto = diagnostics.map((diagnostic) =>
+    verses.find((row) => row.numTo > row.numFrom && onNumber(row, diagnostic.from, diagnostic.to)),
+  );
+  const worst = new Map<number, CmDiagnostic["severity"]>();
+  onto.forEach((verse, i) => {
+    if (verse === undefined) return;
+    const held = worst.get(verse.numFrom);
+    const severity = diagnostics[i].severity;
+    if (held === undefined || (RANK[severity] ?? 0) > (RANK[held] ?? 0))
+      worst.set(verse.numFrom, severity);
+  });
+  return diagnostics.map((diagnostic, i) => {
+    const verse = onto[i];
+    if (verse === undefined) return diagnostic;
+    const severity = worst.get(verse.numFrom) ?? diagnostic.severity;
+    const moved: CmDiagnostic = {
+      ...diagnostic,
+      from: verse.numFrom,
+      to: verse.numTo,
+      markClass: SEVERITY_CLASS[severity] ?? "usfm-lint-info",
+    };
+    // The menu's lookups are keyed by the diagnostic object.
+    const number = suggestedNumber.get(diagnostic);
+    if (number !== undefined) suggestedNumber.set(moved, number);
+    const marker = removesMarker.get(diagnostic);
+    if (marker !== undefined) removesMarker.set(moved, marker);
+    return moved;
+  });
+}
+
 /**
  * The inline linter: Galley's diagnostics from the current state, plus whatever
  * corpus findings were last pushed in. ONE `linter`, so one gutter, one
@@ -348,10 +394,10 @@ export function usfmLinter(
     flaggedTitles,
     linter(
       (view) => {
-        return [
+        return ontoNumbers(view.state, [
           ...onionDiagnostics(view.state, isHidden, suppressHidden),
           ...corpusDiagnostics(view.state, isHidden, suppressHidden),
-        ];
+        ]);
       },
       {
         delay: 150,
