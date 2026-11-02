@@ -128,13 +128,35 @@ function findings(state: EditorState, isHidden?: HiddenTest): Finding[] {
   }
   done();
   const places = out.filter((f) => f.point);
-  return places.length === 0
-    ? out
-    : out.filter(
+  if (places.length === 0) return out;
+  const near = (f: Finding, p: Finding) => f.from <= p.to + 1 && f.to >= p.from - 1;
+  // A missing number beside surplus whitespace is one of two things. Digits
+  // after the whitespace (`\v  2`): the number is there, the engine read past
+  // the extra space and missed it (Scripture Kitchen ask 16), so the point goes
+  // and the whitespace's own finding, whose fix mends both, stays. No digits
+  // (`\v  words`): the number is missing, and the point is the finding.
+  const verses = structureAt(state).verses;
+  const misread = (p: Finding) => {
+    const verse = verses.find((row) => row.markerFrom <= p.from && p.from <= row.contentFrom);
+    if (verse === undefined) return false;
+    const after = state.doc.sliceString(
+      verse.markerTo,
+      Math.min(verse.markerTo + 12, state.doc.length),
+    );
+    return (
+      // `markerTo` is past the marker's one delimiter: more whitespace, then digits.
+      /^[ \t]+\d/.test(after) &&
+      out.some(
         (f) =>
-          f.name !== "delimiter-surplus" ||
-          !places.some((p) => f.from <= p.to + 1 && f.to >= p.from - 1),
-      );
+          f.name === "delimiter-surplus" && f.from >= verse.markerTo && f.to <= verse.contentFrom,
+      )
+    );
+  };
+  return out.filter((f) =>
+    f.point
+      ? !misread(f)
+      : f.name !== "delimiter-surplus" || !places.some((p) => near(f, p) && !misread(p)),
+  );
 }
 
 function applyFix(
