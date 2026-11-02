@@ -204,5 +204,8 @@
   "line_menu_footnote_add": "Add footnote",
   "account_button": "Account",
   "account_signed_in_as": "Signed in as {user}",
-  "cloud_sign_in_from_account": "Sign in from the Account button at the top right to choose a shared project for this one."
+  "cloud_sign_in_from_account": "Sign in from the Account button at the top right to choose a shared project for this one.",
+  "sync_local_headline": "Saved on this device only",
+  "sync_local_detail": "This project is not online. Your work is saved on this device and nowhere else. To save it to WACS, sign in with your WACS account.",
+  "sync_local_detail_signed_in": "This project is not online. Your work is saved on this device and nowhere else. To save it to WACS, choose a shared project or publish this one."
 }
