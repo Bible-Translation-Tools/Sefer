@@ -186,5 +186,18 @@
   "import_document_cancel": "Cancel",
   "import_document_import": "Import",
   "import_document_done": "Imported chapters {chapters} from {file}",
-  "import_document_refused": "Import refused: {reason}"
+  "import_document_refused": "Import refused: {reason}",
+  "desktop_download_title": "Download Desktop Version",
+  "desktop_download_description": "Work without an internet connection. The desktop version keeps your work on your computer.",
+  "desktop_download_recommended": "{platform} (recommended)",
+  "desktop_download_details": "Version {version} · {size}",
+  "desktop_download_button": "Download",
+  "desktop_download_again": "Download again",
+  "desktop_download_unavailable": "Download unavailable",
+  "desktop_download_progress": "Downloading… {percent}%",
+  "desktop_download_done": "Downloaded",
+  "desktop_platform_mac": "macOS",
+  "desktop_platform_windows": "Windows",
+  "desktop_platform_linux": "Linux",
+  "settings_nav_label": "On this page"
 }
