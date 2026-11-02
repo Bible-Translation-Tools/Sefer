@@ -1,6 +1,7 @@
 import { Show, createSignal } from "solid-js";
 
 import { t } from "../../i18n";
+import { m } from "../../paraglide/messages";
 import { Button, Input } from "../primitives";
 import type { Account } from "./account";
 
@@ -18,6 +19,28 @@ export const ProblemNote = (props: { readonly text: string }) => (
       {props.text}
     </p>
   </Show>
+);
+
+/**
+ * A page on the WACS server itself, in the browser: resetting a password and
+ * creating an account are Gitea's own pages (`/user/forgot_password`,
+ * `/user/sign_up`), so Sefer links to them rather than redoing them.
+ */
+const WacsLink = (props: {
+  readonly host: string;
+  readonly path: string;
+  readonly testId: string;
+  readonly children: string;
+}) => (
+  <a
+    class="text-small text-brand hover:underline"
+    href={`${props.host.replace(/\/+$/u, "")}${props.path}`}
+    target="_blank"
+    rel="noopener noreferrer"
+    data-testid={props.testId}
+  >
+    {props.children}
+  </a>
 );
 
 export function SignInForm(props: {
@@ -68,6 +91,11 @@ export function SignInForm(props: {
         value={password()}
         onInput={(event) => setPassword(event.currentTarget.value)}
       />
+      <div class="flex justify-end">
+        <WacsLink host={props.host} path="/user/forgot_password" testId="sign-in-forgot">
+          {m.sign_in_forgot_password()}
+        </WacsLink>
+      </div>
       <Show when={props.account.otpWanted()}>
         <Input
           type="text"
@@ -89,6 +117,12 @@ export function SignInForm(props: {
       >
         {t("Sign in")}
       </Button>
+      <p class="text-center text-small text-on-surface-secondary">
+        {m.sign_in_no_account()}{" "}
+        <WacsLink host={props.host} path="/user/sign_up" testId="sign-in-create">
+          {m.sign_in_create_account()}
+        </WacsLink>
+      </p>
     </form>
   );
 }

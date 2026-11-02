@@ -48,7 +48,7 @@ The generated half looks after itself; the judgement half does not. When a gate 
 | oxlint warnings | 0 | `pnpm lint` fails on any, every commit |
 | fallow dead code (`pnpm deadcode`) | 0 issue(s) | every deploy; advisory on branches |
 | fallow duplication | 1.6% in 65 clone group(s) | none — advisory |
-| suppression comments | 228 | each listed below with its reason |
+| suppression comments | 231 | each listed below with its reason |
 
 ### Oxlint warnings, by rule and file
 
@@ -263,6 +263,9 @@ None.
 | `src/app/paraglide/messages/sidebar_show_key_terms.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/sidebar_show_results.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/sidebar_show_suggestions.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/sign_in_create_account.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/sign_in_forgot_password.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/sign_in_no_account.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/sync_local_detail_signed_in.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/sync_local_detail.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/sync_local_headline_signed_out.js` | `eslint-disable` | — |

@@ -209,5 +209,8 @@
   "sync_local_detail": "This project is not online. Your work is saved on this device and nowhere else. To save it to WACS, sign in with your WACS account.",
   "sync_local_detail_signed_in": "This project is not online. Your work is saved on this device and nowhere else. To save it to WACS, choose a shared project or publish this one.",
   "sync_menu_item": "Sync",
-  "sync_local_headline_signed_out": "Sign in to sync to WACS"
+  "sync_local_headline_signed_out": "Sign in to sync to WACS",
+  "sign_in_forgot_password": "Forgot password?",
+  "sign_in_no_account": "New to WACS?",
+  "sign_in_create_account": "Create an account"
 }
