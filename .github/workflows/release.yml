@@ -214,6 +214,11 @@ jobs:
           OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
           CLOUDFLARE_API_TOKEN: "op://DevOps/Sefer/cloudflare-api-token"
           CLOUDFLARE_ACCOUNT_ID: "op://DevOps/Sefer/cloudflare-account-id"
+          # Settings' Download Desktop Version card asks the updater for its
+          # channel's installers: production asks production, preview and dev
+          # ask preview (dev has no desktop builds of its own).
+          UPDATER_HOST_PREVIEW: "op://DevOps/Sefer/updater-host-preview"
+          UPDATER_HOST_PRODUCTION: "op://DevOps/Sefer/updater-host-production"
 
       - uses: pnpm/action-setup@v5
       - uses: actions/setup-node@v5
@@ -227,6 +232,8 @@ jobs:
       # pairing could quietly come apart.
       - name: Deploy
         run: pnpm deploy:web ${{ needs.resolve.outputs.channel }}
+        env:
+          VITE_SEFER_UPDATER_HOST: ${{ needs.resolve.outputs.channel == 'production' && env.UPDATER_HOST_PRODUCTION || env.UPDATER_HOST_PREVIEW }}
 
       - name: Summary
         run: |

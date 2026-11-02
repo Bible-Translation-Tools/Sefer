@@ -56,6 +56,7 @@ export type OperationName =
   | "inventory.load"
   | "update.check"
   | "update.install"
+  | "desktop.downloads"
   | "diagnostics.export"
   | `command.${string}`
   | `playground.${string}`

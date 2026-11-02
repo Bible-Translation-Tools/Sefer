@@ -11,6 +11,9 @@
  *                                     downgrade picker.
  *   /{target}/at/{specific_version}   Manifest for an exact version (manual
  *                                     downgrade / pinning).
+ *   /downloads                        The latest release's first-install files,
+ *                                     one per platform, for the web app's
+ *                                     "Download Desktop Version" card.
  *
  * Target strings follow Tauri's convention: e.g. darwin-aarch64,
  * darwin-x86_64, linux-x86_64, windows-x86_64.
@@ -91,6 +94,8 @@ export default {
 
     if (path.length === 1 && path[0] === "versions") {
       response = await listVersions(env);
+    } else if (path.length === 1 && path[0] === "downloads") {
+      response = await latestDownloads(env);
     } else if (path.length === 2) {
       response = await latestManifest(path[0], path[1], env);
     } else if (path.length === 3 && path[1] === "at") {
@@ -117,6 +122,41 @@ async function listVersions(env: Env): Promise<Response> {
     prerelease: r.prerelease,
   }));
   return json(versions);
+}
+
+/**
+ * The installers a person downloads to install Sefer for the first time, from
+ * this channel's latest release: not the updater's payloads. macOS installs
+ * from a `.dmg` (its updater payload is an `.app.tar.gz`); Windows from the
+ * NSIS `-setup.exe`, else the `.msi`; Linux from the `.AppImage`. A platform
+ * whose installer the release lacks is left out, and the card says so.
+ */
+const INSTALLERS: readonly {
+  readonly platform: "mac" | "windows" | "linux";
+  readonly patterns: readonly RegExp[];
+}[] = [
+  { platform: "mac", patterns: [/\.dmg$/] },
+  { platform: "windows", patterns: [/-setup\.exe$/, /\.msi$/] },
+  { platform: "linux", patterns: [/\.AppImage$/] },
+];
+
+async function latestDownloads(env: Env): Promise<Response> {
+  const releases = await fetchReleases(env);
+  const latest = releases[0];
+  if (!latest) return new Response("no releases", { status: 404 });
+  const builds = INSTALLERS.flatMap(({ platform, patterns }) => {
+    for (const pattern of patterns) {
+      const asset = latest.assets.find((a) => pattern.test(a.name));
+      if (asset)
+        return [{ platform, name: asset.name, url: asset.browser_download_url, size: asset.size }];
+    }
+    return [];
+  });
+  return json({
+    version: stripTagPrefix(latest.tag_name, env.GH_TAG_PREFIX),
+    published_at: latest.published_at,
+    builds,
+  });
 }
 
 async function latestManifest(target: string, currentVersion: string, env: Env): Promise<Response> {

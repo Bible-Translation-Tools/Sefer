@@ -1,41 +1,39 @@
-import { For, Show, createSignal, onCleanup } from "solid-js";
+import { For, Show, createSignal } from "solid-js";
 
+import {
+  downloadsConfigured,
+  latestDownloads,
+  type DesktopDownloads,
+  type DesktopPlatform,
+} from "#app/desktopDownloads";
 import { m } from "#app/paraglide/messages";
+import { useServices } from "#app/ProjectContext";
 
-import { PlatformIcon, type Platform } from "./PlatformIcon";
-import { Button, Card, PanelHeader } from "./primitives";
+import { PlatformIcon } from "./PlatformIcon";
+import { Button, ButtonLink, Card, PanelHeader } from "./primitives";
 
 /**
  * Settings → Download Desktop Version (SEFER-85), shown only on the Web.
  *
- * PLACEHOLDER — the UI is real, the plumbing is not (paisano's):
- * - `RELEASE` is hard-coded from v0.1.0-5; it should come from the latest
- *   release for this build's channel (preview site → preview builds).
- * - The download is simulated. A browser cannot watch a download it hands to
- *   the user, so "Downloading…" only works if Sefer fetches the installer
- *   itself (then saves the bytes). No page can open the file afterwards.
+ * The installers are this build's channel's latest release, as the updater
+ * worker lists them (`#app/desktopDownloads`). A download is a plain link the
+ * browser saves itself, with its own progress, pause and cancel: a page cannot
+ * watch a download it hands over, and fetching an installer into the page to
+ * show a percentage would hold the whole file in memory. A platform the
+ * release has no installer for (macOS, so far) says so.
  *
- * There is no "Open in desktop": a page cannot tell whether the desktop app
- * is installed, nor which version, so it does not offer to open it.
+ * There is no "Open" and no "Open in desktop": a page cannot open a file it
+ * downloaded, nor tell whether the desktop app is installed.
  */
 
-type PlatformId = Extract<Platform, "mac" | "windows" | "linux">;
+type PlatformId = DesktopPlatform;
 
-interface Build {
-  readonly platform: PlatformId;
-  /** Bytes; undefined when there is no build for that platform yet. */
-  readonly size: number | undefined;
-}
+const PLATFORMS: readonly PlatformId[] = ["mac", "windows", "linux"];
 
-const RELEASE = {
-  version: "0.1.0-5",
-  builds: [
-    // No macOS build has been published yet (the release run's Mac job was cancelled).
-    { platform: "mac", size: undefined },
-    { platform: "windows", size: 6_129_535 },
-    { platform: "linux", size: 89_131_512 },
-  ] satisfies readonly Build[],
-} as const;
+type Release =
+  | { readonly state: "loading" }
+  | { readonly state: "ready"; readonly downloads: DesktopDownloads }
+  | { readonly state: "unavailable"; readonly reason: string };
 
 const platformName = (id: PlatformId): string =>
   id === "mac"
@@ -56,98 +54,103 @@ const megabytes = (bytes: number): string => `${(bytes / 1_000_000).toFixed(0)} 
 /** One width for every row's download button, wide enough for "Download unavailable". */
 const DOWNLOAD_WIDTH = "w-44 justify-center";
 
-type Progress =
-  | { readonly state: "idle" }
-  | { readonly state: "downloading"; readonly percent: number }
-  | { readonly state: "done" };
-
-function DownloadRow(props: { readonly build: Build; readonly recommended: boolean }) {
-  const [progress, setProgress] = createSignal<Progress>(
-    { state: "idle" },
-    { name: "desktopDownload" },
-  );
-  let timer: ReturnType<typeof setInterval> | undefined;
-  onCleanup(() => clearInterval(timer));
-
-  const start = (): void => {
-    clearInterval(timer);
-    setProgress({ state: "downloading", percent: 0 });
-    timer = setInterval(() => {
-      const current = progress();
-      const percent = current.state === "downloading" ? current.percent + 10 : 100;
-      if (percent < 100) {
-        setProgress({ state: "downloading", percent });
-        return;
-      }
-      clearInterval(timer);
-      setProgress({ state: "done" });
-    }, 300);
-  };
-
-  const downloading = (): number | undefined => {
-    const current = progress();
-    return current.state === "downloading" ? current.percent : undefined;
-  };
-
+function DownloadRow(props: {
+  readonly platform: PlatformId;
+  readonly release: Release;
+  readonly recommended: boolean;
+}) {
+  const build = () =>
+    props.release.state === "ready"
+      ? props.release.downloads.builds.find((row) => row.platform === props.platform)
+      : undefined;
   const detail = (): string | undefined => {
-    const size = props.build.size;
-    if (size === undefined) return undefined;
-    const percent = downloading();
-    if (percent !== undefined) return m.desktop_download_progress({ percent: String(percent) });
-    const details = m.desktop_download_details({ version: RELEASE.version, size: megabytes(size) });
-    return progress().state === "done" ? `${m.desktop_download_done()} · ${details}` : details;
+    const found = build();
+    if (found === undefined || props.release.state !== "ready") return undefined;
+    return m.desktop_download_details({
+      version: props.release.downloads.version,
+      size: megabytes(found.size),
+    });
   };
 
   return (
-    <div class="flex items-center gap-3 px-4 py-3" data-desktop-download={props.build.platform}>
+    <div class="flex items-center gap-3 px-4 py-3" data-desktop-download={props.platform}>
       <div class="min-w-0 flex-1">
         <p class="flex items-center gap-2 text-small text-on-surface-primary">
-          <PlatformIcon platform={props.build.platform} />
+          <PlatformIcon platform={props.platform} />
           {props.recommended
-            ? m.desktop_download_recommended({ platform: platformName(props.build.platform) })
-            : platformName(props.build.platform)}
+            ? m.desktop_download_recommended({ platform: platformName(props.platform) })
+            : platformName(props.platform)}
         </p>
         <Show when={detail()}>
           {(text) => <p class="text-smallest text-on-surface-tertiary">{text()}</p>}
         </Show>
-        <Show when={downloading() !== undefined}>
-          <div class="mt-2 h-1 overflow-hidden rounded-full bg-surface-tertiary">
-            <div
-              class="h-full bg-brand transition-[width]"
-              style={{ width: `${downloading() ?? 0}%` }}
-            />
-          </div>
-        </Show>
       </div>
       <Show
-        when={props.build.size !== undefined}
+        when={build()}
         fallback={
-          <Button variant="secondary" class={DOWNLOAD_WIDTH} disabled>
-            {m.desktop_download_unavailable()}
+          <Button
+            variant="secondary"
+            class={DOWNLOAD_WIDTH}
+            loading={props.release.state === "loading"}
+            disabled
+          >
+            {props.release.state === "loading"
+              ? m.desktop_download_button()
+              : m.desktop_download_unavailable()}
           </Button>
         }
       >
-        <Button
-          variant="secondary"
-          class={DOWNLOAD_WIDTH}
-          onClick={start}
-          loading={downloading() !== undefined}
-          disabled={downloading() !== undefined}
-        >
-          {progress().state === "done" ? m.desktop_download_again() : m.desktop_download_button()}
-        </Button>
+        {(found) => (
+          <ButtonLink
+            variant="secondary"
+            class={DOWNLOAD_WIDTH}
+            href={found().url}
+            download={found().name}
+            data-desktop-download-link
+          >
+            {m.desktop_download_button()}
+          </ButtonLink>
+        )}
       </Show>
     </div>
   );
 }
 
 export function DesktopDownloadCard() {
+  const services = useServices();
   const current = detectPlatform();
   // The detected platform first; the rest keep their order.
-  const builds = [
-    ...RELEASE.builds.filter((build) => build.platform === current),
-    ...RELEASE.builds.filter((build) => build.platform !== current),
-  ];
+  const platforms = [current, ...PLATFORMS.filter((platform) => platform !== current)];
+
+  const [release, setRelease] = createSignal<Release>(
+    downloadsConfigured()
+      ? { state: "loading" }
+      : { state: "unavailable", reason: m.desktop_download_not_configured() },
+    { name: "desktopRelease" },
+  );
+  if (downloadsConfigured()) {
+    const operation = services.composition.observability.operation("desktop.downloads");
+    latestDownloads().then(
+      (downloads) => {
+        operation.end("passed", { "downloads.builds": downloads.builds.length });
+        setRelease({ state: "ready", downloads });
+      },
+      (cause: unknown) => {
+        const reason = cause instanceof Error ? cause.message : String(cause);
+        operation.end("unavailable", { "downloads.reason": reason });
+        setRelease({ state: "unavailable", reason: m.desktop_download_failed({ reason }) });
+      },
+    );
+  }
+
+  const offered = (platform: PlatformId): boolean => {
+    const now = release();
+    return now.state === "ready" && now.downloads.builds.some((row) => row.platform === platform);
+  };
+  const note = (): string | undefined => {
+    const now = release();
+    return now.state === "unavailable" ? now.reason : undefined;
+  };
 
   return (
     <Card
@@ -161,12 +164,20 @@ export function DesktopDownloadCard() {
           title={m.desktop_download_title()}
           subtitle={m.desktop_download_description()}
         />
+        <Show when={note()}>
+          {(text) => (
+            <p class="mt-1 text-smallest text-on-surface-tertiary" data-desktop-download-note>
+              {text()}
+            </p>
+          )}
+        </Show>
       </div>
-      <For each={builds}>
-        {(build) => (
+      <For each={platforms}>
+        {(platform) => (
           <DownloadRow
-            build={build}
-            recommended={build.platform === current && build.size !== undefined}
+            platform={platform}
+            release={release()}
+            recommended={platform === current && offered(platform)}
           />
         )}
       </For>

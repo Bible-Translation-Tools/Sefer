@@ -1,5 +1,5 @@
 export { Badge, severityTone, type BadgeTone } from "./Badge";
-export { Button } from "./Button";
+export { Button, ButtonLink } from "./Button";
 export { Card, PanelHeader } from "./Card";
 export { PageDoor } from "./pageLeading";
 export { cx, type ClassValue } from "./cx";

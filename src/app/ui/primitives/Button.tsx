@@ -73,3 +73,29 @@ export function Button(props: ButtonProps) {
     </button>
   );
 }
+
+export interface ButtonLinkProps extends ComponentProps<"a"> {
+  readonly variant?: ButtonVariant;
+  readonly size?: ButtonSize;
+  readonly icon?: JSX.Element;
+}
+
+/**
+ * A link that looks like a Button: for what the browser should do itself,
+ * such as a download (`href` and `download`), where a button would have to
+ * script it and lose the browser's own progress, pause and cancel.
+ */
+export function ButtonLink(props: ButtonLinkProps) {
+  const rest = omit(props, "variant", "size", "icon", "class");
+  const merged = merge(rest, {
+    get class() {
+      return classes({ variant: props.variant, size: props.size }, ["no-underline", props.class]);
+    },
+  });
+  return (
+    <a {...merged}>
+      {props.icon}
+      {props.children}
+    </a>
+  );
+}
