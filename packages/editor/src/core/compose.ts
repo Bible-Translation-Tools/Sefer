@@ -157,14 +157,22 @@ const pressesOutsideTextLetGo = ViewPlugin.define((view) => {
     const onText =
       view.contentDOM.contains(target) && target.closest(".cm-line, .cm-widgetBuffer") !== null;
     // A diff's change bars and the earlier wording they open are the diff's to
-    // answer (`recipes/diffView.ts`, `hunkClicks`), not a press off the text.
+    // answer (`surfaces/diffView.ts`, `hunkClicks`), and a note's row under the
+    // chapter its own (open it, or go back to its caller): not presses off the text.
     if (
       onText ||
-      target.closest(".cm-tooltip, .cm-panels, .cm-gutters, [data-diff-bar], [data-diff-was]") !==
-        null
+      target.closest(
+        ".cm-tooltip, .cm-panels, .cm-gutters, [data-diff-bar], [data-diff-was], [data-note-row]",
+      ) !== null
     )
       return;
     if (view.dom.contains(target)) {
+      // An editor nested in this one (a note's satellite) answers its own
+      // presses, and a control drawn inside (a note's Done) keeps its own say,
+      // as one outside does below.
+      const inner = target.closest(".cm-editor");
+      if (inner !== null && inner !== view.dom) return;
+      if (target.closest("button, a, input, select, textarea") !== null) return;
       if (target === view.scrollDOM && event.offsetX >= view.scrollDOM.clientWidth) return; // the scrollbar
       event.preventDefault();
       event.stopPropagation();

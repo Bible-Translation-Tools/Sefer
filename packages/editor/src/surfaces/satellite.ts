@@ -84,14 +84,22 @@ const rangeEdgesSettled: Extension = EditorState.transactionFilter.of((tr) => {
         : settled <= pos && settled >= limit;
     return inside ? settled : pos;
   };
+  // The range's end where its own stop lies past it, behind hidden markup that
+  // closes the range (a note's \f*: the last word's end and the far side of
+  // \f* draw as one place, and the far side is the stop): the end is the last
+  // place inside, not the stop before it, one character short.
+  const lastInside = (limit: number): number =>
+    !stops.isStop(edge) && stops.settle(edge, "forward") > edge
+      ? edge
+      : inward(Math.min(hi, edge), "backward", limit);
   if (sel.empty) {
     let at = lo;
     if (lo <= windowRange.from) at = inward(lo, "forward", edge);
-    else if (hi >= edge) at = inward(hi, "backward", windowRange.from);
+    else if (hi >= edge) at = lastInside(windowRange.from);
     return at === lo ? tr : [tr, { selection: { anchor: at }, sequential: true }];
   }
   const from = lo <= windowRange.from ? inward(lo, "forward", hi) : lo;
-  const to = hi >= edge ? inward(hi, "backward", from) : hi;
+  const to = hi >= edge ? lastInside(from) : hi;
   if (from === lo && to === hi) return tr;
   const forward = sel.head >= sel.anchor;
   return [
