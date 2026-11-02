@@ -48,7 +48,7 @@ The generated half looks after itself; the judgement half does not. When a gate 
 | oxlint warnings | 0 | `pnpm lint` fails on any, every commit |
 | fallow dead code (`pnpm deadcode`) | 0 issue(s) | every deploy; advisory on branches |
 | fallow duplication | 1.6% in 65 clone group(s) | none — advisory |
-| suppression comments | 220 | each listed below with its reason |
+| suppression comments | 224 | each listed below with its reason |
 
 ### Oxlint warnings, by rule and file
 
@@ -62,6 +62,8 @@ None.
 | `src/app/locale.ts` | `oxlint-disable-next-line` | solid/reactivity |
 | `src/app/paraglide/messages.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/_index.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/account_button.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/account_signed_in_as.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/block_name_d.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/block_name_ip.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/block_name_iq.js` | `eslint-disable` | — |
@@ -108,6 +110,7 @@ None.
 | `src/app/paraglide/messages/chapter_labels_use_everywhere.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/chapter_labels_use_most.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/chapter_labels_word_count.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/cloud_sign_in_from_account.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/desktop_download_button.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/desktop_download_description.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/desktop_download_details.js` | `eslint-disable` | — |
@@ -260,6 +263,7 @@ None.
 | `src/app/paraglide/messages/sidebar_show_key_terms.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/sidebar_show_results.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/sidebar_show_suggestions.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/sync_signed_out.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/typed_usfm_message.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/typed_usfm_switch.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/typed_usfm_title.js` | `eslint-disable` | — |

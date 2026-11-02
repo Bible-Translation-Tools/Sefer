@@ -13,6 +13,7 @@ import type { Sync } from "#core/sync";
 
 import { collaboration } from "../../collaboration";
 import { t } from "../../i18n";
+import { m } from "../../paraglide/messages";
 import type { Shell } from "../../ProjectContext";
 import { syncStatus } from "../../syncStatus";
 import { syncWatch } from "../../syncWatch";
@@ -20,7 +21,6 @@ import { writerWatch } from "../../writerWatch";
 import { ago } from "../panels/format";
 import { Button, IconButton, Input, Popover, cx, toasts } from "../primitives";
 import { createAccount, type Account } from "./account";
-import { SignInForm } from "./AccountCard";
 import { CollabSection } from "./CollabSection";
 import { stateCopy, type StateCopy } from "./copy";
 import { PlanBooks } from "./IncomingPlanCard";
@@ -267,11 +267,24 @@ const SyncDetails = (props: {
   </div>
 );
 
-const AccountRow = (props: { readonly account: Account; readonly host: string }) => (
+const AccountRow = (props: {
+  readonly account: Account;
+  readonly host: string;
+  readonly onSignIn: () => void;
+}) => (
   <div class="mt-4 border-t border-surface-border pt-3" data-sync-account>
     <Show
       when={props.account.session()}
-      fallback={<SignInForm account={props.account} host={props.host} />}
+      fallback={
+        <div class="flex items-center gap-2">
+          <p class="min-w-0 flex-1 text-small text-on-surface-secondary">
+            {m.sync_signed_out({ host: props.host.replace(/^https?:\/\//u, "") })}
+          </p>
+          <Button variant="primary" data-testid="sync-sign-in" onClick={props.onSignIn}>
+            {t("Sign in")}
+          </Button>
+        </div>
+      }
     >
       {(held) => (
         <div class="flex items-center gap-2">
@@ -334,7 +347,11 @@ export function SyncPopover(props: { readonly sync: SyncHandle }) {
         {(held) => <SyncDetails held={held()} pop={pop} quick={quick} account={account} />}
       </Show>
 
-      <Show when={account.host}>{(host) => <AccountRow account={account} host={host()} />}</Show>
+      <Show when={account.host}>
+        {(host) => (
+          <AccountRow account={account} host={host()} onSignIn={() => pop.run("sign-in")} />
+        )}
+      </Show>
     </Popover>
   );
 }

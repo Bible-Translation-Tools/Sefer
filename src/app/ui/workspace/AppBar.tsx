@@ -9,13 +9,13 @@ import ListChecks from "lucide-solid/icons/list-checks";
 import Rows3 from "lucide-solid/icons/rows-3";
 import SettingsIcon from "lucide-solid/icons/settings";
 import TypeIcon from "lucide-solid/icons/type";
-import UserIcon from "lucide-solid/icons/user";
 import { Show, createSignal, For } from "solid-js";
 
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { SyncPopover, createSync, syncGlyph, syncHeadline } from "../cloud/SyncButton";
 import { IconButton, Menu, MenuItem, MenuSeparator, SegmentedControl, cx } from "../primitives";
+import { AccountButton } from "./AccountButton";
 import { ProjectTools } from "./Toolbar";
 
 function BarButton(props: {
@@ -272,13 +272,7 @@ export function AppBar() {
           }
         />
 
-        <BarButton
-          label={t("Account")}
-          testId="app-bar-account"
-          icon={<UserIcon size={20} />}
-          title="TODO: WIP"
-          disabled
-        />
+        <AccountButton />
       </div>
     </nav>
   );

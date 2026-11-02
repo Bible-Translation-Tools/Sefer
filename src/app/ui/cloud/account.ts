@@ -1,5 +1,5 @@
 import { Effect, Option } from "effect";
-import { createEffect, createSignal, type Accessor } from "solid-js";
+import { createEffect, createRoot, createSignal, type Accessor } from "solid-js";
 
 import { Gitea, type Session } from "#core/remote/gitea";
 
@@ -46,6 +46,9 @@ export interface Account {
   }) => void;
   readonly signOut: () => void;
   readonly attempt: (work: () => Promise<void>) => void;
+  /** Whether the app bar's Account popover is open; the sync popover opens it to sign in. */
+  readonly panelOpen: Accessor<boolean>;
+  readonly setPanelOpen: (open: boolean) => void;
 }
 
 const login = (
@@ -64,7 +67,7 @@ const login = (
     ),
   );
 
-export const createAccount = (shell: Shell): Account => {
+const makeAccount = (shell: Shell): Account => {
   const { services } = shell;
   const host = contentHostFor(services.settings);
 
@@ -72,6 +75,7 @@ export const createAccount = (shell: Shell): Account => {
   const [busy, setBusy] = createSignal(false, { name: "cloudBusy" });
   const [problem, setProblem] = createSignal("", { name: "cloudProblem" });
   const [otpWanted, setOtpWanted] = createSignal(false, { name: "cloudOtpWanted" });
+  const [panelOpen, setPanelOpen] = createSignal(false, { name: "accountPanelOpen" });
 
   const attempt = (work: () => Promise<void>): void => {
     setProblem("");
@@ -94,6 +98,8 @@ export const createAccount = (shell: Shell): Account => {
     problem,
     otpWanted,
     attempt,
+    panelOpen,
+    setPanelOpen,
     signIn: (fields) => {
       const base = host;
       if (base === null) return;
@@ -115,4 +121,19 @@ export const createAccount = (shell: Shell): Account => {
       });
     },
   };
+};
+
+const accounts = new WeakMap<Services, Account>();
+
+/**
+ * The one account for this composition. The app bar's Account button, the
+ * sync popover and Settings' Cloud cards all read it, so signing in at one
+ * shows everywhere. It lives as long as the app, under its own root.
+ */
+export const createAccount = (shell: Shell): Account => {
+  const held = accounts.get(shell.services);
+  if (held !== undefined) return held;
+  const made = createRoot(() => makeAccount(shell));
+  accounts.set(shell.services, made);
+  return made;
 };
