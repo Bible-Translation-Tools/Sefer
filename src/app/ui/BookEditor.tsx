@@ -1,5 +1,6 @@
 import {
   annotateRepaint,
+  DEFAULT_PREFERENCES,
   gestureTrace,
   editorFeatures,
   editorPolicy,
@@ -157,8 +158,22 @@ function watchSettings(shell: Shell, editor: BookEditorMount) {
       }),
     ),
   );
-  return { ghosting, pairing, shortcuts };
+  const indentKey = shellKeys(shell.services.settings).indentSpaces;
+  const indenting = shell.services.runtime.runFork(
+    Stream.runForEach(shell.services.settings.changes(indentKey), (spaces) =>
+      Effect.sync(() => {
+        editor.setPreferences({ indentSpaces: indentSpacesOf(spaces) });
+      }),
+    ),
+  );
+  return { ghosting, pairing, shortcuts, indenting };
 }
+
+/** The setting's choice as the editor's number; anything unreadable is the default. */
+const indentSpacesOf = (value: string): number => {
+  const spaces = Number(value);
+  return Number.isInteger(spaces) && spaces >= 0 ? spaces : DEFAULT_PREFERENCES.indentSpaces;
+};
 
 export function BookEditor(props: BookEditorProps) {
   const shell = useShell();
@@ -194,7 +209,10 @@ export function BookEditor(props: BookEditorProps) {
         blockName: nameBlock,
         emptyBlocks: settings.get(keys.annotateEmptyParagraphs),
         pairBlocks: settings.get(keys.pairBlocks),
-        preferences: { verseShortcuts: settings.get(keys.verseShortcuts) },
+        preferences: {
+          verseShortcuts: settings.get(keys.verseShortcuts),
+          indentSpaces: indentSpacesOf(settings.get(keys.indentSpaces)),
+        },
         features: editorFeatures(),
         words: editorWords,
       });
@@ -217,7 +235,7 @@ export function BookEditor(props: BookEditorProps) {
         setLabelsOpen(true),
       );
 
-      const { ghosting, pairing, shortcuts } = watchSettings(shell, editor);
+      const { ghosting, pairing, shortcuts, indenting } = watchSettings(shell, editor);
 
       const untyped = editor.onTypedUsfm(() => suggestUsfmMode(shell));
 
@@ -251,6 +269,7 @@ export function BookEditor(props: BookEditorProps) {
         Effect.runFork(Fiber.interrupt(ghosting));
         Effect.runFork(Fiber.interrupt(pairing));
         Effect.runFork(Fiber.interrupt(shortcuts));
+        Effect.runFork(Fiber.interrupt(indenting));
         Effect.runFork(Fiber.interrupt(watching));
         unsuppressing();
         unsubscribe();

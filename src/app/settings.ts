@@ -132,6 +132,8 @@ export interface ShellKeys {
   readonly pairBlocks: SettingKey<boolean>;
   /** Typed verse numbers ("1", "v1", "verse 1") become verses: the editor's verse shortcuts. */
   readonly verseShortcuts: SettingKey<boolean>;
+  /** Spaces at a line's start that indent it a poetry level ("0" is never): the editor's `indentSpaces`. */
+  readonly indentSpaces: SettingKey<string>;
   readonly syncReferences: SettingKey<boolean>;
   readonly findingsFilter: SettingKey<FindingsFilterPreference>;
   readonly sousSettings: SettingKey<SousOverrides>;
@@ -201,6 +203,7 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
     webTransport: settings.register("network.webTransport", Schema.String, ""),
     pairBlocks: settings.register("editor.pairBlocks", Schema.Boolean, false),
     verseShortcuts: settings.register("editor.verseShortcuts", Schema.Boolean, true),
+    indentSpaces: settings.register("editor.indentSpaces", Schema.String, "4"),
     syncReferences: settings.register("editor.syncReferences", Schema.Boolean, true),
     findingsFilter: settings.register(
       "findings.filter",
@@ -401,6 +404,20 @@ const editorBehaviourRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
       'Typing "1", "1.", "v1" or "verse 1" and then a space starts that verse, when it is the next verse or within the reference\'s count for the chapter, and never one the chapter already has. Pasted text follows the same rule, and Backspace just after a verse\'s number turns it back into the number. Turn this off to keep such numbers as words.',
     kind: "boolean",
     group: "editor",
+  },
+  {
+    key: keys.indentSpaces,
+    label: "Spaces that indent a line",
+    description:
+      "In Refine, this many spaces typed at the start of a line make it a poetry line, or move it one level in, as Tab does. Off, spaces are only spaces.",
+    kind: "choice",
+    group: "editor",
+    options: [
+      { value: "0", label: "Off" },
+      { value: "2", label: "2" },
+      { value: "4", label: "4" },
+      { value: "8", label: "8" },
+    ],
   },
   {
     key: keys.syncReferences,

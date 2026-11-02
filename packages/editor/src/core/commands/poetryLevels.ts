@@ -8,6 +8,7 @@ import {
 import { blockAt, isVisual, trusted } from "../kernel";
 import { structureAt, type Block, type DocStructure } from "../model/docStructure";
 import { assignmentAt } from "../model/registry";
+import { preferenceOf } from "../preferences";
 
 /**
  * Poetry levels in Refine, the way Word indents a list: Tab moves the line one
@@ -228,18 +229,19 @@ const stepOutAtLineStart: StateCommand = ({ state, dispatch }) => {
 };
 
 /**
- * Four spaces at a line's start make it poetry, as Tab does (SEFER-72): the
- * fourth Space, with three already typed before the line's first word, takes
- * the spaces out and moves the line one level in. Backspace then steps it
- * back out a level, as at any poetry line's start (`stepOutAtLineStart`).
+ * Spaces at a line's start make it poetry, as Tab does (SEFER-72): the Space
+ * that makes `indentSpaces` (a preference, 4 by default, 0 never), with the
+ * others already typed before the line's first word, takes them out and moves
+ * the line one level in. Backspace then steps it back out a level, as at any
+ * poetry line's start (`stepOutAtLineStart`).
  */
-const SPACES = 3;
-
 /** Before the caret on its line: an opening verse number if any, then only spaces. */
 const SPACES_BEFORE = /^(\s*\\v[ \t]+[\w-]*[ \t])?( *)$/;
 
 const indentBySpaces: StateCommand = ({ state, dispatch }) => {
   if (!inRefine(state)) return false;
+  const wanted = preferenceOf(state, "indentSpaces");
+  if (wanted < 1) return false;
   const sel = state.selection.main;
   if (!sel.empty) return false;
   const structure = structureAt(state);
@@ -249,7 +251,8 @@ const indentBySpaces: StateCommand = ({ state, dispatch }) => {
   if (level === null) return false;
   const start = verseStart(state, structure, b, sel.from);
   const spaces = SPACES_BEFORE.exec(state.doc.sliceString(start, sel.from))?.[2];
-  if (spaces === undefined || spaces.length < SPACES) return false;
+  // This Space is the last of them: the others are typed already.
+  if (spaces === undefined || spaces.length < wanted - 1) return false;
   const { max, bare } = bookHabits(structure);
   const next = Math.min(max, level + 1);
   // Already as deep as the book goes: the spaces are just spaces.
