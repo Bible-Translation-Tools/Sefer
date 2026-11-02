@@ -4,7 +4,7 @@ title: "Engine asks: what Sefer still needs from Onion, Sous and Galley"
 kind: idea
 status: idea
 created: 2026-09-14
-updated: 2026-10-20
+updated: 2026-11-02
 tags: [kitchen]
 source: planning/00-ideas/scripture-kitchen-asks.md
 ---
@@ -167,3 +167,19 @@ Pinned on the golden fixtures like the Sous identities.
 
 **Sefer side:** `.sefer/onion-suppressions.json` keyed by it
 ([project state](/items/2026-10-06-project-state-and-suppressions)).
+
+## 16. A surplus delimiter does not take a verse's number away
+
+**Not yet asked.** `\v  2` (two spaces) parses as a verse with NO designator
+(`verse-without-designator`, an error) plus `delimiter-surplus` on the second space. The
+number is right there: Will, 2026-11-02, "probably a scripture kitchen error maybe to not read
+past pad". The surplus diagnostic and its fix (remove the extra whitespace) are right; reading
+the designator past the extra whitespace would leave that hint as the only finding, instead of an
+error pointing at a number that is not missing.
+
+**Change:** after a marker's delimiter, skip further spaces and tabs before reading its
+designator, and keep `delimiter-surplus` on them.
+
+**Sefer side:** nothing to change; the editor no longer lets typing make this
+(`keepTypingOutOfVerseNumbers`), and the verse menu's "Remove the extra whitespace" mends a file
+that has it.
