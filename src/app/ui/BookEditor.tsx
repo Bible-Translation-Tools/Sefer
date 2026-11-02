@@ -10,8 +10,8 @@ import {
   type CorpusAction,
   type CorpusFinding,
   type EditorBook,
-} from "@sefer/editor";
-import type { SourceStamp } from "@sefer/text/source";
+} from "@wycliffeassociates/sefer-editor";
+import type { SourceStamp } from "@wycliffeassociates/sefer-text/source";
 import { Effect, Fiber, Stream } from "effect";
 import { Show, createEffect, createRenderEffect, createSignal, untrack } from "solid-js";
 
@@ -34,7 +34,7 @@ import { nameBlock } from "./workspace/blockNames";
 import { expectedVersesFor } from "./workspace/expectedVerses";
 import { metadataOf } from "./workspace/project";
 
-import "@sefer/editor/editor.css";
+import "@wycliffeassociates/sefer-editor/editor.css";
 
 export interface BookEditorProps {
   readonly book: EditorBook;

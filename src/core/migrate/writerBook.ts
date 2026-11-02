@@ -1,5 +1,6 @@
-import { CANON } from "@sefer/text/location/canon";
-import { decode } from "@sefer/text/source";
+import { CANON } from "@wycliffeassociates/sefer-text/location/canon";
+import * as TextResult from "@wycliffeassociates/sefer-text/result";
+import { decode } from "@wycliffeassociates/sefer-text/source";
 import { Effect, FileSystem, Result, Schema } from "effect";
 
 import { joinPath, lastSegment } from "../fileSystem/path";
@@ -58,7 +59,7 @@ const readText = (
   Effect.orElseSucceed(
     Effect.map(fileSystem.readFile(path), (bytes) => {
       const text = decode(bytes);
-      return Result.isSuccess(text) ? text.success.text : undefined;
+      return TextResult.isSuccess(text) ? text.success.text : undefined;
     }),
     () => undefined,
   );

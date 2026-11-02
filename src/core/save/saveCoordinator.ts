@@ -1,5 +1,11 @@
-import { trustedBy, type Book, type BookId, type Origin } from "@sefer/text/book";
-import { decode, encode, type SourceStamp } from "@sefer/text/source";
+import {
+  trustedBy,
+  type Book,
+  type BookId,
+  type Origin,
+} from "@wycliffeassociates/sefer-text/book";
+import * as TextResult from "@wycliffeassociates/sefer-text/result";
+import { decode, encode, type SourceStamp } from "@wycliffeassociates/sefer-text/source";
 import {
   Context,
   Data,
@@ -12,6 +18,8 @@ import {
   Semaphore,
   Stream,
 } from "effect";
+
+import { fromResult } from "#core/result";
 
 import { writeFileAtomic } from "../fileSystem/atomic";
 import { Observability, type ObservabilityService } from "../observability";
@@ -259,7 +267,7 @@ const make = (
         const read = yield* Effect.result(fileSystem.readFile(change.path));
         if (Result.isFailure(read)) return true;
         const decoded = decode(read.success);
-        if (Result.isFailure(decoded)) return true;
+        if (TextResult.isFailure(decoded)) return true;
         const onDisk = decoded.success.text;
         if (baseline.hash !== undefined && hasher !== undefined)
           return hasher(onDisk) !== baseline.hash;
@@ -280,7 +288,7 @@ const make = (
           });
         });
         const decoded = yield* Effect.mapError(
-          Effect.fromResult(decode(bytes)),
+          fromResult(decode(bytes)),
           (error) =>
             new SaveError({
               reason: "Refused",
@@ -319,7 +327,7 @@ const make = (
             origin,
             trustedBy("save.takeDisk"),
           );
-          if (Result.isFailure(applied))
+          if (TextResult.isFailure(applied))
             return yield* Effect.fail(
               refuse(book, "Refused", `${origin} refused by ${applied.failure.rule}`),
             );

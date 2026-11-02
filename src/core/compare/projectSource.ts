@@ -1,7 +1,8 @@
-import type { BookId } from "@sefer/text/book";
-import { trustedBy } from "@sefer/text/book";
-import type { Change } from "@sefer/text/source";
-import { Effect, Result } from "effect";
+import type { BookId } from "@wycliffeassociates/sefer-text/book";
+import { trustedBy } from "@wycliffeassociates/sefer-text/book";
+import * as Result from "@wycliffeassociates/sefer-text/result";
+import type { Change } from "@wycliffeassociates/sefer-text/source";
+import { Effect } from "effect";
 
 import type { Project } from "../project/project";
 import { nameOfRoot } from "../project/slug";

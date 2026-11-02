@@ -1,7 +1,8 @@
-import type { EditorBook } from "@sefer/editor";
-import type { Book, BookId } from "@sefer/text/book";
-import { decode, type Source } from "@sefer/text/source";
 import { useNavigate, useSearch } from "@tanstack/solid-router";
+import type { EditorBook } from "@wycliffeassociates/sefer-editor";
+import type { Book, BookId } from "@wycliffeassociates/sefer-text/book";
+import * as TextResult from "@wycliffeassociates/sefer-text/result";
+import { decode, type Source } from "@wycliffeassociates/sefer-text/source";
 import { Effect, Option, Result } from "effect";
 import GitCommitVertical from "lucide-solid/icons/git-commit-vertical";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
@@ -252,7 +253,7 @@ const textOf = async (shell: Shell, version: Version): Promise<Source | undefine
   const bytes = await shell.services.run(Effect.result(version.bytes()));
   if (Result.isFailure(bytes)) return undefined;
   const decoded = decode(bytes.success);
-  return Result.isFailure(decoded) ? undefined : decoded.success;
+  return TextResult.isFailure(decoded) ? undefined : decoded.success;
 };
 
 const changesOfVersion = async (
@@ -400,7 +401,7 @@ const adopt = (shell: Shell, yours: YoursMap, hunk: Hunk, side: "baseline" | "cu
     return;
   }
   const done = revertUnits(shell.services.galley, held.book, changes, picked);
-  if (Result.isFailure(done)) {
+  if (TextResult.isFailure(done)) {
     toasts.error({ title: t("Adopt refused"), message: t(done.failure.reason) });
     return;
   }

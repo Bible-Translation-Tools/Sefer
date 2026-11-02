@@ -1,4 +1,4 @@
-import type { DiffHunk, DiffPaint } from "@sefer/editor";
+import type { DiffHunk, DiffPaint } from "@wycliffeassociates/sefer-editor";
 
 import { readingEnd } from "#core/excerpts/excerpts";
 import type { Analysis } from "#core/galley";

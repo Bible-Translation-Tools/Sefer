@@ -18,9 +18,9 @@ source: voice memo "Planning-spa", 2026-10-14; wacs-dashboard-2/EDITOR-PIECES.md
 **Done 2026-10-15** (steps 1–3, `21b8e04..214164e`), tagged `editor-v0.1.0`. Two
 framework-free workspace packages:
 
-- **`@sefer/text`**: `Source` (canonical text, `offsetMap(raw)` for CRLF and BOM), the Book
+- **`@wycliffeassociates/sefer-text`**: `Source` (canonical text, `offsetMap(raw)` for CRLF and BOM), the Book
   port, addresses and localized names, the engine's analysis vocabulary.
-- **`@sefer/editor`**: the editor. CodeMirror, Effect, scripture-kitchen and `@sefer/text` are
+- **`@wycliffeassociates/sefer-editor`**: the editor. CodeMirror, Effect, scripture-kitchen and `@wycliffeassociates/sefer-text` are
   peer dependencies, so a git install resolves and there is one copy of each.
 
 No app code imports CodeMirror; `pnpm boundaries` holds `src/` to the front door

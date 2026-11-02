@@ -1,7 +1,7 @@
-import type { ChapterRow, EditorBook, ProjectionName } from "@sefer/editor";
-import type { Book, BookId } from "@sefer/text/book";
-import type { Address } from "@sefer/text/location/address";
-import type { SourceStamp } from "@sefer/text/source";
+import type { ChapterRow, EditorBook, ProjectionName } from "@wycliffeassociates/sefer-editor";
+import type { Book, BookId } from "@wycliffeassociates/sefer-text/book";
+import type { Address } from "@wycliffeassociates/sefer-text/location/address";
+import type { SourceStamp } from "@wycliffeassociates/sefer-text/source";
 import {
   createContext,
   createMemo,

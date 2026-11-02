@@ -1,4 +1,4 @@
-import type { Book, BookId } from "@sefer/text/book";
+import type { Book, BookId } from "@wycliffeassociates/sefer-text/book";
 import { Option, Result } from "effect";
 
 import { textChanges, unitChanges, type BaselineLike, type UnitChanges } from "#core/diff/units";

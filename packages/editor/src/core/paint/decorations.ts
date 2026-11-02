@@ -6,14 +6,14 @@ import {
   EditorView,
   WidgetType,
 } from "@codemirror/view";
-import { MARKERS } from "@sefer/text/engine/analysis";
+import { MARKERS } from "@wycliffeassociates/sefer-text/engine/analysis";
 import {
   FLAG,
   NOTE_PART,
   TOKEN,
   TOKEN_SPELLING_BIT,
   classWordOf,
-} from "@sefer/text/engine/analysis";
+} from "@wycliffeassociates/sefer-text/engine/analysis";
 
 import { figureSource } from "../figures";
 import { trusted } from "../kernel";

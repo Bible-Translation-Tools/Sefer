@@ -1,5 +1,6 @@
-import { Refusal, trustedBy, type Book, type Receipt } from "@sefer/text/book";
-import type { Change, SourceStamp } from "@sefer/text/source";
+import { Refusal, trustedBy, type Book, type Receipt } from "@wycliffeassociates/sefer-text/book";
+import * as TextResult from "@wycliffeassociates/sefer-text/result";
+import type { Change, SourceStamp } from "@wycliffeassociates/sefer-text/source";
 import { Data, Result } from "effect";
 
 import type { Finding } from "../findings/finding";
@@ -86,10 +87,10 @@ const staleRefusal = (book: Book, previewed: SourceStamp, current: SourceStamp):
     description: `${book.id} moved from r${previewed.revision} to r${current.revision} since the preview`,
   });
 
-export const applyFix = (fix: FixPreview, book: Book): Result.Result<Receipt, Refusal> => {
+export const applyFix = (fix: FixPreview, book: Book): TextResult.Result<Receipt, Refusal> => {
   const current = book.source().stamp;
   if (current.revision !== fix.stamp.revision)
-    return Result.fail(staleRefusal(book, fix.stamp, current));
+    return TextResult.fail(staleRefusal(book, fix.stamp, current));
   return book.apply(fix.changes, "fix", trustedBy("fix"));
 };
 
@@ -187,15 +188,19 @@ const applyPreview = (
   preview: FormatPreview,
   book: Book,
   origin: "overlay" | "format",
-): Result.Result<Receipt, Refusal> => {
+): TextResult.Result<Receipt, Refusal> => {
   const current = book.source().stamp;
   if (current.revision !== preview.stamp.revision)
-    return Result.fail(staleRefusal(book, preview.stamp, current));
+    return TextResult.fail(staleRefusal(book, preview.stamp, current));
   return book.apply(preview.changes, origin, trustedBy(origin));
 };
 
-export const applyOverlay = (preview: FormatPreview, book: Book): Result.Result<Receipt, Refusal> =>
-  applyPreview(preview, book, "overlay");
+export const applyOverlay = (
+  preview: FormatPreview,
+  book: Book,
+): TextResult.Result<Receipt, Refusal> => applyPreview(preview, book, "overlay");
 
-export const applyFormat = (preview: FormatPreview, book: Book): Result.Result<Receipt, Refusal> =>
-  applyPreview(preview, book, "format");
+export const applyFormat = (
+  preview: FormatPreview,
+  book: Book,
+): TextResult.Result<Receipt, Refusal> => applyPreview(preview, book, "format");

@@ -1,5 +1,5 @@
-import type { BookId } from "@sefer/text/book";
-import { Result } from "effect";
+import type { BookId } from "@wycliffeassociates/sefer-text/book";
+import * as Result from "@wycliffeassociates/sefer-text/result";
 import { createSignal } from "solid-js";
 
 import { t } from "#app/i18n";

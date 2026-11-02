@@ -13,17 +13,17 @@ import {
   type ProjectionName,
   type ReaderMount,
   type ReferenceMount,
-} from "@sefer/editor";
-import { makeBook } from "@sefer/text/book";
-import { addressLabel } from "@sefer/text/location/address";
-import { decode } from "@sefer/text/source";
-import { Result } from "effect";
+} from "@wycliffeassociates/sefer-editor";
+import { makeBook } from "@wycliffeassociates/sefer-text/book";
+import { addressLabel } from "@wycliffeassociates/sefer-text/location/address";
+import * as Result from "@wycliffeassociates/sefer-text/result";
+import { decode } from "@wycliffeassociates/sefer-text/source";
 
 import { loadEngine } from "./engine";
 import { gestureLog, type Gesture, type Ruling } from "./log";
 import { SCENARIOS, SKIPPED, type BenchText, type Scenario } from "./scenarios";
 
-import "@sefer/editor/editor.css";
+import "@wycliffeassociates/sefer-editor/editor.css";
 import "./bench.css";
 
 const $ = <T extends HTMLElement>(selector: string): T => {

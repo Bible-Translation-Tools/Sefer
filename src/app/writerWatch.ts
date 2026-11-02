@@ -17,7 +17,7 @@
  * they record there marks it taken (`takeWriterWork`), in the same commit.
  */
 
-import { decode } from "@sefer/text/source";
+import { decode } from "@wycliffeassociates/sefer-text/source";
 import { Effect, Option } from "effect";
 import { createSignal, untrack } from "solid-js";
 

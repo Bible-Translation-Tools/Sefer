@@ -1,5 +1,6 @@
-import type { BookId } from "@sefer/text/book";
-import { decode, type Source } from "@sefer/text/source";
+import type { BookId } from "@wycliffeassociates/sefer-text/book";
+import * as TextResult from "@wycliffeassociates/sefer-text/result";
+import { decode, type Source } from "@wycliffeassociates/sefer-text/source";
 import { Effect, Option, Result } from "effect";
 import { createEffect, createSignal, type Accessor } from "solid-js";
 
@@ -88,7 +89,7 @@ const readTexts = (project: Project, repo: Repo, head: string) =>
       const bytes = yield* Effect.result(git.show(repo, head, inside.value));
       if (Result.isFailure(bytes)) continue;
       const source = decode(bytes.success);
-      if (Result.isFailure(source)) continue;
+      if (TextResult.isFailure(source)) continue;
       hold(key, source.success);
       texts.set(book.id, source.success);
     }

@@ -1,5 +1,5 @@
-import type { BookId } from "@sefer/text/book";
-import type { Address } from "@sefer/text/location/address";
+import type { BookId } from "@wycliffeassociates/sefer-text/book";
+import type { Address } from "@wycliffeassociates/sefer-text/location/address";
 import { Effect, Option, type FileSystem } from "effect";
 
 import {

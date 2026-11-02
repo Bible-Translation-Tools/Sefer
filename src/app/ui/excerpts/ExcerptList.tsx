@@ -1,6 +1,6 @@
-import type { EditorBook, Following } from "@sefer/editor";
-import type { BookId } from "@sefer/text/book";
 import type { JSX } from "@solidjs/web";
+import type { EditorBook, Following } from "@wycliffeassociates/sefer-editor";
+import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import { createMemo, createSignal, onCleanup, untrack } from "solid-js";
 
 import {

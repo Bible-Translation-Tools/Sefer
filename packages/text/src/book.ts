@@ -1,5 +1,4 @@
-import { Data, Result } from "effect";
-
+import * as Result from "./result";
 import {
   applyChange,
   type Change,
@@ -64,11 +63,23 @@ export interface Receipt {
  * for the plain Book's range checks) so a trace can say which door closed;
  * `reason` is that rule's own vocabulary.
  */
-export class Refusal extends Data.TaggedError("Refusal")<{
+export class Refusal extends Error {
+  readonly _tag = "Refusal";
   readonly rule: string;
   readonly reason: string;
   readonly description: string;
-}> {}
+  constructor(fields: {
+    readonly rule: string;
+    readonly reason: string;
+    readonly description: string;
+  }) {
+    super(fields.description);
+    this.name = "Refusal";
+    this.rule = fields.rule;
+    this.reason = fields.reason;
+    this.description = fields.description;
+  }
+}
 
 /** Undo history, present only when a CodeMirror state holds the text. */
 export interface History {

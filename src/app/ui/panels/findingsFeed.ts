@@ -1,4 +1,4 @@
-import type { BookId } from "@sefer/text/book";
+import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import { createMemo, type Accessor } from "solid-js";
 
 import type { BookExcerpts, Excerpt, Occurrence, OutlineRow } from "#core/excerpts/excerpts";

@@ -1,6 +1,7 @@
-import { withoutScrolling } from "@sefer/editor";
-import type { EditorAction, EditorBook, ProjectionName } from "@sefer/editor";
 import type { UseNavigateResult } from "@tanstack/solid-router";
+import { withoutScrolling } from "@wycliffeassociates/sefer-editor";
+import type { EditorAction, EditorBook, ProjectionName } from "@wycliffeassociates/sefer-editor";
+import * as TextResult from "@wycliffeassociates/sefer-text/result";
 import { Effect, Option, Result, type Scope } from "effect";
 import { createSignal } from "solid-js";
 
@@ -660,7 +661,7 @@ const formatCommands = (bridge: ShellBridge, h: Helpers) => {
         }
         const applied = applyFormat(previewed.success, book);
         bridge.report(
-          Result.isFailure(applied)
+          TextResult.isFailure(applied)
             ? t("format refused: {reason}", { reason: applied.failure.description })
             : t("formatted {book}", { book: book.id }),
         );
@@ -788,7 +789,7 @@ const overlayFocused = (bridge: ShellBridge, scope: "chapter" | "book") =>
       return;
     }
     const applied = withoutScrolling(() => applyOverlay(previewed.success, book));
-    if (Result.isFailure(applied)) {
+    if (TextResult.isFailure(applied)) {
       bridge.report(
         t("match formatting refused: {reason}", { reason: applied.failure.description }),
       );

@@ -1,5 +1,5 @@
 import type { Extension } from "@codemirror/state";
-import type { Book } from "@sefer/text/book";
+import type { Book } from "@wycliffeassociates/sefer-text/book";
 
 import { editorBook, type EditorBook, type EditorBookOptions } from "./book";
 import { viewLayer } from "./core/compose";

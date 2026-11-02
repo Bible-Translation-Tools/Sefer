@@ -1,5 +1,5 @@
-import type { BookId } from "@sefer/text/book";
 import { useNavigate } from "@tanstack/solid-router";
+import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import { Option } from "effect";
 import Scale from "lucide-solid/icons/scale";
 import { Show, createEffect, createSignal, onCleanup, untrack, type Accessor } from "solid-js";

@@ -1,4 +1,8 @@
-import { editorPolicy, type EditorPolicy, type ProjectionName } from "@sefer/editor";
+import {
+  editorPolicy,
+  type EditorPolicy,
+  type ProjectionName,
+} from "@wycliffeassociates/sefer-editor";
 
 export const cardPolicy = (
   mode: "regular" | "usfm",

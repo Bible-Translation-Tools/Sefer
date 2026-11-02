@@ -9,7 +9,7 @@ import {
   type Transaction,
 } from "@codemirror/state";
 import { type Command, Decoration, EditorView, WidgetType } from "@codemirror/view";
-import { MARKERS, MarkerKind } from "@sefer/text/engine/analysis";
+import { MARKERS, MarkerKind } from "@wycliffeassociates/sefer-text/engine/analysis";
 
 import { planAt, structureAt } from "../editorState";
 import { guardedEnter, setBlockMarker } from "../guards/input";

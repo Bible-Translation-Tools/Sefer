@@ -6,7 +6,7 @@ import {
   NodeView,
   TOKEN,
   describesExactly,
-} from "@sefer/text/engine/analysis";
+} from "@wycliffeassociates/sefer-text/engine/analysis";
 
 import { span } from "../instrument/timing";
 import { stateFailed } from "../instrument/trace";

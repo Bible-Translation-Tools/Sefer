@@ -1,4 +1,4 @@
-import type { LocalizedText } from "@sefer/text/localized";
+import type { LocalizedText } from "@wycliffeassociates/sefer-text/localized";
 import { Data, Result } from "effect";
 import { parse as parseYaml } from "yaml";
 

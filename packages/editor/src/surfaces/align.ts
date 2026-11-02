@@ -1,8 +1,8 @@
 import { EditorView } from "@codemirror/view";
-import type { BookId } from "@sefer/text/book";
-import { tocViewOf } from "@sefer/text/engine/location";
-import type { Address } from "@sefer/text/location/address";
-import { addressAt, resolve, type TocView } from "@sefer/text/location/locate";
+import type { BookId } from "@wycliffeassociates/sefer-text/book";
+import { tocViewOf } from "@wycliffeassociates/sefer-text/engine/location";
+import type { Address } from "@wycliffeassociates/sefer-text/location/address";
+import { addressAt, resolve, type TocView } from "@wycliffeassociates/sefer-text/location/locate";
 
 import { structureAt } from "../core/model/docStructure";
 import { markMoved, viewOf, type EditorHandle } from "../handle";

@@ -15,7 +15,7 @@ import {
   TokenKind,
   TokenView,
   isMarkerKind,
-} from "@sefer/text/engine/analysis";
+} from "@wycliffeassociates/sefer-text/engine/analysis";
 
 import {
   type NodeShape,

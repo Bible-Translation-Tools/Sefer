@@ -1,4 +1,5 @@
-import { decode } from "@sefer/text/source";
+import * as TextResult from "@wycliffeassociates/sefer-text/result";
+import { decode } from "@wycliffeassociates/sefer-text/source";
 import { Effect, FileSystem, Result } from "effect";
 
 import { ProjectAnalysis, type ReferenceText } from "#core/analysis/projectAnalysis";
@@ -31,7 +32,7 @@ const booksOf = (
       const read = yield* Effect.result(fileSystem.readFile(path));
       if (Result.isFailure(read)) continue;
       const source = decode(read.success);
-      if (Result.isFailure(source)) continue;
+      if (TextResult.isFailure(source)) continue;
       out.push({ id: path, text: source.success.text });
     }
     return out;

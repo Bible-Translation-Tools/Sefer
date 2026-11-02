@@ -14,8 +14,8 @@ const CORE_FORBIDDEN = [
   "isomorphic-git/*",
   "#app/**",
   "#dev/**",
-  "@sefer/editor",
-  "@sefer/editor/*",
+  "@wycliffeassociates/sefer-editor",
+  "@wycliffeassociates/sefer-editor/*",
 ];
 const CORE_MESSAGE =
   "Core stays framework and host independent; depend on a core contract instead. `pnpm boundaries` is the authoritative check.";

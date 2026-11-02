@@ -26,9 +26,9 @@ import {
   type Origin,
   type Receipt,
   type Trust,
-} from "@sefer/text/book";
-import type { Change, Source, SourceStamp } from "@sefer/text/source";
-import { Result } from "effect";
+} from "@wycliffeassociates/sefer-text/book";
+import * as Result from "@wycliffeassociates/sefer-text/result";
+import type { Change, Source, SourceStamp } from "@wycliffeassociates/sefer-text/source";
 
 import { clipboardOrigin } from "./core/clipboard";
 import { actionCommand, type EditorAction } from "./core/commands/actions";

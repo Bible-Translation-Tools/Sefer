@@ -1,4 +1,4 @@
-import type { EditorWords, PhraseKey } from "@sefer/editor";
+import type { EditorWords, PhraseKey } from "@wycliffeassociates/sefer-editor";
 
 import { m } from "#app/paraglide/messages";
 

@@ -1,4 +1,4 @@
-import { CANON, type Testament } from "@sefer/text/location/canon";
+import { CANON, type Testament } from "@wycliffeassociates/sefer-text/location/canon";
 import { Data, Effect, FileSystem, Option } from "effect";
 
 import { lastSegment } from "../fileSystem/path";

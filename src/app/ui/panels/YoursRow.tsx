@@ -1,4 +1,4 @@
-import { mountDiffView } from "@sefer/editor";
+import { mountDiffView } from "@wycliffeassociates/sefer-editor";
 import { For, createEffect, createSignal, untrack } from "solid-js";
 
 import { t } from "../../i18n";

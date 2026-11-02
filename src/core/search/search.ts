@@ -5,12 +5,13 @@ import {
   type Book,
   type BookId,
   type Receipt,
-} from "@sefer/text/book";
-import { describesExactly, type Analysis } from "@sefer/text/engine/analysis";
-import { tocViewOf } from "@sefer/text/engine/location";
-import type { Address } from "@sefer/text/location/address";
-import { addressAt } from "@sefer/text/location/locate";
-import type { Change, SourceStamp } from "@sefer/text/source";
+} from "@wycliffeassociates/sefer-text/book";
+import { describesExactly, type Analysis } from "@wycliffeassociates/sefer-text/engine/analysis";
+import { tocViewOf } from "@wycliffeassociates/sefer-text/engine/location";
+import type { Address } from "@wycliffeassociates/sefer-text/location/address";
+import { addressAt } from "@wycliffeassociates/sefer-text/location/locate";
+import * as TextResult from "@wycliffeassociates/sefer-text/result";
+import type { Change, SourceStamp } from "@wycliffeassociates/sefer-text/source";
 import { Data, Result } from "effect";
 
 import type { EngineHit } from "../galley/galley";
@@ -439,10 +440,10 @@ export const replaceInBook = (
   book: Book,
   hits: readonly Hit[],
   insert: string,
-): Result.Result<Receipt, Refusal> => {
+): TextResult.Result<Receipt, Refusal> => {
   const changes = planReplace(book, hits, insert);
   if (changes === null)
-    return Result.fail(
+    return TextResult.fail(
       stale(`${hits.length} hits do not describe ${book.id} at r${book.source().stamp.revision}`),
     );
   return book.apply(changes, "replace", UNTRUSTED);

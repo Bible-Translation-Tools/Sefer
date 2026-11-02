@@ -83,7 +83,7 @@ A git checkpoint, another local project or a remote is a NEW FILE in
 `compare.ts`, `decisions.ts` or the screen changes. It must:
 
 1. answer `books()` in its own canonical order, and `read(bookId)` with the
-   canonical text (LF, no BOM — decode through `@sefer/text/source`);
+   canonical text (LF, no BOM — decode through `@wycliffeassociates/sefer-text/source`);
 2. fail `Absent` for a book it does not hold, and never for one it does;
 3. say `canApply: false` unless it can really be written, and supply `apply` if
    it says `true`;
@@ -325,7 +325,7 @@ context steps are faint until the pointer or focus is on the card, and
   Genesis editors on entering Whole book.
 
 The differences are drawn ON the two texts, as the editor reads them — the
-diff view recipe (`@sefer/editor` `mountDiffView`) paints units and word runs on each
+diff view recipe (`@wycliffeassociates/sefer-editor` `mountDiffView`) paints units and word runs on each
 side's own document, in regular mode or USFM (the header's **Show USFM
 markup** switch). `src/app/ui/review/ReviewReader.tsx` holds it together (its parts in
 `review/reader/`; the panel's in `review/panel/`), over `src/app/ui/diff/`. Three layers, and each can change without the others:

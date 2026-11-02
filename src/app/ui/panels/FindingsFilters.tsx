@@ -1,5 +1,5 @@
-import type { BookId } from "@sefer/text/book";
-import { bookName } from "@sefer/text/location/canon";
+import type { BookId } from "@wycliffeassociates/sefer-text/book";
+import { bookName } from "@wycliffeassociates/sefer-text/location/canon";
 import Search from "lucide-solid/icons/search";
 import { Show, createEffect, createSignal, untrack } from "solid-js";
 

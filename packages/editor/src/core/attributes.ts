@@ -1,6 +1,10 @@
 import { type ChangeSpec, type EditorState, StateEffect } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import { MARKER_ATTRIBUTES, MARKERS, MarkerKind } from "@sefer/text/engine/analysis";
+import {
+  MARKER_ATTRIBUTES,
+  MARKERS,
+  MarkerKind,
+} from "@wycliffeassociates/sefer-text/engine/analysis";
 
 import { figureAt } from "./figures";
 import { docText, lineIndexAt, structureAt } from "./model/docStructure";

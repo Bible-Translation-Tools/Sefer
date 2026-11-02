@@ -1,4 +1,4 @@
-import type { BookId } from "@sefer/text/book";
+import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import { createSignal } from "solid-js";
 
 import type { DecisionUnit, MergeSide } from "#core/galley";

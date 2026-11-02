@@ -1,5 +1,12 @@
-import { trustedBy, type Book, type BookId, type Origin, type Receipt } from "@sefer/text/book";
-import type { Change, SourceStamp } from "@sefer/text/source";
+import {
+  trustedBy,
+  type Book,
+  type BookId,
+  type Origin,
+  type Receipt,
+} from "@wycliffeassociates/sefer-text/book";
+import * as TextResult from "@wycliffeassociates/sefer-text/result";
+import type { Change, SourceStamp } from "@wycliffeassociates/sefer-text/source";
 import { Context, Data, Effect, FileSystem, Layer, Option, Result, Scope } from "effect";
 
 import { writeFileStringAtomic } from "../fileSystem/atomic";
@@ -475,7 +482,7 @@ const make = (
           const trust = trustedBy("recovery");
           for (const [index, entry] of journal.entries.entries()) {
             const applied = book.apply(entry.changes, "recovery", trust);
-            if (Result.isFailure(applied)) {
+            if (TextResult.isFailure(applied)) {
               observability?.note("journal.restore", "refused", applied.failure.reason, {
                 "journal.write": id,
                 "journal.entry": index,

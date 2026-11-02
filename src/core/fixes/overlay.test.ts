@@ -1,5 +1,6 @@
-import { makeBook, type Book } from "@sefer/text/book";
-import { decode } from "@sefer/text/source";
+import { makeBook, type Book } from "@wycliffeassociates/sefer-text/book";
+import * as TextResult from "@wycliffeassociates/sefer-text/result";
+import { decode } from "@wycliffeassociates/sefer-text/source";
 import { Effect, Result } from "effect";
 import { describe, expect, it } from "vitest";
 
@@ -10,7 +11,7 @@ import { applyOverlay, overlayBook } from "./fixes";
 
 const bookOf = (text: string): Book => {
   const source = decode(new TextEncoder().encode(text));
-  if (Result.isFailure(source)) throw new Error(source.failure.reason);
+  if (TextResult.isFailure(source)) throw new Error(source.failure.reason);
   return makeBook("PHM.usfm", source.success);
 };
 
@@ -69,7 +70,7 @@ describe("match formatting", () => {
       if (Result.isFailure(previewed)) return previewed.failure.description;
       expect(previewed.success.empty).toBe(false);
       const applied = applyOverlay(previewed.success, book);
-      if (Result.isFailure(applied)) return applied.failure.description;
+      if (TextResult.isFailure(applied)) return applied.failure.description;
       return book.source().text;
     });
     expect(shapeOf(after)).toEqual(shapeOf(SOURCE));

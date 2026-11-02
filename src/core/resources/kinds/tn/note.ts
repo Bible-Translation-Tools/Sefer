@@ -1,10 +1,10 @@
-import type { BookId } from "@sefer/text/book";
+import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import {
   chaptersAddress,
   introAddress,
   versesAddress,
   type Address,
-} from "@sefer/text/location/address";
+} from "@wycliffeassociates/sefer-text/location/address";
 
 import type { PlaceContext } from "../handle";
 import type { NoteRecord, Span } from "./rcHelpMarkdown";

@@ -1,5 +1,6 @@
-import { identifyBook, type BookId } from "@sefer/text/book";
-import { decode } from "@sefer/text/source";
+import { identifyBook, type BookId } from "@wycliffeassociates/sefer-text/book";
+import * as TextResult from "@wycliffeassociates/sefer-text/result";
+import { decode } from "@wycliffeassociates/sefer-text/source";
 import { Effect, FileSystem, Result } from "effect";
 
 import { discoverBooks } from "../project/discovery";
@@ -29,7 +30,7 @@ export const folderSource = (
       const bytes = yield* Effect.result(fileSystem.readFile(path));
       if (Result.isFailure(bytes)) continue;
       const source = decode(bytes.success);
-      if (Result.isFailure(source)) continue;
+      if (TextResult.isFailure(source)) continue;
       const id = identifyBook(source.success.text, path);
       if (texts.has(id)) continue;
       texts.set(id, source.success.text);

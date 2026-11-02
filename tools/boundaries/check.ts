@@ -183,7 +183,7 @@ export const checkHostUse = (options: {
         });
       };
       if (!isTest && specifier.value.startsWith("@codemirror/"))
-        report("an editor host uses CodeMirror only through @sefer/editor");
+        report("an editor host uses CodeMirror only through @wycliffeassociates/sefer-editor");
       const resolved = isRelative(specifier.value)
         ? path.resolve(path.dirname(file), withoutQuery(specifier.value))
         : resolveAlias(specifier.value, paths, pathsBase);
@@ -295,6 +295,13 @@ export const readTsconfigPaths = (
   return { paths, base: path.resolve(base, options.baseUrl ?? ".") };
 };
 
+/**
+ * What the published packages may not import on top of core's list: Effect is
+ * the app's choice, and as a peer it would hold every installing app to Sefer's
+ * version, so the packages carry their own `Result` (`@wycliffeassociates/sefer-text/result`).
+ */
+const PUBLISHED_FORBIDDEN_PACKAGES = ["effect", "effect/*"];
+
 const main = (): void => {
   const root = process.cwd();
   const source = path.join(root, "src");
@@ -307,7 +314,11 @@ const main = (): void => {
       paths,
       pathsBase: base,
       rawAssetDirs: [path.join(root, "fixtures")],
-      forbiddenPackages: [...DEFAULT_FORBIDDEN_PACKAGES, "@sefer/editor", "@sefer/editor/*"],
+      forbiddenPackages: [
+        ...DEFAULT_FORBIDDEN_PACKAGES,
+        "@wycliffeassociates/sefer-editor",
+        "@wycliffeassociates/sefer-editor/*",
+      ],
     }),
     ...checkReach({
       from: source,
@@ -327,17 +338,25 @@ const main = (): void => {
     }),
     ...checkCoreBoundary({
       coreDir: path.join(root, "packages", "text", "src"),
-      label: "@sefer/text",
+      label: "@wycliffeassociates/sefer-text",
       paths,
       pathsBase: base,
-      forbiddenPackages: [...DEFAULT_FORBIDDEN_PACKAGES, "@sefer/editor", "@sefer/editor/*"],
+      forbiddenPackages: [
+        ...DEFAULT_FORBIDDEN_PACKAGES,
+        ...PUBLISHED_FORBIDDEN_PACKAGES,
+        "@wycliffeassociates/sefer-editor",
+        "@wycliffeassociates/sefer-editor/*",
+      ],
     }),
     ...checkCoreBoundary({
       coreDir: path.join(root, "packages", "editor", "src"),
-      label: "@sefer/editor",
+      label: "@wycliffeassociates/sefer-editor",
       paths,
       pathsBase: base,
-      forbiddenPackages: DEFAULT_FORBIDDEN_PACKAGES.filter((name) => name !== "@codemirror/*"),
+      forbiddenPackages: [
+        ...DEFAULT_FORBIDDEN_PACKAGES.filter((name) => name !== "@codemirror/*"),
+        ...PUBLISHED_FORBIDDEN_PACKAGES,
+      ],
     }),
     ...checkCoreBoundary({
       coreDir: path.join(dev, "annotate"),

@@ -1,12 +1,12 @@
+import type { JSX } from "@solidjs/web";
 import {
   type CardMount,
   type EditorBook,
   type EditorPolicy,
   type Following,
   type MarkedRange,
-} from "@sefer/editor";
-import { tocUnits, unitIndexAt } from "@sefer/text/location/locate";
-import type { JSX } from "@solidjs/web";
+} from "@wycliffeassociates/sefer-editor";
+import { tocUnits, unitIndexAt } from "@wycliffeassociates/sefer-text/location/locate";
 import ChevronDownIcon from "lucide-solid/icons/chevron-down";
 import ChevronUpIcon from "lucide-solid/icons/chevron-up";
 import ChevronsDownIcon from "lucide-solid/icons/chevrons-down";

@@ -1,0 +1,17 @@
+{
+  // The publishable build, as packages/text's. @wycliffeassociates/sefer-text resolves to its
+  // built declarations, so build text first (the package's "build" does).
+  // testing/ stays out: it is the workspace's test harness and imports vitest.
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "allowImportingTsExtensions": false,
+    "rootDir": "src",
+    "outDir": "dist",
+    "types": [],
+    "paths": { "@wycliffeassociates/sefer-text/*": ["../text/dist/*"] }
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts", "src/testing"]
+}

@@ -1,4 +1,4 @@
-import type { BookId } from "@sefer/text/book";
+import type { BookId } from "@wycliffeassociates/sefer-text/book";
 
 const held = new Map<BookId, number>();
 

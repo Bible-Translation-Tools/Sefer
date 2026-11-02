@@ -132,4 +132,4 @@ My estimate is 800 to 1,200 lines on the Sefer side. The package is about 1,800.
 
 <Followup id="verify-skill" done>A verification skill for the package: one command that checks a change against the fixtures and the rules in its README.</Followup>
 
-<Tradeoff id="grammar" chose="the package keeps its own verse-number grammar" cost="two copies of a short regex to keep in step with the editor">The editor and the package agree on `1`, `1.`, `v1` and `verse 1`. Sharing the code would make the package depend on `@sefer/text`, and it is meant to be able to leave this repository.</Tradeoff>
+<Tradeoff id="grammar" chose="the package keeps its own verse-number grammar" cost="two copies of a short regex to keep in step with the editor">The editor and the package agree on `1`, `1.`, `v1` and `verse 1`. Sharing the code would make the package depend on `@wycliffeassociates/sefer-text`, and it is meant to be able to leave this repository.</Tradeoff>

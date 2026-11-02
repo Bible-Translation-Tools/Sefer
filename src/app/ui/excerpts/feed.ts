@@ -1,6 +1,6 @@
-import type { EditorBook, Following } from "@sefer/editor";
-import type { BookId } from "@sefer/text/book";
 import { useNavigate } from "@tanstack/solid-router";
+import type { EditorBook, Following } from "@wycliffeassociates/sefer-editor";
+import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import { Effect, Option, Result, Stream } from "effect";
 import { createMemo, createSignal, type Accessor } from "solid-js";
 

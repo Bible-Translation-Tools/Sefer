@@ -1,0 +1,17 @@
+{
+  // The publishable build: JavaScript and declarations in dist/, one file per
+  // source file so every "./*" subpath keeps its name. The app and the editor
+  // in this workspace read src/ directly; only a published copy reads dist/.
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "allowImportingTsExtensions": false,
+    "rootDir": "src",
+    "outDir": "dist",
+    "types": [],
+    "paths": {}
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"]
+}

@@ -1,9 +1,9 @@
 import { forEachDiagnostic, setDiagnosticsEffect } from "@codemirror/lint";
 import { Compartment, EditorState, StateEffect, type TransactionSpec } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import { tocViewOf } from "@sefer/text/engine/location";
-import type { Address } from "@sefer/text/location/address";
-import { addressAt, resolve } from "@sefer/text/location/locate";
+import { tocViewOf } from "@wycliffeassociates/sefer-text/engine/location";
+import type { Address } from "@wycliffeassociates/sefer-text/location/address";
+import { addressAt, resolve } from "@wycliffeassociates/sefer-text/location/locate";
 
 import { seatedOf, type EditorBook } from "./book";
 import {

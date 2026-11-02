@@ -1,4 +1,4 @@
-import type { BookId } from "@sefer/text/book";
+import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import { For, Show, createMemo, createSignal } from "solid-js";
 
 import { Button, Card } from "#app/ui/primitives";

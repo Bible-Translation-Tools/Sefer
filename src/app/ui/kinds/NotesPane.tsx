@@ -1,4 +1,4 @@
-import { addressCode, type Address } from "@sefer/text/location/address";
+import { addressCode, type Address } from "@wycliffeassociates/sefer-text/location/address";
 import { Effect } from "effect";
 import NotebookText from "lucide-solid/icons/notebook-text";
 import { For, Show } from "solid-js";

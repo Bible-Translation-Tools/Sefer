@@ -1,6 +1,7 @@
 // The check runs AFTER the shared project's (Will, 2026-10-02: the Shared project first, the two never in one pass).
 
-import { decode } from "@sefer/text/source";
+import * as TextResult from "@wycliffeassociates/sefer-text/result";
+import { decode } from "@wycliffeassociates/sefer-text/source";
 import { Effect, FileSystem, Option, Result } from "effect";
 
 import type { Addr, GalleyService, MergeSide } from "../galley";
@@ -68,7 +69,7 @@ const ownerOf = (url: string): string => normaliseRepoUrl(url).split("/").at(-2)
 
 const text = (bytes: Uint8Array): string | undefined => {
   const decoded = decode(bytes);
-  return Result.isSuccess(decoded) ? decoded.success.text : undefined;
+  return TextResult.isSuccess(decoded) ? decoded.success.text : undefined;
 };
 
 export const fetchWork = (

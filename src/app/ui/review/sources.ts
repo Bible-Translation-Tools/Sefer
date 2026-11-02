@@ -1,4 +1,4 @@
-import type { Book } from "@sefer/text/book";
+import type { Book } from "@wycliffeassociates/sefer-text/book";
 import { Option, Result } from "effect";
 
 import {

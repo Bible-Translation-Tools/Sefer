@@ -1,6 +1,12 @@
-import { identifyBook, trustedBy, type Book, type Origin } from "@sefer/text/book";
-import type { SourceStamp } from "@sefer/text/source";
-import { Effect, FileSystem, Option, Result } from "effect";
+import {
+  identifyBook,
+  trustedBy,
+  type Book,
+  type Origin,
+} from "@wycliffeassociates/sefer-text/book";
+import * as Result from "@wycliffeassociates/sefer-text/result";
+import type { SourceStamp } from "@wycliffeassociates/sefer-text/source";
+import { Effect, FileSystem, Option } from "effect";
 
 import { Galley, toLf } from "../galley";
 import { Git, repositoryPath, type ChangedPath, type CommitId, type Repo } from "../git/git";

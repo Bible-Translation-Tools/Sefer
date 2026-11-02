@@ -1,5 +1,5 @@
-import type { BookId } from "@sefer/text/book";
-import type { SourceStamp } from "@sefer/text/source";
+import type { BookId } from "@wycliffeassociates/sefer-text/book";
+import type { SourceStamp } from "@wycliffeassociates/sefer-text/source";
 import { Effect } from "effect";
 
 import { sourceRef, type CompareSource, type CompareError, type SourceRef } from "./source";

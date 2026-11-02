@@ -1,5 +1,5 @@
-import { chaptersAddress, introAddress } from "@sefer/text/location/address";
 import { useNavigate, useRouterState } from "@tanstack/solid-router";
+import { chaptersAddress, introAddress } from "@wycliffeassociates/sefer-text/location/address";
 import ArrowRight from "lucide-solid/icons/arrow-right";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import Library from "lucide-solid/icons/library";

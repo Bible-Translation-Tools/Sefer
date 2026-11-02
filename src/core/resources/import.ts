@@ -1,4 +1,5 @@
-import { decode } from "@sefer/text/source";
+import * as TextResult from "@wycliffeassociates/sefer-text/result";
+import { decode } from "@wycliffeassociates/sefer-text/source";
 import { Data, Effect, FileSystem, Result, type PlatformError } from "effect";
 
 import { joinPath, lastSegment, parentPath } from "../fileSystem/path";
@@ -155,7 +156,7 @@ export const commit = (
         unreadable(book),
       );
       const source = decode(bytes);
-      if (Result.isFailure(source))
+      if (TextResult.isFailure(source))
         return yield* Effect.fail(refuse("InvalidBook", `${book}: ${source.failure.description}`));
     }
 

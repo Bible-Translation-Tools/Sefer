@@ -32,14 +32,14 @@ Effect's own `FileSystem` service, which core may use because it comes from
 [storage](storage.md).
 
 CodeMirror belongs to the editor, which is its own workspace package,
-`@sefer/editor` (`packages/editor/`). It is not a core dependency at any depth.
+`@wycliffeassociates/sefer-editor` (`packages/editor/`). It is not a core dependency at any depth.
 
 ## The packages
 
 Two framework-free workspace packages sit under the app, so that other apps
 (the WACS hub first) install them instead of forking:
 
-- **`@sefer/text`** (`packages/text/`) is the scripture text model:
+- **`@wycliffeassociates/sefer-text`** (`packages/text/`) is the scripture text model:
   - canonical `Source` and `Change`
   - the Book port (opening a file from disk stays in core, `src/core/book/open.ts`)
   - addresses and the citation parser
@@ -49,7 +49,7 @@ Two framework-free workspace packages sit under the app, so that other apps
 
   It has core's rule set, and it may not import the editor.
 
-- **`@sefer/editor`** (`packages/editor/`) is the editor. It has core's rule set
+- **`@wycliffeassociates/sefer-editor`** (`packages/editor/`) is the editor. It has core's rule set
   with CodeMirror allowed, as a peer dependency so host and editor share one
   copy of its state. It brings no engine and no tracing of its own:
   - The host passes an `Analyze` and serves the wasm.
@@ -58,14 +58,31 @@ Two framework-free workspace packages sit under the app, so that other apps
 
 Dependencies only point down the stack:
 
-| Layer           | May use                         |
-| --------------- | ------------------------------- |
-| `@sefer/editor` | `@sefer/text`                   |
-| `src/core`      | `@sefer/text`, never the editor |
-| `src/app`       | both                            |
+| Layer                              | May use                                            |
+| ---------------------------------- | -------------------------------------------------- |
+| `@wycliffeassociates/sefer-editor` | `@wycliffeassociates/sefer-text`                   |
+| `src/core`                         | `@wycliffeassociates/sefer-text`, never the editor |
+| `src/app`                          | both                                               |
 
 Each package's `package.json` `exports` is its public surface. Narrowing it is
 part of the planning item "embeddable editor".
+
+Neither package imports Effect: it is the app's choice, and as a peer it would
+hold an installing app to Sefer's version. `@wycliffeassociates/sefer-text/result` is a plain
+`Result` with Effect's field names. The app checks a `decode` or `book.apply`
+result with that module's guards, and lifts one into an Effect with
+`#core/result`'s `fromResult`. `pnpm boundaries` refuses `effect` in either
+package.
+
+In this workspace both packages are read as source. `pnpm --filter
+@wycliffeassociates/sefer-editor build` (which builds `@wycliffeassociates/sefer-text` first) writes JavaScript and
+declarations to each `dist/`, and `publishConfig.exports` points a packed or
+published copy there. Whoever installs one needs a bundler, as the kitchen's
+`./reader` (raw `.ts`) already requires. The output keeps extensionless
+relative imports, so plain Node does not load it. They sit under the
+`@wycliffeassociates` scope so an installing app needs only the one `.npmrc`
+line the kitchen already asks for. Both stay `private` until a publish job
+exists.
 
 `src/app` composes core policy with the shared Solid UI; `src/platform` detects
 and supplies host capabilities. Both may depend inward on core contracts. Core
@@ -75,7 +92,7 @@ never depends outward.
 
 Each top-level layer has one alias, declared once as `tsconfig.json` `paths`:
 `#core/*`, `#app/*`, `#platform/*`, `#dev/*`. The packages are imported by
-name (`@sefer/text/…`, `@sefer/editor`), never by path. An import that
+name (`@wycliffeassociates/sefer-text/…`, `@wycliffeassociates/sefer-editor`), never by path. An import that
 crosses from one layer into another uses it (`import { … } from
 "#core/book/book"`); an import within a layer stays relative. Vite reads the
 same `paths` (`resolve.tsconfigPaths` in `vite.config.ts`), so there is no
@@ -84,7 +101,7 @@ because the checker's raw-asset exception is written for them.
 
 An alias is not a way around the rules: `pnpm boundaries` resolves it to the
 file it names and applies the same checks as to a relative path, and the Oxlint
-override lists `#app/**`, `@sefer/editor`, `#dev/**` and `#platform/**` for core
+override lists `#app/**`, `@wycliffeassociates/sefer-editor`, `#dev/**` and `#platform/**` for core
 (a core test may still reach `#platform/node/…`, as it may by relative path).
 
 `src/dev` is sealed from the other side. Nothing outside it may statically

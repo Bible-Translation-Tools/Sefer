@@ -1,5 +1,5 @@
-import { CANON } from "@sefer/text/location/canon";
 import { useNavigate } from "@tanstack/solid-router";
+import { CANON } from "@wycliffeassociates/sefer-text/location/canon";
 import { Option } from "effect";
 import FileArchive from "lucide-solid/icons/file-archive";
 import FolderOpen from "lucide-solid/icons/folder-open";

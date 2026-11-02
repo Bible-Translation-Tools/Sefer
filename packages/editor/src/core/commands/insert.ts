@@ -8,7 +8,7 @@ import { opensAParagraph, type DocStructure } from "../model/docStructure";
 
 /**
  * The named gestures the shell may ask a book to perform. Strings rather than
- * `StateCommand`s because this crosses `@sefer/editor`'s front door, and nothing
+ * `StateCommand`s because this crosses `@wycliffeassociates/sefer-editor`'s front door, and nothing
  * above it imports CodeMirror.
  */
 export type EditorAction =

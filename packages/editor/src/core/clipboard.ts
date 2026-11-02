@@ -1,6 +1,11 @@
 import { Facet, type EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import { Category, CloseReason, MARKERS, MarkerKind } from "@sefer/text/engine/analysis";
+import {
+  Category,
+  CloseReason,
+  MARKERS,
+  MarkerKind,
+} from "@wycliffeassociates/sefer-text/engine/analysis";
 
 import { isVisual } from "./kernel";
 import { scanCst, type CstScan, type NodeFacts } from "./model/cst";

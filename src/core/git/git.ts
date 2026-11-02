@@ -1,4 +1,4 @@
-import type { SourceStamp } from "@sefer/text/source";
+import type { SourceStamp } from "@wycliffeassociates/sefer-text/source";
 import { Context, Data, Effect, Option, Result } from "effect";
 
 import { escapesRoot, normalisePath } from "../fileSystem/path";

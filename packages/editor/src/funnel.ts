@@ -1,6 +1,6 @@
 import { Annotation, type ChangeSet, type EditorState, type Text } from "@codemirror/state";
-import type { Origin, Receipt, Refusal } from "@sefer/text/book";
-import type { Change } from "@sefer/text/source";
+import type { Origin, Receipt, Refusal } from "@wycliffeassociates/sefer-text/book";
+import type { Change } from "@wycliffeassociates/sefer-text/source";
 
 import type { Tracer } from "./core/instrument/instrument";
 import type { Mode } from "./core/kernel";

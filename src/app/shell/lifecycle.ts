@@ -1,5 +1,5 @@
-import type { EditorBook } from "@sefer/editor";
-import type { BookId } from "@sefer/text/book";
+import type { EditorBook } from "@wycliffeassociates/sefer-editor";
+import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import { Effect, Option, Result } from "effect";
 import { createSignal, onCleanup, untrack, type Accessor, type Setter } from "solid-js";
 

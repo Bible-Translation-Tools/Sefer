@@ -1,5 +1,10 @@
-import { addressCode, type Address } from "@sefer/text/location/address";
-import { tocUnits, unitAddress, unitIndexAt, type TocUnit } from "@sefer/text/location/locate";
+import { addressCode, type Address } from "@wycliffeassociates/sefer-text/location/address";
+import {
+  tocUnits,
+  unitAddress,
+  unitIndexAt,
+  type TocUnit,
+} from "@wycliffeassociates/sefer-text/location/locate";
 
 import type { Extent } from "#core/excerpts/excerpts";
 import { tocViewOf, type Analysis } from "#core/galley";

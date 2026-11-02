@@ -1,5 +1,6 @@
-import { localized } from "@sefer/text/localized";
-import { decode } from "@sefer/text/source";
+import { localized } from "@wycliffeassociates/sefer-text/localized";
+import * as TextResult from "@wycliffeassociates/sefer-text/result";
+import { decode } from "@wycliffeassociates/sefer-text/source";
 import {
   Context,
   Data,
@@ -495,7 +496,7 @@ const makeLibrary = (
             failure,
           );
           const source = decode(bytes);
-          if (Result.isFailure(source))
+          if (TextResult.isFailure(source))
             return yield* Effect.fail(refuse("Io", `${file}: ${source.failure.description}`));
           return Option.some(source.success.text);
         }),

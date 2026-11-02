@@ -1,4 +1,4 @@
-import type { NodeView, NotePart } from "@sefer/text/engine/analysis";
+import type { NodeView, NotePart } from "@wycliffeassociates/sefer-text/engine/analysis";
 
 import { notePartsOf } from "./cst";
 import type { NoteRange } from "./fold";

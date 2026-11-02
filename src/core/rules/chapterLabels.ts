@@ -1,4 +1,4 @@
-import type { Change } from "@sefer/text/source";
+import type { Change } from "@wycliffeassociates/sefer-text/source";
 
 import { MARKERS, TOKEN, TOKEN_SPELLING_BIT, tocViewOf, type Analysis } from "../galley";
 

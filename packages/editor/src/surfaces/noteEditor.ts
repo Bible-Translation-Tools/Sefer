@@ -6,7 +6,7 @@ import {
   type Transaction,
 } from "@codemirror/state";
 import { EditorView, ViewPlugin, keymap } from "@codemirror/view";
-import { NOTE_PART } from "@sefer/text/engine/analysis";
+import { NOTE_PART } from "@wycliffeassociates/sefer-text/engine/analysis";
 
 import { funnelFor, seatedOf, type EditorBook } from "../book";
 import { planAt } from "../core/editorState";
