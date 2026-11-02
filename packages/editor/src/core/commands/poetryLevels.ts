@@ -5,7 +5,7 @@ import {
   type TransactionSpec,
 } from "@codemirror/state";
 
-import { blockAt, isVisual, trusted } from "../kernel";
+import { blockAt, isVisual, nl, trusted } from "../kernel";
 import { structureAt, type Block, type DocStructure } from "../model/docStructure";
 import { assignmentAt } from "../model/registry";
 import { preferenceOf } from "../preferences";
@@ -134,7 +134,7 @@ const restyle = (
   const breakAt = (at: number, marker: string) => {
     let from = at;
     while (from > b.contentFrom && /\s/.test(state.doc.sliceString(from - 1, from))) from--;
-    return { from, to: at, insert: `\n\\${marker} ` };
+    return { from, to: at, insert: `${nl(state)}\\${marker} ` };
   };
   const changes = [start === undefined ? remark(b, kind) : breakAt(start, kind)];
   if (end !== undefined) changes.push(breakAt(end, b.kind));
@@ -332,10 +332,11 @@ export function turnLineInto(
 ): TransactionSpec | null {
   const line = lineKindAt(state, offset);
   if (line === null || !line.choices.includes(kind) || line.kind === kind) return null;
-  const b = blockAt(structureAt(state), offset);
-  if (b === null) return null;
-  // A heading takes the whole line: it can only be chosen on a line with no verse.
   const structure = structureAt(state);
+  const b = blockAt(structure, offset);
+  if (b === null) return null;
+  // Only the verse at the offset changes kind; a heading is only offered on a
+  // line with no verse, so it takes the whole line.
   return {
     changes: restyle(state, structure, b, offset, kind),
     annotations: trusted.of("poetry-level"),

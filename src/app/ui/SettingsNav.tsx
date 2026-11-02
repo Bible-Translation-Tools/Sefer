@@ -37,17 +37,27 @@ export function createSettingsNav() {
   /** The `ref` for the content whose headings the nav lists. */
   const watch = (content: HTMLElement): void => {
     let visible: IntersectionObserver | undefined;
+    let watched: readonly HTMLElement[] = [];
 
     const read = (): void => {
       const headings = [...content.querySelectorAll<HTMLElement>("h3")];
-      const next = headings.map((heading): Entry => {
-        heading.id ||= slug(heading.textContent ?? "");
+      const taken = new Set<string>();
+      const next = headings.map((heading, index): Entry => {
+        // A heading in a script slug() keeps nothing of, or two alike, must
+        // still get an anchor of its own.
+        const wanted = slug(heading.textContent ?? "");
+        heading.id ||= wanted === "settings-" || taken.has(wanted) ? `${wanted}${index}` : wanted;
+        taken.add(heading.id);
         return {
           id: heading.id,
           title: heading.textContent?.trim() ?? "",
         };
       });
-      // Typing and progress bars mutate the page too; only a changed outline is news.
+      // Typing and progress bars mutate the page too; only a changed outline,
+      // or headings drawn anew, is news.
+      const same = headings.length === watched.length && headings.every((h, i) => h === watched[i]);
+      if (same && JSON.stringify(next) === JSON.stringify(entries())) return;
+      watched = headings;
       if (JSON.stringify(next) !== JSON.stringify(entries())) setEntries(next);
       // Above the first heading's line, the first section is the one you are in.
       if (!next.some((entry) => entry.id === current())) setCurrent(next[0]?.id ?? "");
