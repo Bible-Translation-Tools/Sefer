@@ -312,9 +312,8 @@ export const createSync = (shell: Shell) => {
 
 export type SyncHandle = ReturnType<typeof createSync>;
 
-/** The state's glyph and one-line headline, for a row that opens the popover. */
+/** The state's glyph, for a row that opens the popover. */
 export const syncGlyph = (sync: SyncHandle): JSX.Element => glyphOf(sync.quick.sync());
-export const syncHeadline = (sync: SyncHandle): string => sync.pop.copy()?.headline ?? t("Sync");
 
 /**
  * The sync popover, opened from somewhere else (the app bar's More menu):

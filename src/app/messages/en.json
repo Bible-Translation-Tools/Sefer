@@ -207,5 +207,7 @@
   "cloud_sign_in_from_account": "Sign in from the Account button at the top right to choose a shared project for this one.",
   "sync_local_headline": "Saved on this device only",
   "sync_local_detail": "This project is not online. Your work is saved on this device and nowhere else. To save it to WACS, sign in with your WACS account.",
-  "sync_local_detail_signed_in": "This project is not online. Your work is saved on this device and nowhere else. To save it to WACS, choose a shared project or publish this one."
+  "sync_local_detail_signed_in": "This project is not online. Your work is saved on this device and nowhere else. To save it to WACS, choose a shared project or publish this one.",
+  "sync_menu_item": "Sync",
+  "sync_local_headline_signed_out": "Sign in to sync to WACS"
 }

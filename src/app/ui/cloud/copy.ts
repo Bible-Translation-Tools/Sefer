@@ -116,7 +116,8 @@ export const stateCopy = (state: SyncState, context: StateContext = {}): StateCo
     case "detached":
       return {
         chip: t("Not shared"),
-        headline: m.sync_local_headline(),
+        headline:
+          context.signedIn === true ? m.sync_local_headline() : m.sync_local_headline_signed_out(),
         detail: context.signedIn === true ? m.sync_local_detail_signed_in() : m.sync_local_detail(),
         tone: "neutral",
       };

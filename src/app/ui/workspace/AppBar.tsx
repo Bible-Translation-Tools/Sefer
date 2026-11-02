@@ -12,8 +12,9 @@ import TypeIcon from "lucide-solid/icons/type";
 import { Show, createSignal, For } from "solid-js";
 
 import { t } from "../../i18n";
+import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
-import { SyncPopover, createSync, syncGlyph, syncHeadline } from "../cloud/SyncButton";
+import { SyncPopover, createSync, syncGlyph } from "../cloud/SyncButton";
 import { IconButton, Menu, MenuItem, MenuSeparator, SegmentedControl, cx } from "../primitives";
 import { AccountButton } from "./AccountButton";
 import { ProjectTools } from "./Toolbar";
@@ -95,7 +96,7 @@ function MoreMenu() {
             class={sync.pop.attention() !== "none" ? "text-on-surface-warning" : undefined}
             onSelect={() => setTimeout(() => sync.pop.openChanged(true))}
           >
-            {syncHeadline(sync)}
+            {m.sync_menu_item()}
           </MenuItem>
           <MenuSeparator />
         </Show>
