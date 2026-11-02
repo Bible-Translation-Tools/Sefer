@@ -67,6 +67,21 @@ Dependencies only point down the stack:
 Each package's `package.json` `exports` is its public surface. Narrowing it is
 part of the planning item "embeddable editor".
 
+Neither package imports Effect: it is the app's choice, and as a peer it would
+hold an installing app to Sefer's version. `@sefer/text/result` is a plain
+`Result` with Effect's field names. The app checks a `decode` or `book.apply`
+result with that module's guards, and lifts one into an Effect with
+`#core/result`'s `fromResult`. `pnpm boundaries` refuses `effect` in either
+package.
+
+In this workspace both packages are read as source. `pnpm --filter
+@sefer/editor build` (which builds `@sefer/text` first) writes JavaScript and
+declarations to each `dist/`, and `publishConfig.exports` points a packed or
+published copy there. Whoever installs one needs a bundler, as the kitchen's
+`./reader` (raw `.ts`) already requires. The output keeps extensionless
+relative imports, so plain Node does not load it. Both are still `private`
+until their name and registry are settled.
+
 `src/app` composes core policy with the shared Solid UI; `src/platform` detects
 and supplies host capabilities. Both may depend inward on core contracts. Core
 never depends outward.

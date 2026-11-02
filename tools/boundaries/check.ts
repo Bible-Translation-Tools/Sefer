@@ -295,6 +295,13 @@ export const readTsconfigPaths = (
   return { paths, base: path.resolve(base, options.baseUrl ?? ".") };
 };
 
+/**
+ * What the published packages may not import on top of core's list: Effect is
+ * the app's choice, and as a peer it would hold every installing app to Sefer's
+ * version, so the packages carry their own `Result` (`@sefer/text/result`).
+ */
+const PUBLISHED_FORBIDDEN_PACKAGES = ["effect", "effect/*"];
+
 const main = (): void => {
   const root = process.cwd();
   const source = path.join(root, "src");
@@ -330,14 +337,22 @@ const main = (): void => {
       label: "@sefer/text",
       paths,
       pathsBase: base,
-      forbiddenPackages: [...DEFAULT_FORBIDDEN_PACKAGES, "@sefer/editor", "@sefer/editor/*"],
+      forbiddenPackages: [
+        ...DEFAULT_FORBIDDEN_PACKAGES,
+        ...PUBLISHED_FORBIDDEN_PACKAGES,
+        "@sefer/editor",
+        "@sefer/editor/*",
+      ],
     }),
     ...checkCoreBoundary({
       coreDir: path.join(root, "packages", "editor", "src"),
       label: "@sefer/editor",
       paths,
       pathsBase: base,
-      forbiddenPackages: DEFAULT_FORBIDDEN_PACKAGES.filter((name) => name !== "@codemirror/*"),
+      forbiddenPackages: [
+        ...DEFAULT_FORBIDDEN_PACKAGES.filter((name) => name !== "@codemirror/*"),
+        ...PUBLISHED_FORBIDDEN_PACKAGES,
+      ],
     }),
     ...checkCoreBoundary({
       coreDir: path.join(dev, "annotate"),

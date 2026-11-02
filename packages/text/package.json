@@ -1,16 +1,32 @@
 {
   "name": "@sefer/text",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Sefer's scripture text model, framework-free: canonical Source and its changes, the Book port, scripture addresses and the citation parser, and the engine's analysis vocabulary.",
+  "files": [
+    "dist"
+  ],
   "type": "module",
   "exports": {
     "./*": "./src/*.ts"
+  },
+  "publishConfig": {
+    "exports": {
+      "./*": {
+        "types": "./dist/*.d.ts",
+        "default": "./dist/*.js"
+      }
+    },
+    "registry": "https://nexus-registry.walink.org/repository/wa-npm/"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "prepack": "pnpm run build"
   },
   "devDependencies": {
     "@wycliffeassociates/scripture-kitchen": "0.1.19"
   },
   "peerDependencies": {
-    "@wycliffeassociates/scripture-kitchen": "*"
+    "@wycliffeassociates/scripture-kitchen": "^0.1.19"
   }
 }

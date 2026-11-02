@@ -1,13 +1,30 @@
 {
   "name": "@sefer/editor",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Sefer's USFM editor, framework-free: CodeMirror over the scripture-kitchen engine, mounted by any host. The host brings its engine build and serves the wasm.",
+  "files": [
+    "dist"
+  ],
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
     "./editor.css": "./src/editor.css",
     "./testing/*": "./src/testing/*.ts"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./editor.css": "./dist/editor.css"
+    },
+    "registry": "https://nexus-registry.walink.org/repository/wa-npm/"
+  },
+  "scripts": {
+    "build": "pnpm --filter @sefer/text run build && rm -rf dist && tsc -p tsconfig.build.json && cp src/editor.css dist/",
+    "prepack": "pnpm run build"
   },
   "devDependencies": {
     "@codemirror/commands": "^6.11.1",
@@ -23,7 +40,7 @@
     "@codemirror/lint": "^6.9.7",
     "@codemirror/state": "^6.7.6",
     "@codemirror/view": "^6.43.13",
-    "@sefer/text": "*",
-    "@wycliffeassociates/scripture-kitchen": "*"
+    "@sefer/text": "workspace:^",
+    "@wycliffeassociates/scripture-kitchen": "^0.1.19"
   }
 }
