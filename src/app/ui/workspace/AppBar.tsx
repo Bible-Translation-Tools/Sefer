@@ -15,7 +15,7 @@ import { Show, createSignal, For } from "solid-js";
 import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { SyncPopover, createSync, syncGlyph, syncHeadline } from "../cloud/SyncButton";
-import { IconButton, Menu, MenuItem, MenuSeparator, SegmentedControl, cx } from "../primitives";
+import { IconButton, Menu, MenuItem, MenuSeparator, SegmentedControl } from "../primitives";
 import { ProjectTools } from "./Toolbar";
 
 function BarButton(props: {
@@ -41,7 +41,7 @@ function BarButton(props: {
   );
 }
 
-/** Refine is the book as it reads; Form Mode is the same book one verse per line (design builds only). */
+/** Refine is the book as it reads; Form Mode is the same book one verse per line. */
 type Mode = "refine" | "form" | "terms";
 
 type ProjectScreen =
@@ -175,13 +175,7 @@ function ModeControl(props: {
 }) {
   return (
     // The id is the line-by-line tour's anchor (tour/tours/lineByLine.ts).
-    <div
-      id="app-mode-control"
-      class={cx(
-        "mx-auto w-full max-md:w-auto",
-        __SEFER_DESIGN__ ? "max-w-[30rem]" : "max-w-[20.75rem]",
-      )}
-    >
+    <div id="app-mode-control" class="mx-auto w-full max-w-[30rem] max-md:w-auto">
       <SegmentedControl<Mode>
         label={t("Mode")}
         iconsWhenNarrow
@@ -195,16 +189,12 @@ function ModeControl(props: {
             icon: <FileText aria-hidden="true" />,
             disabled: !props.open,
           },
-          ...(__SEFER_DESIGN__
-            ? [
-                {
-                  value: "form" as const,
-                  label: t("Form Mode"),
-                  icon: <Rows3 aria-hidden="true" />,
-                  disabled: !props.open,
-                },
-              ]
-            : []),
+          {
+            value: "form",
+            label: t("Form Mode"),
+            icon: <Rows3 aria-hidden="true" />,
+            disabled: !props.open,
+          },
           {
             value: "terms",
             label: t("Spiritual terms"),
@@ -233,7 +223,7 @@ export function AppBar() {
   const mode = (): Mode | undefined => {
     if (terms() === "true") return "terms";
     if (refining() !== "true") return undefined;
-    return __SEFER_DESIGN__ && shell.lineByLine() ? "form" : "refine";
+    return shell.lineByLine() ? "form" : "refine";
   };
   const goTo = (next: Mode): void => {
     if (next === "refine" || next === "form") {
