@@ -16,8 +16,8 @@ import {
 } from "@sefer/editor";
 import { makeBook } from "@sefer/text/book";
 import { addressLabel } from "@sefer/text/location/address";
+import * as Result from "@sefer/text/result";
 import { decode } from "@sefer/text/source";
-import { Result } from "effect";
 
 import { loadEngine } from "./engine";
 import { gestureLog, type Gesture, type Ruling } from "./log";

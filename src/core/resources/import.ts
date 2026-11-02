@@ -1,3 +1,4 @@
+import * as TextResult from "@sefer/text/result";
 import { decode } from "@sefer/text/source";
 import { Data, Effect, FileSystem, Result, type PlatformError } from "effect";
 
@@ -155,7 +156,7 @@ export const commit = (
         unreadable(book),
       );
       const source = decode(bytes);
-      if (Result.isFailure(source))
+      if (TextResult.isFailure(source))
         return yield* Effect.fail(refuse("InvalidBook", `${book}: ${source.failure.description}`));
     }
 

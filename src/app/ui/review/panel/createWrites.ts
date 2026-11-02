@@ -1,5 +1,6 @@
 import type { EditorBook } from "@sefer/editor";
 import { trustedBy, type BookId } from "@sefer/text/book";
+import * as TextResult from "@sefer/text/result";
 import { Effect, Result } from "effect";
 
 import type { DecisionUnit, MergeSide } from "#core/galley";
@@ -54,11 +55,11 @@ function applyTaken(
     return;
   }
   const applied = book.apply(splices.success, "compare", trustedBy("compare"));
-  operation.end(Result.isSuccess(applied) ? "passed" : "refused", {
-    "review.wrote": Result.isSuccess(applied),
+  operation.end(TextResult.isSuccess(applied) ? "passed" : "refused", {
+    "review.wrote": TextResult.isSuccess(applied),
     "review.splices": splices.success.length,
   });
-  if (Result.isFailure(applied)) setNote(describe(applied.failure));
+  if (TextResult.isFailure(applied)) setNote(describe(applied.failure));
   shell.changed({ kind: "book.apply", books: [bookId] });
 }
 

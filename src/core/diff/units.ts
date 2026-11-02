@@ -1,4 +1,5 @@
 import { Refusal, trustedBy, type Book, type BookId, type Receipt } from "@sefer/text/book";
+import * as TextResult from "@sefer/text/result";
 import type { SourceStamp } from "@sefer/text/source";
 import { Result } from "effect";
 
@@ -56,15 +57,18 @@ export const revertUnits = (
   book: Book,
   changes: UnitChanges,
   units: readonly DecisionUnit[],
-): Result.Result<Receipt, Refusal> => {
-  if (units.length === 0) return Result.fail(refuseRevert("Empty", "there is nothing to revert"));
+): TextResult.Result<Receipt, Refusal> => {
+  if (units.length === 0)
+    return TextResult.fail(refuseRevert("Empty", "there is nothing to revert"));
   const stamp = book.source().stamp;
   if (
     book.id !== changes.bookId ||
     stamp.revision !== changes.stamp.revision ||
     stamp.length !== changes.stamp.length
   )
-    return Result.fail(refuseRevert("Stale", "the book changed after its changes were computed"));
+    return TextResult.fail(
+      refuseRevert("Stale", "the book changed after its changes were computed"),
+    );
   const splices = galley.mergeSplices(
     changes.workingText,
     changes.baselineText,
@@ -72,8 +76,8 @@ export const revertUnits = (
     "baseline",
   );
   if (Result.isFailure(splices))
-    return Result.fail(refuseRevert("Engine", splices.failure.description));
+    return TextResult.fail(refuseRevert("Engine", splices.failure.description));
   if (splices.success.length === 0)
-    return Result.fail(refuseRevert("Empty", "there is nothing to revert"));
+    return TextResult.fail(refuseRevert("Empty", "there is nothing to revert"));
   return book.apply(splices.success, "revert", trustedBy("diff.revert"));
 };

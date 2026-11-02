@@ -330,9 +330,6 @@ importers:
       '@wycliffeassociates/scripture-kitchen':
         specifier: 0.1.19
         version: 0.1.19
-      effect:
-        specifier: 4.0.0-rc.112
-        version: 4.0.0-rc.112
       vitest:
         specifier: 5.0.1
         version: 5.0.1(@types/node@26.6.2)(@vitest/browser-playwright@5.0.1)(@vitest/ui@5.0.1)(jsdom@25.0.1(supports-color@8.1.1))(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -342,9 +339,6 @@ importers:
       '@wycliffeassociates/scripture-kitchen':
         specifier: 0.1.19
         version: 0.1.19
-      effect:
-        specifier: 4.0.0-rc.112
-        version: 4.0.0-rc.112
 
   planning:
     dependencies:

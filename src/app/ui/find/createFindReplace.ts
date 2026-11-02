@@ -1,5 +1,5 @@
 import type { BookId } from "@sefer/text/book";
-import { Result } from "effect";
+import * as Result from "@sefer/text/result";
 import { createSignal } from "solid-js";
 
 import { t } from "#app/i18n";

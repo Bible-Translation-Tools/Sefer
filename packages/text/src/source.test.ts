@@ -1,6 +1,6 @@
-import { Result } from "effect";
 import { describe, expect, test } from "vitest";
 
+import * as Result from "./result";
 import { applyChange, decode, dominantEol, encode, type Change, type Source } from "./source";
 
 const bytes = (text: string): Uint8Array => new TextEncoder().encode(text);

@@ -1,4 +1,5 @@
 import { CANON } from "@sefer/text/location/canon";
+import * as TextResult from "@sefer/text/result";
 import { decode } from "@sefer/text/source";
 import { Effect, FileSystem, Result, Schema } from "effect";
 
@@ -58,7 +59,7 @@ const readText = (
   Effect.orElseSucceed(
     Effect.map(fileSystem.readFile(path), (bytes) => {
       const text = decode(bytes);
-      return Result.isSuccess(text) ? text.success.text : undefined;
+      return TextResult.isSuccess(text) ? text.success.text : undefined;
     }),
     () => undefined,
   );

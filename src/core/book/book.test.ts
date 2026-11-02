@@ -1,5 +1,6 @@
 import type { Book, Receipt } from "@sefer/text/book";
-import { Effect, Layer, Result } from "effect";
+import * as Result from "@sefer/text/result";
+import { Effect, Layer } from "effect";
 import { expect, test } from "vitest";
 
 import { FixtureFileSystemLive, SMALL_NT_ROOT } from "../fixture/smallNt";

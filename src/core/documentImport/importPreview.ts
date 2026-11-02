@@ -1,4 +1,5 @@
 import { Refusal, trustedBy, type Book, type Receipt } from "@sefer/text/book";
+import * as TextResult from "@sefer/text/result";
 import type { Change, SourceStamp } from "@sefer/text/source";
 import { Result } from "effect";
 
@@ -124,9 +125,9 @@ export const previewImport = (
 export const applyImport = (
   preview: ImportPreview,
   book: Book,
-): Result.Result<Receipt, Refusal> => {
+): TextResult.Result<Receipt, Refusal> => {
   if (book.source().stamp.revision !== preview.stamp.revision) {
-    return Result.fail(
+    return TextResult.fail(
       new Refusal({
         rule: "import.stale",
         reason: "stale",

@@ -1,3 +1,4 @@
+import * as TextResult from "@sefer/text/result";
 import { decode } from "@sefer/text/source";
 import { Effect, FileSystem, Result, Schema } from "effect";
 
@@ -87,7 +88,7 @@ const manifestOf = (tree: UpstreamTree): Effect.Effect<readonly HelpBook[], Unav
     if (bytes === undefined)
       return yield* Effect.fail(unavailable("Unreadable", "no manifest.yaml"));
     const text = decode(bytes);
-    if (Result.isFailure(text))
+    if (TextResult.isFailure(text))
       return yield* Effect.fail(unavailable("Unreadable", text.failure.description));
     const books = booksIn(text.success.text);
     return Result.isSuccess(books) ? books.success : yield* Effect.fail(books.failure);
@@ -127,7 +128,7 @@ const buildPack = (
       if (held === undefined)
         return yield* Effect.fail(unavailable("Unreadable", `${help.book} ${path}: not read`));
       const source = decode(held);
-      if (Result.isFailure(source))
+      if (TextResult.isFailure(source))
         return yield* Effect.fail(
           unavailable("Unreadable", `${help.book} ${path}: ${source.failure.description}`),
         );

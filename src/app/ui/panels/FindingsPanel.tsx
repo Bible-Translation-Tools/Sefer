@@ -1,4 +1,5 @@
 import type { BookId } from "@sefer/text/book";
+import * as TextResult from "@sefer/text/result";
 import { useNavigate, useSearch } from "@tanstack/solid-router";
 import { Option, Result } from "effect";
 import ChevronDown from "lucide-solid/icons/chevron-down";
@@ -201,7 +202,7 @@ const createFixOffer = (shell: Shell) => {
     if (book === undefined) return;
     const applied = Fixes.applyFix(fix, book);
     setNote(
-      Result.isSuccess(applied)
+      TextResult.isSuccess(applied)
         ? t("applied {label}", { label: fix.label })
         : t("refused by {rule}", { rule: applied.failure.rule }),
     );

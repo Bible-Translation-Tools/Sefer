@@ -1,4 +1,5 @@
 import type { EditorBook } from "@sefer/editor";
+import * as TextResult from "@sefer/text/result";
 import { Option, Result } from "effect";
 import type { Accessor, Setter } from "solid-js";
 
@@ -81,7 +82,7 @@ export const createFindingsNav = ({
     }
     const applied = Fixes.applyFix(previewed.success, book);
     report(
-      Result.isSuccess(applied)
+      TextResult.isSuccess(applied)
         ? t("applied {label}", { label: previewed.success.label })
         : t("refused by {rule}", { rule: applied.failure.rule }),
     );

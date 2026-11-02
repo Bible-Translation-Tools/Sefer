@@ -1,4 +1,4 @@
-import { Data, Result } from "effect";
+import * as Result from "./result";
 
 export interface SourceStamp {
   readonly revision: number;
@@ -41,17 +41,31 @@ export interface Change {
 
 export type DecodeRefusal = "InvalidUtf8";
 
-export class SourceDecodeError extends Data.TaggedError("SourceDecodeError")<{
+export class SourceDecodeError extends Error {
+  readonly _tag = "SourceDecodeError";
   readonly reason: DecodeRefusal;
   readonly description: string;
-}> {}
+  constructor(fields: { readonly reason: DecodeRefusal; readonly description: string }) {
+    super(fields.description);
+    this.name = "SourceDecodeError";
+    this.reason = fields.reason;
+    this.description = fields.description;
+  }
+}
 
 export type ChangeRefusal = "RangeOutOfBounds" | "SplitsSurrogatePair" | "CarriageReturn";
 
-export class SourceChangeError extends Data.TaggedError("SourceChangeError")<{
+export class SourceChangeError extends Error {
+  readonly _tag = "SourceChangeError";
   readonly reason: ChangeRefusal;
   readonly description: string;
-}> {}
+  constructor(fields: { readonly reason: ChangeRefusal; readonly description: string }) {
+    super(fields.description);
+    this.name = "SourceChangeError";
+    this.reason = fields.reason;
+    this.description = fields.description;
+  }
+}
 
 const sourceAt = (text: string, revision: number, form: SourceForm): Source => ({
   text,

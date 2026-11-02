@@ -1,6 +1,6 @@
 import { trustedBy, type Book, type BookId, type Receipt } from "@sefer/text/book";
+import * as Result from "@sefer/text/result";
 import type { Change } from "@sefer/text/source";
-import { Result } from "effect";
 
 export interface CrossBookEdit {
   readonly label: string;

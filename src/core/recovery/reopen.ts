@@ -1,3 +1,4 @@
+import * as TextResult from "@sefer/text/result";
 import { decode } from "@sefer/text/source";
 import { Effect, FileSystem, Option, Result } from "effect";
 
@@ -40,7 +41,7 @@ export const pendingOnOpen = (
     for (const journal of mine) {
       const bytes = yield* Effect.result(fileSystem.readFile(journal.path));
       const decoded = Result.isFailure(bytes) ? undefined : decode(bytes.success);
-      if (decoded === undefined || Result.isFailure(decoded)) {
+      if (decoded === undefined || TextResult.isFailure(decoded)) {
         offered.push(yield* setAside(recovery, journal));
         continue;
       }

@@ -27,8 +27,8 @@ import {
   type Receipt,
   type Trust,
 } from "@sefer/text/book";
+import * as Result from "@sefer/text/result";
 import type { Change, Source, SourceStamp } from "@sefer/text/source";
-import { Result } from "effect";
 
 import { clipboardOrigin } from "./core/clipboard";
 import { actionCommand, type EditorAction } from "./core/commands/actions";
