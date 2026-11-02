@@ -48,7 +48,7 @@ The generated half looks after itself; the judgement half does not. When a gate 
 | oxlint warnings | 0 | `pnpm lint` fails on any, every commit |
 | fallow dead code (`pnpm deadcode`) | 0 issue(s) | every deploy; advisory on branches |
 | fallow duplication | 1.6% in 65 clone group(s) | none — advisory |
-| suppression comments | 218 | each listed below with its reason |
+| suppression comments | 220 | each listed below with its reason |
 
 ### Oxlint warnings, by rule and file
 
@@ -206,6 +206,8 @@ None.
 | `src/app/paraglide/messages/landing_search_or_link.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/line_menu_current.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/line_menu_fixed.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/line_menu_footnote_add.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/line_menu_footnote_placeholder.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/line_menu_label.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/line_menu_turn_into.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/recovery_quiet.js` | `eslint-disable` | — |
