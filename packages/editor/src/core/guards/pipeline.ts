@@ -5,6 +5,7 @@ import { pullSelectionsIntoTheClip, refuseEditsOutsideTheClip, surfaceRangeAt } 
 import { deleteMarkersWholeOrNotAtAll } from "./deletion";
 import {
   keepPoetryMarkersAtTheStartOfTheirLine,
+  keepTypingOutOfVerseNumbers,
   refuseATypedBackslash,
   refuseMarkupPastedInsideAWord,
   refusePastesThatWouldAddAChapter,
@@ -49,6 +50,11 @@ export const PHASES = [
     phase: "admission",
     name: "refuseKeystrokesInsideHiddenMarkup",
     rule: () => refuseKeystrokesInsideHiddenMarkup(structureAt, planAt, PAINT_PORT),
+  },
+  {
+    phase: "normalization",
+    name: "keepTypingOutOfVerseNumbers",
+    rule: () => keepTypingOutOfVerseNumbers(structureAt),
   },
   {
     phase: "normalization",

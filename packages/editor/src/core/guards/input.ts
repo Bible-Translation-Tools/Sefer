@@ -1,4 +1,10 @@
-import { EditorState, type SelectionRange, type StateCommand } from "@codemirror/state";
+import {
+  ChangeSet,
+  EditorSelection,
+  EditorState,
+  type SelectionRange,
+  type StateCommand,
+} from "@codemirror/state";
 
 import { note, noteTr, tracing } from "../instrument/trace";
 import {
@@ -262,6 +268,58 @@ export function refusePastesThatWouldAddAChapter(
       detail: `the paste would take chapters ${before} → ${after}`,
     });
     return [];
+  };
+}
+
+/**
+ * A verse's number follows its marker and ONE delimiter (`\\v 2`). Typing with
+ * the caret at the number's start would land between them and part the number
+ * from its marker: `\\v  2` reads as a verse with no number. What is typed
+ * there goes before the marker instead, which is where a reader sees it: just
+ * before the number. Whitespace that would only double the whitespace already
+ * before the marker (a verse opening its line) is dropped.
+ */
+export function keepTypingOutOfVerseNumbers(structureAt: GetStructure): TransactionRule {
+  return (tr) => {
+    if (!tr.docChanged || isTrusted(tr) || !isVisual(tr.startState)) return tr;
+    if (!tr.isUserEvent("input.type")) return tr;
+    const doc = tr.startState.doc;
+    const verses = structureAt(tr.startState).verses;
+    let moved = false;
+    // Where the caret goes, before the change: after what was typed.
+    let caret = -1;
+    const specs: { from: number; to: number; insert: string }[] = [];
+    tr.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
+      const text = inserted.toString();
+      const verse =
+        fromA === toA
+          ? verses.find((row) => row.num !== null && fromA > row.markerFrom && fromA <= row.numFrom)
+          : undefined;
+      if (verse === undefined) {
+        specs.push({ from: fromA, to: toA, insert: text });
+        caret = toA;
+        return;
+      }
+      moved = true;
+      const before = doc.sliceString(Math.max(0, verse.markerFrom - 1), verse.markerFrom);
+      if (text.trim() === "" && (before === "" || /\s/.test(before))) return;
+      specs.push({ from: verse.markerFrom, to: verse.markerFrom, insert: text });
+      caret = verse.markerFrom;
+    });
+    if (!moved) return tr;
+    noteTr(tr, {
+      rule: "keepTypingOutOfVerseNumbers",
+      verdict: specs.length === 0 ? "refused" : "rewrote",
+      detail: "typing at a verse number's start goes before its marker",
+    });
+    if (specs.length === 0) return [];
+    const changes = ChangeSet.of(specs, doc.length);
+    return {
+      changes,
+      selection: EditorSelection.cursor(changes.mapPos(caret, 1)),
+      userEvent: "input.type",
+      scrollIntoView: true,
+    };
   };
 }
 
