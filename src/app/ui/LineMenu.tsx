@@ -26,7 +26,7 @@ export interface LineMenuAt {
 const poetryIcon = (level: string): JSX.Element => (
   <span class="relative inline-flex">
     <TextQuote size={20} />
-    <span class="absolute -end-1.5 -bottom-1.5 text-[10px] leading-none font-semibold">
+    <span class="absolute -end-1.5 -bottom-1.5 text-[0.625rem] leading-none font-semibold">
       {level}
     </span>
   </span>
@@ -69,17 +69,22 @@ export function LineMenu(props: {
   };
   const kinds = (): readonly string[] =>
     props.at.line.choices.filter((kind) => SUPPORTED.test(kind));
-  const turn = (kind: string): void => {
+  // Whether the press was on the selection: then the menu acts on it, else on the press.
+  const overSelection = (): { readonly from: number; readonly to: number } | undefined => {
     const range = props.editor.selectionRange();
-    const over =
-      range.from < range.to && props.at.offset >= range.from && props.at.offset <= range.to;
-    if (over) props.editor.turnLineInto(range.from, kind, range.to);
+    return range.from < range.to && props.at.offset >= range.from && props.at.offset <= range.to
+      ? range
+      : undefined;
+  };
+  const turn = (kind: string): void => {
+    const over = overSelection();
+    if (over !== undefined) props.editor.turnLineInto(over.from, kind, over.to);
     else props.editor.turnLineInto(props.at.offset, kind);
     close();
   };
 
   const addNote = (): void => {
-    props.editor.addFootnote(note());
+    props.editor.addFootnote(note(), overSelection() === undefined ? props.at.offset : undefined);
     close();
   };
 

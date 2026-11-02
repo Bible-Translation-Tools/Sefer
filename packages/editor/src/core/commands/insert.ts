@@ -154,6 +154,29 @@ const NOTE_CLOSE = "\\f*";
 const wrappable = (body: string): boolean => !body.includes("\n") && !body.includes("\\");
 
 /**
+ * A footnote reading `text`: the right-click menu's footnote field. Over a
+ * selection, straight after it, which stays as it is; otherwise at `at`, the
+ * press, past the word it landed in, as a typed verse goes (a right-click does
+ * not move the caret, so the caret is not where the menu was asked for).
+ * Empty `text` writes an empty note. Line breaks and backslashes are left out,
+ * so what was typed cannot open markup.
+ */
+export function footnoteWithText(
+  state: EditorState,
+  structure: DocStructure,
+  text: string,
+  at?: number,
+): TransactionSpec {
+  const where = at === undefined ? state.selection.main.to : wordBoundaryAt(state, structure, at);
+  const body = text.replaceAll(/[\\\r\n]+/g, " ").trim();
+  return {
+    changes: { from: where, insert: `${NOTE_OPEN}${body}${NOTE_CLOSE}` },
+    userEvent: "input.usfm.footnote",
+    scrollIntoView: true,
+  };
+}
+
+/**
  * `\f + \ft …\f*` around the selection, or empty at the caret, with the caret
  * left at the end of the `\ft` content.
  *
@@ -164,22 +187,6 @@ const wrappable = (body: string): boolean => !body.includes("\n") && !body.inclu
  * are correct, and neither is special-cased here — the projection decides what
  * a note looks like, and the caret rules follow the projection.
  */
-/**
- * A footnote reading `text`, written straight after the selection (or at the
- * caret): the right-click menu's footnote field. The selection itself stays
- * as it is; empty `text` writes an empty note. Line breaks and backslashes are
- * left out, so what was typed cannot open markup.
- */
-export function footnoteWithText(state: EditorState, text: string): TransactionSpec {
-  const at = state.selection.main.to;
-  const body = text.replaceAll(/[\\\r\n]+/g, " ").trim();
-  return {
-    changes: { from: at, insert: `${NOTE_OPEN}${body}${NOTE_CLOSE}` },
-    userEvent: "input.usfm.footnote",
-    scrollIntoView: true,
-  };
-}
-
 export function insertFootnote(): StateCommand {
   return ({ state, dispatch }) => {
     const sel = state.selection.main;

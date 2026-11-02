@@ -161,8 +161,11 @@ export interface BookEditorMount extends EditorHandle {
    * Undo step; with `to`, every line from `offset` to `to` instead, whole.
    */
   turnLineInto(offset: number, kind: string, to?: number): boolean;
-  /** A footnote reading `text` just after the selection (or at the caret); empty text, an empty note. */
-  addFootnote(text: string): boolean;
+  /**
+   * A footnote reading `text`: just after the selection, or with `at`, at that
+   * offset (past the word it is in); empty text, an empty note.
+   */
+  addFootnote(text: string, at?: number): boolean;
   /** The selection's main range (`from === to` for a caret). */
   selectionRange(): { readonly from: number; readonly to: number };
   /** Removes the marker of the verse at an offset; its text joins the verse before. */
@@ -522,7 +525,8 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
           ? turnLineInto(created.state, offset, kind)
           : turnLinesInto(created.state, offset, to, kind),
       ),
-    addFootnote: (text: string) => run(footnoteWithText(created.state, text)),
+    addFootnote: (text: string, at?: number) =>
+      run(footnoteWithText(created.state, structureAt(created.state), text, at)),
     selectionRange: () => {
       const { from, to } = created.state.selection.main;
       return { from, to };
