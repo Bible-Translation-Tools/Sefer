@@ -167,9 +167,10 @@ export const createLifecycle = ({
   };
 
   const offerRecovery = (ready: Project, root: string): void => {
-    // Backups are found either way; "Don't remind me again" only keeps the banner quiet for a while.
-    const quiet = Date.now() < services.settings.get(keys.recoveryQuietUntil);
-    if (services.settings.get(keys.offerRecovery) && !quiet) {
+    // Backups are written and found either way; "Offer unsaved work on open"
+    // (Settings › Advanced, or the banner's "Don't remind me again" in a dev
+    // build) only decides whether opening a project asks.
+    if (services.settings.get(keys.offerRecovery)) {
       void services
         .run(pendingOnOpen(services.recovery, ready.id, (text) => services.galley.hash(text)))
         .then(

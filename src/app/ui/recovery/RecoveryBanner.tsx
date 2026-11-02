@@ -12,9 +12,6 @@ import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
 import { Button, Card, PanelHeader, Switch, toasts } from "../primitives";
 
-/** "Don't remind me again" keeps the banner away this long; then it may ask once more. */
-const QUIET_MS = 12 * 60 * 60 * 1000;
-
 const lastTouched = (journals: readonly Restorable[]): string => {
   let latest: number | undefined;
   for (const journal of journals) {
@@ -178,14 +175,16 @@ function createRecoveryActions(shell: Shell) {
 export function RecoveryBanner() {
   const shell = useShell();
   const { offered, busy, books, restoreAll, discardAll } = createRecoveryActions(shell);
-  const quietKey = shellKeys(shell.services.settings).recoveryQuietUntil;
-  // The banner stays up for this session; the switch only decides whether the next opens ask.
-  const [quiet, setQuiet] = createSignal(Date.now() < shell.services.settings.get(quietKey), {
+  // "Don't remind me again" is "Offer unsaved work on open" (Settings ›
+  // Advanced), turned off: one setting. The banner stays up for this session;
+  // the switch only decides whether the next opens ask.
+  const offerKey = shellKeys(shell.services.settings).offerRecovery;
+  const [quiet, setQuiet] = createSignal(!shell.services.settings.get(offerKey), {
     name: "recoveryQuiet",
   });
   const remind = (off: boolean): void => {
     setQuiet(off);
-    void shell.services.run(shell.services.settings.set(quietKey, off ? Date.now() + QUIET_MS : 0));
+    void shell.services.run(shell.services.settings.set(offerKey, !off));
   };
 
   return (
@@ -230,12 +229,16 @@ export function RecoveryBanner() {
             "These edits were never recorded. Restore all puts them back in the editor, unsaved — Save & Review then shows every changed book beside the file on disk, where you can keep or revert any of it. Discard all throws them away.",
           )}
         </p>
-        <Switch
-          label={m.recovery_quiet()}
-          data-recovery-quiet
-          checked={quiet()}
-          onChange={remind}
-        />
+        {/* A shortcut to the setting while developing; a release turns it off
+            only in Settings › Advanced (Will, 2026-11-02). */}
+        <Show when={__SEFER_DESIGN__}>
+          <Switch
+            label={m.recovery_quiet()}
+            data-recovery-quiet
+            checked={quiet()}
+            onChange={remind}
+          />
+        </Show>
         <Show when={offered().filter((journal) => journal.stale === true).length}>
           {(count) => (
             <p class="text-small text-on-surface-warning" data-recovery-stale={count()}>

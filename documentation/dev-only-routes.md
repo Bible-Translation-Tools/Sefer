@@ -28,4 +28,4 @@ Two gates, and the difference is where a route can be seen:
 
 A `$slug` route cannot be opened cold from a link: a slug is known once the project has been opened in that browser, and an unknown one draws the blank no-project area. The fixture is the exception: with `?fixture=1`, `small-nt` resolves cold (`fixtureFor` in `src/app/shell/slugs.ts`), which is how the playground row links straight in, so `/project/small-nt/book/BAD?fixture=1&tour=line-by-line` opens the line-by-line tutorial on BAD chapter 2, the synthetic cases, in one step.
 
-Not routes, but also only in `--mode dev` builds: the floating comment panel and the `data-loc` JSX stamps (both `__SEFER_DESIGN__`), and `?fixture=1`.
+Not routes, but also only in `--mode dev` builds: the floating comment panel and the `data-loc` JSX stamps (both `__SEFER_DESIGN__`), `?fixture=1`, and the recovery banner's "Don't remind me again" (`__SEFER_DESIGN__`, `RecoveryBanner.tsx`): a shortcut that turns off "Offer unsaved work on open"; a release turns that off only in Settings › Advanced (Will, 2026-11-02).
