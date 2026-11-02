@@ -281,13 +281,13 @@ export const poetryLevelCommands = {
 };
 
 /**
- * The kinds a line can be from its menu: a paragraph flush (`\m`) or indented
- * (`\p`), and the poetry levels the book allows; no list items (Will,
- * 2026-10-29). Lines of the wider family (`\pi`, `\li`) can be turned into
+ * The kinds a line can be from its menu: a paragraph (`\p`) or margin (`\m`),
+ * the poetry levels the book allows, and, on a line with no verse, the
+ * headings (`\s1`, `\r`, `\d`, `\sp`); no list items (Will, 2026-10-29). Lines of the wider family (`\pi`, `\li`) can be turned into
  * them, and so can a heading; a line with no verse in it can also become a
  * section heading. Each is one marker name for another, so the words never move.
  */
-const TURNABLE = new Set(["p", "m", "pi", "q", "q1", "q2", "q3", "q4", "li", "li1"]);
+const TURNABLE = new Set(["p", "m", "pi", "mi", "q", "q1", "q2", "q3", "q4", "li", "li1"]);
 
 /**
  * Headings a line can be turned back from (SEFER-72): section (`\s`, `\s1`–`\s3`),
@@ -314,11 +314,13 @@ export function lineKindAt(state: EditorState, offset: number): LineKind | null 
   if (!TURNABLE.has(b.kind) && !HEADINGS.has(b.kind)) return { kind: b.kind, choices: [] };
   const { max, bare, section } = bookHabits(structure);
   const poetry = [1, 2, 3, 4].filter((level) => level <= max).map((level) => spell(level, bare));
-  const lines = ["m", "p", ...poetry];
+  const lines = ["p", "m", ...poetry];
+  const headings = [section, "r", "d", "sp"];
   // A heading lists itself, so the menu marks what it is now.
-  if (HEADINGS.has(b.kind)) return { kind: b.kind, choices: [...lines, b.kind] };
+  if (HEADINGS.has(b.kind))
+    return { kind: b.kind, choices: [...lines, ...new Set([...headings, b.kind])] };
   const words = state.doc.sliceString(b.contentFrom, b.to);
-  return { kind: b.kind, choices: HAS_VERSE.test(words) ? lines : [...lines, section] };
+  return { kind: b.kind, choices: HAS_VERSE.test(words) ? lines : [...lines, ...headings] };
 }
 
 /** Turns the line at an offset into another kind, as one Undo step; null when it cannot. */
@@ -335,6 +337,36 @@ export function turnLineInto(
   const structure = structureAt(state);
   return {
     changes: restyle(state, structure, b, offset, kind),
+    annotations: trusted.of("poetry-level"),
+    userEvent: "input.usfm.reparent",
+  };
+}
+
+/**
+ * Turns every line a range touches into another kind, whole lines, as one
+ * Undo step: the right-click menu over a selection. A line that cannot be
+ * that kind (a heading where there is a verse) is left as it is; null when
+ * none changes.
+ */
+export function turnLinesInto(
+  state: EditorState,
+  from: number,
+  to: number,
+  kind: string,
+): TransactionSpec | null {
+  const structure = structureAt(state);
+  const changes = [];
+  const blocks = structure.blocks;
+  for (let i = 0; i < blocks.length; i++) {
+    const b = blocks.at(i);
+    if (b.to < from || b.from > to) continue;
+    const line = lineKindAt(state, b.contentFrom);
+    if (line === null || line.kind === kind || !line.choices.includes(kind)) continue;
+    changes.push(remark(b, kind));
+  }
+  if (changes.length === 0) return null;
+  return {
+    changes,
     annotations: trusted.of("poetry-level"),
     userEvent: "input.usfm.reparent",
   };

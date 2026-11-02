@@ -1,4 +1,4 @@
-import type { StateCommand } from "@codemirror/state";
+import type { StateCommand, TransactionSpec } from "@codemirror/state";
 import { EditorState } from "@codemirror/state";
 
 import { chapterContaining } from "../guards/clip";
@@ -164,6 +164,22 @@ const wrappable = (body: string): boolean => !body.includes("\n") && !body.inclu
  * are correct, and neither is special-cased here — the projection decides what
  * a note looks like, and the caret rules follow the projection.
  */
+/**
+ * A footnote reading `text`, written straight after the selection (or at the
+ * caret): the right-click menu's footnote field. The selection itself stays
+ * as it is; empty `text` writes an empty note. Line breaks and backslashes are
+ * left out, so what was typed cannot open markup.
+ */
+export function footnoteWithText(state: EditorState, text: string): TransactionSpec {
+  const at = state.selection.main.to;
+  const body = text.replaceAll(/[\\\r\n]+/g, " ").trim();
+  return {
+    changes: { from: at, insert: `${NOTE_OPEN}${body}${NOTE_CLOSE}` },
+    userEvent: "input.usfm.footnote",
+    scrollIntoView: true,
+  };
+}
+
 export function insertFootnote(): StateCommand {
   return ({ state, dispatch }) => {
     const sel = state.selection.main;

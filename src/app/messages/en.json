@@ -80,9 +80,9 @@
   "editor_verse_label": "Verse",
   "editor_chapter_label": "Chapter",
   "editor_empty_chapter_prompt": "Click here to start editing {title}",
-  "block_name_p": "Paragraph (indented)",
+  "block_name_p": "Paragraph",
   "block_name_pi": "Indented paragraph",
-  "block_name_m": "Paragraph (nonindented)",
+  "block_name_m": "Margin",
   "block_name_nb": "Continued paragraph",
   "block_name_q": "Poetry",
   "block_name_q1": "Poetry 1",
@@ -200,5 +200,7 @@
   "desktop_platform_mac": "macOS",
   "desktop_platform_windows": "Windows",
   "desktop_platform_linux": "Linux",
-  "settings_nav_label": "On this page"
+  "settings_nav_label": "On this page",
+  "line_menu_footnote_placeholder": "Footnote text",
+  "line_menu_footnote_add": "Add footnote"
 }

@@ -14,7 +14,13 @@ import {
   type AttributedMarkup,
   attributesAt,
 } from "./core/attributes";
-import { lineKindAt, turnLineInto, type LineKind } from "./core/commands/poetryLevels";
+import { footnoteWithText } from "./core/commands/insert";
+import {
+  lineKindAt,
+  turnLineInto,
+  turnLinesInto,
+  type LineKind,
+} from "./core/commands/poetryLevels";
 import { deleteColumn, deleteRow, insertColumn, insertRow } from "./core/commands/tableCommands";
 import {
   addVerseAfter,
@@ -150,8 +156,15 @@ export interface BookEditorMount extends EditorHandle {
   onTypedUsfm(listener: (marker: string) => void): () => void;
   /** The line (block) at an offset: its marker and what Refine may turn it into; null elsewhere. */
   lineKindAt(offset: number): LineKind | null;
-  /** Turns the line at an offset into another kind (`turnable` choices only), as one Undo step. */
-  turnLineInto(offset: number, kind: string): boolean;
+  /**
+   * Turns the verse at an offset into another kind (`choices` only), as one
+   * Undo step; with `to`, every line from `offset` to `to` instead, whole.
+   */
+  turnLineInto(offset: number, kind: string, to?: number): boolean;
+  /** A footnote reading `text` just after the selection (or at the caret); empty text, an empty note. */
+  addFootnote(text: string): boolean;
+  /** The selection's main range (`from === to` for a caret). */
+  selectionRange(): { readonly from: number; readonly to: number };
   /** Removes the marker of the verse at an offset; its text joins the verse before. */
   removeVerseMarker(offset: number): boolean;
   /** Adds an empty verse after the one at an offset, numbered one past it, with the caret in it. */
@@ -503,7 +516,17 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
       return () => held.delete(listener);
     },
     lineKindAt: (offset: number) => lineKindAt(created.state, offset),
-    turnLineInto: (offset: number, kind: string) => run(turnLineInto(created.state, offset, kind)),
+    turnLineInto: (offset: number, kind: string, to?: number) =>
+      run(
+        to === undefined || to <= offset
+          ? turnLineInto(created.state, offset, kind)
+          : turnLinesInto(created.state, offset, to, kind),
+      ),
+    addFootnote: (text: string) => run(footnoteWithText(created.state, text)),
+    selectionRange: () => {
+      const { from, to } = created.state.selection.main;
+      return { from, to };
+    },
     renumberVerse: (offset: number, number: string) =>
       run(renumberVerse(created.state, verseAt(created.state, offset), number)),
     removeVerseMarker: (offset: number) =>
