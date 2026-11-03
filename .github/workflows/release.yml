@@ -3,9 +3,8 @@
 # ARMED. A push to master deploys `dev`; a `v*` tag releases.
 #
 # The web channels deploy to their custom domains (`wrangler.jsonc`). The
-# updater worker's routes are still COMMENTED OUT in
-# `workers/sefer-updater/wrangler.toml`, so it lands on its `*.workers.dev`
-# subdomain until its hostname is registered.
+# updater worker serves on its custom domains and its `*.workers.dev`
+# subdomains both (`workers/sefer-updater/wrangler.toml`).
 #
 # Modelled on scripture-editor-proto-2's release.yml — same 1Password action,
 # same wrangler invocation, same tag-resolves-the-channel shape.

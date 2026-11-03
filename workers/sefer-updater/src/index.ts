@@ -2,7 +2,7 @@
  * Tauri updater manifest endpoint, backed by the GitHub Releases API.
  *
  * Routes (path-based; this worker only ever receives traffic on the
- * `updater.sefer*` hostnames configured in wrangler.toml):
+ * `sefer-updater*` hostnames configured in wrangler.toml):
  *
  *   /{target}/{current_version}       Auto-check. Returns 204 if the latest
  *                                     release is not newer; manifest JSON

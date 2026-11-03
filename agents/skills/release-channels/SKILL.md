@@ -217,9 +217,10 @@ There is no desktop `dev` channel and we are not planning one.
 
 **The web custom domains are live**: each environment in `wrangler.jsonc`
 declares its hostname as a custom-domain route (table above), which also turns
-its `*.workers.dev` subdomain off. **The updater routes are still commented
-out** in `workers/sefer-updater/wrangler.toml`, so the updater serves from its
-`*.workers.dev` subdomain until its hostname is registered.
+its `*.workers.dev` subdomain off. **The updater serves on both** its custom
+domain and its `*.workers.dev` subdomain (`workers_dev = true` in
+`workers/sefer-updater/wrangler.toml`), because a binary already built against
+the workers.dev address must keep finding it.
 
 One trap that follows from that: a desktop binary asks the updater URL it was
 BUILT with, from `SEFER_UPDATER_HOST`. Move the worker to a custom domain
@@ -228,15 +229,17 @@ anything.
 
 ### Live now
 
-The updater workers are deployed:
+The updater workers are deployed, each on two addresses:
 
-| Channel    | URL                                                                        |
-| ---------- | -------------------------------------------------------------------------- |
-| preview    | `https://sefer-updater-preview.wycliffe-associates-account.workers.dev`    |
-| production | `https://sefer-updater-production.wycliffe-associates-account.workers.dev` |
+| Channel    | Custom domain                                     | workers.dev                                                                |
+| ---------- | ------------------------------------------------- | -------------------------------------------------------------------------- |
+| preview    | `https://sefer-updater-preview.bttdev.org`        | `https://sefer-updater-preview.wycliffe-associates-account.workers.dev`    |
+| production | `https://sefer-updater.bibletranslationtools.org` | `https://sefer-updater-production.wycliffe-associates-account.workers.dev` |
 
-Both answer `/versions` with `[]` and update checks with 404 — correct until a
-release exists. Their `GH_TOKEN` secrets are set.
+Preview answers `/versions` with the candidates on both. Their `GH_TOKEN`
+secrets are set. **The production custom domain answers a 403 challenge page**
+(2026-11-03): the `bibletranslationtools.org` zone's bot check stops every
+client, and an updater cannot pass it. Its workers.dev address answers.
 
 Every value CI needs is in `op://DevOps/Sefer`, including the two updater
 hosts (`updater-host-preview`, `updater-host-production`). Those are not
@@ -245,12 +248,11 @@ means one place to look, and the desktop job already authenticates there.
 
 ### Still to do
 
-1. Register the updater hostnames and uncomment the `routes` blocks in
-   `workers/sefer-updater/wrangler.toml`. Change `updater-host-*` in
-   1Password in the same sitting — a binary asks the URL it was built with,
-   and a mismatch is an updater that silently finds nothing.
-2. Cut the first candidate tag and see what the desktop matrix says. It has
-   never run.
+1. Exempt `sefer-updater.bibletranslationtools.org` from the zone's bot check
+   (a WAF skip rule), or keep production binaries on the workers.dev address.
+2. Before the first `v0.1.0`, decide what `updater-host-production` in
+   1Password holds: every production install asks that address for good. Point
+   it at the custom domain only once item 1 is done.
 
 ### A first release, in order
 

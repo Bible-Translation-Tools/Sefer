@@ -1,9 +1,11 @@
 # Sefer updater — a pure-logic Worker serving the Tauri auto-updater manifest,
 # backed by the GitHub Releases API.
 #
-# Routes are COMMENTED OUT until DNS exists; each env deploys to its own
-# *.workers.dev subdomain in the meantime. Uncomment an env's [[routes]] block
-# when its hostname is registered.
+# Each env serves on its custom domain AND its *.workers.dev subdomain. The
+# domains were registered in the dashboard (2026-11) and are declared here so
+# the config, not the dashboard, is what a deploy holds. `workers_dev = true`
+# is explicit because declaring routes turns workers.dev off by default, and
+# preview binaries already installed may ask that address.
 #
 # The desktop app only ever asks the URL it was built with — SEFER_UPDATER_HOST
 # at build time — so that variable and the live route have to agree. Deploying
@@ -40,17 +42,20 @@ enabled = true
 # -----------------------------------------------------------------------------
 [env.production]
 name = "sefer-updater-production"
+workers_dev = true
 
 [env.production.vars]
 GH_REPO = "Bible-Translation-Tools/Sefer"
 GH_TAG_PREFIX = "v"
 CHANNEL = "stable"
 
-# Uncomment when updater.sefer.bibletranslationtools.org is registered.
-# [[env.production.routes]]
-# pattern = "updater.sefer.bibletranslationtools.org"
-# custom_domain = true
-# zone_name = "bibletranslationtools.org"
+# The zone's bot check answers this host with a 403 challenge page (seen
+# 2026-11-03), which an updater cannot pass: it needs a WAF skip rule before a
+# production binary is built against it.
+[[env.production.routes]]
+pattern = "sefer-updater.bibletranslationtools.org"
+custom_domain = true
+zone_name = "bibletranslationtools.org"
 
 # -----------------------------------------------------------------------------
 # Preview — the Sefer Preview channel.
@@ -63,14 +68,14 @@ CHANNEL = "stable"
 # -----------------------------------------------------------------------------
 [env.preview]
 name = "sefer-updater-preview"
+workers_dev = true
 
 [env.preview.vars]
 GH_REPO = "Bible-Translation-Tools/Sefer"
 GH_TAG_PREFIX = "v"
 CHANNEL = "preview"
 
-# Uncomment when updater.sefer-preview.bttdev.org is registered.
-# [[env.preview.routes]]
-# pattern = "updater.sefer-preview.bttdev.org"
-# custom_domain = true
-# zone_name = "bttdev.org"
+[[env.preview.routes]]
+pattern = "sefer-updater-preview.bttdev.org"
+custom_domain = true
+zone_name = "bttdev.org"
