@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import { createSignal } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import { Observability } from "#core/observability";
 import { remoteVerdict } from "#core/remote/remote";
 import type { Resource } from "#core/resources/library";
@@ -8,7 +9,6 @@ import type { Resource } from "#core/resources/library";
 import { describeCopy, noteLibraryChanged, referenceCopy } from "../arrival";
 import type { ListedText } from "../catalogue";
 import { describe, remoteReasonOf } from "../describe";
-import { t } from "../i18n";
 import type { Services } from "../services";
 import { toasts } from "../ui/primitives";
 
@@ -33,8 +33,8 @@ export const downloadHelp = (services: Services, help: ListedText): Promise<Reso
 
 const startDownload = (services: Services, help: ListedText): Promise<Resource> => {
   const url = help.url;
-  const title = t("Downloading {title}", { title: help.title });
-  const toast = toasts.progress({ title, message: t("Starting…") });
+  const title = m.download_downloading_title({ title: help.title });
+  const toast = toasts.progress({ title, message: m.common_starting() });
   const operation = services.composition.observability.operation("import.remote", {
     "import.source": "reference-material",
     "import.host": services.hostInfo.kind(),
@@ -61,7 +61,7 @@ const startDownload = (services: Services, help: ListedText): Promise<Resource> 
       });
       toasts.update(toast, {
         title: help.title,
-        message: t("On this device. Choose it beside any project."),
+        message: m.download_on_this_device_choose_it(),
         tone: "success",
       });
       return resource;
@@ -69,7 +69,7 @@ const startDownload = (services: Services, help: ListedText): Promise<Resource> 
     .catch((cause: unknown) => {
       operation.end(remoteVerdict(remoteReasonOf(cause)));
       toasts.update(toast, {
-        title: t("Could not download {title}", { title: help.title }),
+        title: m.download_could_not_download_title({ title: help.title }),
         message: describe(cause),
         tone: "error",
       });
@@ -91,11 +91,11 @@ export const removeHelp = (services: Services, resource: Resource): Promise<void
     )
     .then(() => {
       noteLibraryChanged();
-      toasts.success({ title: t("Removed {title}", { title: resource.title }) });
+      toasts.success({ title: m.download_removed_title({ title: resource.title }) });
     })
     .catch((cause: unknown) => {
       toasts.error({
-        title: t("Could not remove {title}", { title: resource.title }),
+        title: m.download_could_not_remove_title({ title: resource.title }),
         message: describe(cause),
       });
     });

@@ -1,8 +1,8 @@
 import { For, Show } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import type { CompareSource } from "#core/compare";
 
-import { t } from "../../../i18n";
 import { Button, Select } from "../../primitives";
 import type { SourceChoice } from "../sources";
 
@@ -18,14 +18,14 @@ export function SourcePicker(props: {
   return (
     <div class="space-y-1">
       <span class="text-smallest font-medium text-on-surface-tertiary">
-        {props.side === "left" ? t("To") : t("From")}
+        {props.side === "left" ? m.review_to() : m.review_from()}
       </span>
       <div class="flex items-center gap-2">
         <Select
           size="sm"
           wrapperClass="min-w-0"
           data-review-side={props.side}
-          aria-label={props.side === "left" ? t("Compare to") : t("Compare from")}
+          aria-label={props.side === "left" ? m.review_compare_to() : m.review_compare_from()}
           value={props.value}
           onChange={(event) => props.onPick(props.side, event.currentTarget.value)}
         >
@@ -39,7 +39,7 @@ export function SourcePicker(props: {
         </Select>
         <Show when={props.choice?.pick !== undefined}>
           <Button size="sm" onClick={() => props.onPick(props.side, props.value)}>
-            {props.picked === undefined ? t("Choose…") : t("Change…")}
+            {props.picked === undefined ? m.review_choose() : m.review_change()}
           </Button>
         </Show>
       </div>

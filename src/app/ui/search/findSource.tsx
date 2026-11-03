@@ -2,11 +2,11 @@ import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import { Effect, Option, Result } from "effect";
 import { Show, createEffect, createSignal } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import type { BookText, Excerpt } from "#core/excerpts/excerpts";
 import { bookHeading } from "#core/galley";
 import type { Resource } from "#core/resources/library";
 
-import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
 import * as Workflows from "../../workflows/references";
@@ -73,7 +73,7 @@ function SourcePicker(props: SourcePickerProps) {
     <MultiSelect
       single
       id="find-source"
-      label={t("Source text")}
+      label={m.search_source_text()}
       summary={props.summary}
       narrowed={props.narrowed}
       items={props.rows}
@@ -81,7 +81,7 @@ function SourcePicker(props: SourcePickerProps) {
       match={(row, query) =>
         `${row.name} ${row.language}`.toLowerCase().includes(query.toLowerCase())
       }
-      placeholder={t("Search texts…")}
+      placeholder={m.search_search_texts()}
       selected={(row) => row.root === props.chosen}
       onToggle={(row) => props.onChoose(row.root)}
     >
@@ -154,9 +154,7 @@ export function createFindSource(onBound: () => void) {
       )
       .then((outcome) => {
         if (Result.isFailure(outcome)) {
-          shell.report(
-            t("could not add the source: {reason}", { reason: outcome.failure.description }),
-          );
+          shell.report(m.search_could_not_add_the_source({ reason: outcome.failure.description }));
           return;
         }
         setTick((held) => held + 1);
@@ -178,22 +176,22 @@ export function createFindSource(onBound: () => void) {
       name: source.title,
       message:
         held.kind === "loading"
-          ? t("Loading…")
-          : t("{place} is not in {name}.", { place: excerpt.label, name: source.title }),
+          ? m.search_loading()
+          : m.search_place_is_not_in_name({ place: excerpt.label, name: source.title }),
     };
   };
 
   const shown = (): boolean => resource() !== undefined;
 
   const rows = (): readonly SourceRow[] => [
-    { root: NONE, name: t("No source text"), language: "" },
+    { root: NONE, name: m.search_no_source_text(), language: "" },
     ...choices().map((row) => ({ root: row.root, name: row.name, language: row.language })),
   ];
   const chosen = (): string => (shown() ? (resource()?.id ?? NONE) : NONE);
 
   const Picker = () => (
     <SourcePicker
-      summary={shown() ? (resource()?.title ?? "") : t("none")}
+      summary={shown() ? (resource()?.title ?? "") : m.search_none()}
       narrowed={shown()}
       rows={rows()}
       chosen={chosen()}

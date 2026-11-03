@@ -2,9 +2,9 @@ import Check from "lucide-solid/icons/check";
 import Save from "lucide-solid/icons/save";
 import { Show } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import type { BookComparison } from "#core/compare";
 
-import { t } from "../../../i18n";
 import type { Shell } from "../../../ProjectContext";
 import { SyncLine } from "../../cloud/SyncLine";
 import { Button, EmptyState } from "../../primitives";
@@ -62,16 +62,13 @@ function ReviewNotices(props: { readonly body: ReviewBodyProps }) {
           class="flex flex-wrap items-center gap-2 text-smallest text-on-surface-secondary"
           data-review-mine-only={props.body.units.mineOnlyCount()}
         >
-          {t(
-            "Your editor also has {count} change(s) that are not in this suggestion. They stay as they are.",
-            { count: props.body.units.mineOnlyCount() },
-          )}
+          {m.review_your_editor_also_has_count({ count: props.body.units.mineOnlyCount() })}
           <Button
             size="sm"
             variant="tertiary"
             onClick={() => props.body.units.setShowMine((on) => !on)}
           >
-            {props.body.units.showMine() ? t("Hide them") : t("Show them")}
+            {props.body.units.showMine() ? m.review_hide_them() : m.review_show_them()}
           </Button>
         </p>
       </Show>
@@ -90,7 +87,7 @@ function WaitingStatus(props: { readonly what: string }) {
         aria-hidden="true"
         class="size-4 animate-spin rounded-full border-2 border-on-surface-tertiary border-t-transparent"
       />
-      {t("Reading {source}…", { source: props.what })}
+      {m.review_reading_source({ source: props.what })}
     </div>
   );
 }
@@ -100,17 +97,14 @@ function OneSidedNote(props: { readonly body: ReviewBodyProps }) {
     <p class="text-smallest text-on-surface-secondary" data-review-one-sided>
       <Show
         when={props.body.emptySide}
-        fallback={t(
-          "Only one side holds {books}. A project's book set is fixed when it opens, so Review cannot add or remove a book yet.",
-          {
-            books:
-              props.body.units.oneSided().length > 6
-                ? t("{count} books", { count: props.body.units.oneSided().length })
-                : props.body.units.oneSided().map(props.body.bookLabel).join(", "),
-          },
-        )}
+        fallback={m.review_only_one_side_holds_books({
+          books:
+            props.body.units.oneSided().length > 6
+              ? m.common_count_books({ count: props.body.units.oneSided().length })
+              : props.body.units.oneSided().map(props.body.bookLabel).join(", "),
+        })}
       >
-        {(side) => t("{source} holds no books yet.", { source: side() })}
+        {(side) => m.review_source_holds_no_books_yet({ source: side() })}
       </Show>
     </p>
   );
@@ -122,13 +116,13 @@ function SettledNotice(props: { readonly body: ReviewBodyProps }) {
       <Show when={props.body.settled && props.body.decisions.showChoices()}>
         <p class="flex items-center gap-2 text-smallest text-on-surface-secondary">
           <Check size={14} aria-hidden="true" class="text-on-surface-success" />
-          {t("Every change is decided.")}
+          {m.review_every_change_is_decided()}
           <Button
             size="sm"
             variant="tertiary"
             onClick={() => props.body.decisions.setShowChoices(false)}
           >
-            {t("Hide my choices")}
+            {m.review_hide_my_choices()}
           </Button>
         </p>
       </Show>
@@ -136,7 +130,7 @@ function SettledNotice(props: { readonly body: ReviewBodyProps }) {
       <Show when={props.body.settled && !props.body.decisions.showChoices()}>
         <EmptyState
           icon={<Check size={20} />}
-          title={t("Every change is decided")}
+          title={m.review_every_change_is_decided_2()}
           description={props.body.form.decidedDescription()}
           action={
             <div class="flex flex-wrap justify-center gap-2" data-review-settled>
@@ -147,11 +141,11 @@ function SettledNotice(props: { readonly body: ReviewBodyProps }) {
                 }
               >
                 <Button variant="primary" icon={<Save />} onClick={props.body.form.openRecord}>
-                  {t("Save")}
+                  {m.common_save()}
                 </Button>
               </Show>
               <Button variant="tertiary" onClick={() => props.body.decisions.setShowChoices(true)}>
-                {t("Show my choices")}
+                {m.review_show_my_choices()}
               </Button>
             </div>
           }
@@ -202,9 +196,10 @@ export function ReviewBody(props: ReviewBodyProps) {
         fallback={
           <Show
             when={
-              props.sides.waitingFor() ?? (props.compare.comparing() ? t("both sides") : undefined)
+              props.sides.waitingFor() ??
+              (props.compare.comparing() ? m.review_both_sides() : undefined)
             }
-            fallback={<EmptyState title={t("Nothing to review yet.")} />}
+            fallback={<EmptyState title={m.review_nothing_to_review_yet()} />}
           >
             {(what) => <WaitingStatus what={what()} />}
           </Show>
@@ -218,8 +213,8 @@ export function ReviewBody(props: ReviewBodyProps) {
               fallback={
                 <EmptyState
                   icon={<Check size={20} />}
-                  title={t("No differences.")}
-                  description={t("Both sides hold exactly the same books and text.")}
+                  title={m.review_no_differences()}
+                  description={m.review_both_sides_hold_exactly_the()}
                 />
               }
             >

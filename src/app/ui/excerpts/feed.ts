@@ -4,6 +4,7 @@ import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import { Effect, Option, Result, Stream } from "effect";
 import { createMemo, createSignal, type Accessor } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import {
   extend,
   group,
@@ -17,7 +18,6 @@ import {
 import { bookHeading, describesExactly, type Analysis } from "#core/galley";
 import type { ObservabilityService } from "#core/observability";
 
-import { t } from "../../i18n";
 import { useShell, type Shell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
 import type { ContextStep } from "../multibuffer/cardState";
@@ -175,7 +175,7 @@ const createSeats = (shell: Shell): Pick<ExcerptFeed, "seatedOf" | "seat"> => {
     if (project === undefined) return undefined;
     const opened = await shell.services.run(Effect.result(project.instantiate(bookId)));
     if (Result.isFailure(opened)) {
-      shell.report(t("could not open book {book}", { book: bookId }));
+      shell.report(m.excerpts_could_not_open_book_book({ book: bookId }));
       return undefined;
     }
     setSeats((held) => held + 1);

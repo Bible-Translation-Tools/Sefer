@@ -8,9 +8,9 @@ import PencilLine from "lucide-solid/icons/pencil-line";
 import Trash2 from "lucide-solid/icons/trash-2";
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import { touchProject } from "#core/project/projectIndex";
 
-import { t } from "../../i18n";
 import { exportProjectZip, renameProject } from "../../projectCommands";
 import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
@@ -145,12 +145,12 @@ const removeProject = (
     settled();
     if (Result.isFailure(done)) {
       toasts.error({
-        title: t("Could not delete"),
+        title: m.landing_could_not_delete(),
         message: done.failure.description ?? done.failure.reason,
       });
       return;
     }
-    toasts.info({ title: t("Deleted {name}", { name: row.name }) });
+    toasts.info({ title: m.landing_deleted_name({ name: row.name }) });
   });
 };
 
@@ -276,12 +276,12 @@ const DownloadLine = (props: { readonly download: PendingDownload }) => (
       title={props.download.status}
     >
       {props.download.state === "failed"
-        ? t("Download failed")
-        : t("Downloading… {status}", { status: props.download.status })}
+        ? m.landing_download_failed()
+        : m.landing_downloading_status({ status: props.download.status })}
     </span>
     <Show when={props.download.state === "downloading" && props.download.percent !== undefined}>
       <span class="shrink-0 tabular-nums font-medium text-on-surface-primary">
-        {t("{percent}%", { percent: props.download.percent ?? 0 })}
+        {m.landing_percent({ percent: props.download.percent ?? 0 })}
       </span>
     </Show>
   </div>
@@ -290,7 +290,7 @@ const DownloadLine = (props: { readonly download: PendingDownload }) => (
 const DownloadBar = (props: { readonly download: PendingDownload }) => (
   <div
     role="progressbar"
-    aria-label={t("Downloading {name}", { name: props.download.language })}
+    aria-label={m.landing_downloading_name({ name: props.download.language })}
     aria-valuemin={0}
     aria-valuemax={100}
     aria-valuenow={props.download.percent}
@@ -337,7 +337,7 @@ const DownloadCard = (props: {
           when={props.download.state === "downloading"}
           fallback={
             <Button size="sm" onClick={() => props.onDismiss(props.download.id)}>
-              {t("Dismiss")}
+              {m.common_dismiss()}
             </Button>
           }
         >
@@ -356,30 +356,30 @@ const ProjectMenu = (props: {
   readonly onDelete: () => void;
 }) => (
   <Menu
-    label={t("Project actions")}
+    label={m.landing_project_actions()}
     side="bottom"
     align="end"
     class="w-52"
     trigger={
       <IconButton
-        label={t("More actions for {name}", { name: props.row.name })}
+        label={m.landing_more_actions_for_name({ name: props.row.name })}
         icon={<MoreVertical />}
       />
     }
   >
     <MenuItem icon={<FolderOpen aria-hidden="true" />} onSelect={props.onOpen}>
-      {t("Open")}
+      {m.landing_open()}
     </MenuItem>
 
     <Show when={!props.row.fixture}>
       <MenuItem icon={<PencilLine aria-hidden="true" />} onSelect={props.onRename}>
-        {t("Rename…")}
+        {m.landing_rename()}
       </MenuItem>
       <MenuItem icon={<Download aria-hidden="true" />} onSelect={props.onExport}>
-        {t("Export as zip")}
+        {m.landing_export_as_zip()}
       </MenuItem>
       <MenuItem icon={<Trash2 aria-hidden="true" />} onSelect={props.onDelete}>
-        {t("Delete…")}
+        {m.landing_delete()}
       </MenuItem>
     </Show>
   </Menu>
@@ -401,7 +401,7 @@ const ProjectCard = (props: {
         </h3>
         <Show when={props.row.fixture}>
           <Badge tone="brand" size="sm">
-            {t("fixture")}
+            {m.landing_fixture()}
           </Badge>
         </Show>
       </div>
@@ -415,7 +415,7 @@ const ProjectCard = (props: {
 
       <div class="mt-auto flex items-center gap-2 pt-4">
         <Button variant="accent" class="flex-1 justify-between" onClick={props.onOpen}>
-          {t("Open Project")}
+          {m.landing_open_project_2()}
           <ArrowRight aria-hidden="true" />
         </Button>
         <ProjectMenu
@@ -471,20 +471,18 @@ const RenameDialog = (props: {
     onOpenChange={(open) => {
       if (!open) props.onCancel();
     }}
-    title={t("Rename project")}
-    description={t(
-      "This is the name Sefer and other Burrito readers show. The folder on disk keeps its own name.",
-    )}
+    title={m.common_rename_project()}
+    description={m.landing_this_is_the_name_sefer()}
     footer={
       <>
-        <Button onClick={props.onCancel}>{t("Cancel")}</Button>
+        <Button onClick={props.onCancel}>{m.common_cancel()}</Button>
         <Button
           variant="primary"
           loading={props.busy}
           disabled={props.name.trim() === ""}
           onClick={props.onRename}
         >
-          {t("Rename")}
+          {m.landing_rename_2()}
         </Button>
       </>
     }
@@ -497,7 +495,7 @@ const RenameDialog = (props: {
     >
       <Input
         value={props.name}
-        aria-label={t("Project name")}
+        aria-label={m.landing_project_name()}
         onInput={(event) => props.onName(event.currentTarget.value)}
       />
     </form>
@@ -515,13 +513,13 @@ const DeleteDialog = (props: {
     onOpenChange={(open) => {
       if (!open) props.onCancel();
     }}
-    title={t("Delete project")}
-    description={t("The folder and everything in it is removed. This cannot be undone.")}
+    title={m.landing_delete_project()}
+    description={m.landing_the_folder_and_everything_in()}
     footer={
       <>
-        <Button onClick={props.onCancel}>{t("Cancel")}</Button>
+        <Button onClick={props.onCancel}>{m.common_cancel()}</Button>
         <Button variant="danger" loading={props.busy} onClick={props.onDelete}>
-          {t("Delete")}
+          {m.landing_delete_2()}
         </Button>
       </>
     }
@@ -534,9 +532,7 @@ const DeleteDialog = (props: {
 
 const EmptyNote = () => (
   <p data-testid="projects-empty" class="text-small text-on-surface-secondary">
-    {t(
-      "To load a project into Sefer, download your translated work from WACS below. Then it will appear here, and you can open it.",
-    )}
+    {m.landing_to_load_a_project_into()}
   </p>
 );
 
@@ -556,7 +552,7 @@ export function YourProjects(props: {
   return (
     <Show
       when={rows()}
-      fallback={<p class="text-small text-on-surface-tertiary">{t("Reading…")}</p>}
+      fallback={<p class="text-small text-on-surface-tertiary">{m.common_reading()}</p>}
     >
       <Show when={sorted().length > 0 || pending().length > 0} fallback={<EmptyNote />}>
         <ProjectStrip

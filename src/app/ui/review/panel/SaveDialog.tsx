@@ -1,7 +1,8 @@
 import Save from "lucide-solid/icons/save";
 import { Show } from "solid-js";
 
-import { t } from "../../../i18n";
+import { m } from "#app/paraglide/messages";
+
 import { Button, Dialog, Input, Switch } from "../../primitives";
 import type { Receipt } from "./createReceipt";
 import type { RecordAction } from "./createRecordAction";
@@ -32,12 +33,12 @@ function SaveFooter(props: { readonly dialog: SaveDialogProps }) {
           data-review-record-done
           onClick={props.dialog.onDone}
         >
-          {t("Done")}
+          {m.common_done()}
         </Button>
       }
     >
       <Button variant="tertiary" onClick={() => props.dialog.form.setRecordOpen(false)}>
-        {t("Cancel")}
+        {m.common_cancel()}
       </Button>
       <Button
         variant="primary"
@@ -51,7 +52,7 @@ function SaveFooter(props: { readonly dialog: SaveDialogProps }) {
         data-review-record-confirm
         onClick={() => void props.dialog.record.record()}
       >
-        {t("Save")}
+        {m.common_save()}
       </Button>
     </Show>
   );
@@ -69,7 +70,7 @@ function SaveReceipt(props: { readonly dialog: SaveDialogProps }) {
                 aria-hidden="true"
                 class="size-4 animate-spin rounded-full border-2 border-on-surface-tertiary border-t-transparent"
               />
-              {t("Sending to the shared project…")}
+              {m.review_sending_to_the_shared_project()}
             </div>
           </Show>
           <Show when={props.dialog.receipt.sentLine()}>
@@ -94,25 +95,21 @@ function DeclineForm(props: { readonly dialog: SaveDialogProps }) {
           props.dialog.record.declineFromDialog();
         }}
       >
-        <p class="text-small text-on-surface-secondary">
-          {t(
-            "You kept none of the suggested changes, so there is nothing to bring in. Decline the suggestion instead; its author reads your note.",
-          )}
-        </p>
+        <p class="text-small text-on-surface-secondary">{m.review_you_kept_none_of_the()}</p>
         <Show when={props.dialog.form.unsaved().length > 0}>
           <p class="text-smallest text-on-surface-tertiary">
-            {t("Edits you typed here stay unsaved; save them from Changes afterwards.")}
+            {m.review_edits_you_typed_here_stay()}
           </p>
         </Show>
         <div class="flex items-center gap-2">
           <Input
             wrapperClass="min-w-0 flex-1"
-            placeholder={t("Why? (optional)")}
+            placeholder={m.review_why_optional()}
             value={props.dialog.record.declineNote()}
             onInput={(event) => props.dialog.record.setDeclineNote(event.currentTarget.value)}
           />
           <Button type="submit" variant="secondary" loading={props.dialog.record.recording()}>
-            {t("Decline")}
+            {m.common_decline()}
           </Button>
         </div>
       </form>
@@ -127,10 +124,9 @@ function SaveFields(props: { readonly dialog: SaveDialogProps }) {
     >
       <Show when={props.dialog.units.undecidedBoth() > 0}>
         <p class="pb-3 text-small text-on-surface-warning" data-review-undecided>
-          {t(
-            "{count} passage(s) changed in both places still need a choice: keep yours or take the shared project's.",
-            { count: props.dialog.units.undecidedBoth() },
-          )}
+          {m.review_passages_changed_in_both_places_choice({
+            count: props.dialog.units.undecidedBoth(),
+          })}
         </p>
       </Show>
       <Show when={props.dialog.form.author() === undefined}>
@@ -138,7 +134,7 @@ function SaveFields(props: { readonly dialog: SaveDialogProps }) {
           class="block pb-1 text-smallest font-semibold tracking-wide text-on-surface-tertiary uppercase"
           for="author-name"
         >
-          {t("Your name, as your team knows you")}
+          {m.review_your_name_as_your_team()}
         </label>
         <Input
           id="author-name"
@@ -151,7 +147,7 @@ function SaveFields(props: { readonly dialog: SaveDialogProps }) {
         class="block pb-1 text-smallest font-semibold tracking-wide text-on-surface-tertiary uppercase"
         for="commit-message"
       >
-        {t("What did you change?")}
+        {m.review_what_did_you_change()}
       </label>
       <Input
         id="commit-message"
@@ -167,7 +163,7 @@ function SaveFields(props: { readonly dialog: SaveDialogProps }) {
         }}
       />
       <p class="pt-1 text-smallest text-on-surface-tertiary">
-        {t("Your team sees this, and so will you later.")}
+        {m.review_your_team_sees_this_and()}
       </p>
       <Show when={props.dialog.form.sends()}>
         <p class="pt-3 text-small text-on-surface-secondary" data-review-sends>
@@ -178,14 +174,14 @@ function SaveFields(props: { readonly dialog: SaveDialogProps }) {
         <label class="flex items-start justify-between gap-3 pt-3" data-review-close-suggestion>
           <span>
             <span class="block text-small font-medium">
-              {t("Close the suggestion as brought in")}
+              {m.review_close_the_suggestion_as_brought()}
             </span>
             <span class="block text-smallest text-on-surface-tertiary">
-              {t("Turn off to keep it open — when you are taking part of it now and more later.")}
+              {m.review_turn_off_to_keep_it()}
             </span>
           </span>
           <Switch
-            aria-label={t("Close the suggestion as brought in")}
+            aria-label={m.review_close_the_suggestion_as_brought()}
             checked={props.dialog.form.closeOnSave()}
             onChange={props.dialog.form.setCloseOnSave}
           />
@@ -206,7 +202,7 @@ export function SaveDialog(props: SaveDialogProps) {
           props.receipt.setSendLine(undefined);
         }
       }}
-      title={t("Save")}
+      title={m.common_save()}
       description={props.form.saveDescription()}
       footer={<SaveFooter dialog={props} />}
     >

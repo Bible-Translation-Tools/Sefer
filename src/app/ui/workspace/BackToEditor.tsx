@@ -2,8 +2,9 @@ import { useNavigate } from "@tanstack/solid-router";
 import X from "lucide-solid/icons/x";
 import { Show, onCleanup } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
+
 import { registerCommand } from "../../commands";
-import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { IconButton } from "../primitives";
 import { bookName } from "./books";
@@ -23,10 +24,10 @@ export function useBackToEditor(): () => BackToEditorTarget | undefined {
 
   const label = (): string => {
     const project = shell.project();
-    if (project === undefined) return t("Back to the editor");
+    if (project === undefined) return m.workspace_back_to_the_editor();
     const held = shell.lastLocation(project.root);
-    if (held === undefined) return t("Back to the project");
-    return t("Back to {book}", { book: bookName(held.bookId, metadataOf(project)) });
+    if (held === undefined) return m.workspace_back_to_the_project();
+    return m.workspace_back_to_book({ book: bookName(held.bookId, metadataOf(project)) });
   };
 
   const go = (): void => {
@@ -38,7 +39,7 @@ export function useBackToEditor(): () => BackToEditorTarget | undefined {
   onCleanup(
     registerCommand({
       id: "editor.back",
-      title: t("Back to the editor"),
+      title: m.workspace_back_to_the_editor,
       when: shown,
       run: go,
     }),

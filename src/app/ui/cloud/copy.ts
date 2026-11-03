@@ -7,13 +7,9 @@ import type {
 } from "#core/sync";
 import { FRONT_MATTER } from "#core/sync";
 
-import { t, type Params } from "../../i18n";
 import { m } from "../../paraglide/messages";
 import type { SendOutcome } from "../../syncActions";
 import type { BadgeTone } from "../primitives";
-
-export const plural = (count: number, one: string, many: string, params: Params = {}): string =>
-  t(count === 1 ? one : many, { count, ...params });
 
 export interface StateCopy {
   readonly chip: string;
@@ -34,35 +30,29 @@ const accessCopy = (state: "offline" | "unauthorized", context: StateContext): S
   switch (state) {
     case "offline":
       return {
-        chip: t("Offline"),
-        headline: t("You're offline"),
+        chip: m.cloud_offline(),
+        headline: m.cloud_youre_offline(),
         detail:
           context.sendRefused === true
-            ? t(
-                "Saved on this device. Not sent yet: you're offline. Sefer sends it the next time you save or open this project. Your work is safe here.",
-              )
-            : t("Your work is still saved here. You can send it once you're back online."),
+            ? m.cloud_saved_on_this_device_not()
+            : m.cloud_your_work_is_still_saved(),
         tone: "muted",
       };
     case "unauthorized":
       if (context.signedIn === true)
         return {
-          chip: t("Can't send"),
-          headline: t("This account can't send to the shared project"),
-          detail: t(
-            "Saved on this device. Not sent: this account may not have permission to write to the shared project, or its sign-in has expired. Your work is safe here.",
-          ),
+          chip: m.cloud_cant_send(),
+          headline: m.cloud_this_account_cant_send_to(),
+          detail: m.cloud_saved_on_this_device_not_sent(),
           tone: "warning",
         };
       return {
-        chip: t("Sign in again"),
-        headline: t("Sign in to keep sharing"),
+        chip: m.cloud_sign_in_again(),
+        headline: m.cloud_sign_in_to_keep_sharing(),
         detail:
           context.sendRefused === true
-            ? t(
-                "Saved on this device. Not sent: sign in to send your changes to the shared project. Your work is safe here.",
-              )
-            : t("Sending and receiving updates is paused until you sign in again."),
+            ? m.cloud_saved_on_this_device_not_sent_sign()
+            : m.cloud_sending_and_receiving_updates_is(),
         tone: "error",
       };
   }
@@ -72,29 +62,23 @@ const troubleCopy = (state: Exclude<SyncState, QuietState>, context: StateContex
   switch (state) {
     case "behind":
       return {
-        chip: t("Updates to receive"),
-        headline: t("There are updates to receive"),
-        detail: t(
-          "The shared project has versions you do not have yet. You will see exactly what changes before anything is applied.",
-        ),
+        chip: m.cloud_updates_to_receive(),
+        headline: m.cloud_there_are_updates_to_receive(),
+        detail: m.cloud_the_shared_project_has_versions(),
         tone: "warning",
       };
     case "diverged":
       return {
-        chip: t("Needs review"),
-        headline: t("Both sides have moved"),
-        detail: t(
-          "You and the shared project both recorded work. Nothing is merged automatically — your text stays exactly as it is until you choose.",
-        ),
+        chip: m.cloud_needs_review(),
+        headline: m.cloud_both_sides_have_moved(),
+        detail: m.cloud_you_and_the_shared_project(),
         tone: "warning",
       };
     case "conflicted":
       return {
-        chip: t("Unfinished"),
-        headline: t("A transfer stopped part-way"),
-        detail: t(
-          "Your work is still here and still saved. Finish this before sending or receiving anything else.",
-        ),
+        chip: m.cloud_unfinished(),
+        headline: m.cloud_a_transfer_stopped_part_way(),
+        detail: m.cloud_your_work_is_still_here(),
         tone: "error",
       };
     default:
@@ -106,16 +90,14 @@ export const stateCopy = (state: SyncState, context: StateContext = {}): StateCo
   switch (state) {
     case "checking":
       return {
-        chip: t("Checking"),
-        headline: t("Checking the shared project"),
-        detail: t(
-          "Sefer is asking the shared project what has changed. Your work is saved here, and you can keep working.",
-        ),
+        chip: m.cloud_checking_2(),
+        headline: m.cloud_checking_the_shared_project(),
+        detail: m.cloud_sefer_is_asking_the_shared(),
         tone: "muted",
       };
     case "detached":
       return {
-        chip: t("Not shared"),
+        chip: m.cloud_not_shared(),
         headline:
           context.signedIn === true ? m.sync_local_headline() : m.sync_local_headline_signed_out(),
         detail: context.signedIn === true ? m.sync_local_detail_signed_in() : m.sync_local_detail(),
@@ -123,37 +105,37 @@ export const stateCopy = (state: SyncState, context: StateContext = {}): StateCo
       };
     case "unpublished":
       return {
-        chip: t("Nothing sent yet"),
-        headline: t("The shared project is still empty"),
-        detail: t("Nothing has been sent yet. Publishing puts your first version online."),
+        chip: m.cloud_nothing_sent_yet(),
+        headline: m.cloud_the_shared_project_is_still(),
+        detail: m.cloud_nothing_has_been_sent_yet(),
         tone: "brand",
       };
     case "attached-clean":
       if (context.inCopy === true)
         return {
-          chip: t("Up to date"),
-          headline: t("Your copy has all your work"),
-          detail: t("Offer your changes to the shared project when they are ready."),
+          chip: m.cloud_up_to_date_2(),
+          headline: m.cloud_your_copy_has_all_your(),
+          detail: m.cloud_offer_your_changes_to_the(),
           tone: "success",
         };
       return {
-        chip: t("Up to date"),
-        headline: t("Up to date with the shared project"),
-        detail: t("Your project is stored safely on this device and in the shared project."),
+        chip: m.cloud_up_to_date_2(),
+        headline: m.cloud_up_to_date_with_the(),
+        detail: m.cloud_your_project_is_stored_safely(),
         tone: "success",
       };
     case "ahead":
       if (context.inCopy === true)
         return {
-          chip: t("Changes to send"),
-          headline: t("You have work your copy does not"),
-          detail: t("Send it to your copy when you are ready."),
+          chip: m.cloud_changes_to_send(),
+          headline: m.cloud_you_have_work_your_copy(),
+          detail: m.cloud_send_it_to_your_copy(),
           tone: "warning",
         };
       return {
-        chip: t("Changes to send"),
-        headline: t("You have work the shared project does not"),
-        detail: t("Send it when you are ready. Nothing in the shared project is replaced."),
+        chip: m.cloud_changes_to_send(),
+        headline: m.cloud_you_have_work_the_shared(),
+        detail: m.cloud_send_it_when_you_are(),
         tone: "warning",
       };
     default:
@@ -162,46 +144,42 @@ export const stateCopy = (state: SyncState, context: StateContext = {}): StateCo
 };
 
 const chapterLabel = (chapter: number): string =>
-  chapter === FRONT_MATTER ? t("the front matter") : t("chapter {number}", { number: chapter });
+  chapter === FRONT_MATTER
+    ? m.cloud_the_front_matter()
+    : m.cloud_chapter_number({ number: chapter });
 
 export const chapterList = (chapters: readonly number[]): string => {
   const labels = chapters.map(chapterLabel);
   if (labels.length <= 1) return labels[0] ?? "";
   const last = labels[labels.length - 1] ?? "";
-  return t("{first} and {last}", { first: labels.slice(0, -1).join(", "), last });
+  return m.cloud_first_and_last({ first: labels.slice(0, -1).join(", "), last });
 };
 
 export const planSummary = (plan: IncomingPlan): string => {
-  if (plan.books.length === 0)
-    return t("Nothing in your books changes; the updates are elsewhere in the project.");
-  const books = plural(plan.books.length, "{count} book", "{count} books");
-  if (plan.verseCount === 0) return t("There are changes in {books}.", { books });
-  const verses = plural(plan.verseCount, "{count} verse", "{count} verses");
-  return t("There are changes to {verses} in {books}.", { verses, books });
+  if (plan.books.length === 0) return m.cloud_nothing_in_your_books_changes();
+  const books = m.common_count_books({ count: plan.books.length });
+  if (plan.verseCount === 0) return m.cloud_there_are_changes_in_books({ books });
+  const verses = m.common_count_verses({ count: plan.verseCount });
+  return m.cloud_there_are_changes_to_verses({ verses, books });
 };
 
 export const incomingWords = (plan: IncomingPlan): string | undefined => {
   if (plan.books.length === 0) return undefined;
-  const books = plural(plan.books.length, "{count} book", "{count} books");
-  if (plan.verseCount === 0) return t("{books} to receive", { books });
-  const verses = plural(plan.verseCount, "{count} verse", "{count} verses");
-  return t("{verses} in {books} to receive", { verses, books });
+  const books = m.common_count_books({ count: plan.books.length });
+  if (plan.verseCount === 0) return m.cloud_books_to_receive({ books });
+  const verses = m.common_count_verses({ count: plan.verseCount });
+  return m.cloud_verses_in_books_to_receive({ verses, books });
 };
 
-export const outgoingWords = (): string => t("Saved changes not sent yet");
+export const outgoingWords = (): string => m.cloud_saved_changes_not_sent_yet();
 
 export const planOverlap = (
   plan: IncomingPlan,
 ): { readonly text: string; readonly mine: boolean } | undefined => {
   if (plan.verseCount === 0) return undefined;
-  if (plan.verseOverlap === 0)
-    return { text: t("You have not changed any of those verses."), mine: false };
+  if (plan.verseOverlap === 0) return { text: m.cloud_you_have_not_changed_any(), mine: false };
   return {
-    text: plural(
-      plan.verseOverlap,
-      "You also changed {count} of those verses.",
-      "You also changed {count} of those verses.",
-    ),
+    text: m.cloud_you_also_changed_count_of_those({ count: plan.verseOverlap }),
     mine: true,
   };
 };
@@ -209,79 +187,52 @@ export const planOverlap = (
 export const receiveRefusal = (refusal: ReceiveRefusal, books: readonly string[] = []): string => {
   switch (refusal) {
     case "review":
-      return t(
-        "You and the shared project both changed {books}, so nothing was received. Compare the two versions and decide what to keep. Your work is untouched.",
-        { books: books.join(", ") },
-      );
+      return m.cloud_you_and_the_shared_project_both({ books: books.join(", ") });
     case "diverged":
-      return t(
-        "This device has versions the shared project does not have yet, so its updates were not received on their own. Combine them instead. Nothing has changed.",
-      );
+      return m.cloud_this_device_has_versions_the();
     case "no-cloud-copy":
-      return t("The shared project has no copy of this work yet. Publish it first.");
+      return m.cloud_the_shared_project_has_no();
     case "no-shared-version":
-      return t(
-        "This project and the shared project have no version in common, so there is nothing to build on. Nothing has changed.",
-      );
+      return m.cloud_this_project_and_the_shared();
     case "unrecorded":
-      return t(
-        "Some files the shared project changed have changes here that aren't kept as a version yet, so nothing was received. Save them first. Your work is untouched.",
-      );
+      return m.cloud_some_files_the_shared_project();
     case "moved":
-      return t(
-        "A book changed while the updates were arriving, so nothing was received. Try again. Your work is untouched.",
-      );
+      return m.cloud_a_book_changed_while_the();
     case "no-branch":
-      return t("There is nothing here to receive into. Your work is exactly as you left it.");
+      return m.cloud_there_is_nothing_here_to();
   }
 };
 
 export const combineRefusal = (refusal: CombineRefusal): string => {
   switch (refusal) {
     case "contested":
-      return t(
-        "You and the shared project both changed the same book, so nothing was combined. Compare the two versions and decide what to keep. Your work is untouched.",
-      );
+      return m.cloud_you_and_the_shared_project_both_changed();
     case "no-cloud-copy":
-      return t("The shared project has no copy of this work yet. Publish it first.");
+      return m.cloud_the_shared_project_has_no();
     case "no-shared-version":
-      return t(
-        "This project and the shared project have no version in common, so there is nothing to build on. Nothing has changed.",
-      );
+      return m.cloud_this_project_and_the_shared();
     case "not-diverged":
-      return t(
-        "Only one side has moved, so there is nothing to combine — send or receive instead. Nothing has changed.",
-      );
+      return m.cloud_only_one_side_has_moved();
     case "deletion":
-      return t(
-        "The shared project deleted a file, and a combine cannot carry a deletion yet. Nothing has changed.",
-      );
+      return m.cloud_the_shared_project_deleted_a();
     case "moved":
-      return t(
-        "A book changed while the two were being combined, so nothing was. Try again. Your work is untouched.",
-      );
+      return m.cloud_a_book_changed_while_the_two();
     case "no-branch":
     case "no-work-here":
-      return t("There is nothing here to combine. Your work is exactly as you left it.");
+      return m.cloud_there_is_nothing_here_to_combine();
   }
 };
 
 export const combineTrouble = (state: CombineState): string => {
   switch (state) {
     case "untouched":
-      return t("Nothing was changed on this device or in the shared project.");
+      return m.cloud_nothing_was_changed_on_this();
     case "restored":
-      return t(
-        "This device was put back exactly as it was, and nothing reached the shared project. You can try again.",
-      );
+      return m.cloud_this_device_was_put_back();
     case "recorded":
-      return t(
-        "Your work and the shared project's are combined on this device, but sending them did not finish. Nothing is lost — the next send carries it.",
-      );
+      return m.cloud_your_work_and_the_shared();
     case "stranded":
-      return t(
-        "This device is part-way through a combine and could not be put back. Your versions are all still recorded — do not edit until someone has looked at it.",
-      );
+      return m.cloud_this_device_is_part_way();
   }
 };
 
@@ -296,47 +247,37 @@ const refusedCopy = (
       if (outcome.toCopy === true)
         return {
           tone: "warning",
-          title: t("Saved here. Not sent: your copy has changes this device does not"),
-          detail: t(
-            "They came from another device, or from changes you offered before. Compare with your copy and choose what to keep; then it sends as usual. Nothing is lost on either side.",
-          ),
+          title: m.cloud_saved_here_not_sent_your(),
+          detail: m.cloud_they_came_from_another_device(),
         };
       if (outcome.description !== undefined)
         return {
           tone: "warning",
-          title: t("Saved here. Not sent to your copy"),
-          detail: t("Your work is safe on this device. What went wrong: {description}", {
+          title: m.cloud_saved_here_not_sent_to(),
+          detail: m.cloud_your_work_is_safe_on({
             description: outcome.description,
           }),
         };
       return {
         tone: "warning",
-        title: t("Saved here. Not sent: the shared project has changed"),
+        title: m.cloud_saved_here_not_sent_the(),
         detail:
           state === "behind" || state === "diverged"
-            ? t(
-                "It has versions you have not reviewed yet. Your work is safe on this device — compare the changes, choose, and record again to send.",
-              )
-            : t(
-                "The shared project would not take it as it is. Your work is safe on this device — check for changes and compare them.",
-              ),
+            ? m.cloud_it_has_versions_you_have()
+            : m.cloud_the_shared_project_would_not(),
       };
     case "Network":
     case "Unavailable":
       return {
         tone: "warning",
-        title: t("Saved here. Not sent: the shared project could not be reached"),
-        detail: t(
-          "You may be offline. Your work is safe on this device, and Sefer sends it the next time you record a version or press Send.",
-        ),
+        title: m.cloud_saved_here_not_sent_the_shared(),
+        detail: m.cloud_you_may_be_offline_your(),
       };
     case "Unauthorized":
       return {
         tone: "warning",
-        title: t("Saved here. Not sent: sign in to send"),
-        detail: t(
-          "Your sign-in has expired, or this account may not write to the shared project. Your work is safe on this device.",
-        ),
+        title: m.cloud_saved_here_not_sent_sign(),
+        detail: m.cloud_your_sign_in_has_expired(),
       };
   }
 };
@@ -354,27 +295,25 @@ export const sendOutcomeCopy = (
       return outcome.toCopy === true
         ? {
             tone: "success",
-            title: t("Sent to your copy"),
-            detail: t("Offer your changes from the cloud menu when they are ready."),
+            title: m.cloud_sent_to_your_copy(),
+            detail: m.cloud_offer_your_changes_from_the(),
           }
         : {
             tone: "success",
-            title: t("Sent to the shared project"),
-            detail: t("Your team gets it the next time they check for changes."),
+            title: m.cloud_sent_to_the_shared_project(),
+            detail: m.cloud_your_team_gets_it_the(),
           };
     case "detached":
       return {
         tone: "muted",
-        title: t("Kept on this device"),
-        detail: t(
-          "This project is not connected to a shared project, so there is nowhere to send it.",
-        ),
+        title: m.cloud_kept_on_this_device(),
+        detail: m.cloud_this_project_is_not_connected(),
       };
     case "held":
       return {
         tone: "muted",
-        title: t("Kept on this device; not sent"),
-        detail: t("This project does not send on save. Send it when you are ready."),
+        title: m.cloud_kept_on_this_device_not(),
+        detail: m.cloud_this_project_does_not_send(),
       };
     case "refused":
       return refusedCopy(outcome, state);
@@ -386,14 +325,10 @@ export const offerRefusalCopy = (needed: {
 }): { readonly title: string; readonly message: string } =>
   needed.copy
     ? {
-        title: t("Your copy has changes this device does not"),
-        message: t(
-          "Compare with your copy and choose what to keep; then offer again. Nothing is lost on either side.",
-        ),
+        title: m.cloud_your_copy_has_changes_this_device(),
+        message: m.cloud_compare_with_your_copy_and(),
       }
     : {
-        title: t("The shared project has changes this device does not"),
-        message: t(
-          "Compare the changes and choose what to keep; then offer again. Nothing is lost on either side.",
-        ),
+        title: m.cloud_the_shared_project_has_changes(),
+        message: m.cloud_compare_the_changes_and_choose(),
       };

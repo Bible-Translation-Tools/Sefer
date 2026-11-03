@@ -1,6 +1,5 @@
 import { createSignal, untrack } from "solid-js";
 
-import { t } from "../../i18n";
 import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
 import { PROJECTS_WIDTH } from "../../settings";
@@ -39,7 +38,7 @@ export function ProjectsLanding() {
           maxSize={PROJECTS_WIDTH.max}
           class="flex flex-col gap-3 lg:pe-3 max-lg:[flex-basis:auto]! max-lg:overflow-visible"
         >
-          <PanelHeader title={t("Projects Loaded into Sefer")} />
+          <PanelHeader title={m.landing_projects_loaded_into_sefer()} />
           {/* The drop zone scrolls away with the list; only the title stays. */}
           <div class="scrollbar-subtle flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pb-24">
             <ImportHub variant="drop" />

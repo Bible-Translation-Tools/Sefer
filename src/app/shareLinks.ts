@@ -1,5 +1,6 @@
 import { Effect, Option } from "effect";
 
+import { m } from "#app/paraglide/messages";
 import { Git } from "#core/git/git";
 import {
   sameSource,
@@ -11,7 +12,6 @@ import {
 } from "#core/project/shareLink";
 import { Remote } from "#core/remote/remote";
 
-import { t } from "./i18n";
 import type { Domain, Services } from "./services";
 import { listProjects } from "./ui/landing/summaries";
 import { toasts } from "./ui/primitives";
@@ -106,8 +106,8 @@ export const copyPlaceLink = async (services: Services, root: string): Promise<v
   const link = await linked;
   if (link === undefined) {
     toasts.error({
-      title: t("This project has no link to share"),
-      message: t("A link names the shared project, and this one is only on this device."),
+      title: m.share_link_this_project_has_no_link(),
+      message: m.share_link_a_link_names_the_shared(),
     });
     return;
   }
@@ -117,6 +117,6 @@ export const copyPlaceLink = async (services: Services, root: string): Promise<v
       () => true,
       () => false,
     ));
-  if (copied) toasts.success({ title: t("Link copied"), message: link });
-  else toasts.error({ title: t("Could not copy the link"), message: link });
+  if (copied) toasts.success({ title: m.common_link_copied(), message: link });
+  else toasts.error({ title: m.share_link_could_not_copy_the_link(), message: link });
 };

@@ -18,6 +18,7 @@ import {
   untrack,
 } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import {
   blockAtOffset,
   equivalentBlock,
@@ -29,7 +30,6 @@ import {
 import type { Attrs } from "#core/observability";
 import type { Resource, Role } from "#core/resources/library";
 
-import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
 import { IconButton } from "../primitives";
@@ -37,9 +37,9 @@ import { useAlignedGroup } from "./aligned";
 import { bookName } from "./books";
 import { lastVerses, supplyExpectedVerses } from "./expectedVerses";
 import { FollowToggle } from "./FollowToggle";
-import { metadataOf } from "./project";
 
 import "@wycliffeassociates/sefer-editor/editor.css";
+import { metadataOf } from "./project";
 
 export interface ReferencePaneProps {
   readonly resource: Resource;
@@ -147,14 +147,14 @@ function PaneHeader(props: {
           {props.title}
         </Show>
         <Show when={props.resource.language}>{(language) => <span> · {language()}</span>}</Show>
-        <span> · {props.role === "source" ? t("Source") : t("Reference")}</span>
+        <span> · {props.role === "source" ? m.workspace_source() : m.workspace_reference()}</span>
       </p>
 
       <FollowToggle
         testId={`follow-${props.resource.id}`}
         following={props.following}
-        stopLabel={t("Stop {title} following the book", { title: props.resource.title })}
-        startLabel={t("Let {title} follow the book", { title: props.resource.title })}
+        stopLabel={m.workspace_stop_title_following_the_book({ title: props.resource.title })}
+        startLabel={m.workspace_let_title_follow_the_book({ title: props.resource.title })}
         onToggle={() => props.onToggleFollow()}
       />
       <Show when={props.onUnbind}>
@@ -162,7 +162,7 @@ function PaneHeader(props: {
           <IconButton
             size="sm"
             data-testid={`unbind-${props.resource.id}`}
-            label={t("Remove {title}", { title: props.resource.title })}
+            label={m.workspace_remove_title({ title: props.resource.title })}
             tooltipSide="left"
             icon={<X />}
             onClick={() => unbind()()}
@@ -409,7 +409,7 @@ export function ReferencePane(props: ReferencePaneProps) {
   );
 
   const missing = (): string =>
-    t("{title} has no {book}", {
+    m.workspace_title_has_no_book({
       title: props.resource.title,
       book: bookName(bookId, metadataOf(shell.project())),
     });
@@ -432,8 +432,10 @@ export function ReferencePane(props: ReferencePaneProps) {
               <FollowToggle
                 testId={`follow-${props.resource.id}`}
                 following={following()}
-                stopLabel={t("Stop {title} following the book", { title: props.resource.title })}
-                startLabel={t("Let {title} follow the book", { title: props.resource.title })}
+                stopLabel={m.workspace_stop_title_following_the_book({
+                  title: props.resource.title,
+                })}
+                startLabel={m.workspace_let_title_follow_the_book({ title: props.resource.title })}
                 onToggle={() => setFollowing((on) => !on)}
               />
             </div>
@@ -452,7 +454,7 @@ export function ReferencePane(props: ReferencePaneProps) {
 
       <Switch>
         <Match when={held().kind === "loading"}>
-          <p class="px-3 py-2 text-smallest text-on-surface-tertiary">{t("Looking…")}</p>
+          <p class="px-3 py-2 text-smallest text-on-surface-tertiary">{m.workspace_looking()}</p>
         </Match>
         <Match when={held().kind === "missing"}>
           <p data-testid="reference-missing" class="px-3 py-2 text-small text-on-surface-tertiary">
@@ -461,7 +463,7 @@ export function ReferencePane(props: ReferencePaneProps) {
         </Match>
         <Match when={held().kind === "failed"}>
           <p class="px-3 py-2 text-small text-on-surface-tertiary">
-            {t("Could not read {title}.", { title: props.resource.title })}
+            {m.workspace_could_not_read_title({ title: props.resource.title })}
           </p>
         </Match>
         <Match when={held().kind === "text"}>

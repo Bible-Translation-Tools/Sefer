@@ -3,7 +3,7 @@ import ChevronDownIcon from "lucide-solid/icons/chevron-down";
 import ChevronUpIcon from "lucide-solid/icons/chevron-up";
 import { Show } from "solid-js";
 
-import { t } from "#app/i18n";
+import { m } from "#app/paraglide/messages";
 import type { useShell } from "#app/ProjectContext";
 import { BookScope, IconButton, Switch } from "#app/ui/primitives";
 import { metadataOf } from "#app/ui/workspace/project";
@@ -32,7 +32,7 @@ function SourceSwitches(props: { readonly row: FindScopeRowProps }) {
     <div class="flex items-center gap-3" data-tour="find-reference">
       <props.row.sources.source.Picker />
       <Switch
-        label={t("Search the source text")}
+        label={m.find_search_the_source_text()}
         checked={props.row.scope() === "reference"}
         disabled={!props.row.sources.hasReference()}
         onChange={(on) => props.row.updateSearch({ scope: on ? "reference" : "project" })}
@@ -40,7 +40,7 @@ function SourceSwitches(props: { readonly row: FindScopeRowProps }) {
       <Show when={props.row.scope() === "reference"}>
         <span data-tour="find-expect-toggle">
           <Switch
-            label={t("Expect…")}
+            label={m.find_expect()}
             checked={props.row.expect.expectShown()}
             onChange={props.row.expect.toggleExpect}
           />
@@ -49,7 +49,7 @@ function SourceSwitches(props: { readonly row: FindScopeRowProps }) {
       <Show when={props.row.sources.searchable().length > 0}>
         <span data-tour="find-helps">
           <Switch
-            label={t("Search {title}", { title: props.row.sources.helpsTitle() })}
+            label={m.find_search_title({ title: props.row.sources.helpsTitle() })}
             checked={props.row.scope() === "helps"}
             onChange={(on) => props.row.updateSearch({ scope: on ? "helps" : "project" })}
           />
@@ -69,7 +69,7 @@ function MatchCounter(props: { readonly row: FindScopeRowProps }) {
         }
       >
         <span class="text-smallest tabular-nums text-on-surface-tertiary">
-          {t("{count} in {title}", {
+          {m.find_count_in_title({
             count: props.row.results.helpHits().length,
             title: props.row.sources.helpsTitle(),
           })}
@@ -82,7 +82,7 @@ function MatchCounter(props: { readonly row: FindScopeRowProps }) {
         }
       >
         <span class="text-smallest tabular-nums text-on-surface-tertiary">
-          {t("{count} in the reference", { count: props.row.results.referenceHits().length })}
+          {m.find_count_in_the_reference({ count: props.row.results.referenceHits().length })}
         </span>
       </Show>
       <span
@@ -90,22 +90,22 @@ function MatchCounter(props: { readonly row: FindScopeRowProps }) {
         data-count={props.row.feedHits().length}
       >
         {props.row.feedHits().length === 0
-          ? t("0 results")
-          : t("{at}/{total}", {
+          ? m.find_0_results()
+          : m.find_at_total({
               at: props.row.results.cursor() + 1,
               total: props.row.feedHits().length,
             })}
       </span>
       <IconButton
         size="sm"
-        label={t("Previous match")}
+        label={m.find_previous_match()}
         icon={<ChevronUpIcon />}
         disabled={props.row.feedHits().length === 0}
         onClick={() => props.row.step(-1)}
       />
       <IconButton
         size="sm"
-        label={t("Next match")}
+        label={m.find_next_match()}
         icon={<ChevronDownIcon />}
         disabled={props.row.feedHits().length === 0}
         onClick={() => props.row.step(1)}

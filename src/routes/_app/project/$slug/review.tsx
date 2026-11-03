@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/solid-router";
 
+import { m } from "#app/paraglide/messages";
 import { ReviewPanel } from "#app/ui/review";
 import { ShellGate } from "#app/ui/ShellGate";
 
@@ -13,6 +14,6 @@ export const Route = createFileRoute("/_app/project/$slug/review")({
     const pull = Number(search.pull);
     return Number.isInteger(pull) && pull > 0 ? { against: "shared", pull } : { against: "shared" };
   },
-  head: () => ({ meta: [{ title: "Sefer — review" }] }),
+  head: () => ({ meta: [{ title: m.page_title({ page: m.page_review() }) }] }),
   component: () => <ShellGate>{() => <ReviewPanel />}</ShellGate>,
 });

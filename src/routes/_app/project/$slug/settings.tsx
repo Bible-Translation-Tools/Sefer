@@ -7,7 +7,7 @@ import { For, Show, createSignal, onCleanup, untrack } from "solid-js";
 
 import { exportDiagnostics } from "#app/diagnostics";
 import { BUILD_ENDPOINTS, endpointsChangedSinceBoot } from "#app/endpoints";
-import { t } from "#app/i18n";
+import type { Message } from "#app/i18n";
 import { m } from "#app/paraglide/messages";
 import { useShell } from "#app/ProjectContext";
 import { SETTING_GROUPS, shellKeys, shellSettings, type AnyDescriptor } from "#app/settings";
@@ -120,7 +120,7 @@ function createSettingsModel(services: Services, keys: Keys): SettingsModel {
     void services.run(Effect.result(services.settings.set(key, value))).then((result) => {
       setProblem(
         Result.isFailure(result)
-          ? t("{key}: {reason}", { key: result.failure.key, reason: result.failure.reason })
+          ? m.common_key_reason({ key: result.failure.key, reason: result.failure.reason })
           : "",
       );
       setTick((held) => held + 1);
@@ -146,7 +146,7 @@ function Stepper(props: {
   return (
     <div class="flex items-center gap-1">
       <IconButton
-        label={t("Decrease {label}", { label: t(descriptor.label) })}
+        label={m.settings_decrease_label({ label: descriptor.label })}
         variant="outlined"
         size="sm"
         icon={<Minus />}
@@ -158,7 +158,7 @@ function Stepper(props: {
         {descriptor.unit ?? ""}
       </span>
       <IconButton
-        label={t("Increase {label}", { label: t(descriptor.label) })}
+        label={m.settings_increase_label({ label: descriptor.label })}
         variant="outlined"
         size="sm"
         icon={<Plus />}
@@ -192,15 +192,15 @@ function createNetworkDraft(services: Services, model: SettingsModel, key: Setti
       const pairs = value.split(",").filter((pair) => pair.trim() !== "");
       return parseTransport(value).size === pairs.length
         ? ""
-        : t("Every pair must be host=proxy, both full URLs.");
+        : m.settings_every_pair_must_be_host();
     }
     try {
       const url = new URL(value);
       return url.protocol === "https:" || url.protocol === "http:"
         ? ""
-        : t("Use a full http(s) URL.");
+        : m.settings_use_a_full_http_s();
     } catch {
-      return t("Use a full http(s) URL.");
+      return m.settings_use_a_full_http_s();
     }
   };
   const dirty = (): boolean => draft().trim() !== inUse();
@@ -231,10 +231,10 @@ function NetworkRow(props: {
   return (
     <div class="space-y-2 py-3" data-setting={key.name}>
       <label for={key.name} class="block text-small text-on-surface-primary">
-        {t(props.descriptor.label)}
+        {props.descriptor.label}
         <Show when={props.descriptor.description}>
           {(description) => (
-            <span class="block text-smallest text-on-surface-tertiary">{t(description())}</span>
+            <span class="block text-smallest text-on-surface-tertiary">{description()}</span>
           )}
         </Show>
       </label>
@@ -245,7 +245,7 @@ function NetworkRow(props: {
           size="sm"
           wrapperClass="min-w-0 flex-1"
           class="font-mono"
-          placeholder={built() || t("none")}
+          placeholder={built() || m.settings_none()}
           value={draft()}
           aria-invalid={invalid() === "" ? undefined : "true"}
           onInput={(event) => setDraft(event.currentTarget.value)}
@@ -254,10 +254,10 @@ function NetworkRow(props: {
           }}
         />
         <Button size="sm" variant="primary" disabled={!dirty() || invalid() !== ""} onClick={save}>
-          {t("Save")}
+          {m.common_save()}
         </Button>
         <Button size="sm" variant="secondary" disabled={stored() === ""} onClick={useBuilds}>
-          {t("Use this build's")}
+          {m.settings_use_this_builds()}
         </Button>
       </div>
       <p data-in-use={key.name} class="text-smallest text-on-surface-tertiary">
@@ -266,9 +266,9 @@ function NetworkRow(props: {
           fallback={<span class="text-on-surface-error">{invalid()}</span>}
         >
           {stored() === ""
-            ? t("In use: this build's value.")
-            : t("In use: your override. This build's is {built}.", {
-                built: built() || t("none"),
+            ? m.settings_in_use_this_builds_value()
+            : m.settings_in_use_your_override_this({
+                built: built() || m.settings_none(),
               })}
         </Show>
       </p>
@@ -282,7 +282,7 @@ const widget = (descriptor: AnyDescriptor, model: SettingsModel): JSX.Element =>
       return (
         <Switch
           id={descriptor.key.name}
-          aria-label={t(descriptor.label)}
+          aria-label={descriptor.label}
           checked={model.read(descriptor.key)}
           onChange={(next) => model.write(descriptor.key, next)}
         />
@@ -298,18 +298,18 @@ const widget = (descriptor: AnyDescriptor, model: SettingsModel): JSX.Element =>
             onChange={(event) => model.write(descriptor.key, event.currentTarget.value)}
           >
             <For each={descriptor.options}>
-              {(option) => <option value={option.value}>{t(option.label)}</option>}
+              {(option) => <option value={option.value}>{option.label}</option>}
             </For>
           </Select>
         );
       return (
         <SegmentedControl
-          label={t(descriptor.label)}
+          label={descriptor.label}
           value={model.read(descriptor.key)}
           onChange={(next) => model.write(descriptor.key, next)}
           items={descriptor.options.map((option) => ({
             value: option.value,
-            label: t(option.label),
+            label: option.label,
           }))}
         />
       );
@@ -334,10 +334,10 @@ function SettingRow(props: { readonly descriptor: AnyDescriptor; readonly model:
     <div class="flex items-center gap-6 py-3" data-setting={props.descriptor.key.name}>
       <div class="min-w-0 flex-1">
         <label for={props.descriptor.key.name} class="block text-small text-on-surface-primary">
-          {t(props.descriptor.label)}
+          {props.descriptor.label}
           <Show when={props.descriptor.description}>
             {(description) => (
-              <span class="block text-smallest text-on-surface-tertiary">{t(description())}</span>
+              <span class="block text-smallest text-on-surface-tertiary">{description()}</span>
             )}
           </Show>
         </label>
@@ -368,7 +368,7 @@ function SettingsGroup(props: {
   return (
     <Show when={rows().length > 0}>
       <Card class="space-y-1" data-settings-group={props.group.id}>
-        <PanelHeader level={3} title={t(props.group.title)} subtitle={t(props.group.subtitle)} />
+        <PanelHeader level={3} title={props.group.title()} subtitle={props.group.subtitle()} />
         <div class="divide-y divide-surface-border">
           <For each={rows()}>
             {(descriptor) =>
@@ -383,12 +383,10 @@ function SettingsGroup(props: {
         <Show when={props.group.id === "network" && props.model.drifted()}>
           <div class="flex items-center gap-3 pt-3">
             <p class="min-w-0 flex-1 text-smallest text-on-surface-tertiary">
-              {t(
-                "Screens are using the new endpoint already; transfers and the catalogue were built with the old one and change on reload.",
-              )}
+              {m.settings_screens_are_using_the_new()}
             </p>
             <Button size="sm" variant="secondary" onClick={() => globalThis.location.reload()}>
-              {t("Reload")}
+              {m.common_reload()}
             </Button>
           </div>
         </Show>
@@ -404,14 +402,12 @@ function DiagnosticsCard() {
     <Card class="space-y-1" data-settings-group="diagnostics">
       <PanelHeader
         level={3}
-        title={t("Diagnostics")}
-        subtitle={t(
-          "What Sefer recorded on this device, as one file to send to someone helping you. Paths are shortened and account names are left out.",
-        )}
+        title={m.settings_diagnostics()}
+        subtitle={m.settings_what_sefer_recorded_on_this()}
       />
       <div class="flex items-center gap-6 py-3">
         <p class="min-w-0 flex-1 text-smallest text-on-surface-tertiary">
-          {t("Kept for seven days, at most {size} MB.", { size: 5 })}
+          {m.settings_kept_for_seven_days_at({ size: 5 })}
         </p>
         <Button
           size="sm"
@@ -419,7 +415,7 @@ function DiagnosticsCard() {
           data-action="export-diagnostics"
           onClick={() => void exportDiagnostics(services, shell.project())}
         >
-          {t("Export diagnostics")}
+          {m.settings_export_diagnostics()}
         </Button>
       </div>
     </Card>
@@ -467,7 +463,7 @@ function PreferencesTab(props: {
       <SourceTextsCard />
 
       <p class="text-smallest text-on-surface-tertiary">
-        {t("Stored in {file}", {
+        {m.settings_stored_in_file({
           file: `${services.hostInfo.paths().appData}/settings.json`,
         })}
       </p>
@@ -493,7 +489,7 @@ function SettingsPage() {
         class="sticky top-6 max-h-[calc(100dvh-7.5rem)] w-64 shrink-0 self-start overflow-y-auto scrollbar-padded [--scrollbar-thumb:var(--on-surface-tertiary)]"
         data-settings-nav
       >
-        <PanelHeader title={t("Settings")} />
+        <PanelHeader title={m.common_settings()} />
         <nav aria-label={m.settings_nav_label()} class="mt-3">
           <ul>
             <li>
@@ -520,7 +516,7 @@ function SettingsPage() {
                     aria-current={tab() === entry.id ? "page" : undefined}
                     data-settings-tab={entry.id}
                   >
-                    {t(entry.label)}
+                    {entry.label()}
                   </Link>
                 </li>
               )}
@@ -559,10 +555,12 @@ function DiffSample() {
       data-diff-sample
     >
       <p class="cm-diff-was px-3 py-1">
-        {t("And God")} <span class="cm-diff-removed">{t("spoke")}</span> {t("all these words")}
+        {m.settings_and_god()} <span class="cm-diff-removed">{m.settings_spoke()}</span>{" "}
+        {m.settings_all_these_words()}
       </p>
       <p class="cm-diff-now px-3 py-1">
-        {t("And God")} <span class="cm-diff-added">{t("said")}</span> {t("all these words")}
+        {m.settings_and_god()} <span class="cm-diff-added">{m.settings_said()}</span>{" "}
+        {m.settings_all_these_words()}
       </p>
     </div>
   );
@@ -571,15 +569,15 @@ function DiffSample() {
 type SettingsTab = "preferences" | "tutorials" | "workflows";
 const SETTINGS_TABS: readonly {
   readonly id: Exclude<SettingsTab, "preferences">;
-  readonly label: string;
+  readonly label: Message;
 }[] = [
-  { id: "tutorials", label: "Tutorials" },
-  { id: "workflows", label: "Workflows" },
+  { id: "tutorials", label: m.tour_tutorials },
+  { id: "workflows", label: m.tour_workflows },
 ];
 
 export const Route = createFileRoute("/_app/project/$slug/settings")({
   validateSearch: (search: Record<string, unknown>): { readonly tab?: SettingsTab } =>
     search["tab"] === "tutorials" || search["tab"] === "workflows" ? { tab: search["tab"] } : {},
-  head: () => ({ meta: [{ title: "Sefer — settings" }] }),
+  head: () => ({ meta: [{ title: m.page_title({ page: m.page_settings() }) }] }),
   component: () => <ShellGate>{() => <SettingsPage />}</ShellGate>,
 });

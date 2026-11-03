@@ -2,7 +2,7 @@ import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import * as Result from "@wycliffeassociates/sefer-text/result";
 import { createSignal } from "solid-js";
 
-import { t } from "#app/i18n";
+import { m } from "#app/paraglide/messages";
 import type { useShell } from "#app/ProjectContext";
 import { shellKeys } from "#app/settings";
 import * as Search from "#core/search/search";
@@ -36,7 +36,7 @@ function previewReplace(inputs: ReplaceInputs, state: ReplaceState): void {
     return;
   const current = signature(query(), scope());
   if (current !== searched()) {
-    setProblem(t("Run Find again before replacing."));
+    setProblem(m.find_run_find_again_before_replacing());
     return;
   }
   const project = shell.project();
@@ -45,7 +45,7 @@ function previewReplace(inputs: ReplaceInputs, state: ReplaceState): void {
   for (const book of project.books) {
     const matches = selected.filter((hit) => hit.bookId === book.id);
     if (matches.length > 0 && Search.planReplace(book, matches, replacement()) === null) {
-      setProblem(t("Results changed or cross markup. Run Find again before replacing."));
+      setProblem(m.find_results_changed_or_cross_markup());
       return;
     }
   }
@@ -62,7 +62,7 @@ function applyReplace(inputs: ReplaceInputs, state: ReplaceState): void {
   if (snapshot === undefined || !state.replaceEnabled()) return;
   setPreview(undefined);
   if (snapshot.signature !== searched() || snapshot.signature !== signature(query(), scope())) {
-    setProblem(t("Search options changed. Preview replacements again."));
+    setProblem(m.find_search_options_changed_preview_replacements());
     return;
   }
   const project = shell.project();
@@ -74,7 +74,7 @@ function applyReplace(inputs: ReplaceInputs, state: ReplaceState): void {
   if (
     batches.some(({ book, matches }) => Search.planReplace(book, matches, snapshot.insert) === null)
   ) {
-    setProblem(t("Results changed or cross markup. Run Find again before replacing."));
+    setProblem(m.find_results_changed_or_cross_markup());
     return;
   }
   let replaced = 0;
@@ -87,14 +87,13 @@ function applyReplace(inputs: ReplaceInputs, state: ReplaceState): void {
   }
   if (changed.length > 0) shell.changed({ kind: "book.apply", books: changed });
   shell.report(
-    t("Replaced {count} match(es) in {books} book(s).", {
+    m.find_replaced_count_matches_in({
       count: replaced,
       books: changed.length,
     }),
   );
   void run();
-  if (replaced !== snapshot.hits.length)
-    setProblem(t("Some replacements were refused. Review the changed books and run Find again."));
+  if (replaced !== snapshot.hits.length) setProblem(m.find_some_replacements_were_refused_review());
 }
 
 export function createFindReplace(inputs: ReplaceInputs) {

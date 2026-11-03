@@ -4,7 +4,6 @@ import UserIcon from "lucide-solid/icons/user";
 import UserCog from "lucide-solid/icons/user-cog";
 import { Show } from "solid-js";
 
-import { t } from "../../i18n";
 import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
 import { createAccount, type Account } from "../cloud/account";
@@ -92,9 +91,7 @@ export function AccountButton() {
           when={account.host}
           fallback={
             <p class="text-small text-on-surface-tertiary" data-cloud="unconfigured">
-              {t(
-                "Cloud sync has no server for this build. Set the WACS endpoint on the Network card in Settings.",
-              )}
+              {m.workspace_cloud_sync_has_no_server()}
             </p>
           }
         >

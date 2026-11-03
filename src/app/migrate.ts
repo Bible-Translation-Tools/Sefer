@@ -1,5 +1,6 @@
 import { Effect, FileSystem, Option, Result } from "effect";
 
+import { m } from "#app/paraglide/messages";
 import { makeMemoryFileSystem } from "#core/fileSystem/memory";
 import { joinPath, lastSegment } from "#core/fileSystem/path";
 import { Git } from "#core/git/git";
@@ -18,7 +19,6 @@ import { highestVersions, type RelatedResource } from "#core/resources/relations
 import { APP_AUTHOR } from "./author";
 import { catalogueFor, type WriterLanguage } from "./catalogue";
 import { describe } from "./describe";
-import { t } from "./i18n";
 import type { Domain, Services } from "./services";
 import { rememberProject } from "./ui/landing/summaries";
 
@@ -105,7 +105,7 @@ export const urlCandidate = async (services: Services, typed: string): Promise<B
   const owner = parts.at(-2);
   const repo = parts.at(-1);
   if (owner === undefined || repo === undefined)
-    throw new NotWriterUrl(t("That is not a repository URL: {url}", { url }));
+    throw new NotWriterUrl(m.migrate_that_is_not_a_repository({ url }));
 
   const probe = await services.run(
     Effect.timeoutOption(
@@ -113,8 +113,8 @@ export const urlCandidate = async (services: Services, typed: string): Promise<B
       UPSTREAM_TIMEOUT,
     ),
   );
-  if (Option.isNone(probe)) throw new NotWriterUrl(t("{url} did not answer in time.", { url }));
-  if (probe.value.empty) throw new NotWriterUrl(t("{url} has nothing in it yet.", { url }));
+  if (Option.isNone(probe)) throw new NotWriterUrl(m.migrate_url_did_not_answer_in({ url }));
+  if (probe.value.empty) throw new NotWriterUrl(m.migrate_url_has_nothing_in_it({ url }));
 
   const inMemory = services.inMemoryTransfer?.();
   const root = `${inMemory === undefined ? stagingRootOf(services) : "/url-check"}/${owner}_${repo}`;
@@ -135,10 +135,7 @@ export const urlCandidate = async (services: Services, typed: string): Promise<B
     Domain
   > = inMemory === undefined ? look : Effect.provide(look, inMemory);
   const { project, newest } = await services.run(where);
-  if (project === undefined)
-    throw new NotWriterUrl(
-      t("{repo} is not a BTT Writer project: it has no manifest.json naming a book.", { repo }),
-    );
+  if (project === undefined) throw new NotWriterUrl(m.migrate_repo_is_not_a_btt({ repo }));
   return {
     id: `remote:${url}:${project.book}`,
     book: project.book,
@@ -172,7 +169,7 @@ export const openOne = async (services: Services, candidate: BookCandidate): Pro
     const opened = await services.run(Effect.provideService(where, Observability, operation));
     if (Option.isNone(opened)) {
       operation.end("unavailable", { "migrate.reason": "timeout" });
-      return { state: "refused", reason: t("it did not answer in time") };
+      return { state: "refused", reason: m.migrate_it_did_not_answer_in() };
     }
     const staged = opened.value;
     const refused = validate(staged.usfm);

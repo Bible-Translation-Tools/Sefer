@@ -1,11 +1,11 @@
 import { Effect, Option, Result } from "effect";
 
+import { m } from "#app/paraglide/messages";
 import type { AdminError } from "#core/admin/projectAdmin";
 import { lastSegment } from "#core/fileSystem/path";
 
 import { registerCommand } from "./commands";
 import { describe } from "./describe";
-import { t } from "./i18n";
 import { noteRenamed } from "./projectNames";
 import type { Services } from "./services";
 import { downloadBytes } from "./ui/landing/download";
@@ -20,7 +20,11 @@ export const exportProjectZip = async (services: Services, root: string): Promis
 
   const destination = services.hostInfo.capabilities().nativeDisk
     ? await services.run(
-        services.dialogs.pickSaveFile(t("Save {name}", { name: fileName }), fileName, ZIP_FILTERS),
+        services.dialogs.pickSaveFile(
+          m.command_save_name({ name: fileName }),
+          fileName,
+          ZIP_FILTERS,
+        ),
       )
     : Option.none<string>();
   if (services.hostInfo.capabilities().nativeDisk && Option.isNone(destination)) return;
@@ -29,11 +33,11 @@ export const exportProjectZip = async (services: Services, root: string): Promis
     ? services.admin.archive(root)
     : services.admin.export(root, "usfm-zip", destination.value);
 
-  const notice = toasts.progress({ title: t("Preparing {name}", { name }) });
+  const notice = toasts.progress({ title: m.command_preparing_name({ name }) });
   const written = await services.run(Effect.result(job));
   if (Result.isFailure(written)) {
     toasts.update(notice, {
-      title: t("Could not export {name}", { name }),
+      title: m.command_could_not_export_name({ name }),
       message: describe(written.failure),
       tone: "error",
       autoClose: false,
@@ -43,7 +47,7 @@ export const exportProjectZip = async (services: Services, root: string): Promis
 
   if (typeof written.success === "string") {
     toasts.update(notice, {
-      title: t("Exported {name}", { name }),
+      title: m.command_exported_name({ name }),
       message: written.success,
       tone: "success",
     });
@@ -51,8 +55,8 @@ export const exportProjectZip = async (services: Services, root: string): Promis
   }
   downloadBytes(fileName, written.success);
   toasts.update(notice, {
-    title: t("Exported {name}", { name }),
-    message: t("{size} KB", { size: Math.max(1, Math.round(written.success.length / 1024)) }),
+    title: m.command_exported_name({ name }),
+    message: m.command_size_kb({ size: Math.max(1, Math.round(written.success.length / 1024)) }),
     tone: "success",
   });
 };
@@ -72,11 +76,11 @@ export const renameProject = async (
     ),
   );
   if (Result.isFailure(done)) {
-    toasts.error({ title: t("Could not rename"), message: describe(done.failure) });
+    toasts.error({ title: m.command_could_not_rename(), message: describe(done.failure) });
     return false;
   }
   noteRenamed(root, name);
-  toasts.success({ title: t("Renamed to {name}", { name }) });
+  toasts.success({ title: m.command_renamed_to_name({ name }) });
   return true;
 };
 
@@ -91,7 +95,7 @@ export const registerProjectCommands = (bridge: ProjectCommandsBridge): (() => v
   const unregister = [
     registerCommand({
       id: "project.export",
-      title: t("Export project as zip"),
+      title: m.command_export_project_as_zip,
       when: open,
       run: () => {
         const root = bridge.root();
@@ -101,7 +105,7 @@ export const registerProjectCommands = (bridge: ProjectCommandsBridge): (() => v
     }),
     registerCommand({
       id: "project.rename",
-      title: t("Rename project…"),
+      title: m.command_rename_project,
       when: open,
       run: () => {
         const root = bridge.root();

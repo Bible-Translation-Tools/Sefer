@@ -7,7 +7,6 @@ import Upload from "lucide-solid/icons/upload";
 import { For, Show, createSignal, onCleanup, untrack } from "solid-js";
 
 import { registerCommand } from "../../commands";
-import { t } from "../../i18n";
 import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
 import { Button, Dialog, cx, toasts } from "../primitives";
@@ -102,7 +101,7 @@ const ImportButtons = (props: { readonly pick: Picker }) => {
         icon={<FileArchive size={24} aria-hidden="true" />}
         onClick={() => props.pick("zip")}
       >
-        {t("Import zip")}
+        {m.landing_import_zip()}
       </Button>
       <Button
         variant="accent"
@@ -111,7 +110,7 @@ const ImportButtons = (props: { readonly pick: Picker }) => {
         icon={<FolderOpen size={24} aria-hidden="true" />}
         onClick={() => props.pick("folder")}
       >
-        {t("Import folder")}
+        {m.landing_import_folder()}
       </Button>
       <Button
         variant="accent"
@@ -120,7 +119,7 @@ const ImportButtons = (props: { readonly pick: Picker }) => {
         icon={<BookCopy size={24} aria-hidden="true" />}
         onClick={() => void navigate({ to: "/migrate" })}
       >
-        {t("Migrate from Writer")}
+        {m.landing_migrate_from_writer()}
       </Button>
     </div>
   );
@@ -142,7 +141,7 @@ const StepList = (props: {
         return (
           <li class={cx("flex items-center gap-2 text-small", tone())}>
             <span aria-hidden="true">{position() < 0 ? "✓" : "•"}</span>
-            {t(STEP_LABEL[each])}
+            {STEP_LABEL[each]()}
             <Show when={position() === 0 && props.detail !== undefined}>
               <span class="ms-auto text-smallest tabular-nums text-on-surface-tertiary">
                 {props.detail}
@@ -165,7 +164,7 @@ const ProgressDialog = (props: { readonly state: Progress; readonly onClose: () 
     footer={
       <Show when={props.state.step === undefined}>
         <Button variant="primary" onClick={props.onClose}>
-          {t("Close")}
+          {m.common_close()}
         </Button>
       </Show>
     }
@@ -218,9 +217,9 @@ export function ImportHub(props: { readonly variant: "buttons" | "drop" }) {
   const nativeFolder = capabilities.nativeDisk && capabilities.dialogs;
 
   const pick: Picker = (source) => {
-    if (source === "zip") importPicked(context, t("Import from a zip"), "zip");
+    if (source === "zip") importPicked(context, m.landing_import_from_a_zip(), "zip");
     else if (nativeFolder) importFolder(context);
-    else importPicked(context, t("Import from a folder"), "folder");
+    else importPicked(context, m.landing_import_from_a_folder(), "folder");
   };
 
   const drop: Dropper = (transfer) => {
@@ -230,9 +229,9 @@ export function ImportHub(props: { readonly variant: "buttons" | "drop" }) {
       file: transfer.files[0],
     };
     if (dropped.entry?.isDirectory === true)
-      importPicked(context, t("Import from a folder"), "folder", dropped);
+      importPicked(context, m.landing_import_from_a_folder(), "folder", dropped);
     else if (dropped.file !== undefined && /\.zip$/iu.test(dropped.file.name))
-      importPicked(context, t("Import from a zip"), "zip", dropped);
+      importPicked(context, m.landing_import_from_a_zip(), "zip", dropped);
     else toasts.error({ title: m.landing_drop_not_project(), message: m.landing_drop_one() });
   };
 
@@ -241,7 +240,7 @@ export function ImportHub(props: { readonly variant: "buttons" | "drop" }) {
     onCleanup(
       registerCommand({
         id: "project.open",
-        title: t("Open project…"),
+        title: m.landing_open_project,
         keys: "Mod-o",
         run: () => pick("folder"),
       }),

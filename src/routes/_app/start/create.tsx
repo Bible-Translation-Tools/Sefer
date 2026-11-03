@@ -1,19 +1,19 @@
 import { createFileRoute } from "@tanstack/solid-router";
 
-import { t } from "#app/i18n";
+import { m } from "#app/paraglide/messages";
 import { Breadcrumb } from "#app/ui/landing/Breadcrumb";
 import { CreateProject } from "#app/ui/landing/CreateProject";
-import { ShellGate } from "#app/ui/ShellGate";
 import "#app/ui/theme";
+import { ShellGate } from "#app/ui/ShellGate";
 
 function CreateProjectRoute() {
   return (
     <main class="min-w-0 max-w-4xl space-y-4 p-6">
       <Breadcrumb
         crumbs={[
-          { label: t("Sefer"), to: "/" },
-          { label: t("Projects"), to: "/projects" },
-          { label: t("Create") },
+          { label: m.common_sefer(), to: "/" },
+          { label: m.common_projects(), to: "/projects" },
+          { label: m.landing_create() },
         ]}
       />
       <CreateProject />
@@ -22,6 +22,6 @@ function CreateProjectRoute() {
 }
 
 export const Route = createFileRoute("/_app/start/create")({
-  head: () => ({ meta: [{ title: "Sefer — create a project" }] }),
+  head: () => ({ meta: [{ title: m.page_title({ page: m.page_create() }) }] }),
   component: () => <ShellGate>{() => <CreateProjectRoute />}</ShellGate>,
 });

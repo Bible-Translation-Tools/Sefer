@@ -6,7 +6,6 @@ import { Gitea, type Profile, type Session } from "#core/remote/gitea";
 import { collaboration } from "../../collaboration";
 import { describe, reasonOf } from "../../describe";
 import { contentHostFor } from "../../endpoints";
-import { t } from "../../i18n";
 import { m } from "../../paraglide/messages";
 import type { Shell } from "../../ProjectContext";
 
@@ -130,7 +129,7 @@ const makeAccount = (shell: Shell): Account => {
         setSession(held);
         setOtpWanted(false);
         reask(shell);
-        shell.report(t("signed in to {host} as {user}", { host: base, user: held.username }));
+        shell.report(m.cloud_signed_in_to_host_as({ host: base, user: held.username }));
       });
     },
     signOut: () => {

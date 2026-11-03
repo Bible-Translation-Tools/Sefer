@@ -2,8 +2,8 @@ import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import { Effect, Result } from "effect";
 import { untrack } from "solid-js";
 
-import { t } from "#app/i18n";
 import { borrowedContext } from "#app/kinds/context";
+import { m } from "#app/paraglide/messages";
 import type { useShell } from "#app/ProjectContext";
 import { createFreshReadings, createReadings } from "#core/search/reading";
 import * as Search from "#core/search/search";
@@ -164,7 +164,7 @@ function createRun(inputs: SearchInputs, readings: Scan["readings"]) {
     if (!Search.longEnough(staticQuery.text))
       return clearAll(
         inputs,
-        t("Type at least {count} characters to search the whole project.", {
+        m.find_type_at_least_count_characters({
           count: Search.MINIMUM_QUERY,
         }),
       );

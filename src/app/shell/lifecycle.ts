@@ -3,6 +3,7 @@ import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import { Effect, Option, Result } from "effect";
 import { createSignal, onCleanup, untrack, type Accessor, type Setter } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import { ProjectAnalysis } from "#core/analysis/projectAnalysis";
 import { Repositories } from "#core/git/repository";
 import { Observability } from "#core/observability";
@@ -13,7 +14,6 @@ import { highestVersions } from "#core/resources/relationships";
 import { SaveCoordinator } from "#core/save/saveCoordinator";
 
 import { editsReported } from "../editReports";
-import { t } from "../i18n";
 import type { ResourceHandles } from "../kinds/handles";
 import { registerLegacyMarkers } from "../legacyMarkers";
 import { noteRenamed } from "../projectNames";
@@ -214,7 +214,7 @@ export const createLifecycle = ({
     );
     if (Result.isFailure(opened)) {
       gesture.end("failed", { "project.error": opened.failure.reason });
-      report(t("could not open {root}: {reason}", { root, reason: opened.failure.reason }));
+      report(m.shell_could_not_open_root_reason({ root, reason: opened.failure.reason }));
       return;
     }
     const ready = opened.success;
@@ -247,7 +247,7 @@ export const createLifecycle = ({
       if (live.get() === ready && bound.ids.length > 0 && first !== undefined)
         services.projectAnalysis.invalidate(first);
     });
-    report(t("opened {name} ({count} books)", { name: ready.root, count: ready.books.length }));
+    report(m.shell_opened_name_count_books({ name: ready.root, count: ready.books.length }));
   };
 
   return { recoveryOffer, setRecoveryOffer, closeProject, openProject };

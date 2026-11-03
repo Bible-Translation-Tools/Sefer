@@ -12,7 +12,6 @@ import { through } from "#core/remote/transport";
 
 import { catalogueFor, type CatalogueEntry } from "../../catalogue";
 import { transportFor } from "../../endpoints";
-import { t } from "../../i18n";
 import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
@@ -88,13 +87,13 @@ const ActiveFilters = (props: {
   readonly onDropRegion: (region: string) => void;
 }) => (
   <div class="flex flex-wrap items-center justify-center gap-4">
-    <span class="text-body font-medium text-on-surface-primary">{t("Filters active:")}</span>
+    <span class="text-body font-medium text-on-surface-primary">{m.landing_filters_active()}</span>
     <For each={props.regions}>
       {(region) => (
         <button
           type="button"
           class="inline-flex cursor-pointer items-center gap-2 rounded-full bg-surface-canvas px-4 py-2 text-body font-medium text-on-surface-primary transition-colors hover:bg-surface-tertiary"
-          aria-label={t("Remove the {region} filter", { region })}
+          aria-label={m.landing_remove_the_region_filter({ region })}
           onClick={() => props.onDropRegion(region)}
         >
           {region}
@@ -111,22 +110,16 @@ function NoMatch(props: {
   readonly onDropRegion: (region: string) => void;
 }) {
   const said = (): readonly string[] =>
-    t(
-      "Nothing matched your search for “{query}.” Try again using alternate spellings, dialect names, or any variant names for your language.",
-      { query: HOLE },
-    ).split(HOLE);
+    m.landing_nothing_matched_your_search_for({ query: HOLE }).split(HOLE);
   return (
     <div
       data-testid="catalogue-empty"
       class="mx-auto flex max-w-2xl flex-col items-center gap-6 px-8 py-12 text-center"
     >
       <div class="flex flex-col gap-2">
-        <h3 class="text-h4 font-bold text-on-surface-primary">{t("No Languages Match")}</h3>
+        <h3 class="text-h4 font-bold text-on-surface-primary">{m.landing_no_languages_match()}</h3>
         <p class="text-body text-on-surface-primary">
-          <Show
-            when={props.query !== ""}
-            fallback={t("No languages match the filters below. Remove one to see more.")}
-          >
+          <Show when={props.query !== ""} fallback={m.landing_no_languages_match_the_filters()}>
             {said()[0]}
             <strong class="font-bold">{props.query}</strong>
             {said()[1]}
@@ -140,17 +133,13 @@ function NoMatch(props: {
 
       <div class="flex w-full items-center gap-6 text-body font-medium text-on-surface-tertiary">
         <span class="h-px flex-1 bg-surface-border" />
-        {t("OR")}
+        {m.landing_or()}
         <span class="h-px flex-1 bg-surface-border" />
       </div>
 
       <div class="flex flex-col items-center gap-2">
-        <h3 class="text-h4 font-bold text-on-surface-primary">{t("Import Project")}</h3>
-        <p class="text-body text-on-surface-primary">
-          {t(
-            "You can also import a project to Sefer if it is on your computer or a memory stick. If none of these options work, consult your Project Manager or Regional Director for assistance.",
-          )}
-        </p>
+        <h3 class="text-h4 font-bold text-on-surface-primary">{m.landing_import_project()}</h3>
+        <p class="text-body text-on-surface-primary">{m.landing_you_can_also_import_a()}</p>
       </div>
 
       <ImportHub variant="buttons" />
@@ -189,7 +178,7 @@ const SortRadios = (props: { readonly column: Column; readonly filters: Filters 
 const RegionFilters = (props: { readonly filters: Filters; readonly total: number }) => (
   <>
     <MenuSeparator />
-    <MenuLabel>{t("Filter")}</MenuLabel>
+    <MenuLabel>{m.landing_filter()}</MenuLabel>
     <For each={props.filters.regions()}>
       {([name, count]) => (
         <MenuCheckbox
@@ -209,7 +198,7 @@ const RegionFilters = (props: { readonly filters: Filters; readonly total: numbe
       icon={<RegionIcon region="" />}
       onChange={() => props.filters.setRegionFilter(new Set<string>())}
     >
-      {t("All regions")}
+      {m.landing_all_regions()}
       <span class="ms-2 text-smallest font-semibold tabular-nums text-on-surface-secondary">
         {props.total}
       </span>
@@ -230,7 +219,7 @@ const ColumnHeader = (props: {
   >
     <Menu
       size="lg"
-      label={t("{column} options", { column: props.label })}
+      label={m.landing_column_options({ column: props.label })}
       side="bottom"
       align="start"
       class="w-60"
@@ -253,12 +242,12 @@ const ColumnHeader = (props: {
           <span class="min-w-0 flex-1 truncate">{props.label}</span>
           {sortIcon(props.filters.sortOf(props.column), 14)}
           <Show when={props.column === "region" && props.filters.regionFilter().size > 0}>
-            <Filter size={14} aria-label={t("filtered")} class="text-brand" />
+            <Filter size={14} aria-label={m.landing_filtered()} class="text-brand" />
           </Show>
         </button>
       }
     >
-      <MenuLabel>{t("Sort")}</MenuLabel>
+      <MenuLabel>{m.landing_sort()}</MenuLabel>
       <SortRadios column={props.column} filters={props.filters} />
       <Show when={props.column === "region" && props.filters.regions().length > 0}>
         <RegionFilters filters={props.filters} total={props.total} />
@@ -285,14 +274,14 @@ const DownloadCell = (props: { readonly item: CatalogueRow; readonly actions: Ro
       fallback={<DownloadButton item={props.item} onDownload={props.actions.onDownload} />}
     >
       {(held) => (
-        <Tooltip label={t("On this device, as {name}", { name: held().name })}>
+        <Tooltip label={m.landing_on_this_device_as_name({ name: held().name })}>
           <Button
             variant="link"
             size="flush"
             data-held={held().root}
             onClick={() => props.actions.onOpen(held().root)}
           >
-            {t("Open")}
+            {m.landing_open()}
           </Button>
         </Tooltip>
       )}
@@ -316,7 +305,7 @@ const DownloadButton = (props: {
             class="opacity-60"
             icon={<Download size={16} aria-hidden="true" />}
           >
-            {t("Download")}
+            {m.common_download()}
           </Button>
         </Tooltip>
       }
@@ -335,7 +324,7 @@ const DownloadButton = (props: {
           )
         }
       >
-        {t("Download")}
+        {m.common_download()}
       </Button>
     </Show>
   </>
@@ -387,7 +376,7 @@ const CatalogueToolbar = (props: {
   readonly onRepos: (repos: Repos) => void;
 }) => (
   <div data-tour="wacs-repos" class="flex flex-wrap items-center gap-3">
-    <PanelHeader title={t("Projects Available on WACS")} />
+    <PanelHeader title={m.landing_projects_available_on_wacs()} />
     <SegmentedControl
       size="md"
       label={m.landing_repos_label()}
@@ -395,7 +384,7 @@ const CatalogueToolbar = (props: {
         { value: "consolidated", label: m.landing_repos_consolidated() },
         { value: "writer", label: m.landing_repos_writer() },
         ...(props.gatewaysOffered
-          ? [{ value: "gateway" as const, label: t("Gateway languages") }]
+          ? [{ value: "gateway" as const, label: m.landing_gateway_languages() }]
           : []),
       ]}
       value={props.repos}
@@ -409,13 +398,13 @@ const CatalogueToolbar = (props: {
       icon={<SearchIcon size={20} aria-hidden="true" />}
       aria-label={
         props.repos === "writer"
-          ? t("Search Writer projects by language")
+          ? m.landing_search_writer_projects_by_language()
           : m.landing_search_or_link()
       }
       placeholder={
         props.repos === "writer"
           ? m.writer_languages_placeholder()
-          : t("Search 'english' or 'axd'…")
+          : m.landing_search_english_or_axd()
       }
       value={props.filters.query()}
       onInput={(event) => props.filters.setQuery(event.currentTarget.value)}
@@ -449,7 +438,7 @@ const TableHead = (props: {
         )}
       </For>
       <div role="columnheader">
-        <span class="sr-only">{t("Download")}</span>
+        <span class="sr-only">{m.common_download()}</span>
       </div>
     </div>
   </div>
@@ -478,7 +467,7 @@ const TableBody = (props: {
             when={props.entries}
             fallback={
               <p class="py-8 text-center text-body text-on-surface-tertiary">
-                {t("Loading projects…")}
+                {m.landing_loading_projects()}
               </p>
             }
           >
@@ -535,9 +524,8 @@ const downloadReasonFor = (services: ReturnType<typeof useShell>["services"]) =>
   const reachable = (url: string): boolean =>
     services.hostInfo.kind() !== "web" || through(transport, url) !== url;
   return (entry: CatalogueEntry): string => {
-    if (entry.gitUrl === "") return t("Sample data — this row names no repository to download.");
-    if (!reachable(entry.gitUrl))
-      return t("This browser has no way to reach the server this project is on.");
+    if (entry.gitUrl === "") return m.landing_sample_data_this_row_names();
+    if (!reachable(entry.gitUrl)) return m.landing_this_browser_has_no_way();
     return "";
   };
 };
@@ -610,7 +598,7 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
         <Card
           padded={false}
           role="table"
-          aria-label={t("Projects available on WACS")}
+          aria-label={m.landing_projects_available_on_wacs_2()}
           aria-rowcount={rows().length + 1}
           class="flex min-h-0 flex-1 flex-col overflow-hidden"
           style={{ "--code-column": codeColumn() }}

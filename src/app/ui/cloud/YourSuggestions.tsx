@@ -1,11 +1,11 @@
 import { useNavigate } from "@tanstack/solid-router";
 import { For, Show, createEffect, createSignal } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import type { Project } from "#core/project/project";
 
 import { collaboration } from "../../collaboration";
 import { describe } from "../../describe";
-import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import {
   mySuggestions,
@@ -22,11 +22,11 @@ import { QuietSection } from "./QuietSection";
 const statusOf = (mine: MySuggestion): string => {
   switch (mine.kind) {
     case "waiting":
-      return t("Waiting for the project's editors");
+      return m.cloud_waiting_for_the_projects_editors();
     case "taken":
-      return t("Brought into the shared project");
+      return m.cloud_brought_into_the_shared_project();
     case "declined":
-      return t("Closed without being brought in");
+      return m.cloud_closed_without_being_brought_in();
   }
 };
 
@@ -66,15 +66,15 @@ const YourRow = (props: {
               disabled={props.busy}
               onClick={props.onAskWithdraw}
             >
-              {t("Withdraw")}
+              {m.cloud_withdraw()}
             </Button>
           }
         >
           <Button size="sm" variant="secondary" disabled={props.busy} onClick={props.onWithdraw}>
-            {t("Yes, withdraw")}
+            {m.cloud_yes_withdraw()}
           </Button>
           <Button size="sm" variant="tertiary" onClick={props.onCancel}>
-            {t("Not now")}
+            {m.common_not_now()}
           </Button>
         </Show>
       </Show>
@@ -126,7 +126,7 @@ const createYourSuggestions = (props: { readonly project: Project; readonly aske
           });
           return;
         }
-        toasts.error({ title: t("That did not work"), message: describe(cause) });
+        toasts.error({ title: m.cloud_that_did_not_work(), message: describe(cause) });
       })
       .finally(() => {
         setBusy(false);
@@ -140,17 +140,17 @@ const createYourSuggestions = (props: { readonly project: Project; readonly aske
 const OfferRow = (props: { readonly busy: boolean; readonly onOffer: () => void }) => (
   <div class="flex items-center gap-3 py-1">
     <p class="min-w-0 flex-1 text-small text-on-surface-secondary">
-      {t("Your copy has changes the shared project does not.")}
+      {m.cloud_your_copy_has_changes_the()}
     </p>
     <Button size="sm" variant="primary" loading={props.busy} onClick={props.onOffer}>
-      {t("Offer my changes")}
+      {m.cloud_offer_my_changes()}
     </Button>
   </div>
 );
 
 const NoneYet = (props: { readonly asking: boolean }) => (
   <p class="text-small text-on-surface-tertiary">
-    {props.asking ? t("Asking the shared project…") : t("You have not offered any yet.")}
+    {props.asking ? m.cloud_asking_the_shared_project() : m.cloud_you_have_not_offered_any()}
   </p>
 );
 
@@ -165,9 +165,9 @@ export function YourSuggestions(props: { readonly project: Project; readonly ask
 
   return (
     <QuietSection
-      title={t("Yours")}
+      title={m.cloud_yours()}
       count={mine()?.length}
-      note={t("What you offered from your own copy. Later sends add to an open suggestion.")}
+      note={m.cloud_what_you_offered_from_your()}
       data={{ "data-suggestions": "yours" }}
     >
       <Show when={!waiting() && facts()?.offerable === true}>
@@ -176,7 +176,7 @@ export function YourSuggestions(props: { readonly project: Project; readonly ask
           onOffer={() =>
             act(
               suggestMyChanges(services, props.project),
-              t("Your changes are offered"),
+              m.cloud_your_changes_are_offered(),
               props.project,
             )
           }
@@ -196,7 +196,7 @@ export function YourSuggestions(props: { readonly project: Project; readonly ask
                   setWithdrawing(undefined);
                   act(
                     withdrawSuggestion(services, props.project, held.suggestion),
-                    t("Withdrawn — your copy keeps the changes"),
+                    m.cloud_withdrawn_your_copy_keeps_the(),
                     props.project,
                   );
                 }}

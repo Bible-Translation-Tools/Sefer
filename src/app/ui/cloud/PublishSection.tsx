@@ -2,13 +2,13 @@ import { useNavigate } from "@tanstack/solid-router";
 import { Effect } from "effect";
 import { Show, createSignal, untrack } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import { Git } from "#core/git/git";
 import type { Project } from "#core/project/project";
 import { Remote } from "#core/remote/remote";
 
 import { collaboration } from "../../collaboration";
 import { describe } from "../../describe";
-import { t } from "../../i18n";
 import { useShell, type Shell } from "../../ProjectContext";
 import { syncWatch } from "../../syncWatch";
 import { Button, Input, toasts } from "../primitives";
@@ -39,9 +39,9 @@ const publishProject = (
         yield* remote.publish(yield* git.init(project.root), staticName);
       }),
     )
-    .then(() => toasts.success({ title: t("Published as {name}", { name: staticName }) }))
+    .then(() => toasts.success({ title: m.cloud_published_as_name({ name: staticName }) }))
     .catch((cause: unknown) =>
-      toasts.error({ title: t("Could not publish"), message: describe(cause) }),
+      toasts.error({ title: m.cloud_could_not_publish(), message: describe(cause) }),
     )
     .finally(() => {
       settled();
@@ -59,7 +59,7 @@ const NameRow = (props: {
     <Input
       size="sm"
       wrapperClass="min-w-0 flex-1"
-      aria-label={t("Name of the shared project")}
+      aria-label={m.cloud_name_of_the_shared_project()}
       value={props.name}
       onInput={(event) => props.onName(event.currentTarget.value)}
     />
@@ -70,7 +70,7 @@ const NameRow = (props: {
       loading={props.busy}
       disabled={props.name.trim() === ""}
     >
-      {t("Publish")}
+      {m.cloud_publish()}
     </Button>
   </div>
 );
@@ -104,9 +104,7 @@ export function PublishSection(props: {
         onSubmit={publish}
         data-sync-publish
       >
-        <p class="text-small text-on-surface-secondary">
-          {t("Publish it to work on it with others, or to keep a copy safe online.")}
-        </p>
+        <p class="text-small text-on-surface-secondary">{m.cloud_publish_it_to_work_on()}</p>
         <NameRow name={name()} busy={busy()} onName={setName} />
         <button
           type="button"
@@ -116,7 +114,7 @@ export function PublishSection(props: {
             void navigate({ to: "/project/$slug/settings", params: { slug: shell.slug() } });
           }}
         >
-          {t("Or choose a shared project that already exists")}
+          {m.cloud_or_choose_a_shared_project()}
         </button>
       </form>
     </Show>

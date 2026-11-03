@@ -3,9 +3,8 @@ import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import { For, Show, createMemo, createSignal } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import type { BookExcerpts, Excerpt, OutlineRow } from "#core/excerpts/excerpts";
-
-import { t } from "../../i18n";
 
 export interface ResultsOutlineProps {
   readonly title: string;
@@ -27,7 +26,7 @@ const chapterOf = (excerpt: Excerpt): string | undefined => {
   const address = excerpt.address;
   if (address.kind === "verses") return String(address.from.chapter);
   if (address.kind === "chapters") return String(address.from);
-  if (address.kind === "intro") return t("Intro");
+  if (address.kind === "intro") return m.common_intro();
   return undefined;
 };
 
@@ -61,7 +60,7 @@ function ChapterTiles(p: {
             <button
               type="button"
               data-chapter-hits={tile.label}
-              title={t("{count} in chapter {chapter}", {
+              title={m.excerpts_count_in_chapter_chapter({
                 count: tile.count,
                 chapter: tile.label,
               })}
@@ -171,7 +170,7 @@ export function ResultsOutline(props: ResultsOutlineProps) {
           {props.title}
         </p>
         <p class="px-2 text-small text-on-surface-secondary">
-          {t("{count} results", { count: total() })}
+          {m.excerpts_count_results({ count: total() })}
         </p>
       </div>
       <nav aria-label={props.title} class="min-h-0 flex-1 overflow-y-auto px-4 pb-4">

@@ -3,9 +3,9 @@ import type { EditorBook } from "@wycliffeassociates/sefer-editor";
 import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import BookOpen from "lucide-solid/icons/book-open";
 
+import { m } from "#app/paraglide/messages";
 import type { Analysis } from "#core/galley";
 
-import { t } from "../../../i18n";
 import { DiffCard, type Controls, type Hunk } from "../../diff";
 import type { CardAction } from "../../multibuffer/CardAction";
 import { CardList } from "../../multibuffer/CardList";
@@ -61,7 +61,7 @@ export function ChangeCards(props: ChangeCardsProps): JSX.Element {
         bookOf={(item) => item.hunk.bookId}
         seat={props.seat}
         lineLabel={(item) => item.hunk.label}
-        goneLabel={t("No longer a change")}
+        goneLabel={m.review_no_longer_a_change()}
         whenGone={(item) => ({ ...item, hunk: { ...item.hunk, units: [], all: [] } })}
         onEditing={(now) => props.onEditing(now)}
         ref={(scrollTo) => props.onScrollTo(scrollTo)}
@@ -93,14 +93,16 @@ export function ChangeCards(props: ChangeCardsProps): JSX.Element {
             open={{
               kind: "icon",
               id: "open",
-              label: t("Open in the book"),
+              label: m.review_open_in_the_book(),
               icon: BookOpen,
               onPress: () => props.onOpen(item().hunk),
             }}
           />
         )}
         empty={
-          <EmptyState title={props.preparing ? t("Preparing…") : t("No changes of this kind.")} />
+          <EmptyState
+            title={props.preparing ? m.review_preparing() : m.review_no_changes_of_this_kind()}
+          />
         }
       />
     </div>

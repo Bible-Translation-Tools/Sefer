@@ -1,11 +1,11 @@
 import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import { Result } from "effect";
 
+import { m } from "#app/paraglide/messages";
 import type { DecisionUnit } from "#core/galley";
 import type { Diff } from "#core/sync/facts";
 import { bookFacts } from "#core/sync/facts";
 
-import { t } from "../../../i18n";
 import type { Shell } from "../../../ProjectContext";
 import type { Services } from "../../../services";
 import type { SendOutcome, settleWithShared } from "../../../syncActions";
@@ -32,12 +32,12 @@ export const settledMessage = (copyReview: boolean, settledNames: readonly strin
   const books = settledNames.join(", ");
   if (copyReview) {
     return settledNames.length === 0
-      ? t("Combined with your copy")
-      : t("Combined {books} with your copy", { books });
+      ? m.review_combined_with_your_copy()
+      : m.review_combined_books_with_your_copy({ books });
   }
   return settledNames.length === 0
-    ? t("Combined with the shared project")
-    : t("Combined {books} with the shared project", { books });
+    ? m.review_combined_with_the_shared_project_2()
+    : m.review_combined_books_with_the_shared({ books });
 };
 
 export type ReceiptAction = "see" | "copy" | "retry" | "send" | "open" | "offer";
@@ -128,7 +128,7 @@ export const writerSide = (shell: Shell) => {
       stamp: { revision: 0, length: each.proposal.length },
     });
   return {
-    label: t("From Writer ({owners})", { owners: owners.join(", ") }),
+    label: m.review_from_writer_owners({ owners: owners.join(", ") }),
     texts: { head: `writer:${work.map((each) => each.head.slice(0, 7)).join("+")}`, texts },
   };
 };

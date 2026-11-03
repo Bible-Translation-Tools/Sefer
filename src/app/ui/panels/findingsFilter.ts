@@ -1,18 +1,20 @@
 import { Effect, Fiber, Stream } from "effect";
 import { createSignal, onCleanup, type Accessor } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import { DEFAULT_FILTER, type FindingsFilter, type GroupKind } from "#core/findings/filter";
 
+import type { Message } from "../../i18n";
 import type { Services } from "../../services";
 import { shellKeys, type FindingsFilterPreference } from "../../settings";
 
 export type FindingsView = GroupKind | "flat";
 
-export const VIEWS: readonly { readonly value: FindingsView; readonly label: string }[] = [
-  { value: "book", label: "By book" },
-  { value: "code", label: "By code" },
-  { value: "severity", label: "By severity" },
-  { value: "flat", label: "Flat" },
+export const VIEWS: readonly { readonly value: FindingsView; readonly label: Message }[] = [
+  { value: "book", label: m.findings_by_book },
+  { value: "code", label: m.findings_by_code },
+  { value: "severity", label: m.findings_by_severity },
+  { value: "flat", label: m.findings_flat },
 ];
 
 export interface FindingsFilterState {

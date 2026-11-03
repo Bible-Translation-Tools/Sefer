@@ -6,7 +6,6 @@ import { m } from "#app/paraglide/messages";
 import type { Restorable } from "#core/recovery/recovery";
 
 import { describe } from "../../describe";
-import { t } from "../../i18n";
 import { uiLocale } from "../../locale";
 import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
@@ -59,7 +58,7 @@ const reportRestore = (
     toasts.update(notice, {
       tone: "error",
       autoClose: false,
-      title: t("Restored {restored} of {total} book(s)", {
+      title: m.recovery_restored_of_total_books({
         restored,
         total: results.length,
       }),
@@ -69,10 +68,8 @@ const reportRestore = (
   }
   toasts.update(notice, {
     tone: "success",
-    title: t("Restored {count} book(s)", { count: restored }),
-    message: t(
-      "The work is in the editor, unsaved. Save & Review shows every changed book against the file on disk.",
-    ),
+    title: m.recovery_restored_count_books({ count: restored }),
+    message: m.recovery_the_work_is_in_the(),
   });
 };
 
@@ -94,7 +91,7 @@ function createRecoveryActions(shell: Shell) {
       "journal.books": journals.length,
     });
     const notice = toasts.progress({
-      title: t("Restoring {count} book(s)…", { count: journals.length }),
+      title: m.recovery_restoring_count_books({ count: journals.length }),
     });
     void shell.services
       .run(restoreProgram(shell, project, journals))
@@ -121,7 +118,7 @@ function createRecoveryActions(shell: Shell) {
         toasts.update(notice, {
           tone: "error",
           autoClose: false,
-          title: t("Could not restore the unsaved work"),
+          title: m.recovery_could_not_restore_the_unsaved(),
         });
       });
   };
@@ -154,19 +151,19 @@ function createRecoveryActions(shell: Shell) {
         });
         if (refused.length > 0) {
           toasts.error({
-            title: t("Could not discard every backup"),
+            title: m.recovery_could_not_discard_every_backup(),
             message: describe(refused[0]?.failure),
           });
           return;
         }
         toasts.info({
-          title: t("Discarded the unsaved work from the last session"),
+          title: m.recovery_discarded_the_unsaved_work_from(),
         });
       })
       .catch(() => {
         setBusy(false);
         operation.end("failed", { "journal.books": journals.length });
-        toasts.error({ title: t("Could not discard the unsaved work") });
+        toasts.error({ title: m.recovery_could_not_discard_the_unsaved() });
       });
   };
   return { offered, busy, books, restoreAll, discardAll };
@@ -200,10 +197,10 @@ export function RecoveryBanner() {
               >
                 <History size={16} />
               </span>
-              {t("Unsaved work from your last session")}
+              {m.recovery_unsaved_work_from_your_last()}
             </span>
           }
-          subtitle={t("{count} book(s), last backed up {when}", {
+          subtitle={m.recovery_count_books_last_backed_up({
             count: books(),
             when: lastTouched(offered()),
           })}
@@ -216,18 +213,16 @@ export function RecoveryBanner() {
                 data-recovery-restore
                 onClick={restoreAll}
               >
-                {t("Restore all")}
+                {m.recovery_restore_all()}
               </Button>
               <Button size="sm" disabled={busy()} data-recovery-discard onClick={discardAll}>
-                {t("Discard all")}
+                {m.recovery_discard_all()}
               </Button>
             </>
           }
         />
         <p class="text-small text-on-surface-secondary">
-          {t(
-            "These edits were never recorded. Restore all puts them back in the editor, unsaved — Save & Review then shows every changed book beside the file on disk, where you can keep or revert any of it. Discard all throws them away.",
-          )}
+          {m.recovery_these_edits_were_never_recorded()}
         </p>
         {/* A shortcut to the setting while developing; a release turns it off
             only in Settings › Advanced (Will, 2026-11-02). */}
@@ -242,10 +237,7 @@ export function RecoveryBanner() {
         <Show when={offered().filter((journal) => journal.stale === true).length}>
           {(count) => (
             <p class="text-small text-on-surface-warning" data-recovery-stale={count()}>
-              {t(
-                "{count} of them no longer match their file — it changed after this work was backed up — so they cannot be put back, only discarded.",
-                { count: count() },
-              )}
+              {m.recovery_count_of_them_no_longer({ count: count() })}
             </p>
           )}
         </Show>

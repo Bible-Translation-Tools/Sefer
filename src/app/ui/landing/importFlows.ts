@@ -10,7 +10,7 @@ import type { Dropped } from "#platform/web/intake";
 import { AlreadyHeld, announceSourceTexts, arrivalRoot, cloneArrival } from "../../arrival";
 import { APP_AUTHOR } from "../../author";
 import { describe, reasonOf, remoteReasonOf } from "../../describe";
-import { t } from "../../i18n";
+import type { Message } from "../../i18n";
 import { m } from "../../paraglide/messages";
 import type { Domain, Services } from "../../services";
 import { toasts } from "../primitives";
@@ -20,11 +20,11 @@ export const STEPS = ["pick", "stage", "classify", "commit"] as const;
 
 export type Step = (typeof STEPS)[number];
 
-export const STEP_LABEL: Readonly<Record<Step, string>> = {
-  pick: "Selecting the source…",
-  stage: "Copying files into staging…",
-  classify: "Working out what it is…",
-  commit: "Validating books and committing…",
+export const STEP_LABEL: Readonly<Record<Step, Message>> = {
+  pick: m.landing_pick,
+  stage: m.landing_stage,
+  classify: m.landing_classify,
+  commit: m.landing_commit,
 };
 
 export interface Progress {
@@ -83,7 +83,7 @@ const beginImport = (
   choosing: string,
 ): Flow => {
   const { services } = context;
-  const toast = toasts.progress({ title: t("Importing project"), message: choosing });
+  const toast = toasts.progress({ title: m.landing_importing_project(), message: choosing });
   context.running(title, "pick");
   const operation = services.composition.observability.operation("import.resource", {
     "import.source": source,
@@ -111,9 +111,9 @@ const failImport = (flow: Flow, cause: unknown): void => {
     "import.phase": flow.phase.name,
     "import.reason": reasonOf(cause) ?? "Unknown",
   });
-  flow.context.finished(t("Couldn't bring it in"), message, true);
+  flow.context.finished(m.landing_couldnt_bring_it_in(), message, true);
   toasts.update(flow.toast, {
-    title: t("Import failed"),
+    title: m.landing_import_failed(),
     message,
     tone: "error",
     autoClose: false,
@@ -140,7 +140,10 @@ const classifyAndCommit = async (
   const kind = await run(classify(services.fileSystem, staged), "import.classify");
 
   enterPhase(flow, "commit");
-  toasts.update(toast, { title: t("Importing project"), message: t("Committing books") });
+  toasts.update(toast, {
+    title: m.landing_importing_project(),
+    message: m.landing_committing_books(),
+  });
   const into = `${services.projectsRoot}/${target.name}`;
   const books = await run(
     commit(services.fileSystem, staged, { root: into }, target.source),
@@ -163,8 +166,8 @@ const classifyAndCommit = async (
   });
 
   flow.context.finished(
-    t("Ready"),
-    t("{count} books imported as {kind} into {root}.", {
+    m.landing_ready(),
+    m.landing_count_books_imported_as_kind({
       count: books.length,
       kind,
       root: into,
@@ -172,8 +175,8 @@ const classifyAndCommit = async (
     false,
   );
   toasts.update(toast, {
-    title: t("Project imported"),
-    message: t("{count} books", { count: books.length }),
+    title: m.landing_project_imported(),
+    message: m.common_count_books({ count: books.length }),
     tone: "success",
   });
   await run(rememberProject(services.projectsRoot, into, undefined));
@@ -184,18 +187,21 @@ const classifyAndCommit = async (
 
 export const importFolder = (context: ImportContext): void => {
   const { services } = context;
-  const title = t("Import from a folder");
-  const flow = beginImport(context, title, "folder", t("Choosing a folder"));
+  const title = m.landing_import_from_a_folder();
+  const flow = beginImport(context, title, "folder", m.landing_choosing_a_folder());
   const { run, toast } = flow;
 
   void (async () => {
-    const picked = await run(services.dialogs.pickFolder(t("Select a project folder")));
+    const picked = await run(services.dialogs.pickFolder(m.landing_select_a_project_folder()));
     const source = Option.getOrUndefined(picked);
     if (source === undefined) return declineImport(flow);
 
     context.running(title, "stage");
     flow.phase.name = "stage";
-    toasts.update(toast, { title: t("Importing project"), message: t("Staging files") });
+    toasts.update(toast, {
+      title: m.landing_importing_project(),
+      message: m.landing_staging_files(),
+    });
     const staged = await run(
       stage(services.fileSystem, [source], `${services.hostInfo.paths().temp}/import`),
       "import.stage",
@@ -215,7 +221,7 @@ export const importPicked = (
   dropped?: Dropped,
 ): void => {
   const { services } = context;
-  const flow = beginImport(context, title, source, t("Choosing files"));
+  const flow = beginImport(context, title, source, m.landing_choosing_files());
   const { run, toast } = flow;
 
   void (async () => {
@@ -228,16 +234,19 @@ export const importPicked = (
           : await intake.pickFolder(flow.operation);
     if (picked === undefined) return declineImport(flow);
 
-    context.running(title, "stage", t("0 of {total} files", { total: picked.files.length }));
+    context.running(title, "stage", m.landing_0_of_total_files({ total: picked.files.length }));
     flow.phase.name = "stage";
-    toasts.update(toast, { title: t("Importing project"), message: t("Copying files in") });
+    toasts.update(toast, {
+      title: m.landing_importing_project(),
+      message: m.landing_copying_files_in(),
+    });
     const staged = await run(
       intake.intake(
         services.fileSystem,
         `${services.hostInfo.paths().temp}/import`,
         picked,
         (written, total) =>
-          context.running(title, "stage", t("{written} of {total} files", { written, total })),
+          context.running(title, "stage", m.landing_written_of_total_files({ written, total })),
       ),
       "import.stage",
     );
@@ -253,7 +262,7 @@ export const cloneRepository = (context: ImportContext, url: string): void => {
   const { services } = context;
   const name = lastSegment(url.replace(/\.git$/u, ""));
   let into = arrivalRoot(services, "project", url);
-  const toast = toasts.progress({ title: t("Cloning {name}", { name }) });
+  const toast = toasts.progress({ title: m.landing_cloning_name({ name }) });
   context.running(m.landing_clone_repository(), "commit");
   const operation = services.composition.observability.operation("import.remote", {
     "import.source": "cloud",
@@ -279,19 +288,19 @@ export const cloneRepository = (context: ImportContext, url: string): void => {
     });
     end("passed", { "import.phase": "complete" });
     void announceSourceTexts(services, into);
-    context.finished(t("Ready"), t("Cloned into {root}.", { root: into }), false);
-    toasts.update(toast, { title: t("Cloned {name}", { name }), tone: "success" });
+    context.finished(m.landing_ready(), m.landing_cloned_into_root({ root: into }), false);
+    toasts.update(toast, { title: m.landing_cloned_name({ name }), tone: "success" });
     context.onImported();
   })().catch((cause: unknown) => {
     if (cause instanceof AlreadyHeld) {
       end("declined", { "import.phase": "clone", "import.reason": "AlreadyHeld" });
       context.clear();
       toasts.update(toast, {
-        title: t("Already on this device"),
+        title: m.landing_already_on_this_device(),
         message: cause.description,
         tone: "info",
         autoClose: false,
-        action: { label: t("Open"), onPress: () => context.open(cause.root) },
+        action: { label: m.landing_open(), onPress: () => context.open(cause.root) },
       });
       return;
     }
@@ -300,7 +309,12 @@ export const cloneRepository = (context: ImportContext, url: string): void => {
       "import.phase": "clone",
       "import.reason": reasonOf(cause) ?? "Unknown",
     });
-    context.finished(t("Couldn't bring it in"), message, true);
-    toasts.update(toast, { title: t("Clone failed"), message, tone: "error", autoClose: false });
+    context.finished(m.landing_couldnt_bring_it_in(), message, true);
+    toasts.update(toast, {
+      title: m.landing_clone_failed(),
+      message,
+      tone: "error",
+      autoClose: false,
+    });
   });
 };

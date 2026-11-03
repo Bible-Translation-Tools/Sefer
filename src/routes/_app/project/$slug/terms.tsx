@@ -4,8 +4,8 @@ import { Effect, Result } from "effect";
 import { createEffect, createMemo, createSignal, Show, untrack } from "solid-js";
 
 import { createApprovals, type ApprovalsHandle } from "#app/approvals";
-import { t } from "#app/i18n";
 import { uiLocale } from "#app/locale";
+import { m } from "#app/paraglide/messages";
 import { useShell } from "#app/ProjectContext";
 import { createExcerptFeed, readBooks, StetView } from "#app/ui/excerpts";
 import { PanelHeader, SegmentedControl } from "#app/ui/primitives";
@@ -53,7 +53,7 @@ function createTermsLoad(shell: Shell, locale: () => string) {
         if (Result.isFailure(found)) {
           guide.end("failed", { "terms.reason": found.failure.reason });
           setProblem(
-            t("Could not read the spiritual-terms guide: {reason}", {
+            m.terms_could_not_read_the_spiritual({
               reason: found.failure.reason,
             }),
           );
@@ -304,11 +304,11 @@ function Terms() {
   return (
     <main class="flex h-full min-w-0 flex-col gap-4 p-6">
       <PanelHeader
-        title={selected()?.term ?? t("Spiritual terms")}
+        title={selected()?.term ?? m.common_spiritual_terms()}
         actions={
           <Show when={load.guides().length > 0}>
             <SegmentedControl
-              label={t("Spiritual terms source language")}
+              label={m.terms_spiritual_terms_source_language()}
               tone="light"
               items={load.guides().map((guide) => ({
                 value: guide.locale,
@@ -323,7 +323,9 @@ function Terms() {
 
       <Show
         when={shell.project()}
-        fallback={<p class="text-small text-on-surface-primary">{t("Open a project first.")}</p>}
+        fallback={
+          <p class="text-small text-on-surface-primary">{m.terms_open_a_project_first()}</p>
+        }
       >
         <Show when={load.problem() !== ""}>
           <p class="rounded-md bg-surface-error px-4 py-3 text-small text-on-surface-error">
@@ -347,6 +349,6 @@ export const Route = createFileRoute("/_app/project/$slug/terms")({
       ? { locale: search["locale"] }
       : {}),
   }),
-  head: () => ({ meta: [{ title: "Sefer — spiritual terms" }] }),
+  head: () => ({ meta: [{ title: m.page_title({ page: m.page_terms() }) }] }),
   component: () => <ShellGate>{() => <Terms />}</ShellGate>,
 });

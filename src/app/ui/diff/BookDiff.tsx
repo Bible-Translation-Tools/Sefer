@@ -9,13 +9,14 @@ import {
 } from "@wycliffeassociates/sefer-editor";
 import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import type { Analysis } from "#core/galley";
 import type { DecisionUnit } from "#core/galley/diff";
-import type { ObservabilityService } from "#core/observability";
 
 import "@wycliffeassociates/sefer-editor/editor.css";
 
-import { t } from "../../i18n";
+import type { ObservabilityService } from "#core/observability";
+
 import { cx } from "../primitives";
 import { sameFields, wasBlock, type DiffSides } from "./DiffCard";
 import { hunkPaint, sidePaint, type Controls, type Side } from "./paint";
@@ -327,7 +328,7 @@ export function BookDiff(props: BookDiffProps) {
         <p class="truncate pb-1 text-smallest text-on-surface-tertiary">
           {props.currentLabel}
           <Show when={props.live !== undefined}>
-            <span class="text-brand"> · {t("editable")}</span>
+            <span class="text-brand"> · {m.diff_editable()}</span>
           </Show>
         </p>
         <div

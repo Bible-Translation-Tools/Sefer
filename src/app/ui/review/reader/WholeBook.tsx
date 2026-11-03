@@ -2,9 +2,9 @@ import type { JSX } from "@solidjs/web";
 import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import { Show, untrack } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import type { DecisionUnit } from "#core/galley";
 
-import { t } from "../../../i18n";
 import { BookDiff, type BookDiffApi, type Controls } from "../../diff";
 import type { CrumbChapter } from "../../workspace/Crumbs";
 import { Crumbs, LocationStrip } from "../../workspace/Crumbs";
@@ -69,8 +69,8 @@ function WholeBookCrumbs(props: { readonly book: WholeBookProps; readonly held: 
             testId="review-linked"
             following={props.book.linked()}
             tooltipSide="bottom"
-            stopLabel={t("Scroll the two texts separately")}
-            startLabel={t("Keep the two texts at the same verse")}
+            stopLabel={m.review_scroll_the_two_texts_separately()}
+            startLabel={m.review_keep_the_two_texts_at()}
             onToggle={props.book.onToggleLinked}
           />
         }

@@ -1,8 +1,8 @@
 import { Show } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import type { Clock, IncomingPlan, Sync } from "#core/sync";
 
-import { t } from "../../i18n";
 import { ago, exact } from "../panels/format";
 import { cx } from "../primitives";
 import { incomingWords, outgoingWords } from "./copy";
@@ -20,12 +20,15 @@ function ClockLine(props: {
         class="text-small"
         title={props.clock.at === undefined ? undefined : exact(props.clock.at)}
       >
-        <Show when={props.clock.at !== undefined} fallback={<span>{t("no versions yet")}</span>}>
+        <Show
+          when={props.clock.at !== undefined}
+          fallback={<span>{m.cloud_no_versions_yet()}</span>}
+        >
           <span class="font-medium text-on-surface-primary">{ago(props.clock.at ?? 0)}</span>
           <Show when={props.clock.by !== undefined}>
             <span class="text-on-surface-tertiary">
               {" "}
-              {t("by {who}", { who: props.clock.by ?? "" })}
+              {m.cloud_by_who({ who: props.clock.by ?? "" })}
             </span>
           </Show>
         </Show>
@@ -53,21 +56,23 @@ export function SyncClocks(props: {
     <div class={cx("flex flex-wrap gap-6", props.class)}>
       <ClockLine
         test="local"
-        label={t("This device")}
+        label={m.cloud_this_device()}
         clock={props.sync.clocks.local}
         unshared={
-          props.sync.clocks.local.unshared === 0 ? t("nothing waiting to be sent") : outgoingWords()
+          props.sync.clocks.local.unshared === 0
+            ? m.cloud_nothing_waiting_to_be_sent()
+            : outgoingWords()
         }
       />
       <ClockLine
         test="shared"
-        label={t("Shared project")}
+        label={m.cloud_shared_project()}
         clock={props.sync.clocks.shared}
         unshared={
           props.sync.clocks.shared.unshared === 0
-            ? t("nothing waiting to be received")
+            ? m.cloud_nothing_waiting_to_be_received()
             : ((props.plan === undefined ? undefined : incomingWords(props.plan)) ??
-              t("changes you don't have yet"))
+              m.cloud_changes_you_dont_have_yet())
         }
       />
     </div>

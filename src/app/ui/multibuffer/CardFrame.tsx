@@ -2,7 +2,8 @@ import type { JSX } from "@solidjs/web";
 import PencilIcon from "lucide-solid/icons/pencil";
 import { Show } from "solid-js";
 
-import { t } from "../../i18n";
+import { m } from "#app/paraglide/messages";
+
 import { Badge, Card, cx } from "../primitives";
 import { CardActionButton, CardActions, type CardAction } from "./CardAction";
 
@@ -40,15 +41,15 @@ const editAction = (edit: CardEdit): CardAction | undefined => {
     return {
       kind: "button",
       id: "done",
-      label: t("Done"),
+      label: m.common_done(),
       emphasis: "primary",
-      title: t("Stop editing (Escape)"),
+      title: m.multibuffer_stop_editing_escape(),
       onPress: edit.onDone,
     };
   return {
     kind: "button",
     id: "edit",
-    label: t("Edit"),
+    label: m.multibuffer_edit(),
     icon: PencilIcon,
     emphasis: "tertiary",
     onPress: edit.onEdit,
@@ -108,7 +109,9 @@ export function CardFrame(props: CardFrameProps) {
       role={props.condensed === true ? "button" : undefined}
       tabindex={props.condensed === true ? 0 : undefined}
       aria-label={
-        props.condensed === true ? t("Open {place}", { place: String(props.title) }) : undefined
+        props.condensed === true
+          ? m.multibuffer_open_place({ place: String(props.title) })
+          : undefined
       }
       class={cx(
         "group/card overflow-hidden",

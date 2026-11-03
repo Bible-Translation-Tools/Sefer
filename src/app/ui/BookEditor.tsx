@@ -20,7 +20,6 @@ import { stale, type Finding } from "#core/findings/finding";
 
 import { editorWords } from "../editorWords";
 import { reportEdits } from "../editReports";
-import { t } from "../i18n";
 import { textDirection } from "../language";
 import { useShell } from "../ProjectContext";
 import { shellKeys } from "../settings";
@@ -73,7 +72,7 @@ function labelAnswers(shell: Shell, finding: Finding, openLabels: () => void): C
                 toasts.info({
                   title: m.chapter_labels_fine_everywhere({ word }),
                   message: m.chapter_labels_fine_saved(),
-                  action: { label: t("Undo"), onPress: () => void shell.unsuppress(id) },
+                  action: { label: m.common_undo(), onPress: () => void shell.unsuppress(id) },
                 });
               });
             },
@@ -92,18 +91,18 @@ function watchCorpus(
     if (finding.producer !== "sous") return undefined;
     const check = checkLabel(finding);
     return [
-      { name: t("Fine here"), run: () => fineHere(shell, finding) },
+      { name: m.common_fine_here(), run: () => fineHere(shell, finding) },
       ...(finding.pattern === undefined
         ? []
         : [
             {
-              name: t("Always allow “{text}”", { text: flaggedText(shell, finding) }),
+              name: m.editor_always_allow_text({ text: flaggedText(shell, finding) }),
               run: () => allow(shell, finding),
             },
           ]),
       ...(check === undefined
         ? []
-        : [{ name: t("Turn off “{check}”", { check }), run: () => turnOff(shell, finding) }]),
+        : [{ name: m.editor_turn_off_check({ check }), run: () => turnOff(shell, finding) }]),
     ];
   };
   const corpus = (): void => {

@@ -5,7 +5,7 @@ import { Match, Switch, createEffect, createSignal, onCleanup, untrack } from "s
 import { AlreadyHeld, announceSourceTexts, cloneArrival } from "#app/arrival";
 import { describe } from "#app/describe";
 import { contentHostFor } from "#app/endpoints";
-import { t } from "#app/i18n";
+import { m } from "#app/paraglide/messages";
 import { useShell, type Shell } from "#app/ProjectContext";
 import { projectsFrom, standingOf } from "#app/shareLinks";
 import { placeOf, sourceUrl, type Source, type VersionStanding } from "#core/project/shareLink";
@@ -32,36 +32,24 @@ const standingCopy = (
   switch (standing) {
     case "ahead":
       return {
-        title: t("Your copy is newer than this link"),
-        message: t(
-          "The link was made at version {version}; you are seeing later work on top of it.",
-          { version },
-        ),
+        title: m.landing_your_copy_is_newer_than(),
+        message: m.landing_the_link_was_made_at({ version }),
       };
     case "behind":
       return {
-        title: t("This link is newer than your copy"),
-        message: t(
-          "It was made at version {version}. Get the changes from the shared project to see what it shows.",
-          { version },
-        ),
+        title: m.landing_this_link_is_newer_than(),
+        message: m.landing_it_was_made_at_version({ version }),
       };
     case "unknown":
       return {
-        title: t("This link may show a different version"),
-        message: t(
-          "It was made at version {version}. Your copy holds only its newest history, so Sefer cannot tell whether that version is older; History can bring in the rest.",
-          { version },
-        ),
+        title: m.landing_this_link_may_show_a(),
+        message: m.landing_it_was_made_at_version_version({ version }),
       };
     case "same":
     case "other":
       return {
-        title: t("This link was made at a version your copy does not have"),
-        message: t(
-          "Version {version}. Check for changes; if that does not bring it, the sender may not have sent it yet.",
-          { version },
-        ),
+        title: m.landing_this_link_was_made_at(),
+        message: m.landing_version_version_check_for_changes({ version }),
       };
   }
 };
@@ -111,7 +99,7 @@ const lookFor = (context: LinkContext, named: Source, target: Place, project: st
         ? { kind: "offer" }
         : {
             kind: "unknown",
-            why: t("{host} has no project {project} that this device can see.", {
+            why: m.landing_host_has_no_project_project({
               host: named.host,
               project,
             }),
@@ -133,7 +121,7 @@ const downloadFrom = (context: LinkContext, named: Source, target: Place): void 
       if (arrived.failure instanceof AlreadyHeld)
         return openAt(context, arrived.failure.root, target);
       toasts.error({
-        title: t("Could not download the project"),
+        title: m.landing_could_not_download_the_project(),
         message: describe(arrived.failure),
       });
       if (context.isAlive()) setPhase({ kind: "offer" });
@@ -176,7 +164,7 @@ const createLinkOpening = (props: LinkProps) => {
       if (named === undefined) {
         setPhase({
           kind: "unknown",
-          why: t("No cloud is set up on this device to look for it on."),
+          why: m.landing_no_cloud_is_set_up(),
         });
         return;
       }
@@ -210,11 +198,11 @@ const OfferState = (props: {
   readonly onProjects: () => void;
 }) => (
   <EmptyState
-    title={t("{owner}/{repo} is not on this device yet", {
+    title={m.landing_owner_repo_is_not_on({
       owner: props.owner,
       repo: props.repo,
     })}
-    description={t("Download it to open the link. It is added to your projects.")}
+    description={m.landing_download_it_to_open_the()}
     action={
       <div class="flex gap-2">
         <Button
@@ -222,10 +210,10 @@ const OfferState = (props: {
           onClick={props.onDownload}
           disabled={props.downloading}
         >
-          {props.downloading ? t("Downloading…") : t("Download")}
+          {props.downloading ? m.landing_downloading() : m.common_download()}
         </Button>
         <Button variant="secondary" onClick={props.onProjects}>
-          {t("Go to projects")}
+          {m.landing_go_to_projects()}
         </Button>
       </div>
     }
@@ -253,11 +241,11 @@ export function OpenByLink(props: LinkProps) {
         </Match>
         <Match when={phase().kind === "unknown"}>
           <EmptyState
-            title={t("This link cannot be opened here")}
+            title={m.landing_this_link_cannot_be_opened()}
             description={opening.why()}
             action={
               <Button variant="secondary" onClick={opening.toProjects}>
-                {t("Go to projects")}
+                {m.landing_go_to_projects()}
               </Button>
             }
           />

@@ -1,9 +1,10 @@
 import { useNavigate } from "@tanstack/solid-router";
 import { Match, Show, Switch, createSignal } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
+
 import { collaboration } from "../../collaboration";
 import { describe } from "../../describe";
-import { t } from "../../i18n";
 import { useShell, type Shell } from "../../ProjectContext";
 import { reviewNeeded, suggestMyChanges } from "../../suggestions";
 import { ago } from "../panels/format";
@@ -31,13 +32,13 @@ const offerChanges = async (
   try {
     await suggestMyChanges(services, project);
     toasts.success({
-      title: t("Your changes are offered"),
-      message: t("The project's editors will see them. Later sends add to the same suggestion."),
+      title: m.cloud_your_changes_are_offered(),
+      message: m.cloud_the_projects_editors_will_see(),
     });
   } catch (cause) {
     const needed = reviewNeeded(cause);
     if (needed === undefined)
-      toasts.error({ title: t("Could not offer your changes"), message: describe(cause) });
+      toasts.error({ title: m.cloud_could_not_offer_your_changes(), message: describe(cause) });
     else {
       toasts.info(offerRefusalCopy(needed));
       toReview(needed.search);
@@ -96,28 +97,22 @@ const CannotWrite = (props: {
   readonly onOwnCopy: () => void;
 }) => (
   <>
-    <p class="text-small font-semibold">
-      {t("You can suggest changes to this project, not change it directly.")}
-    </p>
+    <p class="text-small font-semibold">{m.cloud_you_can_suggest_changes_to()}</p>
     <Show
       when={!props.standalone}
       fallback={
         <p class="text-small text-on-surface-secondary">
-          {t("This shared project is yours. To suggest to another one, choose it in ")}
+          {m.cloud_this_shared_project_is_yours_to()}
           <button type="button" class="text-brand underline" onClick={props.onSettings}>
-            {t("Settings")}
+            {m.common_settings()}
           </button>
           .
         </p>
       }
     >
-      <p class="text-small text-on-surface-secondary">
-        {t(
-          "Work in your own copy: your changes are sent there, and an editor of the shared project brings them in when you offer them.",
-        )}
-      </p>
+      <p class="text-small text-on-surface-secondary">{m.cloud_work_in_your_own_copy()}</p>
       <Button size="sm" variant="primary" loading={props.busy} onClick={props.onOwnCopy}>
-        {t("Work in my own copy")}
+        {m.cloud_work_in_my_own_copy()}
       </Button>
     </Show>
   </>
@@ -127,13 +122,13 @@ const WaitingNote = (props: { readonly waiting: number; readonly onSee: () => vo
   <div class="flex items-center gap-2">
     <p class="min-w-0 flex-1 text-small text-on-surface-secondary">
       {props.waiting === 1
-        ? t("1 suggestion is waiting for an editor.")
-        : t("{count} suggestions are waiting for an editor.", {
+        ? m.cloud_1_suggestion_is_waiting_for()
+        : m.cloud_count_suggestions_are_waiting_for({
             count: props.waiting,
           })}
     </p>
     <Button size="sm" variant="secondary" onClick={props.onSee}>
-      {t("See them")}
+      {m.cloud_see_them()}
     </Button>
   </div>
 );
@@ -141,15 +136,13 @@ const WaitingNote = (props: { readonly waiting: number; readonly onSee: () => vo
 const MineNote = (props: { readonly held: Facts }) => (
   <Switch
     fallback={
-      <p class="text-small text-on-surface-secondary">
-        {t("Offer your changes when they are ready; an editor brings them in.")}
-      </p>
+      <p class="text-small text-on-surface-secondary">{m.cloud_offer_your_changes_when_they()}</p>
     }
   >
     <Match when={props.held.mine?.kind === "waiting" ? props.held.mine : undefined}>
       {(mine) => (
         <p class="text-small text-on-surface-secondary" data-sync-suggestion="waiting">
-          {t("Your suggestion is waiting for the project's editors · {when}", {
+          {m.cloud_your_suggestion_is_waiting_for({
             when: ago(Date.parse(mine().suggestion.updatedAt)),
           })}
         </p>
@@ -157,7 +150,7 @@ const MineNote = (props: { readonly held: Facts }) => (
     </Match>
     <Match when={props.held.mine?.kind === "taken"}>
       <p class="text-small text-on-surface-success" data-sync-suggestion="taken">
-        {t("Your last suggestion was brought into the shared project.")}
+        {m.cloud_your_last_suggestion_was_brought()}
       </p>
     </Match>
     <Match
@@ -169,7 +162,7 @@ const MineNote = (props: { readonly held: Facts }) => (
       {(mine) => (
         <div class="space-y-1" data-sync-suggestion="declined">
           <p class="text-small text-on-surface-secondary">
-            {t("Your last suggestion was closed without being brought in.")}
+            {m.cloud_your_last_suggestion_was_closed()}
           </p>
           <Show when={mine().note}>
             {(note) => (
@@ -192,14 +185,14 @@ const CopyMode = (props: {
   readonly onWorkDirectly: () => void;
 }) => (
   <>
-    <p class="text-small font-semibold">{t("You're working in your own copy.")}</p>
+    <p class="text-small font-semibold">{m.cloud_youre_working_in_your_own()}</p>
     <Show when={props.held.copyAhead}>
       <div class="flex items-center gap-2" data-sync-copy="ahead">
         <p class="min-w-0 flex-1 text-small text-on-surface-secondary">
-          {t("Your copy has changes this device does not: from another device, or offered before.")}
+          {m.cloud_your_copy_has_changes_this()}
         </p>
         <Button size="sm" variant="primary" onClick={props.onSee}>
-          {t("See the changes")}
+          {m.cloud_see_the_changes()}
         </Button>
       </div>
     </Show>
@@ -207,15 +200,15 @@ const CopyMode = (props: {
     <div class="flex flex-wrap items-center gap-2">
       <Show when={props.held.mine?.kind !== "waiting" && props.held.offerable}>
         <Button size="sm" variant="secondary" loading={props.busy} onClick={props.onOffer}>
-          {t("Offer my changes")}
+          {m.cloud_offer_my_changes()}
         </Button>
       </Show>
       <Show when={props.held.canWrite === true}>
         <span class="min-w-0 flex-1 text-smallest text-on-surface-tertiary">
-          {t("You can now work directly in the shared project.")}
+          {m.cloud_you_can_now_work_directly()}
         </span>
         <Button size="sm" variant="tertiary" disabled={props.busy} onClick={props.onWorkDirectly}>
-          {t("Work directly")}
+          {m.cloud_work_directly()}
         </Button>
       </Show>
     </div>

@@ -13,7 +13,6 @@ import { Show, createEffect, createSignal, untrack } from "solid-js";
 import type { Sync } from "#core/sync";
 
 import { collaboration } from "../../collaboration";
-import { t } from "../../i18n";
 import { m } from "../../paraglide/messages";
 import type { Shell } from "../../ProjectContext";
 import { syncStatus } from "../../syncStatus";
@@ -71,8 +70,8 @@ const copyOf = (held: Sync | undefined, inCopy: boolean): StateCopy | undefined 
 const copyToClipboard = (held: string): void => {
   void navigator.clipboard
     .writeText(held)
-    .then(() => toasts.success({ title: t("Link copied") }))
-    .catch(() => toasts.error({ title: t("Could not copy the link"), message: held }));
+    .then(() => toasts.success({ title: m.common_link_copied() }))
+    .catch(() => toasts.error({ title: m.cloud_could_not_copy_the_link(), message: held }));
 };
 
 const createSyncPopover = (shell: Shell, quick: QuickSync, account: Account) => {
@@ -172,7 +171,7 @@ const QuickRow = (props: {
       <Show when={props.fetchedAt}>
         {(at) => (
           <span class="ms-auto text-smallest text-on-surface-tertiary">
-            {t("checked {when}", { when: ago(at()) })}
+            {m.cloud_checked_when({ when: ago(at()) })}
           </span>
         )}
       </Show>
@@ -181,8 +180,8 @@ const QuickRow = (props: {
         class={props.fetchedAt === undefined ? "ms-auto" : undefined}
         label={
           props.fetchedAt === undefined
-            ? t("Check for changes")
-            : t("Check for changes (last checked {when})", {
+            ? m.cloud_check_for_changes()
+            : m.cloud_check_for_changes_last_checked({
                 when: ago(props.fetchedAt ?? 0),
               })
         }
@@ -197,10 +196,10 @@ const QuickRow = (props: {
 const ShareLink = (props: { readonly href: string; readonly onCopy: () => void }) => (
   <details class="border-t border-surface-border pt-3" data-sync-details>
     <summary class="cursor-pointer text-smallest font-medium text-on-surface-tertiary">
-      {t("Project details")}
+      {m.cloud_project_details()}
     </summary>
     <label class="mt-3 block pb-1 text-smallest text-on-surface-tertiary" for="sync-share-link">
-      {t("Shared project link — send it to a teammate to work on this project")}
+      {m.cloud_shared_project_link_send_it()}
     </label>
     <div class="flex items-center gap-2">
       <Input
@@ -212,7 +211,7 @@ const ShareLink = (props: { readonly href: string; readonly onCopy: () => void }
         onFocus={(event) => event.currentTarget.select()}
       />
       <Button size="sm" variant="secondary" icon={<Copy />} onClick={props.onCopy}>
-        {t("Copy")}
+        {m.cloud_copy()}
       </Button>
     </div>
   </details>
@@ -238,7 +237,9 @@ const SyncDetails = (props: {
     <Show when={(props.pop.plan()?.books.length ?? 0) > 0 ? props.pop.plan() : undefined}>
       {(arriving) => (
         <div class="space-y-2 border-t border-surface-border pt-3">
-          <p class="text-smallest font-medium text-on-surface-tertiary">{t("Incoming changes")}</p>
+          <p class="text-smallest font-medium text-on-surface-tertiary">
+            {m.cloud_incoming_changes()}
+          </p>
           <PlanBooks plan={arriving()} />
         </div>
       )}
@@ -303,7 +304,7 @@ const AccountRow = (props: {
             onClick={props.account.signOut}
             disabled={props.account.busy()}
           >
-            {t("Sign out")}
+            {m.cloud_sign_out()}
           </Button>
         </div>
       )}
@@ -333,7 +334,7 @@ export function SyncPopover(props: { readonly sync: SyncHandle }) {
   const { quick, account, pop } = untrack(() => props.sync);
   return (
     <Popover
-      label={t("Sync")}
+      label={m.cloud_sync()}
       side="bottom"
       align="end"
       class="w-[min(480px,92vw)]"
@@ -343,7 +344,9 @@ export function SyncPopover(props: { readonly sync: SyncHandle }) {
     >
       <Show
         when={quick.sync()}
-        fallback={<p class="text-small text-on-surface-secondary">{t("Reading this project…")}</p>}
+        fallback={
+          <p class="text-small text-on-surface-secondary">{m.cloud_reading_this_project()}</p>
+        }
       >
         {(held) => <SyncDetails held={held()} pop={pop} quick={quick} account={account} />}
       </Show>

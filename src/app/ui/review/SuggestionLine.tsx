@@ -1,9 +1,10 @@
 import { useNavigate } from "@tanstack/solid-router";
 import { Show, createEffect, createSignal } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
+
 import { collaboration } from "../../collaboration";
 import { describe } from "../../describe";
-import { t } from "../../i18n";
 import { useShell, type Navigate, type Shell } from "../../ProjectContext";
 import { declineSuggestion, suggestionDetails, type SuggestionDetails } from "../../suggestions";
 import { ago } from "../panels/format";
@@ -28,19 +29,19 @@ function declineHeld(
   declineSuggestion(shell.services, project, held.suggestion, staticNote)
     .then(() => {
       toasts.success({
-        title: t("Declined"),
+        title: m.review_declined(),
         message:
           staticNote.trim() === ""
-            ? t("The suggestion is closed; {author} sees it was not brought in.", {
+            ? m.review_the_suggestion_is_closed_author({
                 author: held.suggestion.author,
               })
-            : t("{author} can read your note.", { author: held.suggestion.author }),
+            : m.review_author_can_read_your_note({ author: held.suggestion.author }),
       });
       void collaboration.refresh(shell.services, project);
       void navigate({ to: "/project/$slug/suggestions", params: { slug: shell.slug() } });
     })
     .catch((cause: unknown) =>
-      toasts.error({ title: t("Could not decline it"), message: describe(cause) }),
+      toasts.error({ title: m.review_could_not_decline_it(), message: describe(cause) }),
     )
     .finally(() => state.setBusy(false));
 }
@@ -61,17 +62,17 @@ function DeclineForm(props: {
       <Input
         size="sm"
         wrapperClass="min-w-0 flex-1"
-        placeholder={t("Why? {author} will read this.", {
+        placeholder={m.review_why_author_will_read_this({
           author: props.held.suggestion.author,
         })}
         value={props.note()}
         onInput={(event) => props.setNote(event.currentTarget.value)}
       />
       <Button size="sm" type="submit" variant="secondary" loading={props.busy()}>
-        {t("Decline")}
+        {m.common_decline()}
       </Button>
       <Button size="sm" variant="tertiary" onClick={props.onCancel}>
-        {t("Not now")}
+        {m.common_not_now()}
       </Button>
     </form>
   );
@@ -104,13 +105,13 @@ export function SuggestionLine(props: { readonly number: number }) {
               <span class="font-semibold">{held().suggestion.author}</span>
               <span class="text-on-surface-secondary">
                 {" "}
-                {t("suggested")} “{held().suggestion.title}” ·{" "}
+                {m.review_suggested()} “{held().suggestion.title}” ·{" "}
                 {ago(Date.parse(held().suggestion.updatedAt))}
               </span>
             </p>
             <Show when={!declining() && held().suggestion.state === "open"}>
               <Button size="sm" variant="tertiary" onClick={() => setDeclining(true)}>
-                {t("Decline…")}
+                {m.review_decline()}
               </Button>
             </Show>
           </div>

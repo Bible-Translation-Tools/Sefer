@@ -11,10 +11,10 @@
 import { Effect } from "effect";
 import { Show, createEffect, createSignal } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import { projectUpstreams } from "#core/migrate/writerWork";
 
 import { describe } from "../../describe";
-import { t } from "../../i18n";
 import { useShell, type Shell } from "../../ProjectContext";
 import { stopFollowingWriter } from "../../writerWatch";
 import { Button, Card, PanelHeader, toasts } from "../primitives";
@@ -37,7 +37,7 @@ const StopConfirm = (props: {
 }) => (
   <div class="flex flex-wrap items-center gap-2">
     <span class="text-small">
-      {t("Stop following all {count}? This is recorded as a version.", {
+      {m.cloud_stop_following_all_count_this({
         count: props.followed,
       })}
     </span>
@@ -49,10 +49,10 @@ const StopConfirm = (props: {
       disabled={props.busy}
       onClick={props.onStop}
     >
-      {t("Stop following")}
+      {m.cloud_stop_following()}
     </Button>
     <Button variant="tertiary" size="sm" onClick={props.onCancel}>
-      {t("Cancel")}
+      {m.common_cancel()}
     </Button>
   </div>
 );
@@ -70,9 +70,9 @@ export function WriterFollowCard(props: { readonly root: string }) {
       try {
         await services.run(Effect.asVoid(stopFollowingWriter(services, root)));
         setFollowed(0);
-        toasts.success({ title: t("Stopped following the Writer projects") });
+        toasts.success({ title: m.cloud_stopped_following_the_writer_projects() });
       } catch (cause) {
-        toasts.error({ title: t("Could not stop following"), message: describe(cause) });
+        toasts.error({ title: m.cloud_could_not_stop_following(), message: describe(cause) });
       } finally {
         setBusy(false);
         setAsking(false);
@@ -83,18 +83,15 @@ export function WriterFollowCard(props: { readonly root: string }) {
   return (
     <Show when={followed() > 0}>
       <Card class="space-y-3" data-cloud-card="writer">
-        <PanelHeader level={3} title={t("Writer projects")} />
+        <PanelHeader level={3} title={m.cloud_writer_projects()} />
         <p class="text-small text-on-surface-secondary">
-          {t(
-            "{count} books follow the BTT Writer projects they came from. Every check for changes asks them for new work, after the shared project.",
-            { count: followed() },
-          )}
+          {m.cloud_count_books_follow_the_btt({ count: followed() })}
         </p>
         <Show
           when={asking()}
           fallback={
             <Button variant="secondary" size="sm" onClick={() => setAsking(true)}>
-              {t("Stop following Writer projects…")}
+              {m.cloud_stop_following_writer_projects()}
             </Button>
           }
         >

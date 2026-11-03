@@ -1,8 +1,8 @@
+import { m } from "#app/paraglide/messages";
 import type { Project } from "#core/project/project";
 
 import { collaboration } from "../../collaboration";
 import { describe } from "../../describe";
-import { t } from "../../i18n";
 import type { Services } from "../../services";
 import { workInOwnCopy, workInShared } from "../../suggestions";
 import { syncWatch } from "../../syncWatch";
@@ -16,22 +16,19 @@ export const chooseOwnCopy = async (services: Services, project: Project): Promi
     switch (outcome.kind) {
       case "copy":
         toasts.success({
-          title: t("You're working in your own copy"),
+          title: m.cloud_youre_working_in_your_own_copy(),
           message:
             outcome.renamed === true
-              ? t(
-                  "You already had a project of that name, so your copy is {copy}. Your changes go there; offer them to the shared project when ready.",
-                  { copy: outcome.copy },
-                )
-              : t("Your changes go to {copy}. Offer them to the shared project when ready.", {
+              ? m.cloud_you_already_had_a_project({ copy: outcome.copy })
+              : m.cloud_your_changes_go_to_copy({
                   copy: outcome.copy,
                 }),
         });
         break;
       case "rerooted":
         toasts.success({
-          title: t("This project is your copy of {shared}", { shared: outcome.shared }),
-          message: t("Your changes stay in your copy until you offer them."),
+          title: m.cloud_this_project_is_your_copy({ shared: outcome.shared }),
+          message: m.cloud_your_changes_stay_in_your(),
         });
         break;
       case "standalone":
@@ -39,7 +36,7 @@ export const chooseOwnCopy = async (services: Services, project: Project): Promi
     }
     return "done";
   } catch (cause) {
-    toasts.error({ title: t("Could not set up your copy"), message: describe(cause) });
+    toasts.error({ title: m.cloud_could_not_set_up_your(), message: describe(cause) });
     return "failed";
   } finally {
     await Promise.all([

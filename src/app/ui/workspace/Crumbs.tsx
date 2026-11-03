@@ -5,7 +5,8 @@ import ChevronUp from "lucide-solid/icons/chevron-up";
 import ListTree from "lucide-solid/icons/list-tree";
 import { Show, createMemo, createSignal } from "solid-js";
 
-import { t } from "../../i18n";
+import { m } from "#app/paraglide/messages";
+
 import { FilterList, IconButton, Popover } from "../primitives";
 
 export interface CrumbBook {
@@ -80,7 +81,7 @@ function BookCrumb(props: {
 }) {
   return (
     <Popover
-      label={t("Books")}
+      label={m.common_books()}
       side="bottom"
       align="start"
       class="flex max-h-[60vh] w-64 flex-col p-2"
@@ -93,8 +94,8 @@ function BookCrumb(props: {
       }
     >
       <FilterList
-        label={t("Filter books")}
-        placeholder={t("Book or code…")}
+        label={m.workspace_filter_books()}
+        placeholder={m.workspace_book_or_code()}
         items={props.crumbs.books()}
         current={props.crumbs.currentBook}
         key={(book) => book.id}
@@ -133,7 +134,7 @@ function ChapterCrumb(props: {
 }) {
   return (
     <Popover
-      label={t("Outline")}
+      label={m.workspace_outline()}
       side="bottom"
       align="start"
       class="flex max-h-[60vh] w-56 flex-col p-2"
@@ -151,8 +152,8 @@ function ChapterCrumb(props: {
       }
     >
       <FilterList
-        label={t("Filter chapters")}
-        placeholder={t("Chapter…")}
+        label={m.workspace_filter_chapters()}
+        placeholder={m.workspace_chapter()}
         items={props.rows}
         current={
           props.crumbs.currentChapter === undefined
@@ -169,7 +170,7 @@ function ChapterCrumb(props: {
         {(row) => (
           <>
             <span data-testid={`outline-${row.intro ? "intro" : row.label}`}>
-              {row.intro ? row.label : t("Chapter {label}", { label: row.label })}
+              {row.intro ? row.label : m.common_chapter_label({ label: row.label })}
             </span>
             <Count count={row.count} />
           </>
@@ -187,7 +188,7 @@ function StepButtons(props: { readonly step: CrumbsProps["step"] }) {
           <IconButton
             size="sm"
             data-testid="location-previous"
-            label={t("Previous chapter")}
+            label={m.workspace_previous_chapter()}
             tooltipSide="bottom"
             icon={<ChevronUp />}
             disabled={step().first}
@@ -196,7 +197,7 @@ function StepButtons(props: { readonly step: CrumbsProps["step"] }) {
           <IconButton
             size="sm"
             data-testid="location-next"
-            label={t("Next chapter")}
+            label={m.workspace_next_chapter()}
             tooltipSide="bottom"
             icon={<ChevronDown />}
             disabled={step().last}

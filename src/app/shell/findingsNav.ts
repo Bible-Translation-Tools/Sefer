@@ -3,12 +3,12 @@ import * as TextResult from "@wycliffeassociates/sefer-text/result";
 import { Option, Result } from "effect";
 import type { Accessor, Setter } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import type { Finding } from "#core/findings/finding";
 import { navigateTarget } from "#core/findings/findings";
 import * as Fixes from "#core/fixes/fixes";
 import type { Project } from "#core/project/project";
 
-import { t } from "../i18n";
 import type { Services } from "../services";
 import type { ShellStores } from "../shellStores";
 import type { Navigate } from "./types";
@@ -48,7 +48,7 @@ export const createFindingsNav = ({
   const stepFinding = (delta: 1 | -1): void => {
     const list = findings();
     if (list.length === 0) {
-      report(t("no findings"));
+      report(m.findings_no_findings());
       return;
     }
     const next = (cursor() + delta + list.length) % list.length;
@@ -63,7 +63,7 @@ export const createFindingsNav = ({
       to: "/project/$slug/book/$book",
       params: { slug: slugFor(held_project.root), book: encodeURIComponent(target.bookId) },
     });
-    report(t("{code} at {from}", { code: held.code, from: target.from }));
+    report(m.findings_code_at_from({ code: held.code, from: target.from }));
   };
 
   const applyFix = (): void => {
@@ -72,19 +72,19 @@ export const createFindingsNav = ({
     if (held === undefined || book === undefined) return;
     const analysis = Option.getOrUndefined(services.projectAnalysis.analysis(held.bookId));
     if (analysis === undefined) {
-      report(t("no analysis for {book}", { book: held.bookId }));
+      report(m.findings_no_analysis_for_book({ book: held.bookId }));
       return;
     }
     const previewed = Fixes.preview(held, book, analysis.analysis);
     if (Result.isFailure(previewed)) {
-      report(t("no fix: {reason}", { reason: previewed.failure.reason }));
+      report(m.findings_no_fix_reason({ reason: previewed.failure.reason }));
       return;
     }
     const applied = Fixes.applyFix(previewed.success, book);
     report(
       TextResult.isSuccess(applied)
-        ? t("applied {label}", { label: previewed.success.label })
-        : t("refused by {rule}", { rule: applied.failure.rule }),
+        ? m.findings_applied_label({ label: previewed.success.label })
+        : m.findings_refused_by_rule({ rule: applied.failure.rule }),
     );
     changed({ kind: "book.apply", books: [held.bookId] });
   };

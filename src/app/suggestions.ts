@@ -1,5 +1,6 @@
 import { Effect, Option } from "effect";
 
+import { m } from "#app/paraglide/messages";
 import { Git, type Commit, type Repo } from "#core/git/git";
 import { Settings } from "#core/host/settings";
 import type { Project } from "#core/project/project";
@@ -9,7 +10,6 @@ import { BROUGHT_IN, Suggestions, type Suggestion } from "#core/remote/suggestio
 import { notIn, trackingRef } from "#core/sync";
 
 import { resolveEndpoints } from "./endpoints";
-import { t } from "./i18n";
 import type { Services } from "./services";
 import { chosenMode, setChosenMode, type CollabMode } from "./syncSettings";
 
@@ -239,7 +239,7 @@ export const suggestTo = (
   );
 
 const suggestionTitle = (now = new Date()): string =>
-  t("Changes suggested on {date}", {
+  m.suggestions_changes_suggested_on_date({
     date: now.toLocaleDateString(undefined, { dateStyle: "long" }),
   });
 

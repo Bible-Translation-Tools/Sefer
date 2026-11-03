@@ -38,8 +38,8 @@ export const writerTour: Tour = {
   id: "writer",
   kind: "tutorial",
   audience: "internal",
-  title: "From BTT Writer to one project",
-  summary:
+  title: () => "From BTT Writer to one project",
+  summary: () =>
     "Gather a language's single-book Writer projects into one Bible, choosing between rival copies of a book, with every Writer save kept as history.",
   needsProject: false,
   start: "/projects",

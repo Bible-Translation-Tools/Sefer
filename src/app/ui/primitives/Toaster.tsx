@@ -4,6 +4,8 @@ import LoaderCircle from "lucide-solid/icons/loader-circle";
 import X from "lucide-solid/icons/x";
 import { For, Show } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
+
 import { Button } from "./Button";
 import { cx } from "./cx";
 import { IconButton } from "./IconButton";
@@ -68,7 +70,7 @@ export function Toaster() {
             </Show>
             <Show when={toast.dismissible}>
               <IconButton
-                label="Dismiss"
+                label={m.common_dismiss()}
                 size="sm"
                 icon={<X />}
                 onClick={() => dismiss(toast.id)}

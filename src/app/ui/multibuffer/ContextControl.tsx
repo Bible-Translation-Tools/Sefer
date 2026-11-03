@@ -4,9 +4,9 @@ import ChevronUpIcon from "lucide-solid/icons/chevron-up";
 import FoldVerticalIcon from "lucide-solid/icons/fold-vertical";
 import UnfoldVerticalIcon from "lucide-solid/icons/unfold-vertical";
 
+import { m } from "#app/paraglide/messages";
 import type { Extent } from "#core/excerpts/excerpts";
 
-import { t } from "../../i18n";
 import { cx, IconButton } from "../primitives";
 import { widened, type ContextStep } from "./cardState";
 
@@ -26,7 +26,11 @@ export function ContextControl(props: {
     <IconButton
       size="sm"
       data-step="fold"
-      label={folded() ? t("Show the context again") : (props.only ?? t("Show only the match"))}
+      label={
+        folded()
+          ? m.multibuffer_show_the_context_again()
+          : (props.only ?? m.multibuffer_show_only_the_match())
+      }
       icon={folded() ? <UnfoldVerticalIcon /> : <FoldVerticalIcon />}
       aria-pressed={folded() ? "true" : "false"}
       disabled={!folded() && !widened(props.extent)}
@@ -37,7 +41,7 @@ export function ContextControl(props: {
     <div class="inline-flex items-center gap-1">
       <div
         role="group"
-        aria-label={t("Context")}
+        aria-label={m.multibuffer_context()}
         data-context
         class="inline-flex items-stretch overflow-hidden rounded-md"
       >
@@ -45,7 +49,7 @@ export function ContextControl(props: {
           type="button"
           data-step="up"
           class={part}
-          aria-label={t("Show one more above")}
+          aria-label={m.multibuffer_show_one_more_above()}
           disabled={chapter() || !props.canUp}
           onClick={() => props.onStep("up")}
         >
@@ -58,13 +62,13 @@ export function ContextControl(props: {
           aria-pressed={chapter() ? "true" : "false"}
           onClick={() => props.onStep("chapter")}
         >
-          {t("Chapter")}
+          {m.multibuffer_chapter()}
         </button>
         <button
           type="button"
           data-step="down"
           class={part}
-          aria-label={t("Show one more below")}
+          aria-label={m.multibuffer_show_one_more_below()}
           disabled={chapter() || !props.canDown}
           onClick={() => props.onStep("down")}
         >

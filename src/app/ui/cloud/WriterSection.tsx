@@ -1,7 +1,8 @@
 import { useNavigate } from "@tanstack/solid-router";
 import { For, Show } from "solid-js";
 
-import { t } from "../../i18n";
+import { m } from "#app/paraglide/messages";
+
 import { useShell } from "../../ProjectContext";
 import { writerWatch } from "../../writerWatch";
 import { ago, dated } from "../panels/format";
@@ -15,11 +16,10 @@ export function WriterSection(props: { readonly onLeave: () => void }) {
   const facts = () => writerWatch.facts(shell.project()?.root);
   const quietNote = (): string => {
     const held = facts();
-    if (held.checking)
-      return t("Checking the Writer projects {count} books follow…", { count: held.followed });
+    if (held.checking) return m.cloud_checking_the_writer_projects_count({ count: held.followed });
     if (held.checkedAt === undefined)
-      return t("{count} books follow their Writer projects.", { count: held.followed });
-    return t("Nothing new in the Writer projects {count} books follow (checked {when}).", {
+      return m.cloud_count_books_follow_their_writer({ count: held.followed });
+    return m.cloud_nothing_new_in_the_writer({
       count: held.followed,
       when: ago(held.checkedAt ?? 0),
     });
@@ -28,7 +28,9 @@ export function WriterSection(props: { readonly onLeave: () => void }) {
   return (
     <Show when={facts().followed > 0}>
       <div class="space-y-2 border-t border-surface-border pt-3" data-sync-writer>
-        <p class="text-smallest font-medium text-on-surface-tertiary">{t("Writer projects")}</p>
+        <p class="text-smallest font-medium text-on-surface-tertiary">
+          {m.cloud_writer_projects()}
+        </p>
         <Show
           when={facts().work.length > 0}
           fallback={<p class="text-small text-on-surface-secondary">{quietNote()}</p>}
@@ -37,7 +39,7 @@ export function WriterSection(props: { readonly onLeave: () => void }) {
             <For each={facts().work}>
               {(work) => (
                 <li data-writer-book={work.book}>
-                  {t("{owner} is still working on {book} in Writer: saved {when}.", {
+                  {m.cloud_owner_is_still_working_on({
                     owner: work.latest.name,
                     book: bookName(work.book, metadataOf(shell.project())),
                     when: dated(work.latest.at),
@@ -59,7 +61,7 @@ export function WriterSection(props: { readonly onLeave: () => void }) {
               });
             }}
           >
-            {t("Review their changes")}
+            {m.cloud_review_their_changes()}
           </Button>
         </Show>
       </div>

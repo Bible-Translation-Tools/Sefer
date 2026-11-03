@@ -1,9 +1,9 @@
 import { createSignal, untrack } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import type { CompareSource } from "#core/compare";
 
 import { describe } from "../../../describe";
-import { t } from "../../../i18n";
 import type { Navigate, Shell } from "../../../ProjectContext";
 import type { Services } from "../../../services";
 import { COPY_REVIEW, fetchCopy } from "../../../suggestions";
@@ -64,13 +64,12 @@ function createSourceChoices(inputs: SidesInputs, state: SideState) {
   const { version, shared } = state;
 
   const sharedLabelWords = (): string | undefined => {
-    if (pull() !== undefined) return t("The suggested changes");
-    return fromCopy() ? t("Your copy") : undefined;
+    if (pull() !== undefined) return m.review_the_suggested_changes();
+    return fromCopy() ? m.review_your_copy() : undefined;
   };
   const sharedExplainerWords = (): string | undefined => {
-    if (pull() !== undefined)
-      return t("What the suggestion offers: its author's copy, as they last sent it.");
-    return fromCopy() ? t("Your copy, as another of your devices last sent it.") : undefined;
+    if (pull() !== undefined) return m.review_what_the_suggestion_offers_its();
+    return fromCopy() ? m.review_your_copy_as_another_of() : undefined;
   };
 
   const choices = (): readonly SourceChoice[] =>
@@ -103,8 +102,8 @@ function createChoices(inputs: SidesInputs, state: SideState) {
   const left = (): CompareSource | undefined => sourceFor(leftId(), leftPicked());
   const right = (): CompareSource | undefined => sourceFor(rightId(), rightPicked());
 
-  const leftShort = (): string => choiceOf(leftId())?.shortLabel ?? t("this side");
-  const rightShort = (): string => choiceOf(rightId())?.shortLabel ?? t("the other side");
+  const leftShort = (): string => choiceOf(leftId())?.shortLabel ?? m.review_this_side();
+  const rightShort = (): string => choiceOf(rightId())?.shortLabel ?? m.review_the_other_side();
   const leftLabel = (): string => left()?.label ?? choiceOf(leftId())?.label ?? "";
   const rightLabel = (): string => right()?.label ?? choiceOf(rightId())?.label ?? "";
 
@@ -120,7 +119,7 @@ function createChoices(inputs: SidesInputs, state: SideState) {
       const pending =
         (id === "shared" && !shared.recorded().read) ||
         (id === "recorded" && !version.recorded().read);
-      if (pending) return choiceOf(id)?.shortLabel ?? t("the other side");
+      if (pending) return choiceOf(id)?.shortLabel ?? m.review_the_other_side();
     }
     return undefined;
   };
@@ -169,7 +168,7 @@ function createPicking(
     }
     inputs.decisions.startOver();
     if (choice?.pick === undefined) return;
-    setBusy(t("Reading…"));
+    setBusy(m.common_reading());
     void choice
       .pick()
       .then((source) => {

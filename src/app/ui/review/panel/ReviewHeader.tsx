@@ -2,7 +2,8 @@ import ChevronDown from "lucide-solid/icons/chevron-down";
 import Save from "lucide-solid/icons/save";
 import { Show } from "solid-js";
 
-import { t } from "../../../i18n";
+import { m } from "#app/paraglide/messages";
+
 import { ago } from "../../panels/format";
 import { Badge, Button, Popover } from "../../primitives";
 import { BackToEditor } from "../../workspace/BackToEditor";
@@ -50,13 +51,11 @@ function SourcesPanel(props: { readonly sides: Sides }) {
       </div>
       <Show when={props.sides.leftId() === props.sides.rightId()}>
         <p class="text-smallest text-on-surface-secondary">
-          {t("Pick two different sides: a text is not a review of itself.")}
+          {m.review_pick_two_different_sides_a()}
         </p>
       </Show>
       <p class="text-smallest text-on-surface-tertiary">
-        {t(
-          "A decision per difference, one write. Taking the other side's version and applying it is exactly what Revert means.",
-        )}
+        {m.review_a_decision_per_difference_one()}
       </p>
     </div>
   );
@@ -71,7 +70,7 @@ function HeaderNotices(props: { readonly header: ReviewHeaderProps }) {
         }
       >
         <Badge tone="muted" data-review-readonly>
-          {t("Reading only")}
+          {m.review_reading_only()}
         </Badge>
       </Show>
       <Show when={props.header.busy !== ""}>
@@ -89,7 +88,7 @@ function HeaderNotices(props: { readonly header: ReviewHeaderProps }) {
             data-review-engine="missing"
             title={reason()}
           >
-            {t("This build's engine has no diff door, so nothing can be compared.")}
+            {m.review_this_builds_engine_has_no()}
           </span>
         )}
       </Show>
@@ -114,14 +113,14 @@ function HeaderActions(props: { readonly header: ReviewHeaderProps }) {
           disabled={props.header.form.unsaved().length === 0 && !props.header.sides.againstShared()}
           title={
             props.header.lastBackup === undefined
-              ? t("Write and keep a version")
-              : t("Write and keep a version. Your work was last backed up {when}.", {
+              ? m.review_write_and_keep_a_version()
+              : m.review_write_and_keep_a_version_your({
                   when: ago(props.header.lastBackup ?? 0),
                 })
           }
           onClick={props.header.form.openRecord}
         >
-          {t("Save")}
+          {m.common_save()}
         </Button>
       </Show>
       <BackToEditor quiet />
@@ -133,7 +132,7 @@ export function ReviewHeader(props: ReviewHeaderProps) {
   return (
     <header class="flex min-h-12 min-w-0 flex-wrap items-center gap-2" data-review-header>
       <Popover
-        label={t("What is compared")}
+        label={m.review_what_is_compared()}
         align="start"
         class="w-[min(560px,90vw)]"
         open={props.sourcesOpen}
@@ -142,7 +141,7 @@ export function ReviewHeader(props: ReviewHeaderProps) {
           <button
             type="button"
             data-review-sources
-            title={t("Change what is compared")}
+            title={m.review_change_what_is_compared()}
             class="-mx-1.5 inline-flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-0.5 text-start transition-colors hover:bg-button-tertiary-surface-hover"
           >
             <h1 class="min-w-0 truncate text-h3 font-semibold text-on-surface-primary">

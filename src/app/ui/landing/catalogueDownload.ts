@@ -1,5 +1,6 @@
 import { Effect, Fiber, Option, Stream } from "effect";
 
+import { m } from "#app/paraglide/messages";
 import { Observability } from "#core/observability";
 import { Remote, remoteVerdict } from "#core/remote/remote";
 
@@ -12,7 +13,6 @@ import {
 } from "../../arrival";
 import { type CatalogueEntry } from "../../catalogue";
 import { describe, describeTransfer, reasonOf, remoteReasonOf } from "../../describe";
-import { t } from "../../i18n";
 import type { Services } from "../../services";
 import { toasts } from "../primitives";
 import type { PendingDownload } from "./downloads";
@@ -45,7 +45,7 @@ const watchProgress = (
             });
           else
             toasts.advance(toast, {
-              title: t("Downloading {name}", { name: entry.repo }),
+              title: m.landing_downloading_name({ name: entry.repo }),
               message: describeTransfer(progress),
             });
         }),
@@ -65,12 +65,12 @@ const announceDownloaded = (
       title: entry.repo,
       message:
         outcome === "held"
-          ? t("Already on this device, under Source texts.")
-          : t("Downloaded. Choose it as a source text beside any project."),
+          ? m.landing_already_on_this_device_under()
+          : m.landing_downloaded_choose_it_as_a(),
       tone: "success",
     });
   else {
-    downloads.update(entry.id, { status: t("Done"), percent: 100 });
+    downloads.update(entry.id, { status: m.common_done(), percent: 100 });
     announce();
   }
 };
@@ -84,7 +84,7 @@ const beginTracking = (
 ): Toast | undefined => {
   const toast =
     kind === "sourceText"
-      ? toasts.progress({ title: t("Downloading {name}", { name: entry.repo }), message: "" })
+      ? toasts.progress({ title: m.landing_downloading_name({ name: entry.repo }), message: "" })
       : undefined;
   if (toast === undefined)
     downloads.start(
@@ -94,7 +94,7 @@ const beginTracking = (
         language: entry.naturalName,
         code: entry.code,
         state: "downloading",
-        status: t("Starting…"),
+        status: m.common_starting(),
         percent: undefined,
       },
       from,
@@ -153,14 +153,14 @@ export const downloadEntry = (
       else downloads.update(entry.id, { state: "failed", status: describe(cause) });
       if (cause instanceof AlreadyHeld) {
         toasts.info({
-          title: t("Already on this device"),
+          title: m.landing_already_on_this_device(),
           message: cause.description,
-          action: { label: t("Open"), onPress: () => open(cause.root) },
+          action: { label: m.landing_open(), onPress: () => open(cause.root) },
         });
         return;
       }
       toasts.error({
-        title: t("Could not download {name}", { name: entry.repo }),
+        title: m.landing_could_not_download_name({ name: entry.repo }),
         message: describe(cause),
       });
     })

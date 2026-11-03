@@ -3,7 +3,6 @@ import { For, Show, createMemo, createSignal, untrack } from "solid-js";
 
 import type { WriterLanguage } from "../../catalogue";
 import { describe } from "../../describe";
-import { t } from "../../i18n";
 import { writerLanguages } from "../../migrate";
 import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
@@ -20,9 +19,9 @@ import {
 type Column = "code" | "language" | "region";
 
 const SORTABLE: readonly (readonly [Column, () => string])[] = [
-  ["code", () => t("Code")],
-  ["language", () => t("Language")],
-  ["region", () => t("Region")],
+  ["code", () => m.common_code()],
+  ["language", () => m.common_language()],
+  ["region", () => m.common_region()],
 ];
 
 const COLUMNS = "grid grid-cols-[9rem_minmax(0,1fr)_9rem] items-center gap-x-6 px-6 text-body";
@@ -159,7 +158,7 @@ export function WriterTable(props: {
 
   const emptyNote = (): string => {
     if (loading()) return m.writer_languages_loading();
-    return t("No language with Writer projects matches “{query}”.", { query: props.query.trim() });
+    return m.migrate_no_language_with_writer_projects({ query: props.query.trim() });
   };
 
   return (
@@ -172,7 +171,7 @@ export function WriterTable(props: {
       <Card
         padded={false}
         role="table"
-        aria-label={t("Writer projects on WACS")}
+        aria-label={m.migrate_writer_projects_on_wacs()}
         aria-rowcount={sorted().length + 1}
         class={cx("flex min-h-0 flex-col overflow-hidden", props.class ?? "h-[60vh]")}
       >
@@ -219,14 +218,14 @@ export function WriterLanguages(props: {
   return (
     <section class="flex min-h-0 flex-col gap-3">
       <div class="flex flex-wrap items-center gap-3">
-        <h2 class="me-auto text-h4 font-semibold">{t("Writer projects on WACS")}</h2>
+        <h2 class="me-auto text-h4 font-semibold">{m.migrate_writer_projects_on_wacs()}</h2>
         <Input
           type="search"
           size="lg"
           wrapperClass="w-full sm:w-[24rem]"
           class="w-full"
           icon={<SearchIcon size={20} aria-hidden="true" />}
-          aria-label={t("Search Writer projects by language")}
+          aria-label={m.migrate_search_writer_projects_by_language()}
           placeholder={m.writer_languages_placeholder()}
           data-testid="writer-languages-search"
           value={query()}

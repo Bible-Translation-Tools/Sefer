@@ -4,9 +4,9 @@ import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import { For, Show } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import { tocViewOf } from "#core/galley";
 
-import { t } from "../../i18n";
 import type { useShell } from "../../ProjectContext";
 
 /** One chapter tile: its number in the book (0 is the intro) and what it shows. */
@@ -25,7 +25,7 @@ export function chaptersOf(shell: Shell, id: string): readonly ChapterTile[] {
     shell.outline().forEach((chapter, index) => {
       if (chapter.label !== "") rows.push({ index, label: chapter.label, intro: false });
       else if (index === 0 && chapter.to > chapter.from)
-        rows.push({ index, label: t("Intro"), intro: true });
+        rows.push({ index, label: m.common_intro(), intro: true });
     });
     return rows;
   }
@@ -34,7 +34,7 @@ export function chaptersOf(shell: Shell, id: string): readonly ChapterTile[] {
   return tocViewOf(held.analysis).chapters.flatMap((chapter): ChapterTile[] => {
     if (chapter.number > 0)
       return [{ index: chapter.number, label: String(chapter.number), intro: false }];
-    return chapter.to > chapter.from ? [{ index: 0, label: t("Intro"), intro: true }] : [];
+    return chapter.to > chapter.from ? [{ index: 0, label: m.common_intro(), intro: true }] : [];
   });
 }
 

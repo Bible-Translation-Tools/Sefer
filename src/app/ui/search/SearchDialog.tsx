@@ -3,6 +3,7 @@ import { Option, Result } from "effect";
 import SearchIcon from "lucide-solid/icons/search";
 import { For, Show, createMemo, createSignal } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import type {
   FindingQuery,
   FindingQueryClass,
@@ -12,7 +13,6 @@ import type {
 import { createReadings, type Readings } from "#core/search/reading";
 import * as Search from "#core/search/search";
 
-import { t } from "../../i18n";
 import { uiLocale } from "../../locale";
 import { useShell } from "../../ProjectContext";
 import { Dialog, IconButton, Kbd, cx } from "../primitives";
@@ -24,9 +24,9 @@ const PREVIEW_WIDTH = 400;
 const PURPOSES: readonly FindingQueryPurpose[] = ["this", "alternative", "others"];
 
 const heading = (purpose: FindingQueryPurpose): string => {
-  if (purpose === "this") return t("Here");
-  if (purpose === "alternative") return t("Instead");
-  return t("Usually");
+  if (purpose === "this") return m.search_here();
+  if (purpose === "alternative") return m.search_instead();
+  return m.search_usually();
 };
 
 const visible = (escape: string, hex: string): string => {
@@ -43,17 +43,17 @@ const partsOf = (query: FindingQuery): readonly FindingQueryPart[] =>
 const classWord = (name: FindingQueryClass): string => {
   switch (name) {
     case "letter":
-      return t("a letter");
+      return m.search_a_letter();
     case "digit":
-      return t("a digit");
+      return m.search_a_digit();
     case "space":
-      return t("a space");
+      return m.search_a_space();
     case "punctuation":
-      return t("a punctuation mark");
+      return m.search_a_punctuation_mark();
     case "capital":
-      return t("a capital");
+      return m.search_a_capital();
     case "lowercase":
-      return t("a lowercase letter");
+      return m.search_a_lowercase_letter();
   }
 };
 
@@ -99,7 +99,7 @@ export function SearchDialog(props: { readonly queries: readonly FindingQuery[] 
     <>
       <IconButton
         size="sm"
-        label={t("Search the project for {form}", { form: form() })}
+        label={m.search_search_the_project_for_form({ form: form() })}
         icon={<SearchIcon />}
         aria-haspopup="dialog"
         onClick={() => setOpen(true)}
@@ -107,7 +107,7 @@ export function SearchDialog(props: { readonly queries: readonly FindingQuery[] 
       <Dialog
         open={open()}
         onOpenChange={setOpen}
-        title={t("{form} in the project", { form: form() })}
+        title={m.search_form_in_the_project({ form: form() })}
         class={columns().length > 1 ? "w-[min(90rem,95vw)]" : "w-[min(56rem,92vw)]"}
       >
         <Show when={open()}>
@@ -246,7 +246,7 @@ function Hits(props: {
           <Shape query={props.query} />
         </span>
         <Show when={props.query.kind === "literal" && props.query.wholeWord}>
-          <span class="text-smallest text-on-surface-tertiary">{t("whole word")}</span>
+          <span class="text-smallest text-on-surface-tertiary">{m.search_whole_word()}</span>
         </Show>
         <span class="ms-auto tabular-nums text-on-surface-secondary">
           {hits().length.toLocaleString(uiLocale())}
@@ -254,7 +254,7 @@ function Hits(props: {
       </p>
       <Show
         when={hits().length > 0}
-        fallback={<p class="text-small text-on-surface-tertiary">{t("None found.")}</p>}
+        fallback={<p class="text-small text-on-surface-tertiary">{m.search_none_found()}</p>}
       >
         <ul
           class="scrollbar-subtle -mx-2 flex flex-col overflow-y-auto"
@@ -266,7 +266,7 @@ function Hits(props: {
         </ul>
         <Show when={hits().length > SHOWN}>
           <p class="text-smallest text-on-surface-tertiary">
-            {t("The first {shown} of {count}.", {
+            {m.search_the_first_shown_of_count({
               shown: SHOWN,
               count: hits().length.toLocaleString(uiLocale()),
             })}

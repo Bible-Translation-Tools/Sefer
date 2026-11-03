@@ -4,7 +4,8 @@ import Info from "lucide-solid/icons/info";
 import TriangleAlert from "lucide-solid/icons/triangle-alert";
 import { Show } from "solid-js";
 
-import { t } from "../../../i18n";
+import { m } from "#app/paraglide/messages";
+
 import { Button } from "../../primitives";
 import type { ReceiptAction, ReceiptLine } from "./helpers";
 
@@ -24,17 +25,17 @@ function glyphOf(tone: ReceiptLine["tone"]) {
 function labelOf(action: ReceiptAction): string {
   switch (action) {
     case "see":
-      return t("Compare the changes");
+      return m.review_compare_the_changes();
     case "copy":
-      return t("Compare with your copy");
+      return m.review_compare_with_your_copy();
     case "retry":
-      return t("Try sending again");
+      return m.review_try_sending_again();
     case "send":
-      return t("Send now");
+      return m.review_send_now();
     case "open":
-      return t("Set up sharing");
+      return m.review_set_up_sharing();
     case "offer":
-      return t("Offer these changes");
+      return m.review_offer_these_changes();
   }
 }
 

@@ -2,12 +2,12 @@ import { useNavigate } from "@tanstack/solid-router";
 import { Effect } from "effect";
 import { createSignal, type Accessor } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import { Git } from "#core/git/git";
 import { Remote } from "#core/remote/remote";
 import type { Sync } from "#core/sync";
 
 import { describe } from "../../describe";
-import { t } from "../../i18n";
 import type { Shell } from "../../ProjectContext";
 import { checkForChanges, sendNow } from "../../syncActions";
 import { syncWatch } from "../../syncWatch";
@@ -40,17 +40,17 @@ export const quickActionOf = (sync: Sync): QuickAction => {
 export const quickLabel = (action: QuickAction): string => {
   switch (action) {
     case "see":
-      return t("See the changes");
+      return m.cloud_see_the_changes();
     case "send":
-      return t("Send my changes");
+      return m.cloud_send_my_changes();
     case "check":
-      return t("Check for changes");
+      return m.cloud_check_for_changes();
     case "resolve":
-      return t("Finish the transfer");
+      return m.cloud_finish_the_transfer();
     case "sign-in":
-      return t("Sign in");
+      return m.cloud_sign_in();
     case "open":
-      return t("Set up sharing");
+      return m.cloud_set_up_sharing();
   }
 };
 
@@ -137,7 +137,10 @@ export const createQuickSync = (shell: Shell, onSee?: () => void): QuickSync => 
         void services
           .run(abortTransfer(project.root))
           .catch((cause: unknown) =>
-            toasts.error({ title: t("Could not finish the transfer"), message: describe(cause) }),
+            toasts.error({
+              title: m.cloud_could_not_finish_the_transfer(),
+              message: describe(cause),
+            }),
           )
           .finally(() => {
             setBusy("");

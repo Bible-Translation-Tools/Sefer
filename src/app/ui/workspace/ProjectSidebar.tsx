@@ -7,7 +7,6 @@ import Plus from "lucide-solid/icons/plus";
 import SearchIcon from "lucide-solid/icons/search";
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 
-import { t } from "../../i18n";
 import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
 import { Badge, Button, Input } from "../primitives";
@@ -114,9 +113,9 @@ export function ProjectSidebar() {
   );
   const searching = (): boolean => search() !== undefined;
   const emptyNote = (): string => {
-    if (rows().length === 0) return t("This project has no books yet.");
-    if (searching()) return t("No book matches {query}", { query: query().trim() });
-    return t("No books in this testament.");
+    if (rows().length === 0) return m.workspace_this_project_has_no_books();
+    if (searching()) return m.workspace_no_book_matches_query({ query: query().trim() });
+    return m.workspace_no_books_in_this_testament();
   };
 
   const shown = createMemo(
@@ -218,9 +217,7 @@ export function ProjectSidebar() {
             class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-8 text-center text-small text-on-surface-tertiary"
           >
             <Library size={32} strokeWidth={1.5} aria-hidden="true" />
-            <p>
-              {t("When your translation project is loaded into Sefer, its books will appear here.")}
-            </p>
+            <p>{m.workspace_when_your_translation_project_is()}</p>
           </div>
         }
       >
@@ -242,7 +239,11 @@ export function ProjectSidebar() {
           />
         </div>
 
-        <nav ref={setList} aria-label={t("Books")} class="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+        <nav
+          ref={setList}
+          aria-label={m.common_books()}
+          class="min-h-0 flex-1 overflow-y-auto px-4 pb-4"
+        >
           <Show
             when={shown().length > 0}
             fallback={<p class="px-2 py-4 text-small text-on-surface-tertiary">{emptyNote()}</p>}
@@ -286,14 +287,14 @@ export function ProjectSidebar() {
               if (root !== undefined) void navigate({ to: "/migrate", search: { into: root } });
             }}
           >
-            {t("Add a book…")}
+            {m.workspace_add_a_book()}
           </Button>
         </nav>
       </Show>
 
       <Show when={shell.updateAvailable()}>
         <footer class="border-t border-sidebar-border p-4">
-          <Badge tone="brand">{t("Update available")}</Badge>
+          <Badge tone="brand">{m.workspace_update_available()}</Badge>
         </footer>
       </Show>
     </div>
@@ -319,10 +320,10 @@ export function ProjectControl() {
           >
             <span class="flex min-w-0 flex-1 flex-col gap-1 leading-normal">
               <span class="block truncate text-h4 leading-normal font-bold">
-                {t("Find a Project")}
+                {m.workspace_find_a_project()}
               </span>
               <span class="block truncate text-body leading-normal">
-                {t("Projects available on WACS")}
+                {m.workspace_projects_available_on_wacs()}
               </span>
             </span>
             <ArrowRight size={20} aria-hidden="true" class="shrink-0" />

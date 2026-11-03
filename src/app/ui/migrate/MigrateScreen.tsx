@@ -6,6 +6,7 @@ import FolderOpen from "lucide-solid/icons/folder-open";
 import Link from "lucide-solid/icons/link";
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import { prefillForm } from "#core/migrate/assemble";
 import {
   candidateLabel,
@@ -20,7 +21,6 @@ import {
 import { announceSourceTexts } from "../../arrival";
 import { describe } from "../../describe";
 import { contentHostFor } from "../../endpoints";
-import { t } from "../../i18n";
 import {
   addToProject,
   assembleProject,
@@ -63,8 +63,8 @@ const refuseAdd = (
   );
   if (otherLanguage !== undefined && fresh.length === 0) {
     toasts.error({
-      title: t("Not added: another language"),
-      message: t("This run assembles {language}; {label} holds {other}.", {
+      title: m.migrate_not_added_another_language(),
+      message: m.migrate_this_run_assembles_language_label({
         language,
         label,
         other: otherLanguage.language,
@@ -74,15 +74,15 @@ const refuseAdd = (
   }
   if (found.length > 0 && fresh.length === 0) {
     toasts.success({
-      title: t("Nothing new in {label}", { label }),
-      message: t("This project already has every book offered there."),
+      title: m.migrate_nothing_new_in_label({ label }),
+      message: m.migrate_this_project_already_has_every(),
     });
     return true;
   }
   if (found.length === 0) {
     toasts.error({
-      title: t("No Writer projects in {label}", { label }),
-      message: t("A Writer project is a folder with a manifest.json and chapter folders."),
+      title: m.migrate_no_writer_projects_in_label({ label }),
+      message: m.migrate_a_writer_project_is_a(),
     });
     return true;
   }
@@ -152,15 +152,13 @@ function FindStep(props: {
     <>
       <Card class="flex flex-col gap-3">
         <PanelHeader
-          title={!props.adding ? t("Migrate from Writer") : t("Add books from Writer")}
+          title={
+            !props.adding ? m.migrate_migrate_from_writer() : m.migrate_add_books_from_writer()
+          }
           subtitle={
             !props.adding
-              ? t(
-                  "Assemble one project from BTT Writer's single-book projects. Pick a language below, or a folder or zip of Writer projects, to start.",
-                )
-              : t(
-                  "Only books this project does not have yet, in its language, are offered. They arrive as one commit.",
-                )
+              ? m.migrate_assemble_one_project_from_btt()
+              : m.migrate_only_books_this_project_does()
           }
         />
         <div class="flex flex-wrap items-center gap-3">
@@ -171,7 +169,7 @@ function FindStep(props: {
             icon={<FolderOpen aria-hidden="true" />}
             onClick={() => props.onLocal("folder")}
           >
-            {t("Folder of Writer projects")}
+            {m.migrate_folder_of_writer_projects()}
           </Button>
           <Button
             variant="secondary"
@@ -180,7 +178,7 @@ function FindStep(props: {
             icon={<FileArchive aria-hidden="true" />}
             onClick={() => props.onLocal("zip")}
           >
-            {t("Zip of Writer projects")}
+            {m.migrate_zip_of_writer_projects()}
           </Button>
         </div>
         <Show when={props.sources.length > 0}>
@@ -190,15 +188,15 @@ function FindStep(props: {
       <Show
         when={props.online}
         fallback={
-          <p class="text-small text-on-surface-secondary">
-            {t("No WACS server is set for this build: use a folder or a zip.")}
-          </p>
+          <p class="text-small text-on-surface-secondary">{m.migrate_no_wacs_server_is_set()}</p>
         }
       >
         <Show
           when={!props.busy}
           fallback={
-            <p class="py-8 text-center text-on-surface-tertiary">{t("Listing Writer projects…")}</p>
+            <p class="py-8 text-center text-on-surface-tertiary">
+              {m.migrate_listing_writer_projects()}
+            </p>
           }
         >
           <WriterLanguages initial={props.language} onPick={props.onCatalogue} />
@@ -235,34 +233,34 @@ function BooksToolbar(props: {
       </span>
 
       <Menu
-        label={t("Add a Writer project")}
+        label={m.migrate_add_a_writer_project()}
         side="bottom"
         align="end"
         trigger={
           <Button size="sm" variant="tertiary" disabled={props.busy} data-testid="migrate-add">
-            {t("Add a Writer project…")}
+            {m.migrate_add_a_writer_project_2()}
           </Button>
         }
       >
         <MenuItem icon={<FolderOpen aria-hidden="true" />} onSelect={() => props.onLocal("folder")}>
-          {t("Folder…")}
+          {m.migrate_folder()}
         </MenuItem>
         <MenuItem icon={<FileArchive aria-hidden="true" />} onSelect={() => props.onLocal("zip")}>
-          {t("Zip…")}
+          {m.migrate_zip()}
         </MenuItem>
         <MenuItem
           icon={<Link aria-hidden="true" />}
           disabled={!props.online}
           onSelect={() => props.onUrl()}
         >
-          {t("From a URL…")}
+          {m.migrate_from_a_url()}
         </MenuItem>
       </Menu>
       <Show when={props.inactiveCount > 0}>
         <Button size="sm" variant="tertiary" onClick={props.onToggleInactive}>
           {props.showInactive
-            ? t("Hide inactive")
-            : t("Show inactive ({count})", { count: props.inactiveCount })}
+            ? m.migrate_hide_inactive()
+            : m.migrate_show_inactive_count({ count: props.inactiveCount })}
         </Button>
       </Show>
       <Show when={props.needsChoice > 0}>
@@ -272,7 +270,7 @@ function BooksToolbar(props: {
           data-testid="migrate-recommended"
           onClick={props.onRecommended}
         >
-          {t("Use the recommended one for {count} books", { count: props.needsChoice })}
+          {m.migrate_use_the_recommended_one_for({ count: props.needsChoice })}
         </Button>
       </Show>
       <Button
@@ -300,11 +298,9 @@ function UrlDialog(props: {
     <Dialog
       open={props.open}
       onOpenChange={props.onOpenChange}
-      title={t("Add a Writer project from its URL")}
-      description={t(
-        "For a project the list above has not caught up with yet: its address on WACS, e.g. https://content.bibletranslationtools.org/owner/xyz_mat_text_reg",
-      )}
-      footer={<Button onClick={() => props.onOpenChange(false)}>{t("Cancel")}</Button>}
+      title={m.migrate_add_a_writer_project_from()}
+      description={m.migrate_for_a_project_the_list()}
+      footer={<Button onClick={() => props.onOpenChange(false)}>{m.common_cancel()}</Button>}
     >
       <form
         class="flex items-center gap-2"
@@ -316,8 +312,8 @@ function UrlDialog(props: {
         <Input
           type="url"
           wrapperClass="min-w-0 flex-1"
-          aria-label={t("Writer project URL")}
-          placeholder={t("https://content.bibletranslationtools.org/…")}
+          aria-label={m.migrate_writer_project_url()}
+          placeholder={m.migrate_https_content_bibletranslationtools_org()}
           value={props.url}
           onInput={(event) => props.onUrl(event.currentTarget.value)}
         />
@@ -328,7 +324,7 @@ function UrlDialog(props: {
           disabled={props.busy || props.url.trim() === ""}
           data-testid="migrate-url-add"
         >
-          {t("Add")}
+          {m.migrate_add()}
         </Button>
       </form>
     </Dialog>
@@ -422,7 +418,7 @@ export function MigrateScreen(props: {
     setStep("books");
     setSources((held) => [
       ...held,
-      t("{label} · {count} Writer projects", { label, count: found.length }),
+      m.migrate_label_count_writer_projects({ label, count: found.length }),
     ]);
     void openPending(fresh, showInactive());
   };
@@ -432,9 +428,10 @@ export function MigrateScreen(props: {
     settle(
       (async () => {
         const found = await pickLocal(services, kind);
-        if (found !== undefined) add(kind === "zip" ? t("a zip") : t("a folder"), found);
+        if (found !== undefined)
+          add(kind === "zip" ? m.migrate_a_zip() : m.migrate_a_folder(), found);
       })(),
-      t("Could not read it"),
+      m.migrate_could_not_read_it(),
       () => setBusy(false),
     );
   };
@@ -455,7 +452,7 @@ export function MigrateScreen(props: {
         setAskingUrl(false);
         setUrl("");
       })(),
-      t("Could not add that Writer project"),
+      m.migrate_could_not_add_that_writer(),
       () => setBusy(false),
     );
   };
@@ -464,9 +461,9 @@ export function MigrateScreen(props: {
     setBusy(true);
     settle(
       (async () => {
-        add(t("the catalogue ({code})", { code }), await remoteCandidates(services, code));
+        add(m.migrate_the_catalogue_code({ code }), await remoteCandidates(services, code));
       })(),
-      t("The catalogue did not answer"),
+      m.migrate_the_catalogue_did_not_answer(),
       () => setBusy(false),
     );
   };
@@ -527,14 +524,14 @@ export function MigrateScreen(props: {
   const counted = (testament: "ot" | "nt"): string => {
     const total = CANON.filter((book) => book.testament === testament).length;
     const have = picked().filter((candidate) => testamentOfBook(candidate.book) === testament);
-    return t("{have} of {total}", { have: have.length, total });
+    return m.migrate_have_of_total({ have: have.length, total });
   };
 
   const assembleLabel = (): string => {
     if (assembling() && ready().some((staged) => (staged.history?.saves.length ?? 0) > 0))
-      return t("Writing {count} books' history…", { count: picked().length });
-    if (props.into === undefined) return t("Assemble {count} books", { count: picked().length });
-    return t("Add {count} books", { count: picked().length });
+      return m.migrate_writing_count_books_history({ count: picked().length });
+    if (props.into === undefined) return m.migrate_assemble_count_books({ count: picked().length });
+    return m.migrate_add_count_books({ count: picked().length });
   };
 
   const runAssemble = (): void => {
@@ -546,13 +543,13 @@ export function MigrateScreen(props: {
       (async () => {
         const { root } = await services.run(assembleProject(services, name, form, books));
         toasts.success({
-          title: t("Assembled {count} books", { count: books.length }),
+          title: m.migrate_assembled_count_books({ count: books.length }),
           message: root,
         });
         void announceSourceTexts(services, root);
         void navigate({ to: "/project/$slug", params: { slug: shell.slugFor(root) } });
       })(),
-      t("Could not assemble"),
+      m.migrate_could_not_assemble(),
       () => setAssembling(false),
     );
   };
@@ -565,11 +562,14 @@ export function MigrateScreen(props: {
     settle(
       (async () => {
         await services.run(addToProject(services, root, held, books));
-        toasts.success({ title: t("Added {count} books", { count: books.length }), message: root });
+        toasts.success({
+          title: m.migrate_added_count_books({ count: books.length }),
+          message: root,
+        });
         await shell.openProject(root);
         void navigate({ to: "/project/$slug", params: { slug: shell.slugFor(root) } });
       })(),
-      t("Could not add the books"),
+      m.migrate_could_not_add_the_books(),
       () => setAssembling(false),
     );
   };
@@ -592,13 +592,13 @@ export function MigrateScreen(props: {
 
   const mark = (row: BookRow): { readonly tone: BadgeTone; readonly label: string } => {
     const shown = visible(row);
-    if (shown.length === 0) return { tone: "muted", label: t("left out") };
+    if (shown.length === 0) return { tone: "muted", label: m.migrate_left_out() };
     if (shown.length > 1 && !chosen().has(row.book))
-      return { tone: "warning", label: t("choose · {count}", { count: shown.length }) };
+      return { tone: "warning", label: m.migrate_choose_count({ count: shown.length }) };
     const candidate = pick(row);
     const held = candidate === undefined ? undefined : openedOf(candidate.id);
-    if (held?.state === "refused") return { tone: "error", label: t("refused") };
-    if (held?.state !== "ready") return { tone: "neutral", label: t("checking") };
+    if (held?.state === "refused") return { tone: "error", label: m.migrate_refused() };
+    if (held?.state !== "ready") return { tone: "neutral", label: m.migrate_checking_2() };
     return { tone: "success", label: candidate === undefined ? "" : candidateLabel(candidate) };
   };
 
@@ -623,9 +623,9 @@ export function MigrateScreen(props: {
         <BooksToolbar
           summary={[
             needsChoice().length > 0
-              ? t("{count} books need a choice", { count: needsChoice().length })
-              : t("{count} books ready", { count: picked().length - stillOpening() }),
-            checking() > 0 ? t("checking {count} more…", { count: checking() }) : "",
+              ? m.migrate_count_books_need_a_choice({ count: needsChoice().length })
+              : m.migrate_count_books_ready({ count: picked().length - stillOpening() }),
+            checking() > 0 ? m.migrate_checking_count_more({ count: checking() }) : "",
           ]
             .filter((part) => part !== "")
             .join(" · ")}
@@ -653,7 +653,7 @@ export function MigrateScreen(props: {
           <Card padded={false} data-tour="migrate-books" class="max-h-[75vh] overflow-y-auto">
             <TestamentSection
               testament="ot"
-              title={t("Old Testament")}
+              title={m.common_old_testament()}
               rows={allRows()}
               count={counted("ot")}
               current={current()?.book}
@@ -662,7 +662,7 @@ export function MigrateScreen(props: {
             />
             <TestamentSection
               testament="nt"
-              title={t("New Testament")}
+              title={m.common_new_testament()}
               rows={allRows()}
               count={counted("nt")}
               current={current()?.book}

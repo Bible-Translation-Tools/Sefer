@@ -1,7 +1,8 @@
 import type { JSX } from "@solidjs/web";
 import { Match, Switch } from "solid-js";
 
-import { t } from "../i18n";
+import { m } from "#app/paraglide/messages";
+
 import { useShellState } from "../ProjectContext";
 import { DelayedSpinner } from "./primitives";
 
@@ -21,8 +22,7 @@ export function ShellGate(props: { readonly children: () => JSX.Element }) {
           class="m-6 rounded-md bg-surface-error px-4 py-3 text-small text-on-surface-error"
           data-shell="failed"
         >
-          {t("The USFM engine did not load. Sefer cannot parse without it.")}{" "}
-          <code class="font-mono">{reason()}</code>
+          {m.shell_the_usfm_engine_did_not()} <code class="font-mono">{reason()}</code>
         </p>
       </Match>
     </Switch>

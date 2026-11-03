@@ -2,7 +2,8 @@ import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import { testamentOf } from "@wycliffeassociates/sefer-text/location/canon";
 import { Show } from "solid-js";
 
-import { t } from "../../i18n";
+import { m } from "#app/paraglide/messages";
+
 import { Badge } from "./Badge";
 import { MultiSelect } from "./MultiSelect";
 import { SegmentedControl } from "./SegmentedControl";
@@ -48,29 +49,29 @@ export function BookScope(props: BookScopeProps) {
     <div class="flex flex-wrap items-center gap-2">
       <SegmentedControl<BookScopeKind>
         size="sm"
-        label={t("Scope")}
+        label={m.common_scope()}
         value={props.value}
         onChange={(next) => props.onChange(next)}
         items={[
-          { value: "book", label: t("This book"), disabled: !props.hasFocused || off() },
-          { value: "project", label: t("Whole project"), disabled: off() },
+          { value: "book", label: m.common_this_book(), disabled: !props.hasFocused || off() },
+          { value: "project", label: m.common_whole_project(), disabled: off() },
           ...(splits()
             ? [
-                { value: "ot" as const, label: t("OT"), disabled: off() },
-                { value: "nt" as const, label: t("NT"), disabled: off() },
+                { value: "ot" as const, label: m.common_ot(), disabled: off() },
+                { value: "nt" as const, label: m.common_nt(), disabled: off() },
               ]
             : []),
-          { value: "custom", label: t("Custom"), disabled: off() },
+          { value: "custom", label: m.common_custom(), disabled: off() },
         ]}
       />
       <Show when={props.value === "custom"}>
         <MultiSelect
           id="scope-books"
-          label={t("Books")}
+          label={m.common_books()}
           summary={
             props.custom.length === 0
-              ? t("none")
-              : t("{kept} of {total}", { kept: props.custom.length, total: props.books.length })
+              ? m.common_none()
+              : m.common_kept_of_total({ kept: props.custom.length, total: props.books.length })
           }
           narrowed={props.custom.length > 0}
           items={props.books}
@@ -87,7 +88,7 @@ export function BookScope(props: BookScopeProps) {
                 : ids().filter((id) => id === row.id || held.includes(id)),
             );
           }}
-          clear={{ label: t("No books"), onClear: () => props.onCustom([]) }}
+          clear={{ label: m.common_no_books(), onClear: () => props.onCustom([]) }}
         >
           {(row) => (
             <>

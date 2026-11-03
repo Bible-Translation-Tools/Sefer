@@ -2,7 +2,7 @@ import { Outlet, createFileRoute, useRouterState } from "@tanstack/solid-router"
 import { Show, onCleanup, untrack } from "solid-js";
 
 import { installCommandKeys } from "#app/commands";
-import { t } from "#app/i18n";
+import { m } from "#app/paraglide/messages";
 import { readyShell, useShell, useShellState } from "#app/ProjectContext";
 import { SIDEBAR_WIDTH } from "#app/settings";
 import { TourOutlet } from "#app/tour/TourOutlet";
@@ -77,8 +77,8 @@ function Workspace() {
         maxSize={maxWidth}
         onCollapse={() => shell.setSidebarOpen(false)}
         collapseHint={{
-          title: t("Keep dragging to close the panel"),
-          detail: t("Release to keep it open."),
+          title: m.shell_keep_dragging_to_close_the(),
+          detail: m.shell_release_to_keep_it_open(),
         }}
         class={showing() ? undefined : rail() ? "shrink-0 [flex-basis:auto]!" : "hidden"}
       >
@@ -102,7 +102,7 @@ function Workspace() {
       </Resizable.Panel>
       <Resizable.Handle
         edge
-        label={t("Resize the project panel")}
+        label={m.shell_resize_the_project_panel()}
         class={showing() ? undefined : "hidden"}
       />
       <Resizable.Panel

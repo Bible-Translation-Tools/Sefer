@@ -2,7 +2,7 @@ import { createFileRoute, redirect, useNavigate } from "@tanstack/solid-router";
 import SearchIcon from "lucide-solid/icons/search";
 import { Show } from "solid-js";
 
-import { t } from "#app/i18n";
+import { m } from "#app/paraglide/messages";
 import { useShell } from "#app/ProjectContext";
 import { createExcerptFeed, excerptCard, ExcerptList } from "#app/ui/excerpts";
 import { createFindBooks } from "#app/ui/find/createFindBooks";
@@ -171,7 +171,7 @@ function FindNotices(props: { readonly model: FindModel }) {
 function FindResultsList(props: { readonly model: FindModel }) {
   return (
     <ExcerptList
-      goneLabel={t("No longer matches")}
+      goneLabel={m.find_no_longer_matches()}
       resultsKey={props.model.asked()}
       groups={props.model.feed.groups()}
       views={props.model.feed.views}
@@ -191,15 +191,15 @@ function FindResultsList(props: { readonly model: FindModel }) {
           icon={<SearchIcon size={22} />}
           title={
             props.model.feedHits().length === 0 && props.model.query.text() !== ""
-              ? t("No matches")
-              : t("Nothing searched yet")
+              ? m.find_no_matches()
+              : m.find_nothing_searched_yet()
           }
           description={
             props.model.scope() === "reference"
-              ? t("Searching {count} reference book(s); your own verse is the editable one.", {
+              ? m.find_searching_count_reference_books({
                   count: props.model.sources.bound().ids.length,
                 })
-              : t("Results are grouped by verse, one card each, read-only until you edit.")
+              : m.find_results_are_grouped_by_verse()
           }
         />
       }
@@ -215,11 +215,13 @@ function Find() {
 
   return (
     <main class="flex h-full min-w-0 flex-col gap-4 p-6">
-      <PanelHeader title={t("Find")} />
+      <PanelHeader title={m.find_find()} />
 
       <Show
         when={shell.project()}
-        fallback={<p class="text-small text-on-surface-tertiary">{t("Open a project first.")}</p>}
+        fallback={
+          <p class="text-small text-on-surface-tertiary">{m.find_open_a_project_first()}</p>
+        }
       >
         <FindControls model={model} />
         <FindNotices model={model} />
@@ -252,6 +254,6 @@ export const Route = createFileRoute("/_app/project/$slug/find")({
     if (new URLSearchParams(location.searchStr).get("mode") === "stet")
       throw redirect({ to: "/project/$slug/terms", params: { slug: params.slug }, search: {} });
   },
-  head: () => ({ meta: [{ title: "Sefer — find" }] }),
+  head: () => ({ meta: [{ title: m.page_title({ page: m.page_find() }) }] }),
   component: () => <ShellGate>{() => <Find />}</ShellGate>,
 });

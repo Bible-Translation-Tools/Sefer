@@ -17,12 +17,12 @@ import {
   type Setter,
 } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import { tocViewOf } from "#core/galley";
 import type { SettingKey } from "#core/host/settings";
 import type { Project } from "#core/project/project";
 import { SaveCoordinator } from "#core/save/saveCoordinator";
 
-import { t } from "../i18n";
 import type { Location } from "../location";
 import type { Services } from "../services";
 import type { LastLocation, LastLocations, shellKeys } from "../settings";
@@ -202,7 +202,7 @@ const arriveAt = (
           const at = ordinalAt(found.within.from);
           if (at >= 0) showChapter(at);
         }
-        report(t("{place} is not in this book", { place: place() }));
+        report(m.reader_place_is_not_in_this({ place: place() }));
         return;
       }
       case "ambiguous": {
@@ -212,7 +212,7 @@ const arriveAt = (
           if (at >= 0) showChapter(at);
           if (want.kind === "verses") aim(held.id, first.from, undefined, "top");
         }
-        report(t("{place} appears more than once in this book", { place: place() }));
+        report(m.reader_place_appears_more_than_once({ place: place() }));
         return;
       }
     }
@@ -299,7 +299,7 @@ export const createReader = ({
     );
     const editing = seated === undefined ? undefined : services.seated(bookId);
     if (editing === undefined) {
-      report(t("could not open book {book}", { book: bookId }));
+      report(m.reader_could_not_open_book_book({ book: bookId }));
       return;
     }
     setFocused(editing);
@@ -380,7 +380,7 @@ export const createReader = ({
     if (project() === undefined) return;
     if (!location.holds(address.book)) {
       report(
-        t("This project has no {book}", {
+        m.reader_this_project_has_no_book({
           book: location.label({ kind: "book", book: address.book }),
         }),
       );

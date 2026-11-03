@@ -3,10 +3,10 @@ import { bookName } from "@wycliffeassociates/sefer-text/location/canon";
 import Search from "lucide-solid/icons/search";
 import { Show, createEffect, createSignal, untrack } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import type { Facet, Facets, FindingsFilter } from "#core/findings/filter";
 import type { Producer, Severity } from "#core/findings/finding";
 
-import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import {
   Badge,
@@ -34,10 +34,10 @@ export interface FindingsFiltersProps {
 }
 
 const some = (kept: number, total: number): string =>
-  kept >= total ? t("all") : t("{kept} of {total}", { kept, total });
+  kept >= total ? m.findings_all() : m.findings_kept_of_total({ kept, total });
 
 const narrowedSummary = (held: readonly string[] | null, total: number): string =>
-  held === null ? t("all") : t("{kept} of {total}", { kept: held.length, total });
+  held === null ? m.findings_all() : m.findings_kept_of_total({ kept: held.length, total });
 
 const byText = (value: string, query: string): boolean =>
   value.toLowerCase().includes(query.toLowerCase());
@@ -45,10 +45,10 @@ const byText = (value: string, query: string): boolean =>
 function SeverityToggle(props: FindingsFiltersProps) {
   return (
     <ToggleGroup
-      label={t("Severity")}
+      label={m.findings_severity()}
       items={props.facets.severities.map((facet: Facet<Severity>) => ({
         value: facet.value,
-        label: t(facet.value),
+        label: m.findings_severity_name({ severity: facet.value }),
         adornment: <Badge tone={severityTone(facet.value)}>{facet.count}</Badge>,
       }))}
       pressed={(value) => props.state.filter().severities.includes(value)}
@@ -64,7 +64,7 @@ function ProducerSelect(props: FindingsFiltersProps) {
   return (
     <MultiSelect
       id="producer"
-      label={t("Producer")}
+      label={m.findings_producer()}
       summary={some(filter().producers.length, props.facets.producers.length)}
       narrowed={filter().producers.length < props.facets.producers.length}
       items={props.facets.producers}
@@ -89,7 +89,7 @@ function CodeSelect(props: FindingsFiltersProps) {
   return (
     <MultiSelect
       id="code"
-      label={t("Codes")}
+      label={m.findings_codes()}
       summary={narrowedSummary(filter().codes, props.facets.codes.length)}
       narrowed={filter().codes !== null}
       items={props.facets.codes}
@@ -97,7 +97,7 @@ function CodeSelect(props: FindingsFiltersProps) {
       match={(facet, query) => byText(codeLabel(facet.value), query) || byText(facet.value, query)}
       selected={(facet) => chosen(filter().codes, facet.value)}
       onToggle={(facet) => props.state.update({ codes: narrowed(filter().codes, facet.value) })}
-      clear={{ label: t("All codes"), onClear: () => props.state.update({ codes: null }) }}
+      clear={{ label: m.findings_all_codes(), onClear: () => props.state.update({ codes: null }) }}
     >
       {(facet) => (
         <>
@@ -151,7 +151,7 @@ export function FindingsFilters(props: FindingsFiltersProps) {
   return (
     <div
       class={cx("flex flex-wrap items-center gap-2", props.class)}
-      aria-label={t("Filters")}
+      aria-label={m.findings_filters()}
       data-findings-filters
     >
       <SeverityToggle state={props.state} facets={props.facets} books={props.books} />
@@ -180,8 +180,8 @@ export function FindingsFilters(props: FindingsFiltersProps) {
         size="sm"
         wrapperClass="min-w-40 flex-1"
         icon={<Search />}
-        aria-label={t("Filter findings")}
-        placeholder={t("Filter by text…")}
+        aria-label={m.findings_filter_findings()}
+        placeholder={m.findings_filter_by_text()}
         value={filter().text}
         onInput={(event) => props.state.update({ text: event.currentTarget.value })}
       />

@@ -1,8 +1,9 @@
 import type { Address } from "@wycliffeassociates/sefer-text/location/address";
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
+
 import { availableCommands, runCommand } from "../commands";
-import { t } from "../i18n";
 import { useShell } from "../ProjectContext";
 import { Kbd } from "./primitives";
 
@@ -29,7 +30,7 @@ function PaletteList(props: PaletteListProps) {
               class="flex w-full cursor-pointer items-center gap-2 px-4 py-2 text-start text-small text-on-surface-primary hover:bg-surface-secondary"
               onClick={() => props.onChoose(command.id)}
             >
-              <span>{command.title}</span>
+              <span>{command.title()}</span>
               <Show when={command.keys}>{(keys) => <Kbd class="ms-auto">{keys()}</Kbd>}</Show>
             </button>
           </li>
@@ -44,14 +45,16 @@ function PaletteList(props: PaletteListProps) {
               class="flex w-full cursor-pointer items-center gap-2 px-4 py-2 text-start text-small text-on-surface-primary hover:bg-surface-secondary"
               onClick={props.onGo}
             >
-              <span>{t("Go to {place}", { place: found().label })}</span>
-              <Kbd class="ms-auto">{t("Enter")}</Kbd>
+              <span>{m.palette_go_to_place({ place: found().label })}</span>
+              <Kbd class="ms-auto">{m.palette_enter()}</Kbd>
             </button>
           </li>
         )}
       </Show>
       <Show when={props.shown.length === 0 && props.place === undefined}>
-        <li class="px-4 py-2 text-small text-on-surface-tertiary">{t("No command matches.")}</li>
+        <li class="px-4 py-2 text-small text-on-surface-tertiary">
+          {m.palette_no_command_matches()}
+        </li>
       </Show>
     </ul>
   );
@@ -75,7 +78,7 @@ export function CommandPalette(props: PaletteProps) {
 
   const shown = () =>
     availableCommands().filter((command) =>
-      command.title.toLowerCase().includes(query().trim().toLowerCase()),
+      command.title().toLowerCase().includes(query().trim().toLowerCase()),
     );
 
   const place = createMemo(() => {
@@ -119,7 +122,7 @@ export function CommandPalette(props: PaletteProps) {
         <div
           class="flex h-fit max-h-[60vh] w-[min(36rem,90vw)] flex-col overflow-hidden rounded-xl border border-surface-border bg-surface-primary shadow-large"
           role="dialog"
-          aria-label={t("Commands")}
+          aria-label={m.palette_commands()}
         >
           <input
             type="search"
@@ -129,7 +132,7 @@ export function CommandPalette(props: PaletteProps) {
             ref={setBox}
             data-testid="palette-input"
             class="border-b border-surface-border bg-transparent px-4 py-3 text-h4 text-on-surface-primary placeholder:text-on-surface-tertiary focus:outline-none"
-            placeholder={t("Type a command…")}
+            placeholder={m.palette_type_a_command()}
             value={query()}
             onInput={(event) => setQuery(event.currentTarget.value)}
             onKeyDown={(event) => {

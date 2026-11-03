@@ -2,9 +2,9 @@ import type { JSX } from "@solidjs/web";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import { Show } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import type { MergeSide } from "#core/galley";
 
-import { t } from "../../../i18n";
 import { Button, Menu, MenuItem, MenuLabel, MenuSeparator } from "../../primitives";
 import { bookCount, changeCount } from "./helpers";
 import type { Scope } from "./types";
@@ -22,13 +22,13 @@ export function DecideAll(props: {
   return (
     <Show when={props.decidable && props.count > 0}>
       <Menu
-        label={t("Decide all")}
+        label={m.review_decide_all()}
         side="bottom"
         align="end"
         class="w-72"
         trigger={
           <Button size="sm" variant="tertiary" data-review-decide-all>
-            {t("Decide all")}
+            {m.review_decide_all()}
             <ChevronDown aria-hidden="true" />
           </Button>
         }
@@ -37,18 +37,20 @@ export function DecideAll(props: {
           {(() => {
             const changes = changeCount(props.count);
             if (props.scope !== "changes")
-              return t("{changes} in {book}", { changes, book: props.bookName });
-            return t("{changes} in {books}", { changes, books: bookCount(props.books) });
+              return m.review_changes_in_book({ changes, book: props.bookName });
+            return m.review_changes_in_books({ changes, books: bookCount(props.books) });
           })()}
         </MenuLabel>
         <MenuItem data-review-take-all onSelect={() => props.onDecide("baseline")}>
-          {t("Take {source}'s for all", { source: props.baselineShort })}
+          {m.review_take_source_s_for_all({ source: props.baselineShort })}
         </MenuItem>
         <MenuItem data-review-keep-all onSelect={() => props.onDecide("current")}>
-          {t("Keep {source}'s for all", { source: props.currentShort })}
+          {m.review_keep_source_s_for_all({ source: props.currentShort })}
         </MenuItem>
         <MenuSeparator />
-        <MenuItem onSelect={() => props.onDecide(undefined)}>{t("Clear these decisions")}</MenuItem>
+        <MenuItem onSelect={() => props.onDecide(undefined)}>
+          {m.review_clear_these_decisions()}
+        </MenuItem>
       </Menu>
     </Show>
   );

@@ -1,5 +1,6 @@
 import { createFileRoute, redirect } from "@tanstack/solid-router";
 
+import { m } from "#app/paraglide/messages";
 import { HistoryPanel } from "#app/ui/panels";
 import { ShellGate } from "#app/ui/ShellGate";
 
@@ -21,6 +22,6 @@ export const Route = createFileRoute("/_app/project/$slug/history")({
     if (search.review === true)
       throw redirect({ to: "/project/$slug/review", params: { slug: params.slug } });
   },
-  head: () => ({ meta: [{ title: "Sefer — history" }] }),
+  head: () => ({ meta: [{ title: m.page_title({ page: m.page_history() }) }] }),
   component: () => <ShellGate>{() => <HistoryPanel />}</ShellGate>,
 });

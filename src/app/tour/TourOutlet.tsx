@@ -3,8 +3,9 @@ import Ellipsis from "lucide-solid/icons/ellipsis";
 import Minimize2 from "lucide-solid/icons/minimize-2";
 import { For, Show, createEffect, createSignal, onCleanup, untrack } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
+
 import { registerCommand, runCommand } from "../commands";
-import { t } from "../i18n";
 import { useShell } from "../ProjectContext";
 import { Button, IconButton, Menu, MenuItem, cx, toasts } from "../ui/primitives";
 import {
@@ -48,10 +49,10 @@ const registerTourCommands = (shell: Shell, context: TourContext): void => {
     onCleanup(
       registerCommand({
         id: `${tour.kind}.${tour.id}`,
-        title:
+        title: () =>
           tour.kind === "workflow"
-            ? t(tour.title)
-            : t("Start tutorial: {title}", { title: t(tour.title) }),
+            ? tour.title()
+            : m.tour_start_tutorial_title({ title: tour.title() }),
         when: () => !tour.needsProject || tour.start !== undefined || shell.project() !== undefined,
         run: () => beginTour(context, tour),
       }),
@@ -88,11 +89,11 @@ function useTourLink(shell: Shell, context: TourContext): void {
       }
       const tour = tourById(id);
       if (tour === undefined) {
-        toasts.error({ title: t("There is no tutorial called {id}", { id }) });
+        toasts.error({ title: m.tour_there_is_no_tutorial_called({ id }) });
         return;
       }
       if (tour.needsProject && untrack(shell.project) === undefined) {
-        toasts.info({ title: t("Open a project to start “{title}”", { title: t(tour.title) }) });
+        toasts.info({ title: m.tour_open_a_project_to_start({ title: tour.title() }) });
         return;
       }
       startTour(context, tour, at);
@@ -245,7 +246,7 @@ const progress = () => {
   const now = runningTour();
   return now === undefined
     ? ""
-    : t("{at} of {count}", { at: now.index + 1, count: now.steps.length });
+    : m.tour_at_of_count({ at: now.index + 1, count: now.steps.length });
 };
 const last = () => {
   const now = runningTour();
@@ -289,18 +290,18 @@ const startDrag = (event: PointerEvent): void => {
 };
 
 const stopLabel = () => {
-  if (last()) return t("Close");
-  return workflow() ? t("Stop") : t("Skip tutorial");
+  if (last()) return m.common_close();
+  return workflow() ? m.tour_stop() : m.tour_skip_tutorial();
 };
 const nextLabel = () => {
-  if (last()) return t("Done");
-  return workflow() && !fixed() ? t("Skip") : t("Next");
+  if (last()) return m.common_done();
+  return workflow() && !fixed() ? m.tour_skip() : m.tour_next();
 };
 
 const cardHeader = (context: TourContext, onPause: () => void, title: string) => (
   <div
     class="flex cursor-grab touch-none items-baseline justify-between gap-3 select-none active:cursor-grabbing"
-    title={t("Drag to move")}
+    title={m.tour_drag_to_move()}
     data-tour-drag
     onPointerDown={startDrag}
   >
@@ -308,7 +309,7 @@ const cardHeader = (context: TourContext, onPause: () => void, title: string) =>
     <span class="flex shrink-0 items-center gap-1 text-smallest text-on-surface-tertiary tabular-nums">
       {progress()}
       <Menu
-        label={t("Go to a step")}
+        label={m.tour_go_to_a_step()}
         side="bottom"
         align="end"
         class="z-60! w-72"
@@ -317,7 +318,7 @@ const cardHeader = (context: TourContext, onPause: () => void, title: string) =>
           <IconButton
             size="sm"
             variant="quiet"
-            label={t("Go to a step")}
+            label={m.tour_go_to_a_step()}
             icon={<Ellipsis />}
             data-tour-steps
           />
@@ -329,7 +330,7 @@ const cardHeader = (context: TourContext, onPause: () => void, title: string) =>
               <span
                 class={at() === runningTour()?.index ? "font-semibold text-brand" : "font-normal"}
               >
-                {`${at() + 1}. ${t(each.spotlight?.title ?? each.panel?.title ?? "")}`}
+                {`${at() + 1}. ${each.spotlight?.title ?? each.panel?.title ?? ""}`}
               </span>
             </MenuItem>
           )}
@@ -338,7 +339,7 @@ const cardHeader = (context: TourContext, onPause: () => void, title: string) =>
       <IconButton
         size="sm"
         variant="quiet"
-        label={t("Pause the tutorial")}
+        label={m.tour_pause_the_tutorial()}
         icon={<Minimize2 />}
         data-tour-pause
         onClick={onPause}
@@ -375,7 +376,7 @@ const tourCard = (
           class="rounded-md border-s-4 border-brand bg-surface-secondary px-3 py-2 text-small font-medium text-on-surface-primary"
           data-tour-try
         >
-          {t(what())}
+          {what()}
         </p>
       )}
     </Show>
@@ -383,20 +384,20 @@ const tourCard = (
       {(note) => (
         <div class="flex flex-col gap-0.5" data-tour-note>
           <span class="text-smallest font-semibold tracking-wide text-on-surface-tertiary uppercase">
-            {t(note.label)}
+            {note.label}
           </span>
-          <p class="text-small text-on-surface-secondary">{t(note.text)}</p>
+          <p class="text-small text-on-surface-secondary">{note.text}</p>
         </div>
       )}
     </For>
     <Show when={fixed()}>
       <p class="text-small font-medium text-on-surface-success" data-tour-fixed>
-        {t("Looks fixed. Press Next when you are done here.")}
+        {m.tour_looks_fixed_press_next_when()}
       </p>
     </Show>
     <Show when={reached()}>
       <p class="text-small font-medium text-on-surface-success" data-tour-reached>
-        {last() ? t("Done.") : t("Done. Press Next when you are ready.")}
+        {last() ? m.tour_done() : m.tour_done_press_next_when_you()}
       </p>
     </Show>
     <Show when={actions !== undefined && actions.length > 0 && !fixed()}>
@@ -421,7 +422,7 @@ const tourCard = (
       <div class="flex gap-2">
         <Show when={(runningTour()?.index ?? 0) > 0}>
           <Button size="sm" variant="secondary" onClick={() => stepTour(context, -1)}>
-            {t("Back")}
+            {m.tour_back()}
           </Button>
         </Show>
         <Button
@@ -478,10 +479,10 @@ export function TourOutlet() {
               data-tour-paused
             >
               <span class="text-small text-on-surface-secondary">
-                {t("Tutorial paused · {progress}", { progress: progress() })}
+                {m.tour_tutorial_paused_progress({ progress: progress() })}
               </span>
               <Button size="sm" variant="primary" onClick={() => setPaused(false)}>
-                {t("Resume")}
+                {m.tour_resume()}
               </Button>
             </div>
           </Show>
@@ -490,8 +491,8 @@ export function TourOutlet() {
               <Show
                 when={box()}
                 fallback={card(
-                  t(spotlight().title),
-                  t(spotlight().body),
+                  spotlight().title,
+                  spotlight().body,
                   CENTRED,
                   undefined,
                   spotlight(),
@@ -512,8 +513,8 @@ export function TourOutlet() {
                       }}
                     />
                     {card(
-                      t(spotlight().title),
-                      t(spotlight().body),
+                      spotlight().title,
+                      spotlight().body,
                       cardStyle(held(), spotlight().side),
                       undefined,
                       spotlight(),
@@ -527,13 +528,7 @@ export function TourOutlet() {
             {(panel) => card(panel().title, panel().body, DOCKED, panel().actions)}
           </Show>
           <Show when={!paused() && now().phase === "timedOut"}>
-            {card(
-              t("This step could not be shown"),
-              t(
-                "What it points at is not on screen; the app has probably changed since this tutorial was written. Next skips this step.",
-              ),
-              CENTRED,
-            )}
+            {card(m.tour_this_step_could_not_be(), m.tour_what_it_points_at_is(), CENTRED)}
           </Show>
         </div>
       )}

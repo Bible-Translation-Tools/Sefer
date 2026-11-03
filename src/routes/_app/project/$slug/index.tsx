@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/solid-router";
 import { Show, createEffect, untrack } from "solid-js";
 
-import { t } from "#app/i18n";
+import { m } from "#app/paraglide/messages";
 import { useShell } from "#app/ProjectContext";
 
 function ProjectDoor() {
@@ -34,13 +34,13 @@ function ProjectDoor() {
   return (
     <Show when={target === undefined}>
       <main data-testid="empty-project" class="p-6 text-small text-on-surface-tertiary">
-        {t("This project has no books yet.")}
+        {m.shell_this_project_has_no_books()}
       </main>
     </Show>
   );
 }
 
 export const Route = createFileRoute("/_app/project/$slug/")({
-  head: () => ({ meta: [{ title: "Sefer — project" }] }),
+  head: () => ({ meta: [{ title: m.page_title({ page: m.page_project() }) }] }),
   component: ProjectDoor,
 });

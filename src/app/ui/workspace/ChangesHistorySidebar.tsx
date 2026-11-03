@@ -2,8 +2,9 @@ import type { JSX } from "@solidjs/web";
 import { Link } from "@tanstack/solid-router";
 import { Show } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
+
 import { collaboration } from "../../collaboration";
-import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { cx } from "../primitives";
 import type { VersionsTab } from "./screen";
@@ -25,7 +26,7 @@ export function VersionTabs(props: {
   const tab = (): string => cx(TAB, props.inline !== true && "flex-1");
   return (
     <nav
-      aria-label={t("Changes and history")}
+      aria-label={m.workspace_changes_and_history()}
       class={cx("flex", props.inline !== true && "border-b border-sidebar-border")}
       data-version-tabs={props.inline === true ? "page" : "sidebar"}
     >
@@ -37,8 +38,8 @@ export function VersionTabs(props: {
         data-sidebar-tab="changes"
       >
         {props.changes === undefined || props.changes === 0
-          ? t("Changes")
-          : t("Changes ({count})", { count: props.changes })}
+          ? m.common_changes()
+          : m.workspace_changes_count({ count: props.changes })}
       </Link>
       <Link
         to="/project/$slug/history"
@@ -47,7 +48,7 @@ export function VersionTabs(props: {
         aria-current={props.active === "history" ? "page" : undefined}
         data-sidebar-tab="history"
       >
-        {t("History")}
+        {m.common_history()}
       </Link>
 
       <Show
@@ -63,8 +64,8 @@ export function VersionTabs(props: {
           data-sidebar-tab="suggestions"
         >
           {(facts()?.waiting ?? 0) === 0
-            ? t("Suggestions")
-            : t("Suggestions ({count})", { count: facts()?.waiting ?? 0 })}
+            ? m.common_suggestions()
+            : m.workspace_suggestions_count({ count: facts()?.waiting ?? 0 })}
         </Link>
       </Show>
     </nav>

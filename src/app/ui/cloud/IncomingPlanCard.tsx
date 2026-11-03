@@ -1,11 +1,11 @@
 import { For, Show } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import type { IncomingBook, IncomingPlan } from "#core/sync";
 
-import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { bookName } from "../workspace/books";
-import { chapterList, planOverlap, planSummary, plural } from "./copy";
+import { chapterList, planOverlap, planSummary } from "./copy";
 
 const reviewHref = (slug: string): string =>
   `/project/${encodeURIComponent(slug)}/review?against=shared`;
@@ -23,11 +23,11 @@ function BookRow(props: { readonly book: IncomingBook; readonly links: boolean }
       <span class="text-small text-on-surface-secondary">
         {props.book.verses === 0
           ? chapterList(props.book.chapters)
-          : plural(props.book.verses, "{count} verse", "{count} verses")}
+          : m.common_count_verses({ count: props.book.verses })}
       </span>
       <Show when={props.book.versesAlsoHere > 0}>
         <span class="text-small text-on-surface-warning">
-          {t("· {count} you also changed", { count: props.book.versesAlsoHere })}
+          {m.cloud_count_you_also_changed({ count: props.book.versesAlsoHere })}
         </span>
       </Show>
       <Show when={props.links && props.book.contested}>
@@ -36,7 +36,7 @@ function BookRow(props: { readonly book: IncomingBook; readonly links: boolean }
           href={reviewHref(shell.slug())}
           data-compare-link={props.book.bookId}
         >
-          {t("Compare {book}", { book: name() })}
+          {m.cloud_compare_book({ book: name() })}
         </a>
       </Show>
     </li>

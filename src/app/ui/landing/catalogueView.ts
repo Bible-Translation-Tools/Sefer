@@ -1,5 +1,7 @@
 import { createMemo, createSignal, type Accessor } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
+
 import {
   catalogueFailureAttrs,
   catalogueFor,
@@ -7,7 +9,6 @@ import {
   type CatalogueEntry,
 } from "../../catalogue";
 import { describe } from "../../describe";
-import { t } from "../../i18n";
 import type { Services } from "../../services";
 import { type SortDirection } from "../primitives";
 
@@ -23,21 +24,21 @@ export interface CatalogueRow {
 }
 
 export const SORTABLE: readonly (readonly [Column, () => string])[] = [
-  ["code", () => t("Code")],
-  ["language", () => t("Language")],
-  ["region", () => t("Region")],
-  ["date", () => t("Date")],
+  ["code", () => m.common_code()],
+  ["language", () => m.common_language()],
+  ["region", () => m.common_region()],
+  ["date", () => m.landing_date()],
 ];
 
 export const sortChoices = (column: Column): readonly (readonly [SortDirection, string])[] =>
   column === "date"
     ? [
-        ["desc", t("Newest first")],
-        ["asc", t("Oldest first")],
+        ["desc", m.landing_newest_first()],
+        ["asc", m.landing_oldest_first()],
       ]
     : [
-        ["asc", t("A to Z")],
-        ["desc", t("Z to A")],
+        ["asc", m.landing_a_to_z()],
+        ["desc", m.landing_z_to_a()],
       ];
 
 const ROW_HEIGHT = 75;
@@ -70,7 +71,7 @@ const measureCodeColumn = (codes: readonly string[]): string => {
   if (context === null) return "9rem";
   const style = getComputedStyle(document.body);
   context.font = `400 16px ${style.fontFamily}`;
-  let widest = context.measureText(t("Code")).width + 16;
+  let widest = context.measureText(m.common_code()).width + 16;
   for (const code of codes) widest = Math.max(widest, context.measureText(code).width);
   return `${String((Math.ceil(widest) + 2) / 16)}rem`;
 };

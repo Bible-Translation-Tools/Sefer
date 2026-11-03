@@ -3,11 +3,11 @@ import { Effect } from "effect";
 import NotebookText from "lucide-solid/icons/notebook-text";
 import { For, Show } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import type { ResourceHandle } from "#core/resources/kinds/handle";
 import type { Note } from "#core/resources/kinds/tn/note";
 import type { Resource } from "#core/resources/library";
 
-import { t } from "../../i18n";
 import { borrowedContext } from "../../kinds/context";
 import { useShell } from "../../ProjectContext";
 import { createHeld, DelayedSpinner, EmptyState } from "../primitives";
@@ -53,7 +53,7 @@ function NoteItem(props: NoteItemProps) {
       >
         <p class="text-smallest text-on-surface-tertiary">
           {props.note.openEnded === true
-            ? t("From {place} to the chapter's end", {
+            ? m.kinds_from_place_to_the_chapters({
                 place: shell.location.label(props.note.address),
               })
             : shell.location.label(props.note.address)}
@@ -106,7 +106,7 @@ export function NotesPane(props: NotesPaneProps) {
         </h3>
 
         <Show when={props.handle.edit === undefined}>
-          <span class="shrink-0 text-smallest text-on-surface-tertiary">{t("Read only")}</span>
+          <span class="shrink-0 text-smallest text-on-surface-tertiary">{m.kinds_read_only()}</span>
         </Show>
       </header>
 
@@ -115,8 +115,8 @@ export function NotesPane(props: NotesPaneProps) {
         fallback={
           <EmptyState
             icon={<NotebookText size={22} />}
-            title={t("No verse yet")}
-            description={t("Put the caret in a verse to read its notes.")}
+            title={m.kinds_no_verse_yet()}
+            description={m.kinds_put_the_caret_in_a()}
           />
         }
       >
@@ -134,7 +134,7 @@ export function NotesPane(props: NotesPaneProps) {
                 when={notes().length > 0}
                 fallback={
                   <p data-testid="notes-none" class="px-1 text-small text-on-surface-tertiary">
-                    {t("No notes for {place}.", { place: label() })}
+                    {m.kinds_no_notes_for_place({ place: label() })}
                   </p>
                 }
               >

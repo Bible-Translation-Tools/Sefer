@@ -3,9 +3,9 @@ import CloudIcon from "lucide-solid/icons/cloud";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import { Show } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import type { IncomingPlan, Sync } from "#core/sync";
 
-import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { syncWatch } from "../../syncWatch";
 import { writerWatch } from "../../writerWatch";
@@ -19,39 +19,36 @@ export interface ComparisonCount {
   readonly decided: number;
 }
 
-const plural = (count: number, one: string, many: string): string =>
-  t(count === 1 ? one : many, { count });
-
 const comparisonWords = (count: ComparisonCount): string => {
-  if (count.changes === 0) return t("No differences");
-  const changes = plural(count.changes, "{count} change", "{count} changes");
-  const books = plural(count.books, "{count} book", "{count} books");
-  const said = t("{changes} in {books}", { changes, books });
+  if (count.changes === 0) return m.cloud_no_differences();
+  const changes = m.common_count_changes({ count: count.changes });
+  const books = m.common_count_books({ count: count.books });
+  const said = m.cloud_changes_in_books({ changes, books });
   return count.decided === 0
     ? said
-    : t("{said} · {decided} decided", { said, decided: count.decided });
+    : m.cloud_said_decided_decided({ said, decided: count.decided });
 };
 
 const toReceiveWords = (books: number, verses: number): string => {
-  if (books === 0) return t("has changes you don't have yet");
+  if (books === 0) return m.cloud_has_changes_you_dont_have();
   if (verses === 0)
-    return t("{books} to receive", { books: plural(books, "{count} book", "{count} books") });
-  return t("{verses} in {books} to receive", {
-    verses: plural(verses, "{count} verse", "{count} verses"),
-    books: plural(books, "{count} book", "{count} books"),
+    return m.cloud_books_to_receive({ books: m.common_count_books({ count: books }) });
+  return m.cloud_verses_in_books_to_receive({
+    verses: m.common_count_verses({ count: verses }),
+    books: m.common_count_books({ count: books }),
   });
 };
 
 const sharedWords = (sync: Sync, plan: IncomingPlan | undefined): string => {
   switch (sync.state) {
     case "offline":
-      return t("offline — your saved changes stay here until you're back");
+      return m.cloud_offline_your_saved_changes_stay();
     case "unauthorized":
-      return t("sign in to send your changes");
+      return m.cloud_sign_in_to_send_your();
     case "checking":
-      return t("checking…");
+      return m.cloud_checking();
     case "conflicted":
-      return t("a transfer did not finish");
+      return m.cloud_a_transfer_did_not_finish();
     default:
       break;
   }
@@ -61,8 +58,8 @@ const sharedWords = (sync: Sync, plan: IncomingPlan | undefined): string => {
     const verses = plan?.verseCount ?? 0;
     parts.push(toReceiveWords(books, verses));
   }
-  if (sync.clocks.local.unshared > 0) parts.push(t("your saved changes aren't sent yet"));
-  return parts.length === 0 ? t("up to date") : parts.join(" · ");
+  if (sync.clocks.local.unshared > 0) parts.push(m.cloud_your_saved_changes_arent_sent());
+  return parts.length === 0 ? m.cloud_up_to_date() : parts.join(" · ");
 };
 
 const Zone = (props: {
@@ -102,7 +99,7 @@ const SharedZone = (props: {
   readonly seeing: boolean;
 }) => (
   <Zone
-    label={t("Shared project")}
+    label={m.cloud_shared_project()}
     icon={<CloudIcon size={14} aria-hidden="true" />}
     attention={attentionOf(props.held) === "alert"}
     data="shared"
@@ -110,11 +107,11 @@ const SharedZone = (props: {
     <span data-sync-line={props.held.state}>{sharedWords(props.held, props.plan)}</span>
     <span class="inline-flex items-center gap-0.5 text-on-surface-tertiary">
       <Show when={props.checkedAt}>
-        {(at) => <span>{t("checked {when}", { when: ago(at()) })}</span>}
+        {(at) => <span>{m.cloud_checked_when({ when: ago(at()) })}</span>}
       </Show>
       <IconButton
         size="sm"
-        label={t("Check for changes")}
+        label={m.cloud_check_for_changes()}
         disabled={props.quick.busy() !== ""}
         icon={<RefreshCw class={cx(props.quick.busy() === "check" && "animate-spin")} />}
         onClick={() => props.quick.run("check")}
@@ -141,15 +138,15 @@ const WriterZone = (props: {
   readonly seeing: boolean;
   readonly onSee: () => void;
 }) => (
-  <Zone label={t("Writer")} attention={!props.seeing} data="writer">
+  <Zone label={m.common_writer()} attention={!props.seeing} data="writer">
     <span>
-      {t("new work in {books}", {
-        books: plural(props.count, "{count} book", "{count} books"),
+      {m.cloud_new_work_in_books({
+        books: m.common_count_books({ count: props.count }),
       })}
     </span>
     <Show when={!props.seeing}>
       <Button size="sm" variant="link" onClick={props.onSee}>
-        {t("See it")}
+        {m.cloud_see_it()}
       </Button>
     </Show>
   </Zone>

@@ -1,9 +1,9 @@
 import { Effect } from "effect";
 
+import { m } from "#app/paraglide/messages";
 import type { Finding } from "#core/findings/finding";
 import { SOUS_SETTINGS } from "#core/galley";
 
-import { t } from "./i18n";
 import type { Shell } from "./ProjectContext";
 import { shellKeys } from "./settings";
 import { checkSwitchOf, withSetting } from "./sousSettings";
@@ -13,10 +13,8 @@ const QUOTE_MAX = 32;
 
 const unsaved = (): void => {
   toasts.error({
-    title: t("Could not save that"),
-    message: t(
-      "This project's list of findings marked fine could not be read, so Sefer leaves it alone rather than replace it.",
-    ),
+    title: m.findings_could_not_save_that(),
+    message: m.findings_this_projects_list_of_findings(),
   });
 };
 
@@ -38,9 +36,9 @@ export const fineHere = (shell: Shell, finding: Finding): void => {
     !saved
       ? unsaved()
       : toasts.info({
-          title: t("Marked fine here"),
-          message: t("Hidden on this device. It comes back if this text changes."),
-          action: { label: t("Undo"), onPress: () => void shell.unsuppress(id) },
+          title: m.findings_marked_fine_here(),
+          message: m.findings_hidden_on_this_device_it(),
+          action: { label: m.common_undo(), onPress: () => void shell.unsuppress(id) },
         }),
   );
 };
@@ -53,9 +51,9 @@ export const allow = (shell: Shell, finding: Finding): void => {
     !saved
       ? unsaved()
       : toasts.info({
-          title: t("Always allowing “{text}”", { text: quoted }),
-          message: t("In this project, on this device."),
-          action: { label: t("Undo"), onPress: () => void shell.unsuppress(id) },
+          title: m.findings_always_allowing_text({ text: quoted }),
+          message: m.findings_in_this_project_on_this(),
+          action: { label: m.common_undo(), onPress: () => void shell.unsuppress(id) },
         }),
   );
 };
@@ -68,10 +66,10 @@ export const turnOff = (shell: Shell, finding: Finding): void => {
   const before = services.settings.get(key);
   void services.run(Effect.ignore(services.settings.set(key, withSetting(before, setting, false))));
   toasts.info({
-    title: t("Turned off “{check}”", { check: SOUS_SETTINGS[setting].label }),
-    message: t("For every project. Turn it back on in the proofreading settings."),
+    title: m.findings_turned_off_check({ check: SOUS_SETTINGS[setting].label }),
+    message: m.findings_for_every_project_turn_it(),
     action: {
-      label: t("Undo"),
+      label: m.common_undo(),
       onPress: () => void services.run(Effect.ignore(services.settings.set(key, before))),
     },
   });
@@ -91,8 +89,9 @@ export const bringBack = (shell: Shell, finding: Finding): void => {
       !saved
         ? unsaved()
         : toasts.info({
-            title: rung === "here" ? t("Shown again") : t("No longer always allowed"),
-            action: { label: t("Undo"), onPress: () => void shell.suppress(finding, rung) },
+            title:
+              rung === "here" ? m.findings_shown_again() : m.findings_no_longer_always_allowed(),
+            action: { label: m.common_undo(), onPress: () => void shell.suppress(finding, rung) },
           }),
     );
 };

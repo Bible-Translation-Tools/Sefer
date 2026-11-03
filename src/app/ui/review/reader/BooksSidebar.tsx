@@ -5,9 +5,9 @@ import CheckIcon from "lucide-solid/icons/check";
 import MoreVertical from "lucide-solid/icons/more-vertical";
 import { For, Show } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import type { DecisionUnit, MergeSide } from "#core/galley";
 
-import { t } from "../../../i18n";
 import { IconButton, Menu, MenuItem } from "../../primitives";
 import { ChangesHistorySidebar } from "../../workspace/ChangesHistorySidebar";
 import { bookCount, changeCount } from "./helpers";
@@ -31,14 +31,14 @@ interface BooksSidebarProps {
 function BookMenu(props: { readonly sidebar: BooksSidebarProps; readonly held: Prepared }) {
   return (
     <Menu
-      label={t("Decide {book}", { book: props.held.book.name })}
+      label={m.review_decide_book({ book: props.held.book.name })}
       side="bottom"
       align="end"
       class="w-56"
       trigger={
         <IconButton
           size="sm"
-          label={t("Decide all of {book}", { book: props.held.book.name })}
+          label={m.review_decide_all_of_book({ book: props.held.book.name })}
           icon={<MoreVertical />}
           data-review-book-menu={props.held.book.bookId}
         />
@@ -49,17 +49,17 @@ function BookMenu(props: { readonly sidebar: BooksSidebarProps; readonly held: P
           props.sidebar.onDecide(props.held.book.bookId, props.held.shown, "baseline")
         }
       >
-        {t("Take all of {source}'s", { source: props.sidebar.baselineShort })}
+        {m.review_take_all_of_source_s({ source: props.sidebar.baselineShort })}
       </MenuItem>
       <MenuItem
         onSelect={() => props.sidebar.onDecide(props.held.book.bookId, props.held.shown, "current")}
       >
-        {t("Keep all of {source}'s", { source: props.sidebar.currentShort })}
+        {m.review_keep_all_of_source_s({ source: props.sidebar.currentShort })}
       </MenuItem>
       <MenuItem
         onSelect={() => props.sidebar.onDecide(props.held.book.bookId, props.held.shown, undefined)}
       >
-        {t("Clear")}
+        {m.common_clear()}
       </MenuItem>
     </Menu>
   );
@@ -104,14 +104,14 @@ export function BooksSidebar(props: BooksSidebarProps): JSX.Element {
           {(() => {
             const count = props.books.reduce((sum, held) => sum + held.shown.length, 0);
             const books = props.books.length;
-            return t("{changes} in {books}", {
+            return m.review_changes_in_books({
               changes: changeCount(count),
               books: bookCount(books),
             });
           })()}
         </p>
       </div>
-      <nav aria-label={t("Changes")} class="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+      <nav aria-label={m.common_changes()} class="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
         <ul>
           <For each={props.books}>{(held) => <BookRow sidebar={props} held={held} />}</For>
         </ul>

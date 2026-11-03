@@ -1,8 +1,8 @@
 import { Show, createSignal } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import { UpdaterError, type AvailableUpdate } from "#core/host/updater";
 
-import { t } from "../i18n";
 import { useServices } from "../ProjectContext";
 import { Button, Card, PanelHeader } from "./primitives";
 
@@ -33,7 +33,7 @@ function createUpdater(services: Services) {
         setAvailable(result.update);
         return;
       }
-      setNote(result._tag === "UpToDate" ? t("Sefer is up to date.") : result.reason);
+      setNote(result._tag === "UpToDate" ? m.update_sefer_is_up_to_date() : result.reason);
     });
   };
 
@@ -77,7 +77,7 @@ export function UpdatePanel() {
       <div class="px-4 py-3">
         <PanelHeader
           level={3}
-          title={t("About")}
+          title={m.update_about()}
           actions={
             <Button
               size="sm"
@@ -85,20 +85,20 @@ export function UpdatePanel() {
               disabled={busy() !== ""}
               loading={busy() === "checking"}
             >
-              {t("Check for updates")}
+              {m.update_check_for_updates()}
             </Button>
           }
         />
       </div>
 
-      {row(t("Version"), services.updater.currentVersion(), { "data-update-version": "" })}
-      {row(t("Channel"), services.updater.channel(), { "data-update-channel": "" })}
-      {row(t("Build"), services.hostInfo.build())}
+      {row(m.update_version(), services.updater.currentVersion(), { "data-update-version": "" })}
+      {row(m.common_channel(), services.updater.channel(), { "data-update-channel": "" })}
+      {row(m.update_build(), services.hostInfo.build())}
 
       <Show when={available()}>
         {(update) => (
           <div class="flex items-center gap-3 px-4 py-3 text-small" data-update-available>
-            {t("Version {version} is available.", { version: update().version })}
+            {m.update_version_version_is_available({ version: update().version })}
             <Button
               variant="primary"
               size="sm"
@@ -107,7 +107,7 @@ export function UpdatePanel() {
               disabled={busy() !== ""}
               loading={busy() === "installing"}
             >
-              {t("Install and relaunch")}
+              {m.update_install_and_relaunch()}
             </Button>
           </div>
         )}
@@ -115,7 +115,7 @@ export function UpdatePanel() {
 
       <Show when={busy() === "installing"}>
         <p class="px-4 py-2 text-small text-on-surface-tertiary">
-          {t("Downloading and installing…")}
+          {m.update_downloading_and_installing()}
         </p>
       </Show>
 

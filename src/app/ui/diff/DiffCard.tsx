@@ -10,12 +10,13 @@ import CheckIcon from "lucide-solid/icons/check";
 import CodeIcon from "lucide-solid/icons/code";
 import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import type { Analysis, MergeSide } from "#core/galley";
-import type { DecisionUnit } from "#core/galley/diff";
 
 import "@wycliffeassociates/sefer-editor/editor.css";
 
-import { t } from "../../i18n";
+import type { DecisionUnit } from "#core/galley/diff";
+
 import { CardActions, type CardAction } from "../multibuffer/CardAction";
 import { CardEditor } from "../multibuffer/CardEditor";
 import { CardFrame } from "../multibuffer/CardFrame";
@@ -66,8 +67,8 @@ export const sameFields = (
 ) => Object.keys(a).every((key) => a[key] === b[key]);
 
 const originWords = (origin: "here" | "there" | "both"): string => {
-  if (origin === "there") return t("changed there");
-  return origin === "here" ? t("changed here") : t("changed in both places");
+  if (origin === "there") return m.diff_changed_there();
+  return origin === "here" ? m.diff_changed_here() : m.diff_changed_in_both_places();
 };
 
 export interface DiffCardProps {
@@ -304,7 +305,7 @@ const usfmAction = (props: DiffCardProps, markup: boolean): CardAction[] =>
         {
           kind: "icon",
           id: "usfm",
-          label: markup ? t("Show the reading") : t("Show the USFM"),
+          label: markup ? m.diff_show_the_reading() : m.diff_show_the_usfm(),
           icon: CodeIcon,
           pressed: markup,
           onPress: () => props.onView({ kind: "usfm" }),
@@ -422,7 +423,7 @@ export function DiffCard(props: DiffCardProps) {
               extent={props.hunk.extent}
               canUp={props.hunk.more.up}
               canDown={props.hunk.more.down}
-              only={t("Show only the change")}
+              only={m.diff_show_only_the_change()}
               onStep={step()}
             />
           )}
@@ -462,7 +463,7 @@ export function DiffCard(props: DiffCardProps) {
           <div class={cx("min-w-0", props.currentFirst === true && "order-last")} ref={setLeft}>
             <Show when={props.hunk.baseline === undefined}>
               <p class="px-3 py-2 text-small text-on-surface-tertiary italic">
-                {t("Not on this side.")}
+                {m.diff_not_on_this_side()}
               </p>
             </Show>
           </div>
@@ -473,7 +474,7 @@ export function DiffCard(props: DiffCardProps) {
               when={editingBook()}
               fallback={
                 <p class="px-3 py-2 text-small text-on-surface-tertiary">
-                  {refused() ? t("That book could not be opened for editing.") : t("Opening…")}
+                  {refused() ? m.diff_that_book_could_not_be() : m.diff_opening()}
                 </p>
               }
             >

@@ -4,11 +4,11 @@ import { bookName } from "@wycliffeassociates/sefer-text/location/canon";
 import { addressAt } from "@wycliffeassociates/sefer-text/location/locate";
 import { Option, Result } from "effect";
 
+import { m } from "#app/paraglide/messages";
 import type { Finding } from "#core/findings/finding";
 import * as Fixes from "#core/fixes/fixes";
 import { tocViewOf } from "#core/galley";
 
-import { t } from "../../i18n";
 import { codeLabel } from "../../ui/panels/findingLabels";
 import type { Step, Tour, TourContext } from "../machine";
 
@@ -42,7 +42,7 @@ const placeOf = (
       : addressAt(finding.bookId, tocViewOf(held.analysis), finding.from);
   return address === undefined
     ? { key: `${finding.bookId}@${String(finding.from)}`, label: name }
-    : { key: addressCode(address), label: addressLabel(address, name, t("Introduction")) };
+    : { key: addressCode(address), label: addressLabel(address, name, m.tour_introduction()) };
 };
 
 const onBook = (bookId: BookId): boolean =>
@@ -108,13 +108,13 @@ const stepFor = (context: TourContext, finding: Finding): Step => {
     },
     ready: () => onBook(finding.bookId),
     panel: {
-      title: t("{place}: {problem}", { place: place.label, problem: codeLabel(finding.code) }),
+      title: m.tour_place_problem({ place: place.label, problem: codeLabel(finding.code) }),
       body: finding.message,
       actions: [
         {
           label: () => {
             const held = renumbering(context, finding.code, place.key);
-            return held === undefined ? undefined : t("Renumber to {n}", { n: held.to });
+            return held === undefined ? undefined : m.tour_renumber_to_n({ n: held.to });
           },
           run: () => renumbering(context, finding.code, place.key)?.apply(),
         },
@@ -150,10 +150,8 @@ const steps = (context: TourContext): readonly Step[] => {
     return [
       {
         panel: {
-          title: t("No verse-number problems"),
-          body: t(
-            "Sefer found nothing out of order, repeated, missing or empty. Nothing to triage.",
-          ),
+          title: m.tour_no_verse_number_problems(),
+          body: m.tour_sefer_found_nothing_out_of(),
         },
         advance: "user",
       },
@@ -178,9 +176,8 @@ export const verseNumbersWorkflow: Tour = {
   id: "triage-verse-numbers",
   kind: "workflow",
   audience: "field",
-  title: "Triage verse numbers",
-  summary:
-    "Every verse number out of order, repeated, missing or empty, against your source text, one at a time; each moves on once fixed.",
+  title: m.tour_triage_verse_numbers,
+  summary: m.tour_triage_verse_numbers_summary,
   needsProject: true,
   startable: settled,
   steps,

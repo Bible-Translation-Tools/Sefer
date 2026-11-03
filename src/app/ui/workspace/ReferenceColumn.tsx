@@ -61,7 +61,6 @@ import {
 import { announceSourceTexts, libraryRevision, sourceTextCopy } from "../../arrival";
 import { listSourceTexts, listTranslationNotes, type ListedText } from "../../catalogue";
 import { describe, remoteReasonOf } from "../../describe";
-import { t } from "../../i18n";
 import { downloadHelp, helpDownloads, removeHelp } from "../../kinds/download";
 import { KIND_ROLES, roleFor } from "../../kinds/table";
 import { uiLocale } from "../../locale";
@@ -348,7 +347,7 @@ export function ReferenceColumn() {
         setBusy(false);
         if (Result.isFailure(outcome)) {
           shell.report(
-            t("could not add {name}: {reason}", {
+            m.workspace_could_not_add_name_reason({
               name: row.name,
               reason: outcome.failure.description,
             }),
@@ -400,7 +399,7 @@ export function ReferenceColumn() {
       })
       .catch((cause: unknown) => {
         operation.end(remoteVerdict(remoteReasonOf(cause)));
-        shell.report(t("could not add {name}: {reason}", { name, reason: describe(cause) }));
+        shell.report(m.workspace_could_not_add_name_reason({ name, reason: describe(cause) }));
       })
       .finally(() => {
         if (keep) pull(text.repository, false);
@@ -448,7 +447,7 @@ export function ReferenceColumn() {
   const fetchHelp = (help: ListedText): void => {
     setBusy(true);
     setFetching(
-      t("Translation Notes · {language}", { language: help.languageName || help.language }),
+      m.workspace_translation_notes_language({ language: help.languageName || help.language }),
     );
     void downloadHelp(services, help)
       // oxlint-disable-next-line solid/reactivity
@@ -881,7 +880,7 @@ export function ReferenceColumn() {
 
   return (
     <aside
-      aria-label={t("Reference texts")}
+      aria-label={m.workspace_reference_texts()}
       class="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-3"
       data-references={entries().length}
     >
@@ -898,7 +897,7 @@ export function ReferenceColumn() {
           class="flex shrink-0 flex-col gap-1.5 rounded-md bg-surface-secondary px-3 py-2 text-small"
         >
           <p class="text-on-surface-secondary">
-            {t("This project's source text is not on this device: {texts}.", {
+            {m.workspace_this_projects_source_text_is({
               texts: missing()
                 .map((ref) =>
                   ref.version === undefined
@@ -909,7 +908,7 @@ export function ReferenceColumn() {
             })}
           </p>
           <Button variant="secondary" size="sm" disabled={busy()} onClick={download}>
-            {t("Download")}
+            {m.common_download()}
           </Button>
         </div>
       </Show>
@@ -923,13 +922,13 @@ export function ReferenceColumn() {
               icon={<BookMarked size={22} />}
               title={
                 fetching() === ""
-                  ? t("No source text yet")
-                  : t("Getting {language}…", { language: fetching() })
+                  ? m.workspace_no_source_text_yet()
+                  : m.workspace_getting_language({ language: fetching() })
               }
               description={
                 fetching() === ""
-                  ? t("Choose a reference language above to read beside this project.")
-                  : t("Downloading it once, to read beside this project.")
+                  ? m.workspace_choose_a_reference_language_above()
+                  : m.workspace_downloading_it_once_to_read()
               }
             />
           </Show>

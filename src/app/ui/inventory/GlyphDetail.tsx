@@ -3,6 +3,7 @@ import { Option } from "effect";
 import ExternalLink from "lucide-solid/icons/external-link";
 import { For, Show, createMemo } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import { quote, type Quotation } from "#core/excerpts/excerpts";
 import {
   codePointLabel,
@@ -11,7 +12,6 @@ import {
   type PatternRow,
 } from "#core/findings/inventory";
 
-import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import {
   Badge,
@@ -94,7 +94,7 @@ export function GlyphDetail(props: GlyphDetailProps) {
       analysisOf(site.bookId)?.analysis,
     );
     if (address === undefined)
-      return t("{book} · offset {from}", { book: site.bookId, from: site.from });
+      return m.inventory_book_offset_from({ book: site.bookId, from: site.from });
     return shell.location.label(address);
   };
 
@@ -139,7 +139,7 @@ export function GlyphDetail(props: GlyphDetailProps) {
         aria-pressed={props.pattern === row.pattern ? "true" : "false"}
         onClick={() => props.onPattern(props.pattern === row.pattern ? undefined : row.pattern)}
       >
-        {row.flagged === 1 ? t("1 site") : t("{count} sites", { count: row.flagged })}
+        {m.inventory_count_sites({ count: row.flagged })}
       </Button>
     </Show>
   );
@@ -186,7 +186,7 @@ export function GlyphDetail(props: GlyphDetailProps) {
           <span class="flex flex-wrap items-center gap-2">
             <Badge tone="neutral">{props.glyph.pool}</Badge>
             <span class="text-small text-on-surface-tertiary">
-              {t("{sites} sites · {books} of {total} books", {
+              {m.inventory_sites_sites_books_of_total({
                 sites: props.glyph.population,
                 books: props.glyph.books,
                 total: props.bookCount,
@@ -194,7 +194,7 @@ export function GlyphDetail(props: GlyphDetailProps) {
             </span>
             <Show when={props.glyph.flagged.length > 0}>
               <Badge tone="warning">
-                {t("{count} flagged", { count: props.glyph.flagged.length })}
+                {m.inventory_count_flagged({ count: props.glyph.flagged.length })}
               </Badge>
             </Show>
           </span>
@@ -203,17 +203,17 @@ export function GlyphDetail(props: GlyphDetailProps) {
 
       <Show when={props.glyph.neighbours.length > 0}>
         <Section
-          title={t("What sits beside it")}
-          note={t("the character, or the class of character, next to this one")}
+          title={m.inventory_what_sits_beside_it()}
+          note={m.inventory_the_character_or_the_class()}
         >
           <Table>
             <TableHead>
               <TableRow>
-                <TableHeader>{t("Neighbour")}</TableHeader>
-                <TableHeader class="text-end">{t("Count")}</TableHeader>
-                <TableHeader class="text-end">{t("Share")}</TableHeader>
-                <TableHeader class="text-end">{t("Books")}</TableHeader>
-                <TableHeader class="text-end">{t("Flagged")}</TableHeader>
+                <TableHeader>{m.inventory_neighbour()}</TableHeader>
+                <TableHeader class="text-end">{m.inventory_count()}</TableHeader>
+                <TableHeader class="text-end">{m.inventory_share()}</TableHeader>
+                <TableHeader class="text-end">{m.common_books()}</TableHeader>
+                <TableHeader class="text-end">{m.inventory_flagged()}</TableHeader>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -229,7 +229,9 @@ export function GlyphDetail(props: GlyphDetailProps) {
                           <GlyphTile char={row.label} size="sm" />
                         </Show>
                         <span class="text-smallest text-on-surface-tertiary">
-                          {row.channel === "ExactNeighbor" ? t("exactly") : t("any of the pool")}
+                          {row.channel === "ExactNeighbor"
+                            ? m.inventory_exactly()
+                            : m.inventory_any_of_the_pool()}
                         </span>
                       </span>
                       {usualLine(row)}
@@ -249,18 +251,18 @@ export function GlyphDetail(props: GlyphDetailProps) {
 
       <Show when={props.glyph.placement.length > 0}>
         <Section
-          title={t("How it attaches to words")}
-          note={placementUsual() || t("what class of character the engine found on each side")}
+          title={m.inventory_how_it_attaches_to_words()}
+          note={placementUsual() || m.inventory_what_class_of_character_the()}
         >
           <Table>
             <TableHead>
               <TableRow>
-                <TableHeader>{t("Class")}</TableHeader>
-                <TableHeader class="text-end">{t("Before")}</TableHeader>
-                <TableHeader class="text-end">{t("Share")}</TableHeader>
-                <TableHeader class="text-end">{t("After")}</TableHeader>
-                <TableHeader class="text-end">{t("Share")}</TableHeader>
-                <TableHeader class="text-end">{t("Flagged")}</TableHeader>
+                <TableHeader>{m.inventory_class()}</TableHeader>
+                <TableHeader class="text-end">{m.inventory_before()}</TableHeader>
+                <TableHeader class="text-end">{m.inventory_share()}</TableHeader>
+                <TableHeader class="text-end">{m.inventory_after()}</TableHeader>
+                <TableHeader class="text-end">{m.inventory_share()}</TableHeader>
+                <TableHeader class="text-end">{m.inventory_flagged()}</TableHeader>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -299,17 +301,14 @@ export function GlyphDetail(props: GlyphDetailProps) {
       </Show>
 
       <Show when={props.glyph.runShape.length > 0}>
-        <Section
-          title={t("Run shape")}
-          note={t("how long a run of it gets, and whether the run is only this character")}
-        >
+        <Section title={m.inventory_run_shape()} note={m.inventory_how_long_a_run_of()}>
           <Table>
             <TableHead>
               <TableRow>
-                <TableHeader>{t("Run")}</TableHeader>
-                <TableHeader class="text-end">{t("Count")}</TableHeader>
-                <TableHeader class="text-end">{t("Share")}</TableHeader>
-                <TableHeader class="text-end">{t("Flagged")}</TableHeader>
+                <TableHeader>{m.inventory_run()}</TableHeader>
+                <TableHeader class="text-end">{m.inventory_count()}</TableHeader>
+                <TableHeader class="text-end">{m.inventory_share()}</TableHeader>
+                <TableHeader class="text-end">{m.inventory_flagged()}</TableHeader>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -350,17 +349,17 @@ export function GlyphDetail(props: GlyphDetailProps) {
 
       <Show when={props.glyph.other.length > 0}>
         <Section
-          title={t("Other signals")}
-          note={t("rarity in the corpus, letter runs, and what follows it at a sentence start")}
+          title={m.inventory_other_signals()}
+          note={m.inventory_rarity_in_the_corpus_letter()}
         >
           <Table>
             <TableHead>
               <TableRow>
-                <TableHeader>{t("Signal")}</TableHeader>
-                <TableHeader>{t("Channel")}</TableHeader>
-                <TableHeader class="text-end">{t("Count")}</TableHeader>
-                <TableHeader class="text-end">{t("Share")}</TableHeader>
-                <TableHeader class="text-end">{t("Flagged")}</TableHeader>
+                <TableHeader>{m.inventory_signal()}</TableHeader>
+                <TableHeader>{m.common_channel()}</TableHeader>
+                <TableHeader class="text-end">{m.inventory_count()}</TableHeader>
+                <TableHeader class="text-end">{m.inventory_share()}</TableHeader>
+                <TableHeader class="text-end">{m.inventory_flagged()}</TableHeader>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -385,8 +384,8 @@ export function GlyphDetail(props: GlyphDetailProps) {
       </Show>
 
       <Section
-        title={t("Flagged sites")}
-        note={t("{count} of {total} shown", {
+        title={m.inventory_flagged_sites()}
+        note={m.inventory_count_of_total_shown({
           count: sites().length,
           total: props.glyph.flagged.length,
         })}
@@ -394,10 +393,10 @@ export function GlyphDetail(props: GlyphDetailProps) {
         <Show when={props.pattern !== undefined}>
           <div class="flex flex-wrap items-center gap-2 rounded-md bg-surface-secondary px-3 py-2">
             <span class="text-smallest text-on-surface-secondary">
-              {t("Narrowed to one pattern.")}
+              {m.inventory_narrowed_to_one_pattern()}
             </span>
             <Button size="sm" variant="tertiary" onClick={() => props.onPattern(undefined)}>
-              {t("Show all sites")}
+              {m.inventory_show_all_sites()}
             </Button>
             <Button
               size="sm"
@@ -406,7 +405,7 @@ export function GlyphDetail(props: GlyphDetailProps) {
               icon={<ExternalLink />}
               onClick={() => openInFindings()}
             >
-              {t("Open this channel in Findings")}
+              {m.inventory_open_this_channel_in_findings()}
             </Button>
           </div>
         </Show>
@@ -415,7 +414,7 @@ export function GlyphDetail(props: GlyphDetailProps) {
           when={sites().length > 0}
           fallback={
             <p class="rounded-md border border-dashed border-surface-border px-3 py-4 text-center text-smallest text-on-surface-tertiary">
-              {t("The engine flagged no site for this character.")}
+              {m.inventory_the_engine_flagged_no_site()}
             </p>
           }
         >
@@ -433,10 +432,10 @@ export function GlyphDetail(props: GlyphDetailProps) {
                       {(reason) => <Badge tone="warning">{reason}</Badge>}
                     </For>
                     <Show when={stale(site)}>
-                      <Badge tone="muted">{t("stale")}</Badge>
+                      <Badge tone="muted">{m.inventory_stale()}</Badge>
                     </Show>
                     <Show when={!quoted().projected}>
-                      <Badge tone="muted">{t("in markup")}</Badge>
+                      <Badge tone="muted">{m.inventory_in_markup()}</Badge>
                     </Show>
                     <span
                       class={cx(
@@ -452,7 +451,7 @@ export function GlyphDetail(props: GlyphDetailProps) {
                       {quoted().after}
                     </span>
                     <Button size="sm" variant="tertiary" onClick={() => go(site)}>
-                      {t("Go")}
+                      {m.inventory_go()}
                     </Button>
                   </li>
                 );

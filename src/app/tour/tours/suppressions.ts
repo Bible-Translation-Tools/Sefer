@@ -98,8 +98,8 @@ export const suppressionsTour: Tour = {
   id: "suppressions",
   kind: "tutorial",
   audience: "internal",
-  title: "Marking findings fine, and approving key terms",
-  summary:
+  title: () => "Marking findings fine, and approving key terms",
+  summary: () =>
     "Two first versions of telling Sefer something about your project to remember: a finding that is fine, a key term approved. What each does, why, and what we could do instead. For feedback.",
   needsProject: true,
   start: PROJECT,

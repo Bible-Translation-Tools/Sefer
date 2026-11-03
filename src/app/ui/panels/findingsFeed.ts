@@ -1,10 +1,10 @@
 import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import { createMemo, type Accessor } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import type { BookExcerpts, Excerpt, Occurrence, OutlineRow } from "#core/excerpts/excerpts";
 import type { Finding, Severity } from "#core/findings/finding";
 
-import { t } from "../../i18n";
 import { createExcerptFeed, type ExcerptFeed, type MarkTone } from "../excerpts";
 import type { FindingsView } from "./findingsFilter";
 
@@ -251,8 +251,8 @@ export const createFindingsFeed = (options: FindingsFeedOptions): FindingsFeed =
     () => {
       const buckets =
         options.view() === "book"
-          ? byBook(excerpts.groups(), t("Front matter"))
-          : bucketed(excerpts.groups(), options.view(), t("Every finding"));
+          ? byBook(excerpts.groups(), m.findings_front_matter())
+          : bucketed(excerpts.groups(), options.view(), m.findings_every_finding());
       return sectionsOf(buckets);
     },
     { name: "findingsSections" },

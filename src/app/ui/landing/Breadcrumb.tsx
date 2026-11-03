@@ -1,6 +1,8 @@
 import { Link, type LinkProps } from "@tanstack/solid-router";
 import { For, Show } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
+
 export interface Crumb {
   readonly label: string;
   readonly to?: LinkProps["to"];
@@ -8,7 +10,7 @@ export interface Crumb {
 
 export function Breadcrumb(props: { readonly crumbs: readonly Crumb[] }) {
   return (
-    <nav aria-label="Breadcrumb" class="text-smallest text-on-surface-tertiary">
+    <nav aria-label={m.landing_breadcrumb()} class="text-smallest text-on-surface-tertiary">
       <ol class="flex flex-wrap items-center gap-1">
         <For each={props.crumbs}>
           {(crumb, index) => (

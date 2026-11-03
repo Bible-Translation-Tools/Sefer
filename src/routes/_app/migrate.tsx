@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/solid-router";
 
-import { t } from "#app/i18n";
+import { m } from "#app/paraglide/messages";
 import { Breadcrumb } from "#app/ui/landing/Breadcrumb";
 import { MigrateScreen } from "#app/ui/migrate/MigrateScreen";
-import { ShellGate } from "#app/ui/ShellGate";
 import "#app/ui/theme";
+import { ShellGate } from "#app/ui/ShellGate";
 
 interface MigrateSearch {
   readonly into?: string;
@@ -21,9 +21,9 @@ function MigrateRoute() {
     <main class="min-w-0 space-y-4 p-6">
       <Breadcrumb
         crumbs={[
-          { label: t("Sefer"), to: "/" },
-          { label: t("Projects"), to: "/projects" },
-          { label: t("Migrate from Writer") },
+          { label: m.common_sefer(), to: "/" },
+          { label: m.common_projects(), to: "/projects" },
+          { label: m.migrate_migrate_from_writer() },
         ]}
       />
       <MigrateScreen into={search().into} language={search().language} />
@@ -40,6 +40,6 @@ export const Route = createFileRoute("/_app/migrate")({
       ...(language === undefined ? {} : { language }),
     };
   },
-  head: () => ({ meta: [{ title: "Migrate from Writer · Sefer" }] }),
+  head: () => ({ meta: [{ title: m.page_title({ page: m.page_migrate() }) }] }),
   component: () => <ShellGate>{() => <MigrateRoute />}</ShellGate>,
 });

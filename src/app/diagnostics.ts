@@ -1,5 +1,6 @@
 import { Effect, Option } from "effect";
 
+import { m } from "#app/paraglide/messages";
 import { renderExport, type ProjectSnapshot } from "#core/diagnostics/export";
 import { channelOf, UNKNOWN, type SessionHeader } from "#core/diagnostics/header";
 import { listParts, makeLogWriter, pruneLogs } from "#core/diagnostics/logFiles";
@@ -9,7 +10,6 @@ import { idle } from "#platform/observability";
 import { describe } from "./describe";
 import { resolveEndpoints } from "./endpoints";
 import { env } from "./env";
-import { t } from "./i18n";
 import type { Services } from "./services";
 import { shellKeys } from "./settings";
 import { downloadBytes } from "./ui/landing/download";
@@ -261,9 +261,9 @@ const diagnosticsText = async (
   const persist = services.logFiles.status();
   let missing: string | undefined;
   if (read.status.state === "unavailable")
-    missing = t("The log files could not be read: {reason}", { reason: read.status.reason });
+    missing = m.diagnostics_the_log_files_could_not({ reason: read.status.reason });
   else if (persist.state === "stopped")
-    missing = t("Writing the log stopped this session: {reason}", { reason: persist.reason ?? "" });
+    missing = m.diagnostics_writing_the_log_stopped_this({ reason: persist.reason ?? "" });
   const text = renderExport({
     header: sessionHeader(services),
     exported: Date.now(),
@@ -300,14 +300,14 @@ export const exportDiagnostics = async (
   const nativeDisk = services.hostInfo.capabilities().nativeDisk;
   const destination = nativeDisk
     ? await services.run(
-        services.dialogs.pickSaveFile(t("Save diagnostics"), fileName, JSONL_FILTERS),
+        services.dialogs.pickSaveFile(m.diagnostics_save_diagnostics(), fileName, JSONL_FILTERS),
       )
     : Option.none<string>();
   if (nativeDisk && Option.isNone(destination)) {
     operation.end("declined");
     return;
   }
-  const notice = toasts.progress({ title: t("Preparing diagnostics") });
+  const notice = toasts.progress({ title: m.diagnostics_preparing_diagnostics() });
   try {
     const { text, missing } = await diagnosticsText(services, project);
     const lines = text.split("\n").length - 1;
@@ -321,7 +321,10 @@ export const exportDiagnostics = async (
     });
     const where = Option.isSome(destination) ? destination.value : fileName;
     toasts.update(notice, {
-      title: missing === undefined ? t("Diagnostics exported") : t("Diagnostics exported, in part"),
+      title:
+        missing === undefined
+          ? m.diagnostics_diagnostics_exported()
+          : m.diagnostics_diagnostics_exported_in_part(),
       message: missing === undefined ? where : `${where} — ${missing}`,
       tone: missing === undefined ? "success" : "info",
       ...(missing === undefined ? {} : { autoClose: false }),
@@ -329,7 +332,7 @@ export const exportDiagnostics = async (
   } catch (cause) {
     operation.end("failed", { "error.type": cause instanceof Error ? cause.name : "unknown" });
     toasts.update(notice, {
-      title: t("Could not export diagnostics"),
+      title: m.diagnostics_could_not_export_diagnostics(),
       message: describe(cause),
       tone: "error",
       autoClose: false,

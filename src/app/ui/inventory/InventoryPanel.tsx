@@ -3,10 +3,10 @@ import Type from "lucide-solid/icons/case-sensitive";
 import Search from "lucide-solid/icons/search";
 import { For, Show, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import { codePointLabel, type Glyph } from "#core/findings/inventory";
 import { POOLS, type Pool } from "#core/galley";
 
-import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import {
   Badge,
@@ -27,9 +27,9 @@ import { GlyphDetail } from "./GlyphDetail";
 import { GlyphTile } from "./GlyphTile";
 
 const LENSES = [
-  { value: "all", label: "All" },
-  { value: "flagged", label: "Flagged" },
-  { value: "quiet", label: "Quiet" },
+  { value: "all", label: m.inventory_all },
+  { value: "flagged", label: m.inventory_flagged },
+  { value: "quiet", label: m.inventory_quiet },
 ] as const;
 
 type Lens = (typeof LENSES)[number]["value"];
@@ -151,13 +151,11 @@ export function InventoryPanel() {
   return (
     <main class="min-w-0 space-y-4 p-6">
       <PanelHeader
-        title={t("Character inventory")}
-        subtitle={t(
-          "How this translation uses its punctuation, digits and symbols — and what stands out.",
-        )}
+        title={m.common_character_inventory()}
+        subtitle={m.inventory_how_this_translation_uses_its()}
         actions={
           <span class="text-small text-on-surface-tertiary" data-inventory-count={shown().length}>
-            {t("{characters} characters · {flagged} flagged sites", {
+            {m.inventory_characters_characters_flagged_flagged_sites({
               characters: held().glyphs.length,
               flagged: held().flaggedSites,
             })}
@@ -170,11 +168,11 @@ export function InventoryPanel() {
         fallback={
           <EmptyState
             icon={<Type size={22} />}
-            title={t("No project is open.")}
-            description={t("The inventory is a reading of one project's whole corpus.")}
+            title={m.inventory_no_project_is_open()}
+            description={m.inventory_the_inventory_is_a_reading()}
             action={
               <Link to="/" class="text-small text-brand hover:underline">
-                {t("Open a project")}
+                {m.inventory_open_a_project()}
               </Link>
             }
           />
@@ -184,10 +182,8 @@ export function InventoryPanel() {
           when={held().bookCount > 0}
           fallback={
             <EmptyState
-              title={t("Analyzing…")}
-              description={t(
-                "The corpus has not been published yet. The inventory appears with the first whole-corpus publication, a moment after the project opens.",
-              )}
+              title={m.inventory_analyzing()}
+              description={m.inventory_the_corpus_has_not_been()}
             />
           }
         >
@@ -195,11 +191,11 @@ export function InventoryPanel() {
             when={held().glyphs.length > 0}
             fallback={
               <EmptyState
-                title={t("The publication measured no characters.")}
-                description={t(
-                  "Sous publishes a pattern row only when a channel has a claim to make about a glyph. This corpus produced none — {words} word patterns, {rows} rows in all.",
-                  { words: held().wordPatterns.length, rows: held().patternCount },
-                )}
+                title={m.inventory_the_publication_measured_no_characters()}
+                description={m.inventory_sous_publishes_a_pattern_row({
+                  words: held().wordPatterns.length,
+                  rows: held().patternCount,
+                })}
               />
             }
           >
@@ -208,39 +204,37 @@ export function InventoryPanel() {
                 size="sm"
                 wrapperClass="w-56"
                 icon={<Search />}
-                placeholder={t("A character, a name, or U+201C")}
-                aria-label={t("Filter characters")}
+                placeholder={m.inventory_a_character_a_name_or()}
+                aria-label={m.inventory_filter_characters()}
                 value={query()}
                 onInput={(event) => setQuery(event.currentTarget.value)}
               />
               <SegmentedControl<Lens>
-                label={t("Show which characters")}
-                items={LENSES.map((item) => ({ value: item.value, label: t(item.label) }))}
+                label={m.inventory_show_which_characters()}
+                items={LENSES.map((item) => ({ value: item.value, label: item.label() }))}
                 value={lens()}
                 onChange={(value) => setLens(value)}
               />
               <Select
                 size="sm"
                 wrapperClass="w-40"
-                aria-label={t("Filter by pool")}
+                aria-label={m.inventory_filter_by_pool()}
                 value={pool()}
                 // SAFETY: the option list below is exactly `POOLS` plus the empty "every pool" value, so a native select can only ever report one of those strings back.
                 onChange={(event) => setPool(event.currentTarget.value as Pool | "")}
               >
-                <option value="">{t("Every pool")}</option>
+                <option value="">{m.inventory_every_pool()}</option>
                 <For each={POOLS}>{(name) => <option value={name}>{name}</option>}</For>
               </Select>
               <span class="ms-auto text-smallest text-on-surface-tertiary">
-                {t("{shown} of {total} shown", {
+                {m.inventory_shown_of_total_shown({
                   shown: shown().length,
                   total: held().glyphs.length,
                 })}
               </span>
 
               <p class="w-full text-smallest text-on-surface-tertiary">
-                {t(
-                  "These are the characters the engine measured — it publishes a row when a channel has something to say about a glyph, not one per character in the text. “Sites” is the largest population any of a character's channels was judged against, not a count of the text.",
-                )}
+                {m.inventory_these_are_the_characters_the()}
               </p>
             </Card>
 
@@ -249,17 +243,15 @@ export function InventoryPanel() {
                 <Table>
                   <TableHead>
                     <TableRow>
-                      <TableHeader>{t("Character")}</TableHeader>
+                      <TableHeader>{m.inventory_character()}</TableHeader>
                       <TableHeader
                         class="text-end"
-                        title={t(
-                          "The largest population any of its channels was judged against — a proxy, not a count of the text.",
-                        )}
+                        title={m.inventory_the_largest_population_any_of()}
                       >
-                        {t("Sites")}
+                        {m.inventory_sites()}
                       </TableHeader>
-                      <TableHeader class="text-end">{t("Books")}</TableHeader>
-                      <TableHeader class="text-end">{t("Flagged")}</TableHeader>
+                      <TableHeader class="text-end">{m.common_books()}</TableHeader>
+                      <TableHeader class="text-end">{m.inventory_flagged()}</TableHeader>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -268,7 +260,7 @@ export function InventoryPanel() {
                 </Table>
                 <Show when={shown().length === 0}>
                   <p class="px-4 py-8 text-center text-small text-on-surface-tertiary">
-                    {t("No character matches this filter.")}
+                    {m.inventory_no_character_matches_this_filter()}
                   </p>
                 </Show>
               </Card>
@@ -288,14 +280,12 @@ export function InventoryPanel() {
             <Show when={held().wordPatterns.length > 0}>
               <Card class="space-y-1 text-small text-on-surface-secondary">
                 <strong class="font-semibold text-on-surface-primary">
-                  {t("Not shown here: {count} word patterns", {
+                  {m.inventory_not_shown_here_count_word({
                     count: held().wordPatterns.length,
                   })}
                 </strong>
                 <p class="text-smallest text-on-surface-tertiary">
-                  {t(
-                    "Casing, word length and doubled words are judgements about words, not about characters. The engine carries them in the same table; this page keeps them out of it rather than filing them under a character they do not describe.",
-                  )}
+                  {m.inventory_casing_word_length_and_doubled()}
                 </p>
               </Card>
             </Show>

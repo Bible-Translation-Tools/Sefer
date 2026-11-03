@@ -8,7 +8,6 @@ import { Remote } from "#core/remote/remote";
 
 import { collaboration } from "../../collaboration";
 import { describeTransfer } from "../../describe";
-import { t } from "../../i18n";
 import { m } from "../../paraglide/messages";
 import { useShell, type Shell } from "../../ProjectContext";
 import { syncWatch } from "../../syncWatch";
@@ -146,7 +145,7 @@ const createSharedProject = (account: Account, root: () => string | undefined) =
       if (at === undefined) return;
       account.attempt(async () => {
         await services.run(initAndAttach(at, repo.cloneUrl));
-        shell.report(t("attached {name}", { name: repo.fullName }));
+        shell.report(m.cloud_attached_name({ name: repo.fullName }));
         reread();
       });
     },
@@ -159,7 +158,7 @@ const createSharedProject = (account: Account, root: () => string | undefined) =
         if (staticName === "") return;
         await services.run(initAndPublish(at, staticName));
         setNewName("");
-        shell.report(t("published {name}", { name: staticName }));
+        shell.report(m.cloud_published_name({ name: staticName }));
         reread();
       });
     },
@@ -179,7 +178,7 @@ const RepoChooser = (props: {
 }) => (
   <div class="flex flex-wrap items-center gap-2">
     <Popover
-      label={t("Shared projects")}
+      label={m.cloud_shared_projects()}
       side="bottom"
       align="start"
       class="flex max-h-[60vh] w-96 flex-col p-2"
@@ -190,7 +189,7 @@ const RepoChooser = (props: {
       }}
       trigger={
         <Button disabled={props.account.busy()} data-testid="choose-shared-project">
-          {t("Choose a shared project…")}
+          {m.cloud_choose_a_shared_project()}
         </Button>
       }
     >
@@ -199,8 +198,8 @@ const RepoChooser = (props: {
         fallback={<p class="p-2 text-small text-on-surface-tertiary">{props.emptyNote}</p>}
       >
         <FilterList
-          label={t("Filter shared projects")}
-          placeholder={t("Name or owner…")}
+          label={m.cloud_filter_shared_projects()}
+          placeholder={m.cloud_name_or_owner()}
           items={props.shared.repos()}
           key={(repo) => repo.fullName}
           match={(repo, query) => repo.fullName.toLowerCase().includes(query.toLowerCase())}
@@ -229,12 +228,12 @@ const CreateForm = (props: { readonly account: Account; readonly shared: SharedP
     <Input
       type="text"
       wrapperClass="w-64"
-      placeholder={t("new shared project name")}
+      placeholder={m.cloud_new_shared_project_name()}
       value={props.shared.newName()}
       onInput={(event) => props.shared.setNewName(event.currentTarget.value)}
     />
     <Button type="submit" disabled={props.account.busy()}>
-      {t("Create and publish")}
+      {m.cloud_create_and_publish()}
     </Button>
   </form>
 );
@@ -253,17 +252,13 @@ const SharedControls = (props: {
 const AttachedBlock = (props: { readonly origin: string; readonly children: JSX.Element }) => (
   <div class="space-y-3">
     <p class="text-small text-on-surface-secondary" data-cloud="attached-to">
-      {t("This project is shared at {name}.", { name: props.origin })}
+      {m.cloud_this_project_is_shared_at({ name: props.origin })}
     </p>
     <details class="space-y-3" data-cloud="change-shared">
       <summary class="cursor-pointer text-small text-on-surface-tertiary">
-        {t("Change shared project…")}
+        {m.cloud_change_shared_project()}
       </summary>
-      <p class="pt-2 text-smallest text-on-surface-tertiary">
-        {t(
-          "Your work stays on this device. Another shared project changes where this one receives from and sends to.",
-        )}
-      </p>
+      <p class="pt-2 text-smallest text-on-surface-tertiary">{m.cloud_your_work_stays_on_this()}</p>
       {props.children}
     </details>
   </div>
@@ -277,8 +272,8 @@ export function SharedProjectCard(props: {
   const account = props.account;
   const shared = createSharedProject(account, () => props.root);
   const emptyNote = (): string => {
-    if (account.host === null) return t("Sign in to choose a shared project.");
-    return account.busy() ? t("Listing your projects…") : t("No projects to choose from.");
+    if (account.host === null) return m.cloud_sign_in_to_choose_a();
+    return account.busy() ? m.cloud_listing_your_projects() : m.cloud_no_projects_to_choose_from();
   };
   const controls = () => (
     <SharedControls account={account} shared={shared} emptyNote={emptyNote()} />
@@ -286,7 +281,7 @@ export function SharedProjectCard(props: {
 
   return (
     <Card class="space-y-3" data-cloud-card="attach">
-      <PanelHeader level={3} title={t("Shared project")} />
+      <PanelHeader level={3} title={m.cloud_shared_project()} />
 
       <Show
         when={account.host !== null && account.session() !== undefined}
@@ -300,7 +295,7 @@ export function SharedProjectCard(props: {
           when={props.root !== undefined}
           fallback={
             <p class="text-small text-on-surface-tertiary" data-cloud="no-project">
-              {t("Open a project to attach it to a shared project, or to send and receive.")}
+              {m.cloud_open_a_project_to_attach()}
             </p>
           }
         >

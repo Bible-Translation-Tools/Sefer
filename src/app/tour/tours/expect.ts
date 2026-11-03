@@ -38,8 +38,8 @@ export const expectTour: Tour = {
   id: "expect",
   kind: "tutorial",
   audience: "internal",
-  title: "Expect: catching spelling slips (Bisa demo)",
-  summary:
+  title: () => "Expect: catching spelling slips (Bisa demo)",
+  summary: () =>
     "Where the source says “Jesus”, a Bisa translation should say “Yesu”. Sefer shows the verses that do not.",
   needsProject: true,
   start:

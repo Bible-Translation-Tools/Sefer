@@ -12,7 +12,6 @@ import {
 } from "#core/excerpts/excerpts";
 import type { Analysis } from "#core/galley";
 
-import { t } from "../../i18n";
 import { m } from "../../paraglide/messages";
 import { CardList, type CardListProps } from "../multibuffer/CardList";
 import type { CardViews } from "../multibuffer/cardViews";
@@ -161,7 +160,7 @@ export function ExcerptList(props: ExcerptListProps) {
       claimSidebar(
         () => (
           <ResultsOutline
-            title={props.sections?.title ?? t("Results")}
+            title={props.sections?.title ?? m.excerpts_results()}
             groups={props.groups}
             outline={props.outline}
             active={current()}

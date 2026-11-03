@@ -150,7 +150,7 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
 }
 
 export const Route = createFileRoute("/_app/project/$slug/book/$book")({
-  head: () => ({ meta: [{ title: "Sefer — book" }] }),
+  head: () => ({ meta: [{ title: m.page_title({ page: m.page_book() }) }] }),
   component: () => {
     const params = Route.useParams();
     const shell = useShell();

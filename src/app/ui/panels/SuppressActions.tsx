@@ -2,9 +2,9 @@ import CheckCheck from "lucide-solid/icons/check-check";
 import Ellipsis from "lucide-solid/icons/ellipsis";
 import { Show } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import type { Finding } from "#core/findings/finding";
 
-import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { checkSwitchOf } from "../../sousSettings";
 import {
@@ -24,20 +24,25 @@ function MoreMenu(props: { readonly finding: Finding; readonly everywhere: boole
 
   return (
     <Menu
-      label={t("More ways to answer this finding")}
+      label={m.findings_more_ways_to_answer_this()}
       side="bottom"
       align="end"
       class="w-80"
       trigger={
-        <IconButton label={t("More")} size="sm" icon={<Ellipsis />} data-tour="finding-more" />
+        <IconButton
+          label={m.common_more()}
+          size="sm"
+          icon={<Ellipsis />}
+          data-tour="finding-more"
+        />
       }
     >
       <Show when={props.everywhere}>
         <MenuItem onSelect={() => allow(shell, props.finding)} data-testid="suppress-allow">
           <span class="flex flex-col gap-0.5">
-            <span>{t("Always allow “{text}”", { text: flagged() })}</span>
+            <span>{m.findings_always_allow_text({ text: flagged() })}</span>
             <span class="text-smallest font-normal text-on-surface-tertiary">
-              {t("Never flag this in this project. Other “{check}” findings still show.", {
+              {m.findings_never_flag_this_in_this({
                 check: check(),
               })}
             </span>
@@ -47,9 +52,9 @@ function MoreMenu(props: { readonly finding: Finding; readonly everywhere: boole
       <Show when={checkSwitchOf(props.finding.code) !== undefined}>
         <MenuItem onSelect={() => turnOff(shell, props.finding)} data-testid="suppress-turn-off">
           <span class="flex flex-col gap-0.5">
-            <span>{t("Turn off “{check}”", { check: check() })}</span>
+            <span>{m.findings_turn_off_check({ check: check() })}</span>
             <span class="text-smallest font-normal text-on-surface-tertiary">
-              {t("Stop this check in every project. Turn it back on in the proofreading settings.")}
+              {m.findings_stop_this_check_in_every()}
             </span>
           </span>
         </MenuItem>
@@ -72,12 +77,12 @@ export function SuppressActions(props: { readonly finding: Finding }) {
           variant="tertiary"
           title={
             hidden() === "everywhere"
-              ? t("Allowed everywhere in this project: bringing it back shows every one.")
-              : t("Marked fine here.")
+              ? m.findings_allowed_everywhere_in_this_project()
+              : m.findings_marked_fine_here_2()
           }
           onClick={() => bringBack(shell, props.finding)}
         >
-          {hidden() === "everywhere" ? t("Stop allowing") : t("Show again")}
+          {hidden() === "everywhere" ? m.findings_stop_allowing() : m.findings_show_again()}
         </Button>
       }
     >
@@ -89,10 +94,10 @@ export function SuppressActions(props: { readonly finding: Finding }) {
               variant="tertiary"
               icon={<CheckCheck />}
               data-tour="fine-here"
-              title={t("Hide this one. It comes back if this text changes.")}
+              title={m.findings_hide_this_one_it_comes()}
               onClick={() => fineHere(shell, props.finding)}
             >
-              {t("Fine here")}
+              {m.common_fine_here()}
             </Button>
             <Show
               when={

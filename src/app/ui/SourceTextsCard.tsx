@@ -12,10 +12,10 @@
 import { Effect, Result } from "effect";
 import { For, Show, createEffect, createSignal } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import type { Resource } from "#core/resources/library";
 
 import { adoptAsProject, libraryRevision } from "../arrival";
-import { t } from "../i18n";
 import { roleFor } from "../kinds/table";
 import { useShell } from "../ProjectContext";
 import { Button, Card, PanelHeader, toasts } from "./primitives";
@@ -50,13 +50,13 @@ function SourceTextRow(props: SourceTextRowProps) {
             data-testid={`adopt-${props.resource.id}`}
             onClick={() => props.onAsk()}
           >
-            {t("Edit as your own project…")}
+            {m.source_texts_edit_as_your_own_project()}
           </Button>
         }
       >
         <span class="flex items-center gap-2">
           <Button size="sm" variant="tertiary" onClick={() => props.onCancel()}>
-            {t("Cancel")}
+            {m.common_cancel()}
           </Button>
           <Button
             size="sm"
@@ -65,7 +65,7 @@ function SourceTextRow(props: SourceTextRowProps) {
             disabled={props.busy}
             onClick={() => props.onAdopt()}
           >
-            {t("Move to my projects")}
+            {m.source_texts_move_to_my_projects()}
           </Button>
         </span>
       </Show>
@@ -104,11 +104,11 @@ export function SourceTextsCard() {
       setBusy(false);
       setAsking(undefined);
       if (Result.isFailure(outcome)) {
-        toasts.error({ title: t("Could not move {title}", { title: resource.title }) });
+        toasts.error({ title: m.source_texts_could_not_move_title({ title: resource.title }) });
         return;
       }
       toasts.success({
-        title: t("{title} is now one of your projects", { title: resource.title }),
+        title: m.source_texts_title_is_now_one_of({ title: resource.title }),
       });
     });
   };
@@ -118,10 +118,8 @@ export function SourceTextsCard() {
       <Card class="space-y-2" data-settings-group="source-texts">
         <PanelHeader
           level={3}
-          title={t("Source texts on this device")}
-          subtitle={t(
-            "Downloaded to read beside your projects. Editing one makes it your own project: it leaves this list, and projects that read it download the official text again.",
-          )}
+          title={m.source_texts_source_texts_on_this_device()}
+          subtitle={m.source_texts_downloaded_to_read_beside_your()}
         />
         <ul class="divide-y divide-surface-border">
           <For each={copies()}>

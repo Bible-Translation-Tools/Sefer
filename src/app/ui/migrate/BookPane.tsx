@@ -22,11 +22,11 @@ import { CANON } from "@wycliffeassociates/sefer-text/location/canon";
 import { Result } from "effect";
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import { diffSkeleton } from "#core/diff/skeleton";
 import { candidateLabel, type BookCandidate } from "#core/migrate/candidate";
 import type { Health } from "#core/migrate/check";
 
-import { t } from "../../i18n";
 import { passagesDiffering, sourceCensus, type Opened } from "../../migrate";
 import { useShell, type Shell } from "../../ProjectContext";
 import { formatDate } from "../landing/summaries";
@@ -63,8 +63,8 @@ const healthOfCandidate = (
   expected: Health | undefined,
 ): { readonly text: string; readonly off: boolean } => {
   if (held.state === "refused")
-    return { text: t("refused: {reason}", { reason: held.reason }), off: true };
-  if (held.state !== "ready") return { text: t("Checking…"), off: false };
+    return { text: m.migrate_refused_reason({ reason: held.reason }), off: true };
+  if (held.state !== "ready") return { text: m.migrate_checking(), off: false };
   return {
     text: healthLine(held.health),
     off:
@@ -130,15 +130,15 @@ function CandidateHeader() {
       )}
     >
       <span role="columnheader">
-        <span class="sr-only">{t("Use")}</span>
+        <span class="sr-only">{m.migrate_use()}</span>
       </span>
-      <span role="columnheader">{t("Who")}</span>
-      <span role="columnheader">{t("Status")}</span>
-      <span role="columnheader">{t("Updated")}</span>
-      <span role="columnheader">{t("Health")}</span>
-      <span role="columnheader">{t("Differs from picked")}</span>
+      <span role="columnheader">{m.migrate_who()}</span>
+      <span role="columnheader">{m.migrate_status()}</span>
+      <span role="columnheader">{m.migrate_updated()}</span>
+      <span role="columnheader">{m.migrate_health()}</span>
+      <span role="columnheader">{m.migrate_differs_from_picked()}</span>
       <span role="columnheader">
-        <span class="sr-only">{t("Compare")}</span>
+        <span class="sr-only">{m.common_compare()}</span>
       </span>
     </div>
   );
@@ -179,7 +179,7 @@ function CandidateRow(props: {
       <span role="cell" class="flex min-w-0 items-center gap-2">
         <span class="truncate font-medium">{candidateLabel(props.candidate)}</span>
         <Show when={props.recommended === props.candidate.id}>
-          <Badge tone="brand">{t("Recommended")}</Badge>
+          <Badge tone="brand">{m.migrate_recommended()}</Badge>
         </Show>
       </span>
       <span role="cell" class="text-on-surface-secondary">
@@ -211,7 +211,7 @@ function CandidateRow(props: {
               props.onCompare();
             }}
           >
-            {props.comparing ? t("Hide") : t("Compare")}
+            {props.comparing ? m.migrate_hide() : m.common_compare()}
           </Button>
         </Show>
       </span>
@@ -271,10 +271,10 @@ export function BookPane(props: {
   const healthOf = (id: string) => healthOfCandidate(props.opened(id), source()?.health);
 
   const differingText = (id: string): string => {
-    if (id === props.picked) return t("picked");
+    if (id === props.picked) return m.migrate_picked();
     const count = differing().get(id);
     if (count === undefined) return "—";
-    return count === 0 ? t("same text") : t("{count} passages", { count });
+    return count === 0 ? m.migrate_same_text() : m.migrate_count_passages({ count });
   };
 
   const compared = createMemo(
@@ -308,7 +308,7 @@ export function BookPane(props: {
         <Show when={source()}>
           {(found) => (
             <span class="text-small text-on-surface-secondary">
-              {t("{title} has {chapters} ch · {verses} v", {
+              {m.migrate_title_has_chapters_ch_verses({
                 title: found().title,
                 chapters: found().health.chapters,
                 verses: found().health.verses,
@@ -318,7 +318,7 @@ export function BookPane(props: {
         </Show>
       </div>
 
-      <div role="table" aria-label={t("Candidates for {book}", { book: name() })}>
+      <div role="table" aria-label={m.migrate_candidates_for_book({ book: name() })}>
         <CandidateHeader />
         <For each={props.candidates}>
           {(candidate) => (

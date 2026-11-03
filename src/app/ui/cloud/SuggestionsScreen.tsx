@@ -3,7 +3,6 @@ import RefreshCw from "lucide-solid/icons/refresh-cw";
 import { Show, createSignal, onCleanup, untrack } from "solid-js";
 
 import { collaboration } from "../../collaboration";
-import { t } from "../../i18n";
 import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
 import { ago } from "../panels/format";
@@ -20,11 +19,11 @@ const CheckAction = (props: {
 }) => (
   <span class="inline-flex items-center gap-0.5 text-smallest text-on-surface-tertiary">
     <Show when={props.checkedAt}>
-      {(at) => <span>{t("checked {when}", { when: ago(at()) })}</span>}
+      {(at) => <span>{m.cloud_checked_when({ when: ago(at()) })}</span>}
     </Show>
     <IconButton
       size="sm"
-      label={t("Check for suggestions")}
+      label={m.cloud_check_for_suggestions()}
       disabled={props.checking}
       icon={<RefreshCw class={cx(props.checking && "animate-spin")} />}
       onClick={props.onCheck}
@@ -55,7 +54,7 @@ export function SuggestionsScreen() {
       () => (
         <ChangesHistorySidebar active="suggestions">
           <p class="px-6 pt-3 text-small text-on-surface-tertiary">
-            {t("Suggestions are offered from people's own copies.")}
+            {m.cloud_suggestions_are_offered_from_peoples()}
           </p>
         </ChangesHistorySidebar>
       ),
@@ -68,8 +67,8 @@ export function SuggestionsScreen() {
   return (
     <main class="flex h-full min-w-0 flex-col gap-6 overflow-y-auto p-6" data-screen="suggestions">
       <PanelHeader
-        title={t("Suggestions")}
-        subtitle={t("The shared project only changes when an editor accepts.")}
+        title={m.common_suggestions()}
+        subtitle={m.cloud_the_shared_project_only_changes_when()}
         actions={
           <CheckAction checkedAt={facts()?.checkedAt} checking={checking()} onCheck={check} />
         }
@@ -84,10 +83,8 @@ export function SuggestionsScreen() {
       <Show when={nothing()}>
         <EmptyState
           icon={<Inbox aria-hidden="true" />}
-          title={t("No suggestions here")}
-          description={t(
-            "Suggestions are offered from your own copy, and reviewed by the shared project's editors. Choose how you work in Settings.",
-          )}
+          title={m.cloud_no_suggestions_here()}
+          description={m.cloud_suggestions_are_offered_from_your()}
         />
       </Show>
     </main>

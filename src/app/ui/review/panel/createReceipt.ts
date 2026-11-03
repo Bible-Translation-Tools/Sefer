@@ -1,8 +1,9 @@
 import { createSignal } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
+
 import { collaboration } from "../../../collaboration";
 import { describe } from "../../../describe";
-import { t } from "../../../i18n";
 import type { Navigate, Shell } from "../../../ProjectContext";
 import type { Services } from "../../../services";
 import { reviewNeeded, suggestMyChanges } from "../../../suggestions";
@@ -32,11 +33,11 @@ function lineOfSend(shell: Shell, outcome: SendOutcome): ReceiptLine | undefined
     return waiting
       ? {
           ...copy,
-          detail: t("Your open suggestion now includes these changes."),
+          detail: m.review_your_open_suggestion_now_includes(),
         }
       : {
           ...copy,
-          detail: t("Offer them to the shared project when they are ready."),
+          detail: m.review_offer_them_to_the_shared(),
           action: "offer",
         };
   }
@@ -54,10 +55,8 @@ function offerChanges(
     .then(() =>
       setSendLine({
         tone: "success",
-        title: t("Offered to the shared project"),
-        detail: t(
-          "The project's editors will see your changes. Later sends add to the same suggestion.",
-        ),
+        title: m.review_offered_to_the_shared_project(),
+        detail: m.review_the_projects_editors_will_see(),
       }),
     )
     .catch((cause: unknown) => {
@@ -67,13 +66,13 @@ function offerChanges(
         needed !== undefined && said !== undefined
           ? {
               tone: "warning",
-              title: t("Not offered yet: {why}", { why: said.title }),
+              title: m.review_not_offered_yet_why({ why: said.title }),
               detail: said.message,
               action: needed.copy ? "copy" : "see",
             }
           : {
               tone: "error",
-              title: t("Could not offer your changes"),
+              title: m.review_could_not_offer_your_changes(),
               detail: describe(cause),
               action: "offer",
             },

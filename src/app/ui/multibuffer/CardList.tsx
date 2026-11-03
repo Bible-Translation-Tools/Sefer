@@ -10,7 +10,8 @@ import {
   type Accessor,
 } from "solid-js";
 
-import { t } from "../../i18n";
+import { m } from "#app/paraglide/messages";
+
 import { VirtualList, type VirtualSection } from "../primitives";
 
 export interface CardSession {
@@ -108,7 +109,7 @@ function GoneLine(props: GoneLineProps) {
         <button
           type="button"
           class="ms-auto cursor-pointer text-smallest hover:text-on-surface-primary"
-          aria-label={t("Dismiss")}
+          aria-label={m.common_dismiss()}
           onClick={() => props.onDismiss()}
         >
           ×
@@ -133,7 +134,7 @@ export function CardList<T>(props: CardListProps<T>) {
     const held = pin();
     return held !== undefined && !keys().has(held.key);
   };
-  const goneLabel = (): string => props.goneLabel ?? t("No longer in the results");
+  const goneLabel = (): string => props.goneLabel ?? m.multibuffer_no_longer_in_the_results();
 
   const shown = createMemo(
     (): readonly VirtualSection<T>[] => {

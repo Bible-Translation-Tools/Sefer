@@ -27,7 +27,6 @@ import { Remote, type Deepen } from "#core/remote/remote";
 import { trackingRef } from "#core/sync";
 
 import { remoteReasonOf } from "../../describe";
-import { t } from "../../i18n";
 import { m } from "../../paraglide/messages";
 import { useShell, type Shell } from "../../ProjectContext";
 import { syncStatus } from "../../syncStatus";
@@ -397,15 +396,15 @@ const adopt = (shell: Shell, yours: YoursMap, hunk: Hunk, side: "baseline" | "cu
   const changes = side === "current" ? held?.version : held?.before;
   const picked = yoursAt(yours, hunk, side);
   if (held === undefined || changes === undefined || picked.length === 0) {
-    toasts.success({ title: t("Already in your text") });
+    toasts.success({ title: m.history_already_in_your_text() });
     return;
   }
   const done = revertUnits(shell.services.galley, held.book, changes, picked);
   if (TextResult.isFailure(done)) {
-    toasts.error({ title: t("Adopt refused"), message: t(done.failure.reason) });
+    toasts.error({ title: m.history_adopt_refused(), message: done.failure.reason });
     return;
   }
-  toasts.success({ title: t("Adopted into your text") });
+  toasts.success({ title: m.history_adopted_into_your_text() });
   shell.changed({ kind: "book.apply", books: [hunk.bookId] });
 };
 
@@ -425,8 +424,8 @@ const adoptAction = (
     label,
     disabled: off,
     title: off
-      ? t("Your text already reads this way here.")
-      : t("Write this wording into your text. Unsaved until you record a version."),
+      ? m.history_your_text_already_reads_this()
+      : m.history_write_this_wording_into_your(),
     onPress: () => adopt(shell, yours, hunk, side),
   };
 };
@@ -449,7 +448,7 @@ const yoursBelow = (
       steps: 0,
     })}
     usfm={markup()}
-    label={t("Your text against this version")}
+    label={m.history_your_text_against_this_version()}
   />
 );
 
@@ -468,7 +467,9 @@ const createSidesOf =
     const open = differs.length > 0 && yoursOpen().has(hunk.key);
     const sides = yours().get(hunk.bookId)?.sides;
     return {
-      baseline: [adoptOf("baseline", "adopt-before", split ? t("Adopt") : t("Adopt before"))],
+      baseline: [
+        adoptOf("baseline", "adopt-before", split ? m.history_adopt() : m.history_adopt_before()),
+      ],
       current: [
         ...(differs.length === 0
           ? []
@@ -477,9 +478,9 @@ const createSidesOf =
                 kind: "button",
                 id: "yours",
                 emphasis: "tertiary",
-                label: t("Yours differs"),
+                label: m.history_yours_differs(),
                 pressed: open,
-                title: t("Show your text against this version"),
+                title: m.history_show_your_text_against_this(),
                 onPress: () =>
                   setYoursOpen((was) => {
                     const next = new Set(was);
@@ -488,7 +489,11 @@ const createSidesOf =
                   }),
               } satisfies CardAction,
             ]),
-        adoptOf("current", "adopt-version", split ? t("Adopt") : t("Adopt this version")),
+        adoptOf(
+          "current",
+          "adopt-version",
+          split ? m.history_adopt() : m.history_adopt_this_version(),
+        ),
       ],
       below:
         open && sides !== undefined ? yoursBelow(shell, hunk, differs, sides, markup) : undefined,
@@ -546,7 +551,7 @@ function TimelineList(props: {
                 data-history-divider="local"
                 class="px-5 py-1 text-smallest font-medium text-on-surface-warning"
               >
-                {t("Only on this device")}
+                {m.history_only_on_this_device()}
               </li>
             </Show>
             <Show
@@ -560,7 +565,7 @@ function TimelineList(props: {
                 data-history-divider="shared"
                 class="px-5 py-1 text-smallest font-medium text-on-surface-tertiary"
               >
-                {t("On the shared project")}
+                {m.history_on_the_shared_project()}
               </li>
             </Show>
             <li>
@@ -574,12 +579,9 @@ function TimelineList(props: {
 }
 
 const olderNoteOf = (older: Older): string => {
-  if (older === "loading") return t("Bringing the older history to this device…");
-  if (older === "failed")
-    return t(
-      "The older history could not be brought to this device. What is here is recent history only.",
-    );
-  return t("Only recent history is on this device. The older history is on the shared project.");
+  if (older === "loading") return m.history_bringing_the_older_history_to();
+  if (older === "failed") return m.history_the_older_history_could_not();
+  return m.history_only_recent_history_is_on();
 };
 
 function OlderHistory(props: { readonly older: Older; readonly onLoad: (more: Deepen) => void }) {
@@ -589,10 +591,10 @@ function OlderHistory(props: { readonly older: Older; readonly onLoad: (more: De
       <Show when={props.older !== "loading"}>
         <div class="flex gap-2">
           <Button variant="secondary" size="sm" onClick={() => props.onLoad(HISTORY_STEP)}>
-            {t("Load {count} more", { count: HISTORY_STEP })}
+            {m.history_load_count_more({ count: HISTORY_STEP })}
           </Button>
           <Button variant="tertiary" size="sm" onClick={() => props.onLoad("all")}>
-            {t("Load all")}
+            {m.history_load_all()}
           </Button>
         </div>
       </Show>
@@ -615,17 +617,17 @@ function HistorySidebar(props: {
     <ChangesHistorySidebar active="history" changes={props.changes}>
       <div class="flex items-center gap-2 px-4 pt-3 pb-2">
         <p class="min-w-0 flex-1 px-2 text-small text-on-surface-secondary">
-          {t("{count} version(s)", { count: props.log?.length ?? 0 })}
+          {m.history_count_versions({ count: props.log?.length ?? 0 })}
         </p>
         <IconButton
           size="sm"
           variant="subtle"
-          label={t("Reload")}
+          label={m.common_reload()}
           icon={<RefreshCw />}
           onClick={props.onReload}
         />
       </div>
-      <nav aria-label={t("Timeline")} class="min-h-0 flex-1 overflow-y-auto pb-4">
+      <nav aria-label={m.history_timeline()} class="min-h-0 flex-1 overflow-y-auto pb-4">
         <TimelineList
           log={props.log}
           problem={props.problem}
@@ -659,8 +661,8 @@ function HistoryProblem(props: { readonly problem: string; readonly onReview: ()
       when={props.problem === "NotARepository"}
       fallback={
         <EmptyState
-          title={t("Sefer could not read this project's history.")}
-          description={t("The repository refused the read: {reason}.", {
+          title={m.history_sefer_could_not_read_this()}
+          description={m.history_the_repository_refused_the_read({
             reason: props.problem,
           })}
         />
@@ -668,13 +670,11 @@ function HistoryProblem(props: { readonly problem: string; readonly onReview: ()
     >
       <EmptyState
         icon={<GitCommitVertical size={22} />}
-        title={t("Nothing has been recorded for this project yet.")}
-        description={t(
-          "Your unsaved work is kept safe as you type, but your books are only written to disk when you Save & Review. That records a version you can come back to — the first one creates the repository.",
-        )}
+        title={m.history_nothing_has_been_recorded_for()}
+        description={m.history_your_unsaved_work_is_kept()}
         action={
           <Button variant="primary" size="sm" onClick={props.onReview}>
-            {t("Save & Review")}
+            {m.common_save_review()}
           </Button>
         }
       />
@@ -699,18 +699,20 @@ function ChangedBooks(props: {
               fallback={
                 <>
                   <Badge tone="warning">
-                    {t("{count} change(s)", { count: changeCount(changes) })}
+                    {m.history_count_changes({ count: changeCount(changes) })}
                   </Badge>
                   <Show when={changes.added > 0}>
-                    <Badge tone="success">{t("+{count} added", { count: changes.added })}</Badge>
+                    <Badge tone="success">{m.history_count_added({ count: changes.added })}</Badge>
                   </Show>
                   <Show when={changes.removed > 0}>
-                    <Badge tone="error">{t("−{count} removed", { count: changes.removed })}</Badge>
+                    <Badge tone="error">
+                      {m.history_count_removed({ count: changes.removed })}
+                    </Badge>
                   </Show>
                 </>
               }
             >
-              <Badge tone="brand">{t("first version")}</Badge>
+              <Badge tone="brand">{m.history_first_version()}</Badge>
             </Show>
           </span>
         )}
@@ -750,9 +752,9 @@ export function HistoryPanel() {
   };
   const [older, setOlder] = createSignal<Older>("whole", { name: "historyOlder" });
   const emptyTitle = (): string => {
-    if (log()?.length === 0) return t("No versions yet.");
-    if (selected() === "") return t("Reading the history…");
-    return t("This version changed no book's text.");
+    if (log()?.length === 0) return m.history_no_versions_yet();
+    if (selected() === "") return m.history_reading_the_history();
+    return m.history_this_version_changed_no_books();
   };
 
   const { load, loadOlder } = createTimelineLoader(shell, {
@@ -841,7 +843,7 @@ export function HistoryPanel() {
   return (
     <main class="flex h-full min-w-0 flex-col gap-4 p-6" data-history>
       <PanelHeader
-        title={selectedCommit()?.message ?? t("History")}
+        title={selectedCommit()?.message ?? m.common_history()}
         subtitle={
           <Show when={selectedCommit()}>{(commit) => <CommitSubtitle commit={commit()} />}</Show>
         }
@@ -852,8 +854,8 @@ export function HistoryPanel() {
         fallback={
           <EmptyState
             icon={<GitCommitVertical size={22} />}
-            title={t("Open a project first.")}
-            description={t("History is read from the project's own repository.")}
+            title={m.history_open_a_project_first()}
+            description={m.history_history_is_read_from_the()}
           />
         }
       >
@@ -875,17 +877,17 @@ export function HistoryPanel() {
                   sides={sidesOf}
                   usfm={markup()}
                   onUsfm={setMarkup}
-                  currentLabel={t("This version · {when}", {
+                  currentLabel={m.history_this_version_when({
                     when: dated(selectedCommit()?.at ?? Date.now()),
                   })}
                   baselineLabel={(bookId) => {
                     const before = previousOf(versions(), bookId, selected());
                     return before === undefined
-                      ? t("Before it")
-                      : t("Before it · {when}", { when: dated(before.commit.at) });
+                      ? m.history_before_it()
+                      : m.history_before_it_when({ when: dated(before.commit.at) });
                   }}
-                  currentShort={t("this version")}
-                  baselineShort={t("before")}
+                  currentShort={m.history_this_version()}
+                  baselineShort={m.history_before()}
                   selected={focusBook()}
                   onSelect={setFocusBook}
                   seat={seatBook}

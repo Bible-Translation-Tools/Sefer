@@ -6,7 +6,6 @@ import { Show, createMemo, createSignal, onCleanup, untrack, type Accessor } fro
 
 import type { Analysis, DecisionUnit, MergeSide } from "#core/galley";
 
-import { t } from "../../i18n";
 import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
 import type { Services } from "../../services";
@@ -178,8 +177,8 @@ function createControls(props: ReviewReaderProps, prepared: Accessor<readonly Pr
       ? {
           decision: (unit) => props.decision(bookId, unit.id),
           decide: (unit, side) => props.decide(bookId, [unit], side),
-          keepTitle: t("Keep {source}'s", { source: props.currentShort }),
-          takeTitle: t("Take {source}'s", { source: props.baselineShort }),
+          keepTitle: m.review_keep_source_s({ source: props.currentShort }),
+          takeTitle: m.review_take_source_s({ source: props.baselineShort }),
           live: props.writesDecisions ?? props.decidable,
           dimUnchosen: props.dimUnchosen === true,
         }
@@ -231,10 +230,10 @@ function cardDecisionFor(
   const side: MergeSide | "mixed" | undefined = sides.size !== 1 ? "mixed" : [...sides][0];
   const one = hunk.units.length === 1;
   const takeLabel = (): string => {
-    if (side === "baseline") return t("Taken from {source}", { source: props.baselineShort });
+    if (side === "baseline") return m.review_taken_from_source({ source: props.baselineShort });
     return one
-      ? t("Take {source}'s", { source: props.baselineShort })
-      : t("Take all of {source}'s", { source: props.baselineShort });
+      ? m.review_take_source_s({ source: props.baselineShort })
+      : m.review_take_all_of_source_s({ source: props.baselineShort });
   };
   const choose = (chosen: MergeSide): void =>
     props.decide(hunk.bookId, hunk.units, side === chosen ? undefined : chosen);
@@ -253,8 +252,8 @@ function cardDecisionFor(
       emphasis: "tertiary",
       pressed: side === "current",
       label: one
-        ? t("Keep {source}'s", { source: props.currentShort })
-        : t("Keep all of {source}'s", { source: props.currentShort }),
+        ? m.review_keep_source_s({ source: props.currentShort })
+        : m.review_keep_all_of_source_s({ source: props.currentShort }),
       onPress: () => choose("current"),
     },
   ];
@@ -504,7 +503,7 @@ export function ReviewReader(props: ReviewReaderProps) {
         fallback={
           <Show
             when={selectedBook()?.book.bookId}
-            fallback={<EmptyState title={t("Preparing…")} />}
+            fallback={<EmptyState title={m.review_preparing()} />}
           >
             {(_bookId) => <WholeBookView reader={reader} />}
           </Show>

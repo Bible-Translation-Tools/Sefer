@@ -4,9 +4,9 @@ import { Result } from "effect";
 import ArrowLeft from "lucide-solid/icons/arrow-left";
 import { For, Show, createSignal } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import { decodeBurritoMetadata, type BurritoMetadata } from "#core/resources/burrito";
 
-import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { Badge, Button, Card, Input, PanelHeader, SegmentedControl, Select } from "../primitives";
 
@@ -182,7 +182,7 @@ const BookGroup = (props: {
         {props.title}
       </h3>
       <Button size="sm" variant="tertiary" onClick={() => props.form.selectAll(props.set)}>
-        {t("Select all")}
+        {m.landing_select_all()}
       </Button>
     </div>
     <div class="flex flex-wrap gap-1">
@@ -204,53 +204,50 @@ const BookGroup = (props: {
 
 const IdentityFields = (props: { readonly form: ProjectForm }) => (
   <div class="grid gap-4 sm:grid-cols-2">
-    <Field label={t("Project name")} hint={t("What translators will see in the projects list.")}>
+    <Field label={m.landing_project_name()} hint={m.landing_what_translators_will_see_in()}>
       <Input
         value={props.form.name()}
-        placeholder={t("Shila New Testament")}
+        placeholder={m.landing_shila_new_testament()}
         onInput={(event) => props.form.setName(event.currentTarget.value)}
       />
     </Field>
-    <Field label={t("Abbreviation")} hint={t("Optional short form, e.g. SHNT.")}>
+    <Field label={m.landing_abbreviation()} hint={m.landing_optional_short_form_e_g()}>
       <Input
         value={props.form.abbreviation()}
-        placeholder={t("SHNT")}
+        placeholder={m.landing_shnt()}
         onInput={(event) => props.form.setAbbreviation(event.currentTarget.value)}
       />
     </Field>
-    <Field
-      label={t("Project id")}
-      hint={t("The folder name on disk. Letters, digits and hyphens.")}
-    >
+    <Field label={m.landing_project_id()} hint={m.landing_the_folder_name_on_disk()}>
       <Input
         value={props.form.projectId()}
-        placeholder={t("bem-x-shila-nt")}
+        placeholder={m.landing_bem_x_shila_nt()}
         onInput={(event) => props.form.setProjectId(event.currentTarget.value)}
       />
     </Field>
-    <Field label={t("Language name")} hint={t("As its own speakers write it.")}>
+    <Field label={m.landing_language_name()} hint={m.landing_as_its_own_speakers_write()}>
       <Input
         value={props.form.languageName()}
-        placeholder={t("Ichibemba")}
+        placeholder={m.landing_ichibemba()}
         onInput={(event) => props.form.setLanguageName(event.currentTarget.value)}
       />
     </Field>
-    <Field label={t("Language id")} hint={t("A BCP-47 tag, e.g. bem or bem-x-shila.")}>
+    <Field label={m.landing_language_id()} hint={m.landing_a_bcp_47_tag_e()}>
       <Input
         value={props.form.languageTag()}
-        placeholder={t("bem-x-shila")}
+        placeholder={m.landing_bem_x_shila()}
         onInput={(event) => props.form.setLanguageTag(event.currentTarget.value)}
       />
     </Field>
-    <Field label={t("Script direction")} hint={t("How the script runs on the page.")}>
+    <Field label={m.landing_script_direction()} hint={m.landing_how_the_script_runs_on()}>
       <Select
         value={props.form.direction()}
         onChange={(event) =>
           props.form.setDirection(event.currentTarget.value === "rtl" ? "rtl" : "ltr")
         }
       >
-        <option value="ltr">{t("Left to right")}</option>
-        <option value="rtl">{t("Right to left")}</option>
+        <option value="ltr">{m.landing_left_to_right()}</option>
+        <option value="rtl">{m.landing_right_to_left()}</option>
       </Select>
     </Field>
   </div>
@@ -260,10 +257,10 @@ const StagedMetadata = (props: { readonly metadata: BurritoMetadata }) => (
   <div class="space-y-2" data-staged-metadata>
     <div class="flex items-center gap-2">
       <Badge tone="success" size="sm">
-        {t("valid Scripture Burrito")}
+        {m.landing_valid_scripture_burrito()}
       </Badge>
       <span class="text-smallest text-on-surface-tertiary">
-        {t("Not written: ProjectAdmin has no create yet.")}
+        {m.landing_not_written_projectadmin_has_no()}
       </span>
     </div>
     <pre class="max-h-72 overflow-auto rounded-md bg-surface-secondary p-3 font-mono text-smallest text-on-surface-secondary">
@@ -275,17 +272,15 @@ const StagedMetadata = (props: { readonly metadata: BurritoMetadata }) => (
 const TypePicker = (props: { readonly form: ProjectForm }) => (
   <div class="space-y-1.5">
     <SegmentedControl
-      label={t("Project type")}
+      label={m.landing_project_type()}
       value={props.form.type()}
       onChange={props.form.setType}
       items={[
-        { value: "translation", label: t("Translation") },
-        { value: "gateway", label: t("Gateway") },
+        { value: "translation", label: m.landing_translation() },
+        { value: "gateway", label: m.landing_gateway() },
       ]}
     />
-    <p class="text-smallest text-on-surface-tertiary">
-      {t("A gateway project is the one other teams translate from.")}
-    </p>
+    <p class="text-smallest text-on-surface-tertiary">{m.landing_a_gateway_project_is_the()}</p>
   </div>
 );
 
@@ -293,16 +288,16 @@ const BooksCard = (props: { readonly form: ProjectForm }) => (
   <Card class="space-y-4">
     <PanelHeader
       level={3}
-      title={t("Books to include")}
-      subtitle={t("{count} selected", { count: props.form.books().length })}
+      title={m.landing_books_to_include()}
+      subtitle={m.landing_count_selected({ count: props.form.books().length })}
       actions={
         <Button size="sm" variant="tertiary" onClick={() => props.form.setBooks([])}>
-          {t("Clear")}
+          {m.common_clear()}
         </Button>
       }
     />
-    <BookGroup title={t("Old Testament")} set={OLD_TESTAMENT} form={props.form} />
-    <BookGroup title={t("New Testament")} set={NEW_TESTAMENT} form={props.form} />
+    <BookGroup title={m.common_old_testament()} set={OLD_TESTAMENT} form={props.form} />
+    <BookGroup title={m.common_new_testament()} set={NEW_TESTAMENT} form={props.form} />
   </Card>
 );
 
@@ -313,8 +308,8 @@ export function CreateProject() {
     <div class="space-y-4">
       <Card class="space-y-5">
         <PanelHeader
-          title={t("Create new project")}
-          subtitle={t("Everything a Scripture Burrito needs to identify itself.")}
+          title={m.landing_create_new_project()}
+          subtitle={m.landing_everything_a_scripture_burrito_needs()}
           actions={
             <Link
               to="/projects"
@@ -322,7 +317,7 @@ export function CreateProject() {
               class="inline-flex items-center gap-1 text-smallest text-on-surface-tertiary no-underline hover:text-on-surface-secondary"
             >
               <ArrowLeft size={13} aria-hidden="true" />
-              {t("Go back")}
+              {m.landing_go_back()}
             </Link>
           }
         />
@@ -337,15 +332,13 @@ export function CreateProject() {
       <Card class="space-y-3">
         <div class="flex flex-wrap items-center gap-3">
           <Button variant="primary" disabled>
-            {t("Create (not available yet)")}
+            {m.landing_create_not_available_yet()}
           </Button>
           <Button disabled={!form.complete()} onClick={form.build}>
-            {t("Validate metadata")}
+            {m.landing_validate_metadata()}
           </Button>
           <p class="min-w-60 flex-1 text-smallest text-on-surface-tertiary">
-            {t(
-              "Sefer cannot write a new project yet: ProjectAdmin has no create, and a project with no books could not be opened. Validate checks this metadata against the Scripture Burrito schema and shows exactly what would be written.",
-            )}
+            {m.landing_sefer_cannot_write_a_new()}
           </p>
         </div>
 

@@ -1,9 +1,10 @@
 import { Effect } from "effect";
 import { createSignal, untrack } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
+
 import { collaboration } from "../../../collaboration";
 import { describe } from "../../../describe";
-import { t } from "../../../i18n";
 import type { Navigate, Shell } from "../../../ProjectContext";
 import { recordVersion } from "../../../recordVersion";
 import type { Services } from "../../../services";
@@ -67,18 +68,18 @@ function declineFromDialog(
   declineSuggestion(services, project, { number }, staticNote)
     .then(() => {
       toasts.success({
-        title: t("Declined"),
+        title: m.review_declined(),
         message:
           staticNote.trim() === ""
-            ? t("The suggestion is closed; its author sees it was not brought in.")
-            : t("Its author can read your note."),
+            ? m.review_the_suggestion_is_closed_its()
+            : m.review_its_author_can_read_your(),
       });
       inputs.receipt.closeRecord();
       void collaboration.refresh(services, project);
       void navigate({ to: "/project/$slug/suggestions", params: { slug: shell.slug() } });
     })
     .catch((cause: unknown) =>
-      toasts.error({ title: t("Could not decline it"), message: describe(cause) }),
+      toasts.error({ title: m.review_could_not_decline_it(), message: describe(cause) }),
     )
     .finally(() => state.setRecording(false));
 }
@@ -96,8 +97,8 @@ function combinedLine(settling: Settling) {
   return {
     tone: "success" as const,
     title: settling.copyReview
-      ? t("Combined with your copy on this device")
-      : t("Combined with the shared project on this device"),
+      ? m.review_combined_with_your_copy_on()
+      : m.review_combined_with_the_shared_project(),
     detail: settling.staticMessage,
   };
 }
@@ -124,7 +125,7 @@ function markTakenFor(
       .then(() => inputs.form.setBroughtIn(true))
       .catch((cause: unknown) =>
         toasts.error({
-          title: t("Brought in, but the suggestion is still open on the shared project"),
+          title: m.review_brought_in_but_the_suggestion(),
           message: describe(cause),
         }),
       )
@@ -157,7 +158,7 @@ function reportReceived(
       shell.noteWritten(outcome.recorded.books, false);
       setRecordedLine({
         tone: "error",
-        title: t("Updates received; your decisions are on disk, but not recorded"),
+        title: m.review_updates_received_your_decisions_are(),
         detail: describe(outcome.recorded.error),
       });
       settledDone(inputs);
@@ -165,7 +166,7 @@ function reportReceived(
     case "not-written":
       setRecordedLine({
         tone: "error",
-        title: t("Updates received; your decisions could not be written"),
+        title: m.review_updates_received_your_decisions_could(),
         detail: describe(outcome.recorded.error),
       });
       settledDone(inputs);
@@ -184,7 +185,7 @@ function reportSettled(
     case "refused":
       setRecordedLine({
         tone: "error",
-        title: t("Not combined"),
+        title: m.review_not_combined(),
         detail: refusedDetail(outcome),
       });
       break;
@@ -200,7 +201,7 @@ function reportSettled(
           ? lineOfSend(outcome.to === "copy" ? { kind: "sent", toCopy: true } : { kind: "sent" })
           : {
               tone: "warning",
-              title: t("Saved here. Not sent yet"),
+              title: m.review_saved_here_not_sent_yet(),
               detail: combineTrouble("recorded"),
               action: "retry",
             },
@@ -249,12 +250,12 @@ function reportRecorded(
   const { setRecordedLine, follow } = inputs.receipt;
   switch (outcome.kind) {
     case "nothing":
-      setRecordedLine({ tone: "muted", title: t("Nothing to record") });
+      setRecordedLine({ tone: "muted", title: m.review_nothing_to_record() });
       break;
     case "not-written":
       setRecordedLine({
         tone: "error",
-        title: t("Could not write to disk"),
+        title: m.review_could_not_write_to_disk(),
         detail: describe(outcome.error),
       });
       break;
@@ -262,7 +263,7 @@ function reportRecorded(
       shell.noteWritten(outcome.books, false);
       setRecordedLine({
         tone: "error",
-        title: t("On disk, but not recorded"),
+        title: m.review_on_disk_but_not_recorded(),
         detail: describe(outcome.error),
       });
       break;
@@ -270,7 +271,7 @@ function reportRecorded(
       shell.noteWritten(outcome.books, true);
       setRecordedLine({
         tone: "success",
-        title: t("Recorded {count} book(s) on this device", { count: outcome.receipts }),
+        title: m.review_recorded_count_books_on_this_device({ count: outcome.receipts }),
         detail: `${staticMessage} · ${outcome.commit.slice(0, 7)}`,
       });
       inputs.form.setMessage("");
@@ -299,7 +300,7 @@ async function recordPlain(
           .run(takeWriterWork(services, project, writerBooks))
           .catch((cause: unknown) => {
             toasts.error({
-              title: t("Could not mark the Writer work taken"),
+              title: m.review_could_not_mark_the_writer(),
               message: describe(cause),
             });
             return undefined;
@@ -307,7 +308,7 @@ async function recordPlain(
   const writerMessage =
     writerBooks.length === 0 || typedMessage !== ""
       ? staticMessage
-      : t("Reviewed Writer work: {books}", {
+      : m.review_reviewed_writer_work_books({
           books: writerBooks.map((id) => bookName(id, metadataOf(project))).join(", "),
         });
   const outcome = await recordVersion(
@@ -342,8 +343,8 @@ async function record(inputs: RecordActionInputs, state: RecordState): Promise<v
   const by = author() ?? (typed === "" ? undefined : { name: typed, email: "" });
   if (by === undefined) {
     toasts.error({
-      title: t("Add your name first"),
-      message: t("It goes with every version you keep."),
+      title: m.review_add_your_name_first(),
+      message: m.review_it_goes_with_every_version(),
     });
     return;
   }
@@ -353,8 +354,8 @@ async function record(inputs: RecordActionInputs, state: RecordState): Promise<v
   }
   if (againstShared() && undecidedBoth() > 0) {
     toasts.error({
-      title: t("Choose a side first"),
-      message: t("{count} passage(s) changed in both places still need a choice.", {
+      title: m.review_choose_a_side_first(),
+      message: m.review_passages_changed_in_both_places({
         count: undecidedBoth(),
       }),
     });

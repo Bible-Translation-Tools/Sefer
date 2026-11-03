@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/solid-router";
 
+import { m } from "#app/paraglide/messages";
 import { FindingsPanel } from "#app/ui/panels";
 import { ShellGate } from "#app/ui/ShellGate";
 
@@ -25,6 +26,6 @@ export const Route = createFileRoute("/_app/project/$slug/findings")({
       ...(pattern === undefined ? {} : { pattern }),
     };
   },
-  head: () => ({ meta: [{ title: "Sefer — findings" }] }),
+  head: () => ({ meta: [{ title: m.page_title({ page: m.page_findings() }) }] }),
   component: () => <ShellGate>{() => <FindingsPanel />}</ShellGate>,
 });

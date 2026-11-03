@@ -9,7 +9,6 @@ import { Show, createEffect, createSignal } from "solid-js";
 import { m } from "#app/paraglide/messages";
 
 import { findCommand, runCommand } from "../../commands";
-import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { IconButton, Input, Popover, Switch } from "../primitives";
 import { bookName } from "./books";
@@ -29,8 +28,8 @@ function ToolbarSearch(props: { query: string; onQuery: (value: string) => void 
       data-testid="toolbar-search"
       wrapperClass="w-44"
       icon={<SearchIcon />}
-      aria-label={t("Find in project")}
-      placeholder={t("Search…")}
+      aria-label={m.workspace_find_in_project()}
+      placeholder={m.workspace_search()}
       value={props.query}
       onInput={(event) => props.onQuery(event.currentTarget.value)}
       onKeyDown={(event) => {
@@ -74,13 +73,15 @@ function KebabMenu(props: {
   const shell = useShell();
   return (
     <Popover
-      label={t("Book actions")}
+      label={m.workspace_book_actions()}
       side="bottom"
       align="end"
       class="w-64 p-1"
       open={props.open}
       onOpenChange={props.onOpenChange}
-      trigger={<IconButton data-testid="toolbar-kebab" label={t("More")} icon={<MoreVertical />} />}
+      trigger={
+        <IconButton data-testid="toolbar-kebab" label={m.common_more()} icon={<MoreVertical />} />
+      }
     >
       {/* How the book shows: switches, so the menu stays open while they flip. */}
       <Switch
@@ -100,7 +101,7 @@ function KebabMenu(props: {
       <Show when={props.hasSource}>
         <KebabItem
           testId="toolbar-overlay"
-          label={t("Match formatting from source")}
+          label={m.workspace_match_formatting_from_source()}
           disabled={!can("overlay.book")}
           onSelect={() => {
             props.onOpenChange(false);
@@ -113,7 +114,7 @@ function KebabMenu(props: {
 
       <KebabItem
         testId="kebab-save-review"
-        label={t("Save & Review")}
+        label={m.common_save_review()}
         disabled={!can("book.save")}
         onSelect={() => {
           props.onOpenChange(false);
@@ -122,7 +123,7 @@ function KebabMenu(props: {
       />
       <KebabItem
         testId="kebab-inventory"
-        label={t("Character inventory")}
+        label={m.common_character_inventory()}
         onSelect={() => {
           props.onOpenChange(false);
           void navigate({
@@ -137,7 +138,7 @@ function KebabMenu(props: {
 
       <KebabItem
         testId="kebab-format-book"
-        label={t("Format book")}
+        label={m.common_format_book()}
         onSelect={() => {
           props.onOpenChange(false);
           runCommand("format.book");
@@ -145,7 +146,7 @@ function KebabMenu(props: {
       />
       <KebabItem
         testId="kebab-format-project"
-        label={t("Format project")}
+        label={m.workspace_format_project()}
         onSelect={() => {
           props.onOpenChange(false);
           runCommand("format.project");
@@ -156,7 +157,7 @@ function KebabMenu(props: {
 
       <KebabItem
         testId="kebab-export-zip"
-        label={t("Export as zip")}
+        label={m.workspace_export_as_zip()}
         onSelect={() => {
           props.onOpenChange(false);
           runCommand("project.export");
@@ -164,7 +165,7 @@ function KebabMenu(props: {
       />
       <KebabItem
         testId="kebab-rename-project"
-        label={t("Rename project")}
+        label={m.common_rename_project()}
         onSelect={() => {
           props.onOpenChange(false);
           runCommand("project.rename");
@@ -185,14 +186,14 @@ export function ProjectTools() {
       <div class="flex shrink-0 items-center gap-2" data-testid="toolbar">
         <IconButton
           data-testid="toolbar-undo"
-          label={t("Undo")}
+          label={m.common_undo()}
           icon={<Undo2 />}
           disabled={!can("book.undo")}
           onClick={() => runCommand("book.undo")}
         />
         <IconButton
           data-testid="toolbar-redo"
-          label={t("Redo")}
+          label={m.common_redo()}
           icon={<Redo2 />}
           disabled={!can("book.redo")}
           onClick={() => runCommand("book.redo")}

@@ -1,11 +1,11 @@
 import { Outlet, createFileRoute } from "@tanstack/solid-router";
 import { Match, Switch, createEffect, createSignal, untrack } from "solid-js";
 
-import { t } from "#app/i18n";
+import { m } from "#app/paraglide/messages";
 import { useShell } from "#app/ProjectContext";
 import { DelayedSpinner } from "#app/ui/primitives";
-import { ShellGate } from "#app/ui/ShellGate";
 import "#app/ui/theme";
+import { ShellGate } from "#app/ui/ShellGate";
 
 function ProjectLayout() {
   const shell = useShell();
@@ -39,7 +39,7 @@ function ProjectLayout() {
         <Outlet />
       </Match>
       <Match when={phase() === "unknown"}>
-        <main data-testid="no-project" aria-label={t("No project open")} class="h-full" />
+        <main data-testid="no-project" aria-label={m.shell_no_project_open()} class="h-full" />
       </Match>
       <Match when={phase() === "opening"}>
         {/* The open reads every book, parses every book and proofreads the

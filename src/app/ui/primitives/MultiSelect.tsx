@@ -3,7 +3,8 @@ import Check from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import { For, Show, createMemo, createSignal } from "solid-js";
 
-import { t } from "../../i18n";
+import { m } from "#app/paraglide/messages";
+
 import { Button } from "./Button";
 import { cx } from "./cx";
 import { Input } from "./Input";
@@ -107,7 +108,7 @@ export function MultiSelect<T>(props: MultiSelectProps<T>) {
           role="combobox"
           aria-expanded="true"
           aria-label={props.label}
-          placeholder={props.placeholder ?? t("Filter…")}
+          placeholder={props.placeholder ?? m.common_filter()}
           value={query()}
           onInput={(event) => {
             setQuery(event.currentTarget.value);
@@ -122,7 +123,7 @@ export function MultiSelect<T>(props: MultiSelectProps<T>) {
           <p class="px-2 py-3 text-center text-smallest text-on-surface-tertiary">
             {query().trim() === "" && props.empty !== undefined
               ? props.empty
-              : t("Nothing matches {query}", { query: query() })}
+              : m.common_nothing_matches_query({ query: query() })}
           </p>
         }
       >

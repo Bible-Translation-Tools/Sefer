@@ -1,11 +1,11 @@
 import { Effect, Option } from "effect";
 import { createSignal } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import type { Author } from "#core/git/git";
 
 import { personAuthor } from "../../../author";
 import { collaboration } from "../../../collaboration";
-import { t } from "../../../i18n";
 import type { Shell } from "../../../ProjectContext";
 import type { Services } from "../../../services";
 import { syncPreferences } from "../../../syncSettings";
@@ -28,11 +28,11 @@ function sendsLineOf(shell: Shell): string {
   const name = facts?.sendsTo;
   if (name === undefined)
     return copy
-      ? t("This also sends your changes to your copy.")
-      : t("This also sends your changes to the shared project.");
+      ? m.review_this_also_sends_your_changes()
+      : m.review_this_also_sends_your_changes_to();
   return copy
-    ? t("This also sends your changes to your copy, {name}.", { name })
-    : t("This also sends your changes to the shared project, {name}.", { name });
+    ? m.review_this_also_sends_your_changes_to_your({ name })
+    : m.review_this_also_sends_your_changes_to_the({ name });
 }
 
 function openRecordWith(
@@ -65,27 +65,20 @@ function createDescriptions(inputs: SaveFormInputs, unsaved: () => readonly unkn
   const { againstShared } = inputs.sides;
 
   const decidedDescription = (): string => {
-    if (againstShared())
-      return t(
-        "The editor now reads as you chose. Save to finish: it keeps your choices and joins your work with the shared project's.",
-      );
+    if (againstShared()) return m.review_the_editor_now_reads_as();
     return unsaved().length > 0
-      ? t("Both sides now read the same. Save to keep it.")
-      : t("Both sides now read the same. Nothing is left to save.");
+      ? m.review_both_sides_now_read_the()
+      : m.review_both_sides_now_read_the_same();
   };
 
   const saveDescription = (): string => {
     if (!againstShared())
-      return t("Your changes in {count} book(s) are written and kept as a version.", {
+      return m.review_your_changes_in_count_books({
         count: unsaved().length,
       });
     return fromCopy()
-      ? t(
-          "The project's text is kept as you left it here: your choices, and anything you edited. A passage only your copy changed, that you didn't choose for, comes in. Its versions stay in the history either way, and this one goes on top, so the next send is an ordinary one.",
-        )
-      : t(
-          "The project's text is kept as you left it here: your choices, and anything you edited. A passage only the shared project changed, that you didn't choose for, comes in. Everything else it changed arrives too, as one version.",
-        );
+      ? m.review_the_projects_text_is_kept()
+      : m.review_the_projects_text_is_kept_as();
   };
   return { decidedDescription, saveDescription };
 }
@@ -106,7 +99,9 @@ export function createSaveForm(inputs: SaveFormInputs) {
 
   const defaultMessage = (): string => {
     const names = unsaved().map((book) => bookName(book.bookId, metadataOf(shell.project())));
-    return names.length === 0 ? t("Edited") : t("Edited {books}", { books: names.join(", ") });
+    return names.length === 0
+      ? m.review_edited()
+      : m.review_edited_books({ books: names.join(", ") });
   };
 
   return {

@@ -1,6 +1,7 @@
 import type { Book } from "@wycliffeassociates/sefer-text/book";
 import { Option, Result } from "effect";
 
+import { m } from "#app/paraglide/messages";
 import {
   currentProjectSource,
   folderSource,
@@ -13,7 +14,6 @@ import {
 import type { Project } from "#core/project/project";
 import type { Baseline } from "#core/save/baseline";
 
-import { t } from "../../i18n";
 import type { Services } from "../../services";
 
 export interface SourceChoice {
@@ -41,18 +41,16 @@ export interface ChoiceContext {
 
 const projectChoice = ({ services, project }: ChoiceContext): SourceChoice => ({
   id: "project",
-  label: t("In the editor"),
-  shortLabel: t("the editor"),
+  label: m.review_in_the_editor(),
+  shortLabel: m.review_the_editor(),
   explainer:
-    project === undefined
-      ? t("No project is open.")
-      : t("The books as they are right now, including unsaved edits."),
+    project === undefined ? m.review_no_project_is_open() : m.review_the_books_as_they_are(),
   available: project !== undefined,
   immediate: () =>
     project === undefined
       ? undefined
       : currentProjectSource(project, {
-          label: t("In the editor"),
+          label: m.review_in_the_editor(),
           edits: (before, after) => {
             const found = services.galley.mergeSplices(before, after, new Map(), "current");
             return Result.isSuccess(found) ? found.success : undefined;
@@ -64,12 +62,14 @@ const diskChoice = (context: ChoiceContext): SourceChoice => {
   const { project } = context;
   return {
     id: "disk",
-    label: t("On disk"),
-    shortLabel: t("the file"),
-    explainer: t("The bytes in the project's files — what was loaded, or last recorded."),
+    label: m.review_on_disk(),
+    shortLabel: m.review_the_file(),
+    explainer: m.review_the_bytes_in_the_projects(),
     available: project !== undefined,
     immediate: () =>
-      project === undefined ? undefined : savedSource(project, context.baselineOf, t("On disk")),
+      project === undefined
+        ? undefined
+        : savedSource(project, context.baselineOf, m.review_on_disk()),
   };
 };
 
@@ -77,15 +77,17 @@ const recordedChoice = (context: ChoiceContext): SourceChoice => {
   const { project } = context;
   return {
     id: "recorded",
-    label: t("The last recorded version"),
-    shortLabel: t("the last version"),
+    label: m.review_the_last_recorded_version(),
+    shortLabel: m.review_the_last_version(),
     explainer:
       context.recorded.head === undefined
-        ? t("Nothing has been recorded in this project yet.")
-        : t("The books as the last commit holds them."),
+        ? m.review_nothing_has_been_recorded_in()
+        : m.review_the_books_as_the_last(),
     available: project !== undefined && context.recorded.head !== undefined,
     immediate: () =>
-      project === undefined ? undefined : recordedSource(context.recorded, t("Last recorded")),
+      project === undefined
+        ? undefined
+        : recordedSource(context.recorded, m.review_last_recorded()),
   };
 };
 
@@ -93,18 +95,17 @@ const sharedChoice = (context: ChoiceContext): SourceChoice => {
   const { project } = context;
   return {
     id: "shared",
-    label: context.sharedLabel ?? t("The shared project"),
-    shortLabel: context.sharedLabel?.toLowerCase() ?? t("the shared project"),
+    label: context.sharedLabel ?? m.review_the_shared_project(),
+    shortLabel: context.sharedLabel?.toLowerCase() ?? m.review_the_shared_project_2(),
     explainer:
       context.shared.head === undefined
-        ? t("Nothing has been received from a shared project yet.")
-        : (context.sharedExplainer ??
-          t("The shared project's newest version, as the last check brought it here.")),
+        ? m.review_nothing_has_been_received_from()
+        : (context.sharedExplainer ?? m.review_the_shared_projects_newest_version()),
     available: project !== undefined && context.shared.head !== undefined,
     immediate: () =>
       project === undefined
         ? undefined
-        : sharedSource(context.shared, context.sharedLabel ?? t("The shared project")),
+        : sharedSource(context.shared, context.sharedLabel ?? m.review_the_shared_project()),
   };
 };
 
@@ -112,12 +113,12 @@ const writerChoice = (context: ChoiceContext): SourceChoice => {
   const { project } = context;
   return {
     id: "writer",
-    label: context.writer?.label ?? t("From Writer"),
-    shortLabel: t("Writer"),
+    label: context.writer?.label ?? m.review_from_writer(),
+    shortLabel: m.common_writer(),
     explainer:
       context.writer === undefined
-        ? t("No Writer project this project follows has new work.")
-        : t("New saves in Writer, in the verses they changed since this project took them."),
+        ? m.review_no_writer_project_this_project()
+        : m.review_new_saves_in_writer_in(),
     available: project !== undefined && context.writer !== undefined,
     immediate: () =>
       project === undefined || context.writer === undefined
@@ -128,11 +129,11 @@ const writerChoice = (context: ChoiceContext): SourceChoice => {
 
 const zipChoice = (services: Services, web: boolean): SourceChoice => ({
   id: "zip",
-  label: t("A zip"),
-  shortLabel: t("the zip"),
+  label: m.review_a_zip(),
+  shortLabel: m.review_the_zip(),
   explainer: web
-    ? t("A .zip somebody shared. It is unpacked here, in the page, and only read.")
-    : t("This host opens folders directly; unzip it first."),
+    ? m.review_a_zip_somebody_shared_it()
+    : m.review_this_host_opens_folders_directly(),
   available: web,
   pick: async () => {
     const intake = await import("#platform/web/intake");
@@ -147,16 +148,16 @@ const zipChoice = (services: Services, web: boolean): SourceChoice => ({
 
 const folderChoice = (services: Services, nativeFolder: boolean): SourceChoice => ({
   id: "folder",
-  label: t("A folder"),
-  shortLabel: t("the folder"),
+  label: m.review_a_folder(),
+  shortLabel: m.review_the_folder(),
   explainer: nativeFolder
-    ? t("Any folder of books on this disk. It is only read.")
-    : t("The browser copies the folder's files in so Sefer can read them."),
+    ? m.review_any_folder_of_books_on()
+    : m.review_the_browser_copies_the_folders(),
   available: true,
   pick: async () => {
     if (nativeFolder) {
       const picked = await services.run(
-        services.dialogs.pickFolder(t("Select a folder to compare")),
+        services.dialogs.pickFolder(m.review_select_a_folder_to_compare()),
       );
       const root = Option.getOrUndefined(picked);
       return root === undefined ? undefined : folderSource(services.fileSystem, root);

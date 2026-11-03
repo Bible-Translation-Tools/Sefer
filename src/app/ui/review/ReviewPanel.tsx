@@ -7,7 +7,6 @@ import { Show, createEffect, createSignal, onCleanup, untrack, type Accessor } f
 import type { BookComparison } from "#core/compare";
 import type { Restorable } from "#core/recovery/recovery";
 
-import { t } from "../../i18n";
 import { m } from "../../paraglide/messages";
 import { useShell, type Navigate, type Shell } from "../../ProjectContext";
 import type { Services } from "../../services";
@@ -210,7 +209,7 @@ export function ReviewPanel() {
     claimSidebar(
       () => (
         <ChangesHistorySidebar active="changes" changes={0}>
-          <p class="px-6 pt-3 text-small text-on-surface-tertiary">{t("Nothing differs.")}</p>
+          <p class="px-6 pt-3 text-small text-on-surface-tertiary">{m.review_nothing_differs()}</p>
         </ChangesHistorySidebar>
       ),
       { show: m.sidebar_show_changes(), hide: m.sidebar_hide_changes() },
@@ -264,9 +263,9 @@ export function ReviewPanel() {
 
   const bookLabel = (book: BookComparison): string => {
     if (book.presence === "left")
-      return t("{book} — only in {source}", { book: nameOf(book.bookId), source: leftShort() });
+      return m.review_book_only_in_source({ book: nameOf(book.bookId), source: leftShort() });
     if (book.presence === "right")
-      return t("{book} — only in {source}", { book: nameOf(book.bookId), source: rightShort() });
+      return m.review_book_only_in_source({ book: nameOf(book.bookId), source: rightShort() });
     return nameOf(book.bookId);
   };
 
@@ -293,7 +292,7 @@ export function ReviewPanel() {
     <main class="flex h-full min-w-0 flex-col gap-2 px-4 pt-3 pb-2" data-review>
       <Show
         when={shell.project()}
-        fallback={<EmptyState icon={<Scale size={22} />} title={t("Open a project first.")} />}
+        fallback={<EmptyState icon={<Scale size={22} />} title={m.review_open_a_project_first()} />}
       >
         <ReviewHeaderView panel={panel} />
 

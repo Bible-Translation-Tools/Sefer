@@ -19,6 +19,7 @@
 import { Data, Effect, FileSystem, Option, Stream, type Scope } from "effect";
 import { createSignal } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import { lastSegment } from "#core/fileSystem/path";
 import { Git } from "#core/git/git";
 import { Observability } from "#core/observability";
@@ -40,7 +41,6 @@ import {
 
 import { describe, describeTransfer, remoteReasonOf } from "./describe";
 import { contentHostFor } from "./endpoints";
-import { t } from "./i18n";
 import { indexFor, packFor } from "./kinds/table";
 import type { Domain, Services } from "./services";
 import { rememberProject } from "./ui/landing/summaries";
@@ -105,7 +105,7 @@ export const cloneArrival = (
           new AlreadyHeld({
             root: held.root,
             name: held.name,
-            description: t("This project is already on this device, as {name}.", {
+            description: m.arrival_this_project_is_already_on({
               name: held.name,
             }),
           }),
@@ -310,7 +310,7 @@ export const referenceCopy = (
 export const describeCopy = (progress: CopyProgress): string => {
   switch (progress.phase) {
     case "downloading":
-      return t("Downloading: {transfer}", {
+      return m.arrival_downloading_transfer({
         transfer: describeTransfer({
           phase: progress.step,
           loaded: progress.loaded,
@@ -319,11 +319,11 @@ export const describeCopy = (progress: CopyProgress): string => {
         }),
       });
     case "reading":
-      return t("Reading what arrived…");
+      return m.arrival_reading_what_arrived();
     case "packing":
       return progress.done >= progress.of
-        ? t("Finishing…")
-        : t("Packing {book}: book {at} of {of}", {
+        ? m.arrival_finishing()
+        : m.arrival_packing_book_book_at_of({
             book: progress.book,
             at: progress.done + 1,
             of: progress.of,
@@ -370,7 +370,7 @@ const pullSourceTexts = (
           outcome: "failed",
           note:
             remoteReasonOf(pulled.failure) === "Unauthorized"
-              ? t("not on {host}, or not public", { host: hostOfUrl(url) ?? host })
+              ? m.arrival_not_on_host_or_not({ host: hostOfUrl(url) ?? host })
               : describe(pulled.failure),
         });
         operation?.note("sources.resolve", "refused", undefined, { "sources.how": "clone" });
@@ -408,14 +408,15 @@ export const announceSourceTexts = async (
   if (worth.length === 0) return;
   const lines = worth.map((row) => {
     let said: string;
-    if (row.outcome === "failed") said = t("{title} could not be downloaded", { title: row.title });
-    else if (row.outcome === "pulled") said = t("{title} downloaded", { title: row.title });
-    else said = t("{title} is already on this device", { title: row.title });
+    if (row.outcome === "failed")
+      said = m.arrival_title_could_not_be_downloaded({ title: row.title });
+    else if (row.outcome === "pulled") said = m.arrival_title_downloaded({ title: row.title });
+    else said = m.arrival_title_is_already_on_this({ title: row.title });
     return row.note === undefined ? said : `${said} (${row.note})`;
   });
   const failed = rows.some((row) => row.outcome === "failed");
   (failed ? toasts.error : toasts.success)({
-    title: t("Source texts"),
+    title: m.arrival_source_texts(),
     message: lines.join("\n"),
   });
 };

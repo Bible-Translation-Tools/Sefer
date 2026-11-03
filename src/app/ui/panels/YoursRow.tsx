@@ -1,7 +1,8 @@
 import { mountDiffView } from "@wycliffeassociates/sefer-editor";
 import { For, createEffect, createSignal, untrack } from "solid-js";
 
-import { t } from "../../i18n";
+import { m } from "#app/paraglide/messages";
+
 import { wasBlock, type DiffSides } from "../diff/DiffCard";
 import type { Hunk } from "../diff/hunks";
 import { hunkPaint } from "../diff/paint";
@@ -55,5 +56,5 @@ function YoursClip(props: {
       return () => mount.destroy();
     },
   );
-  return <div class="min-w-0" ref={setHost} aria-label={t("Your text")} />;
+  return <div class="min-w-0" ref={setHost} aria-label={m.findings_your_text()} />;
 }

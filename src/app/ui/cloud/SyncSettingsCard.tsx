@@ -1,37 +1,37 @@
 import { Effect } from "effect";
 import { For, createSignal } from "solid-js";
 
-import { t } from "../../i18n";
+import { m } from "#app/paraglide/messages";
+
+import type { Message } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { setSyncPreference, syncPreferences, type SyncPreferences } from "../../syncSettings";
 import { Card, PanelHeader, Switch } from "../primitives";
 
 const ROWS: readonly {
   readonly key: keyof SyncPreferences;
-  readonly label: string;
-  readonly detail: string;
+  readonly label: Message;
+  readonly detail: Message;
 }[] = [
   {
     key: "checkOnOpen",
-    label: "Check for changes on open",
-    detail: "When you open this project, ask the shared project what has changed.",
+    label: m.cloud_check_for_changes_on_open,
+    detail: m.cloud_when_you_open_this_project,
   },
   {
     key: "sendOnSave",
-    label: "Send my changes on save",
-    detail:
-      "When you save, send your changes — to the shared project, or to your copy if you work in one.",
+    label: m.cloud_send_my_changes_on_save,
+    detail: m.cloud_when_you_save_send_your,
   },
   {
     key: "skipReviewMine",
-    label: "Skip review of my changes",
-    detail: "Save your changes directly, without reviewing them first.",
+    label: m.cloud_skip_review_of_my_changes,
+    detail: m.cloud_save_your_changes_directly_without,
   },
   {
     key: "skipReviewIncoming",
-    label: "Skip review of incoming changes",
-    detail:
-      "Take changes from the shared project without reviewing them — unless they touch a book you have also changed.",
+    label: m.cloud_skip_review_of_incoming_changes,
+    detail: m.cloud_take_changes_from_the_shared,
   },
 ];
 
@@ -49,17 +49,17 @@ export function SyncSettingsCard(props: { readonly root: string }) {
   };
   return (
     <Card class="space-y-3" data-cloud-card="settings">
-      <PanelHeader level={3} title={t("For this project")} />
+      <PanelHeader level={3} title={m.cloud_for_this_project()} />
       <ul class="space-y-3">
         <For each={ROWS}>
           {(row) => (
             <li class="flex items-start justify-between gap-3">
               <div>
-                <p class="text-small font-semibold">{t(row.label)}</p>
-                <p class="text-smallest text-on-surface-secondary">{t(row.detail)}</p>
+                <p class="text-small font-semibold">{row.label()}</p>
+                <p class="text-smallest text-on-surface-secondary">{row.detail()}</p>
               </div>
               <Switch
-                aria-label={t(row.label)}
+                aria-label={row.label()}
                 checked={held()[row.key]}
                 onChange={(value) => change(row.key, value)}
               />

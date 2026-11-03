@@ -1,7 +1,8 @@
 import type { JSX } from "@solidjs/web";
 import { For, Show, createMemo, createSignal } from "solid-js";
 
-import { t } from "../../i18n";
+import { m } from "#app/paraglide/messages";
+
 import { Input } from "./Input";
 
 export interface FilterListProps<T> {
@@ -56,7 +57,7 @@ export function FilterList<T>(props: FilterListProps<T>) {
         size="sm"
         autofocus
         aria-label={props.label}
-        placeholder={props.placeholder ?? t("Filter…")}
+        placeholder={props.placeholder ?? m.common_filter()}
         value={query()}
         onInput={(event) => retype(event.currentTarget.value)}
         onKeyDown={keys}
@@ -66,8 +67,8 @@ export function FilterList<T>(props: FilterListProps<T>) {
         fallback={
           <p class="px-2 py-3 text-center text-smallest text-on-surface-tertiary">
             {props.searching === true
-              ? t("Searching…")
-              : t("Nothing matches {query}", { query: query() })}
+              ? m.common_searching()
+              : m.common_nothing_matches_query({ query: query() })}
           </p>
         }
       >

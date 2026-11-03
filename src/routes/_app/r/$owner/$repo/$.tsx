@@ -1,8 +1,9 @@
 import { createFileRoute, useLocation } from "@tanstack/solid-router";
 
+import { m } from "#app/paraglide/messages";
 import { OpenByLink } from "#app/ui/landing/OpenByLink";
-import { ShellGate } from "#app/ui/ShellGate";
 import "#app/ui/theme";
+import { ShellGate } from "#app/ui/ShellGate";
 
 function Arrival() {
   const params = Route.useParams();
@@ -18,6 +19,6 @@ function Arrival() {
 }
 
 export const Route = createFileRoute("/_app/r/$owner/$repo/$")({
-  head: () => ({ meta: [{ title: "Opening a link · Sefer" }] }),
+  head: () => ({ meta: [{ title: m.page_title({ page: m.page_opening_link() }) }] }),
   component: () => <ShellGate>{() => <Arrival />}</ShellGate>,
 });

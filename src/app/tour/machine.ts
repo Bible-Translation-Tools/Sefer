@@ -1,6 +1,7 @@
 import type { UseNavigateResult } from "@tanstack/solid-router";
 import { createSignal } from "solid-js";
 
+import type { Message } from "../i18n";
 import type { Shell } from "../ProjectContext";
 
 export interface TourContext {
@@ -55,8 +56,8 @@ export interface Tour {
    * (Will, 2026-10-22: "they are different purposes").
    */
   readonly audience: "field" | "internal";
-  readonly title: string;
-  readonly summary: string;
+  readonly title: Message;
+  readonly summary: Message;
   readonly needsProject: boolean;
   readonly start?: string;
   readonly steps: readonly Step[] | ((context: TourContext) => readonly Step[]);

@@ -3,6 +3,7 @@ import { Effect, Fiber, Result, Stream } from "effect";
 import RotateCcw from "lucide-solid/icons/rotate-ccw";
 import { For, Show, createSignal, onCleanup, untrack } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import {
   SOUS_SETTING_KEYS,
   SOUS_SETTINGS,
@@ -10,11 +11,17 @@ import {
   type SousSettingKey,
 } from "#core/galley";
 
-import { t } from "../i18n";
 import { uiLocale } from "../locale";
 import { useServices } from "../ProjectContext";
 import { shellKeys } from "../settings";
-import { fits, SOUS_GROUPS, sousValues, withSetting, type SousOverrides } from "../sousSettings";
+import {
+  fits,
+  SOUS_GROUPS,
+  SOUS_SETTING_WORDS,
+  sousValues,
+  withSetting,
+  type SousOverrides,
+} from "../sousSettings";
 import { Button, Card, IconButton, Input, PanelHeader, Switch } from "./primitives";
 
 const percent = (basisPoints: number): number => basisPoints / 100;
@@ -26,7 +33,7 @@ const stepOf = (kind: string): number => {
 
 const shown = (key: SousSettingKey, value: boolean | number): string => {
   const kind = SOUS_SETTINGS[key].kind;
-  if (typeof value === "boolean") return value ? t("on") : t("off");
+  if (typeof value === "boolean") return value ? m.sous_on() : m.sous_off();
   if (kind === "share-bp") return `${percent(value).toLocaleString(uiLocale())}%`;
   return value.toLocaleString(uiLocale());
 };
@@ -93,7 +100,7 @@ function SousControl(props: SousControlProps) {
     >
       <Switch
         id={`sous-${props.setting}`}
-        aria-label={t(SOUS_SETTINGS[props.setting].label)}
+        aria-label={SOUS_SETTING_WORDS[props.setting].label()}
         checked={value() === true}
         onChange={(next) => props.onSet(props.setting, next)}
       />
@@ -112,9 +119,9 @@ function SousGroupSection(props: SousGroupSectionProps) {
   return (
     <section class="space-y-1" data-sous-group={props.group}>
       <h4 class="text-small font-semibold text-on-surface-primary">
-        {t(SOUS_GROUPS[props.group].title)}
+        {SOUS_GROUPS[props.group].title()}
       </h4>
-      <p class="text-smallest text-on-surface-tertiary">{t(SOUS_GROUPS[props.group].subtitle)}</p>
+      <p class="text-smallest text-on-surface-tertiary">{SOUS_GROUPS[props.group].subtitle()}</p>
       <div class="divide-y divide-surface-border">
         <For
           each={SOUS_SETTING_KEYS.filter((setting) => SOUS_SETTINGS[setting].group === props.group)}
@@ -122,21 +129,21 @@ function SousGroupSection(props: SousGroupSectionProps) {
           {(setting) => (
             <div class="space-y-2 py-3" data-setting={`sous.${setting}`}>
               <label for={`sous-${setting}`} class="block text-small text-on-surface-primary">
-                {t(SOUS_SETTINGS[setting].label)}
+                {SOUS_SETTING_WORDS[setting].label()}
                 <span class="block text-smallest text-on-surface-tertiary">
-                  {t(SOUS_SETTINGS[setting].description)}
+                  {SOUS_SETTING_WORDS[setting].description()}
                 </span>
               </label>
               <div class="flex flex-wrap items-center gap-controls">
                 <SousControl setting={setting} values={props.values} onSet={props.onSet} />
                 <span class="text-smallest text-on-surface-tertiary">
-                  {t("Default: {value}", {
+                  {m.sous_default_value({
                     value: shown(setting, SOUS_SETTINGS[setting].default),
                   })}
                 </span>
                 <IconButton
-                  label={t("Reset {label} to its default", {
-                    label: t(SOUS_SETTINGS[setting].label),
+                  label={m.sous_reset_label_to_its_default({
+                    label: SOUS_SETTING_WORDS[setting].label(),
                   })}
                   size="sm"
                   icon={<RotateCcw />}
@@ -178,7 +185,7 @@ export function SousSettingsPanel(props: SousSettingsPanelProps) {
     void services.run(Effect.result(services.settings.set(key, next))).then((result) => {
       setProblem(
         Result.isFailure(result)
-          ? t("{key}: {reason}", { key: result.failure.key, reason: result.failure.reason })
+          ? m.common_key_reason({ key: result.failure.key, reason: result.failure.reason })
           : "",
       );
     });
@@ -198,10 +205,8 @@ export function SousSettingsPanel(props: SousSettingsPanelProps) {
     >
       <PanelHeader
         level={3}
-        title={t("Proofreading")}
-        subtitle={t(
-          "What the proofreading checks look for. They compare each place with the rest of this project, so they find what is unusual here, not what is wrong.",
-        )}
+        title={m.common_proofreading()}
+        subtitle={m.sous_what_the_proofreading_checks_look()}
         actions={
           <Button
             size="sm"
@@ -210,7 +215,7 @@ export function SousSettingsPanel(props: SousSettingsPanelProps) {
             disabled={Object.keys(overrides()).length === 0}
             onClick={() => write({})}
           >
-            {t("Reset all")}
+            {m.sous_reset_all()}
           </Button>
         }
       />

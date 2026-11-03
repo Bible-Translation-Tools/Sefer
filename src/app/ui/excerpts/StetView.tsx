@@ -15,7 +15,6 @@ import { isStanding, type ApprovalState } from "#core/stet/approvals";
 import type { Guide, Term } from "#core/stet/stet";
 
 import type { ApprovalsHandle } from "../../approvals";
-import { t } from "../../i18n";
 import { m } from "../../paraglide/messages";
 import type { SourceReading } from "../../workflows/stet";
 import type { CardViews } from "../multibuffer/cardViews";
@@ -123,10 +122,10 @@ export function StetView(props: StetViewProps) {
     >
       <span class="flex min-w-0 flex-1 flex-col gap-1 ps-3">
         <span class="text-small font-bold">
-          {props.additional ? t("Show less") : t("Show more")}
+          {props.additional ? m.excerpts_show_less() : m.excerpts_show_more()}
         </span>
         <span class="text-small">
-          {t("There are {count} additional verses with the word “{term}”", {
+          {m.excerpts_there_are_count_additional_verses({
             count: props.additionalCount,
             term: openTerm()?.term ?? "",
           })}
@@ -219,9 +218,10 @@ export function StetView(props: StetViewProps) {
   };
 
   const approveLabel = (sid: string): string => {
-    if (isChanged(sid)) return t("Text changed since last approved");
-    if (isApproved(sid)) return isEdited(sid) ? t("Approved with edits") : t("Approved");
-    return isEdited(sid) ? t("Approve with edits") : t("Approve");
+    if (isChanged(sid)) return m.excerpts_text_changed_since_last_approved();
+    if (isApproved(sid))
+      return isEdited(sid) ? m.excerpts_approved_with_edits() : m.excerpts_approved();
+    return isEdited(sid) ? m.excerpts_approve_with_edits() : m.excerpts_approve();
   };
 
   const Status = (statusProps: { readonly sid: string; readonly size: number }) => (
@@ -230,7 +230,7 @@ export function StetView(props: StetViewProps) {
       fallback={
         <CircleAlert
           size={statusProps.size}
-          aria-label={t("Text changed since last approved")}
+          aria-label={m.excerpts_text_changed_since_last_approved()}
           class="shrink-0 text-on-surface-warning"
         />
       }
@@ -241,7 +241,7 @@ export function StetView(props: StetViewProps) {
           <Show when={isApproved(statusProps.sid)}>
             <CheckIcon
               size={statusProps.size}
-              aria-label={t("Approved")}
+              aria-label={m.excerpts_approved()}
               class="shrink-0 text-brand"
             />
           </Show>
@@ -249,7 +249,9 @@ export function StetView(props: StetViewProps) {
       >
         <PencilIcon
           size={statusProps.size}
-          aria-label={isApproved(statusProps.sid) ? t("Approved with edits") : t("Edited")}
+          aria-label={
+            isApproved(statusProps.sid) ? m.excerpts_approved_with_edits() : m.excerpts_edited()
+          }
           class={
             isApproved(statusProps.sid)
               ? "shrink-0 text-brand"
@@ -308,9 +310,13 @@ export function StetView(props: StetViewProps) {
 
   const paired = (excerpt: Excerpt): Paired => {
     const reading = props.sourceOf?.(excerpt);
-    const name = reading?.origin === "library" ? t("Paired resource") : t("Guide");
+    const name = reading?.origin === "library" ? m.excerpts_paired_resource() : m.excerpts_guide();
     if (reading === undefined)
-      return { kind: "none", name: t("Paired resource"), message: t("No paired resource bound") };
+      return {
+        kind: "none",
+        name: m.excerpts_paired_resource(),
+        message: m.excerpts_no_paired_resource_bound(),
+      };
     return { kind: "static", name, text: reading.text, spans: reading.spans ?? [] };
   };
 
@@ -356,14 +362,14 @@ export function StetView(props: StetViewProps) {
   const terms = () => (
     <>
       <nav
-        aria-label={t("Spiritual terms")}
+        aria-label={m.common_spiritual_terms()}
         class="scrollbar-padded min-h-0 flex-1 overflow-y-auto ps-4 pt-4 pb-4"
       >
         <Show
           when={!(props.loading === true && props.terms.length === 0)}
           fallback={
             <p class="px-2 py-4 text-small text-on-surface-primary">
-              {t("Loading spiritual terms…")}
+              {m.excerpts_loading_spiritual_terms()}
             </p>
           }
         >
@@ -371,7 +377,7 @@ export function StetView(props: StetViewProps) {
             when={shown().length > 0}
             fallback={
               <p class="px-2 py-4 text-small text-on-surface-primary">
-                {t("No term matches that.")}
+                {m.excerpts_no_term_matches_that()}
               </p>
             }
           >
@@ -409,10 +415,10 @@ export function StetView(props: StetViewProps) {
 
           <Show when={props.coreTotalOf(rowProps.term.id) > 0}>
             <Show when={coreDone(rowProps.term.id) >= props.coreTotalOf(rowProps.term.id)}>
-              <CheckIcon aria-label={t("Done")} class="size-5 shrink-0" />
+              <CheckIcon aria-label={m.common_done()} class="size-5 shrink-0" />
             </Show>
             <span class="shrink-0 text-small tabular-nums">
-              {t("{done}/{total}", {
+              {m.excerpts_done_total({
                 done: coreDone(rowProps.term.id),
                 total: props.coreTotalOf(rowProps.term.id),
               })}
@@ -437,7 +443,7 @@ export function StetView(props: StetViewProps) {
               when={verses().length > 0}
               fallback={
                 <p class="text-small text-on-surface-primary">
-                  {t("No curated verse falls in a book this project has.")}
+                  {m.excerpts_no_curated_verse_falls_in()}
                 </p>
               }
             >
@@ -469,7 +475,7 @@ export function StetView(props: StetViewProps) {
                 class="h-12 w-full justify-between px-3"
                 checked={props.additional}
                 onChange={props.onAdditional}
-                label={t("Show {count} more", { count: props.additionalCount })}
+                label={m.excerpts_show_count_more({ count: props.additionalCount })}
               />
             </Show>
           </div>
@@ -506,7 +512,7 @@ export function StetView(props: StetViewProps) {
       }
     >
       <ExcerptList
-        goneLabel={t("No longer an occurrence")}
+        goneLabel={m.excerpts_no_longer_an_occurrence()}
         resultsKey={`${props.selected}:${props.additional ? "all" : "curated"}`}
         claimsSidebar={false}
         goTo={(go) => {
@@ -528,7 +534,7 @@ export function StetView(props: StetViewProps) {
         pairedOf={paired}
         empty={
           <p class="text-small text-on-surface-primary">
-            {t("No occurrence of this term falls in a book this project has.")}
+            {m.excerpts_no_occurrence_of_this_term()}
           </p>
         }
       />

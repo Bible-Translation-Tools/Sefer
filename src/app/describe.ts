@@ -1,6 +1,5 @@
+import { m } from "#app/paraglide/messages";
 import type { Progress, RemoteFailureReason } from "#core/remote/remote";
-
-import { t } from "./i18n";
 
 const MAX = 400;
 
@@ -60,13 +59,13 @@ export const remoteReasonOf = (cause: unknown): RemoteFailureReason | undefined 
 
 export const describeTransfer = (progress: Progress): string => {
   if (progress.unit === "bytes")
-    return t("{phase}: {size} MB", {
+    return m.describe_phase_size_mb({
       phase: progress.phase,
       size: (progress.loaded / 1_000_000).toFixed(1),
     });
   if (progress.total === undefined || progress.total === 0)
-    return t("{phase} {loaded}", { phase: progress.phase, loaded: progress.loaded });
-  return t("{phase} {percent}%", {
+    return m.describe_phase_loaded({ phase: progress.phase, loaded: progress.loaded });
+  return m.describe_phase_percent({
     phase: progress.phase,
     percent: Math.min(100, Math.round((progress.loaded / progress.total) * 100)),
   });

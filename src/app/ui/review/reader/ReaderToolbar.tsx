@@ -5,7 +5,8 @@ import ChevronDown from "lucide-solid/icons/chevron-down";
 import Columns2 from "lucide-solid/icons/columns-2";
 import { For, Show } from "solid-js";
 
-import { t } from "../../../i18n";
+import { m } from "#app/paraglide/messages";
+
 import {
   Button,
   IconButton,
@@ -50,7 +51,7 @@ export interface ViewSettings {
 export function ViewMenu(props: { readonly toolbar: ViewSettings }) {
   return (
     <Menu
-      label={t("View")}
+      label={m.review_view()}
       side="bottom"
       align="start"
       class="w-64"
@@ -64,7 +65,7 @@ export function ViewMenu(props: { readonly toolbar: ViewSettings }) {
       }
     >
       <Show when={props.toolbar.filter !== undefined}>
-        <MenuLabel>{t("Show")}</MenuLabel>
+        <MenuLabel>{m.review_show()}</MenuLabel>
         <For each={["all", "words", "formatting"] as const}>
           {(value) => (
             <MenuRadio
@@ -79,29 +80,29 @@ export function ViewMenu(props: { readonly toolbar: ViewSettings }) {
         <MenuSeparator />
       </Show>
       <Show when={props.toolbar.layout !== undefined}>
-        <MenuLabel>{t("Layout")}</MenuLabel>
+        <MenuLabel>{m.review_layout()}</MenuLabel>
         <MenuRadio
           checked={props.toolbar.layout === "auto"}
           onSelect={() => props.toolbar.onLayout?.("auto")}
         >
-          {t("Side by side when there is room")}
+          {m.review_side_by_side_when_there()}
         </MenuRadio>
         <MenuRadio
           checked={props.toolbar.layout === "split"}
           onSelect={() => props.toolbar.onLayout?.("split")}
         >
-          {t("Side by side")}
+          {m.review_side_by_side()}
         </MenuRadio>
         <MenuRadio
           checked={props.toolbar.layout === "unified"}
           onSelect={() => props.toolbar.onLayout?.("unified")}
         >
-          {t("One text, changes marked")}
+          {m.review_one_text_changes_marked()}
         </MenuRadio>
         <MenuSeparator />
       </Show>
       <MenuCheckbox checked={props.toolbar.usfm} onChange={props.toolbar.onUsfm}>
-        {t("Show USFM markup")}
+        {m.review_show_usfm_markup()}
       </MenuCheckbox>
     </Menu>
   );
@@ -119,13 +120,13 @@ function StepControls(props: { readonly toolbar: ReaderToolbarProps }) {
       </Show>
       <IconButton
         size="sm"
-        label={t("Previous change (Alt-Shift-F5)")}
+        label={m.review_previous_change_alt_shift_f5()}
         icon={<ArrowUp />}
         onClick={() => props.toolbar.onStep(-1)}
       />
       <IconButton
         size="sm"
-        label={t("Next change (Alt-F5)")}
+        label={m.review_next_change_alt_f5()}
         icon={<ArrowDown />}
         onClick={() => props.toolbar.onStep(1)}
       />
@@ -138,19 +139,19 @@ export function ReaderToolbar(props: ReaderToolbarProps): JSX.Element {
     <div class="flex flex-wrap items-center gap-2" data-review-toolbar>
       <SegmentedControl<Scope>
         size="sm"
-        label={t("How much to show")}
+        label={m.review_how_much_to_show()}
         value={props.scope}
         onChange={(value) => props.onScope(value)}
         items={[
           {
             value: "changes",
-            label: t("Changes"),
-            title: t("Each change as a card, with context, across every book"),
+            label: m.common_changes(),
+            title: m.review_each_change_as_a_card(),
           },
           {
             value: "book",
-            label: t("Whole book"),
-            title: t("The whole book, with its changes drawn in place"),
+            label: m.review_whole_book(),
+            title: m.review_the_whole_book_with_its(),
           },
         ]}
       />

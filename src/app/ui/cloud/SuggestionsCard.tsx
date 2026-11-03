@@ -1,12 +1,12 @@
 import { useNavigate } from "@tanstack/solid-router";
 import { For, Show, createEffect, createSignal } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import type { Project } from "#core/project/project";
 import type { Suggestion } from "#core/remote/suggestions";
 
 import { collaboration } from "../../collaboration";
 import { describe } from "../../describe";
-import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import {
   canWriteShared,
@@ -41,11 +41,11 @@ const SuggestionRow = (props: {
       </span>
       <span class="flex shrink-0 gap-1">
         <Button size="sm" disabled={props.busy} onClick={props.onReview}>
-          {t("Review")}
+          {m.cloud_review()}
         </Button>
         <Show when={!props.declining}>
           <Button size="sm" variant="tertiary" disabled={props.busy} onClick={props.onStartDecline}>
-            {t("Decline")}
+            {m.common_decline()}
           </Button>
         </Show>
       </span>
@@ -61,17 +61,17 @@ const SuggestionRow = (props: {
         <Input
           size="sm"
           wrapperClass="min-w-0 flex-1"
-          placeholder={t("Why? {author} will read this.", {
+          placeholder={m.cloud_why_author_will_read_this({
             author: props.suggestion.author,
           })}
           value={props.note}
           onInput={(event) => props.onNote(event.currentTarget.value)}
         />
         <Button size="sm" type="submit" disabled={props.busy}>
-          {t("Decline")}
+          {m.common_decline()}
         </Button>
         <Button size="sm" variant="tertiary" onClick={props.onCancel}>
-          {t("Not now")}
+          {m.common_not_now()}
         </Button>
       </form>
     </Show>
@@ -125,7 +125,7 @@ const createSuggestionActions = (
     work
       .then(() => toasts.success({ title: done }))
       .catch((cause: unknown) =>
-        toasts.error({ title: t("That did not work"), message: describe(cause) }),
+        toasts.error({ title: m.cloud_that_did_not_work(), message: describe(cause) }),
       )
       .finally(() => {
         setBusy(false);
@@ -145,7 +145,7 @@ const createSuggestionActions = (
         }),
       )
       .catch((cause: unknown) =>
-        toasts.error({ title: t("Could not open the suggestion"), message: describe(cause) }),
+        toasts.error({ title: m.cloud_could_not_open_the_suggestion(), message: describe(cause) }),
       )
       .finally(() => setBusy(false));
   };
@@ -164,16 +164,16 @@ export function SuggestionsCard(props: CardProps) {
   return (
     <Show when={props.signedIn && writer() === true}>
       <QuietSection
-        title={t("To review")}
+        title={m.cloud_to_review()}
         count={waiting().length}
-        note={t(
-          "From people working in their own copy. The shared project only changes when you accept.",
-        )}
+        note={m.cloud_from_people_working_in_their()}
         data={{ "data-cloud-card": "suggestions" }}
       >
         <Show
           when={waiting().length > 0}
-          fallback={<p class="text-small text-on-surface-tertiary">{t("Nothing is waiting.")}</p>}
+          fallback={
+            <p class="text-small text-on-surface-tertiary">{m.cloud_nothing_is_waiting()}</p>
+          }
         >
           <ul class="space-y-1">
             <For each={waiting()}>
@@ -193,7 +193,7 @@ export function SuggestionsCard(props: CardProps) {
                     setDeclining(undefined);
                     act(
                       declineSuggestion(services, props.project, suggestion, note()),
-                      t("Declined"),
+                      m.cloud_declined(),
                       props.project,
                       props.signedIn,
                     );

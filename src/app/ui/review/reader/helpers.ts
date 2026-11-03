@@ -1,8 +1,8 @@
 import type { BookId } from "@wycliffeassociates/sefer-text/book";
 
+import { m } from "#app/paraglide/messages";
 import type { DecisionUnit } from "#core/galley";
 
-import { t } from "../../../i18n";
 import type { CrumbChapter } from "../../workspace/Crumbs";
 import type { Filter, Layout, Prepared } from "./types";
 
@@ -19,13 +19,13 @@ export const stepTarget = (
 };
 
 export const viewLabel = (filter: Filter): string => {
-  if (filter === "all") return t("View");
-  return filter === "words" ? t("View · words only") : t("View · markup only");
+  if (filter === "all") return m.review_view();
+  return filter === "words" ? m.review_view_words_only() : m.review_view_markup_only();
 };
 
 export const filterLabel = (filter: Filter): string => {
-  if (filter === "all") return t("All changes");
-  return filter === "words" ? t("Changes to the words") : t("Markup and spacing only");
+  if (filter === "all") return m.review_all_changes();
+  return filter === "words" ? m.review_changes_to_the_words() : m.review_markup_and_spacing_only();
 };
 
 export const labelOf = (label: string | ((bookId: BookId) => string), bookId: BookId): string =>
@@ -49,7 +49,7 @@ export const chaptersOf = (held: Prepared): readonly CrumbChapter[] => {
     .sort((a, b) => a[0] - b[0])
     .map(([chapter, count]) => ({
       ordinal: chapter,
-      label: chapter === 0 ? t("Intro") : String(chapter),
+      label: chapter === 0 ? m.common_intro() : String(chapter),
       intro: chapter === 0,
       count,
     }));
@@ -57,14 +57,12 @@ export const chaptersOf = (held: Prepared): readonly CrumbChapter[] => {
 
 export const chapterWords = (chapter: number | undefined): string => {
   if (chapter === undefined) return "";
-  return chapter === 0 ? t("Intro") : t("Chapter {label}", { label: chapter });
+  return chapter === 0 ? m.common_intro() : m.common_chapter_label({ label: chapter });
 };
 
-export const changeCount = (count: number): string =>
-  t(count === 1 ? "{count} change" : "{count} changes", { count });
+export const changeCount = (count: number): string => m.common_count_changes({ count });
 
-export const bookCount = (count: number): string =>
-  t(count === 1 ? "{count} book" : "{count} books", { count });
+export const bookCount = (count: number): string => m.common_count_books({ count });
 
 export const visibleCardIndex = (
   root: HTMLElement | undefined,

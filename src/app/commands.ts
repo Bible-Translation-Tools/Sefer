@@ -14,7 +14,7 @@ import { chapterLabelsOf, standardize } from "#core/rules/chapterLabels";
 
 import { personAuthor } from "./author";
 import { contentHostFor } from "./endpoints";
-import { t } from "./i18n";
+import type { Message } from "./i18n";
 import { recordVersion } from "./recordVersion";
 import type { Domain, Services } from "./services";
 import { shellKeys } from "./settings";
@@ -32,7 +32,8 @@ export type CommandResult =
 
 export interface CommandSpec {
   readonly id: string;
-  readonly title: string;
+  /** A function, so the palette says it in the language of the moment. */
+  readonly title: Message;
   readonly run: (argument?: unknown) => CommandResult;
   readonly when?: () => boolean;
   readonly keys?: string;
@@ -174,7 +175,7 @@ type Helpers = {
   readonly seated: () => EditorBook | undefined;
   readonly insertion: (
     id: string,
-    title: string,
+    title: Message,
     keys: string | undefined,
     action: EditorAction,
   ) => ReturnType<typeof registerCommand>;
@@ -207,7 +208,7 @@ const saveWithoutReview = async (bridge: ShellBridge, project: Project): Promise
       search: { review: true },
     });
   if (books.length === 0) {
-    bridge.report(t("nothing to save"));
+    bridge.report(m.command_nothing_to_save());
     return;
   }
   const author = Option.getOrUndefined(await services.run(personAuthor()));
@@ -216,13 +217,13 @@ const saveWithoutReview = async (bridge: ShellBridge, project: Project): Promise
     return;
   }
   const metadata = Option.getOrUndefined(project.metadata());
-  const message = t("Edited {books}", {
+  const message = m.command_edited_books({
     books: books.map((book) => bookName(book.id, metadata)).join(", "),
   });
   const outcome = await recordVersion(services, project, books, message, author);
   if (outcome.kind === "recorded") {
     bridge.changed({ kind: "book.write", books: outcome.books, recorded: true });
-    bridge.report(t("saved {count} book(s)", { count: outcome.books.length }));
+    bridge.report(m.command_saved_count_books({ count: outcome.books.length }));
     void sendAfterSave(services, project);
     return;
   }
@@ -241,7 +242,7 @@ const shellHelpers = (bridge: ShellBridge): Helpers => {
     return book === undefined ? undefined : services.seated(book.id);
   };
 
-  const insertion = (id: string, title: string, keys: string | undefined, action: EditorAction) =>
+  const insertion = (id: string, title: Message, keys: string | undefined, action: EditorAction) =>
     registerCommand({
       id,
       title,
@@ -260,7 +261,7 @@ const paletteCommands = (bridge: ShellBridge) => {
   return [
     registerCommand({
       id: "palette.open",
-      title: t("Command palette…"),
+      title: m.command_command_palette,
       keys: "Mod-k",
       run: () => {
         bridge.setPaletteOpen(true);
@@ -269,14 +270,14 @@ const paletteCommands = (bridge: ShellBridge) => {
 
     registerCommand({
       id: "workspace.togglePanel",
-      title: t("Show or hide the project panel"),
+      title: m.command_show_or_hide_the_project,
       keys: "Mod-b",
       run: () => bridge.setSidebarOpen(!bridge.sidebarOpen()),
     }),
 
     registerCommand({
       id: "project.settings",
-      title: t("Settings"),
+      title: m.common_settings,
       keys: "Mod-,",
       run: () => {
         void bridge.navigate({ to: "/project/$slug/settings", params: { slug: bridge.slug() } });
@@ -285,7 +286,7 @@ const paletteCommands = (bridge: ShellBridge) => {
 
     registerCommand({
       id: "project.copyLink",
-      title: t("Copy a link to this place"),
+      title: m.command_copy_a_link_to_this,
       when: () => bridge.project() !== undefined,
       run: () => {
         const root = bridge.project()?.root;
@@ -299,7 +300,7 @@ const advancedCommands = (bridge: ShellBridge) => {
   return [
     registerCommand({
       id: "settings.showAdvanced",
-      title: t("Show advanced settings"),
+      title: m.command_show_advanced_settings,
       when: () =>
         !bridge.services.settings.get(shellKeys(bridge.services.settings).showAdvancedSettings),
       run: () => {
@@ -319,7 +320,7 @@ const advancedCommands = (bridge: ShellBridge) => {
 
     registerCommand({
       id: "settings.hideAdvanced",
-      title: t("Hide advanced settings"),
+      title: m.command_hide_advanced_settings,
       when: () =>
         bridge.services.settings.get(shellKeys(bridge.services.settings).showAdvancedSettings),
       run: () => {
@@ -335,7 +336,7 @@ const saveCommands = (bridge: ShellBridge, h: Helpers) => {
   return [
     registerCommand({
       id: "book.save",
-      title: t("Save & Review…"),
+      title: m.command_save_review,
       keys: "Mod-s",
       when: hasProject,
       run: () => {
@@ -357,7 +358,7 @@ const saveCommands = (bridge: ShellBridge, h: Helpers) => {
 
     registerCommand({
       id: "project.saveAll",
-      title: t("Record a version…"),
+      title: m.command_record_a_version,
       keys: "Mod-Shift-s",
       when: hasProject,
       run: () => {
@@ -371,7 +372,7 @@ const saveCommands = (bridge: ShellBridge, h: Helpers) => {
 
     registerCommand({
       id: "book.undo",
-      title: t("Undo"),
+      title: m.common_undo,
       when: () => bridge.historyDepth().undo > 0,
       run: () => {
         bridge.focused()?.history()?.undo();
@@ -380,7 +381,7 @@ const saveCommands = (bridge: ShellBridge, h: Helpers) => {
 
     registerCommand({
       id: "book.redo",
-      title: t("Redo"),
+      title: m.common_redo,
       when: () => bridge.historyDepth().redo > 0,
       run: () => {
         bridge.focused()?.history()?.redo();
@@ -395,7 +396,7 @@ const importCommands = (bridge: ShellBridge, h: Helpers) => {
   return [
     registerCommand({
       id: "import.document",
-      title: m.import_document_command(),
+      title: m.import_document_command,
       // Any book in the project takes it; none need be open.
       when: hasProject,
       run: () => bridge.setImportOpen(true),
@@ -408,7 +409,7 @@ const searchCommands = (bridge: ShellBridge, h: Helpers) => {
   return [
     registerCommand({
       id: "search.open",
-      title: t("Find in project"),
+      title: m.command_find_in_project,
       keys: "Mod-Shift-f",
       when: hasProject,
       run: () => {
@@ -429,7 +430,7 @@ const searchCommands = (bridge: ShellBridge, h: Helpers) => {
 
     registerCommand({
       id: "dev.playground",
-      title: "Playground (dev)",
+      title: () => "Playground (dev)",
       when: () => import.meta.env.DEV && hasProject(),
       run: () => {
         void bridge.navigate({
@@ -441,7 +442,7 @@ const searchCommands = (bridge: ShellBridge, h: Helpers) => {
 
     registerCommand({
       id: "editor.toggleMode",
-      title: t("Toggle USFM"),
+      title: m.command_toggle_usfm,
       keys: "Mod-Shift-m",
       when: hasProject,
       run: () => {
@@ -456,7 +457,7 @@ const chapterCommands = (bridge: ShellBridge, h: Helpers) => {
   return [
     registerCommand({
       id: "editor.chapter.next",
-      title: t("Clip to next chapter"),
+      title: m.command_clip_to_next_chapter,
       when: () => hasBook() && bridge.chapterCount() > 0,
       run: () => {
         const count = bridge.chapterCount();
@@ -468,7 +469,7 @@ const chapterCommands = (bridge: ShellBridge, h: Helpers) => {
 
     registerCommand({
       id: "editor.chapter.previous",
-      title: t("Clip to previous chapter"),
+      title: m.command_clip_to_previous_chapter,
       when: () => hasBook() && bridge.chapterCount() > 0,
       run: () => {
         const count = bridge.chapterCount();
@@ -480,7 +481,7 @@ const chapterCommands = (bridge: ShellBridge, h: Helpers) => {
 
     registerCommand({
       id: "editor.chapter.whole",
-      title: t("Show the whole book"),
+      title: m.command_show_the_whole_book,
       when: () => hasBook() && bridge.chapter() !== null,
       run: () => {
         bridge.setChapter(null);
@@ -494,7 +495,7 @@ const findingCommands = (bridge: ShellBridge, h: Helpers) => {
   return [
     registerCommand({
       id: "findings.next",
-      title: t("Next finding"),
+      title: m.command_next_finding,
       keys: "Alt-F8",
       when: hasProject,
       run: () => {
@@ -504,7 +505,7 @@ const findingCommands = (bridge: ShellBridge, h: Helpers) => {
 
     registerCommand({
       id: "findings.previous",
-      title: t("Previous finding"),
+      title: m.command_previous_finding,
       keys: "Alt-Shift-F8",
       when: hasProject,
       run: () => {
@@ -514,7 +515,7 @@ const findingCommands = (bridge: ShellBridge, h: Helpers) => {
 
     registerCommand({
       id: "findings.applyFix",
-      title: t("Apply the offered fix"),
+      title: m.command_apply_the_offered_fix,
       when: hasProject,
       run: () => {
         bridge.applyFix();
@@ -523,7 +524,7 @@ const findingCommands = (bridge: ShellBridge, h: Helpers) => {
 
     registerCommand({
       id: "git.commit",
-      title: t("Record a version…"),
+      title: m.command_record_a_version,
       when: hasProject,
       run: () => {
         void bridge.navigate({
@@ -541,11 +542,11 @@ const remoteCommands = (bridge: ShellBridge) => {
   return [
     registerCommand({
       id: "remote.login",
-      title: t("Sign in to the cloud…"),
+      title: m.command_sign_in_to_the_cloud,
       run: () => {
         const host = contentHostFor(services.settings);
         if (host === null) {
-          bridge.report(t("no WACS server is set for this build: set one in Settings"));
+          bridge.report(m.command_no_wacs_server_is_set());
           return;
         }
         const project = bridge.project();
@@ -554,7 +555,7 @@ const remoteCommands = (bridge: ShellBridge) => {
           return;
         }
         void bridge.navigate({ to: "/project/$slug", params: { slug: bridge.slug() } });
-        bridge.report(t("sign in to {host} from the cloud menu or Settings", { host }));
+        bridge.report(m.command_sign_in_to_host_from({ host }));
       },
     }),
   ];
@@ -565,7 +566,7 @@ const syncCommands = (bridge: ShellBridge, h: Helpers) => {
   return [
     registerCommand({
       id: "remote.pull",
-      title: t("Receive updates…"),
+      title: m.command_receive_updates,
       when: hasProject,
       run: () => {
         seeIncoming(bridge);
@@ -574,7 +575,7 @@ const syncCommands = (bridge: ShellBridge, h: Helpers) => {
 
     registerCommand({
       id: "remote.push",
-      title: t("Send my changes"),
+      title: m.command_send_my_changes,
       when: hasProject,
       run: () => {
         sendMine(bridge);
@@ -583,7 +584,7 @@ const syncCommands = (bridge: ShellBridge, h: Helpers) => {
 
     registerCommand({
       id: "findings.open",
-      title: t("Findings"),
+      title: m.common_findings,
       when: hasProject,
       run: () => {
         void bridge.navigate({
@@ -596,7 +597,7 @@ const syncCommands = (bridge: ShellBridge, h: Helpers) => {
 
     registerCommand({
       id: "git.history",
-      title: t("History"),
+      title: m.common_history,
       when: hasProject,
       run: () => {
         void bridge.navigate({
@@ -612,28 +613,48 @@ const syncCommands = (bridge: ShellBridge, h: Helpers) => {
 const insertCommands = (h: Helpers) => {
   const { insertion } = h;
   return [
-    insertion("editor.insert.verse", t("Insert verse"), "Mod-Shift-v", "insert.verse"),
-    insertion("editor.insert.paragraph", t("Insert paragraph"), "Mod-Shift-p", "insert.paragraph"),
-    insertion("editor.insert.poetry", t("Insert poetry line"), "Mod-Shift-l", "insert.poetry"),
-    insertion("editor.insert.footnote", t("Insert footnote"), "Mod-Shift-n", "insert.footnote"),
-    insertion("editor.table.rowAbove", t("Table: insert row above"), undefined, "table.rowAbove"),
-    insertion("editor.table.rowBelow", t("Table: insert row below"), undefined, "table.rowBelow"),
-    insertion("editor.table.deleteRow", t("Table: delete row"), undefined, "table.deleteRow"),
+    insertion("editor.insert.verse", m.command_insert_verse, "Mod-Shift-v", "insert.verse"),
+    insertion(
+      "editor.insert.paragraph",
+      m.command_insert_paragraph,
+      "Mod-Shift-p",
+      "insert.paragraph",
+    ),
+    insertion("editor.insert.poetry", m.command_insert_poetry_line, "Mod-Shift-l", "insert.poetry"),
+    insertion(
+      "editor.insert.footnote",
+      m.command_insert_footnote,
+      "Mod-Shift-n",
+      "insert.footnote",
+    ),
+    insertion(
+      "editor.table.rowAbove",
+      m.command_table_insert_row_above,
+      undefined,
+      "table.rowAbove",
+    ),
+    insertion(
+      "editor.table.rowBelow",
+      m.command_table_insert_row_below,
+      undefined,
+      "table.rowBelow",
+    ),
+    insertion("editor.table.deleteRow", m.command_table_delete_row, undefined, "table.deleteRow"),
     insertion(
       "editor.table.columnBefore",
-      t("Table: insert column before"),
+      m.command_table_insert_column_before,
       undefined,
       "table.columnBefore",
     ),
     insertion(
       "editor.table.columnAfter",
-      t("Table: insert column after"),
+      m.command_table_insert_column_after,
       undefined,
       "table.columnAfter",
     ),
     insertion(
       "editor.table.deleteColumn",
-      t("Table: delete column"),
+      m.command_table_delete_column,
       undefined,
       "table.deleteColumn",
     ),
@@ -645,7 +666,7 @@ const formatCommands = (bridge: ShellBridge, h: Helpers) => {
   return [
     registerCommand({
       id: "format.book",
-      title: t("Format book"),
+      title: m.common_format_book,
       when: hasBook,
       run: () => {
         const book = bridge.focused();
@@ -656,14 +677,14 @@ const formatCommands = (bridge: ShellBridge, h: Helpers) => {
           return;
         }
         if (previewed.success.empty) {
-          bridge.report(t("{book} is already formatted", { book: book.id }));
+          bridge.report(m.command_book_is_already_formatted({ book: book.id }));
           return;
         }
         const applied = applyFormat(previewed.success, book);
         bridge.report(
           TextResult.isFailure(applied)
-            ? t("format refused: {reason}", { reason: applied.failure.description })
-            : t("formatted {book}", { book: book.id }),
+            ? m.command_format_refused_reason({ reason: applied.failure.description })
+            : m.command_formatted_book({ book: book.id }),
         );
         bridge.changed({ kind: "book.apply", books: [book.id] });
       },
@@ -671,7 +692,7 @@ const formatCommands = (bridge: ShellBridge, h: Helpers) => {
 
     registerCommand({
       id: "format.project",
-      title: t("Format every book"),
+      title: m.command_format_every_book,
       when: hasProject,
       run: () => {
         let refusal = "";
@@ -684,10 +705,10 @@ const formatCommands = (bridge: ShellBridge, h: Helpers) => {
           return previewed.success.changes;
         });
         if (operation === null) {
-          bridge.report(refusal === "" ? t("nothing to format") : refusal);
+          bridge.report(refusal === "" ? m.command_nothing_to_format() : refusal);
           return;
         }
-        bridge.report(t("formatted {count} book(s)", { count: operation.books.length }));
+        bridge.report(m.command_formatted_count_books({ count: operation.books.length }));
         bridge.changed({ kind: "book.apply", books: operation.books });
       },
     }),
@@ -742,11 +763,11 @@ const showWhatNeedsText = (
     if (wasOff) yield* bridge.services.settings.set(ghostKey, true);
     bridge.report(
       wasOff
-        ? t("{done} — {count} block(s) need text; showing empty paragraphs", {
+        ? m.command_blocks_need_text_showing_empty({
             done,
             count: holes.length,
           })
-        : t("{done} — {count} block(s) need text", { done, count: holes.length }),
+        : m.command_blocks_need_text({ done, count: holes.length }),
     );
   });
 
@@ -757,17 +778,17 @@ const overlayFocused = (bridge: ShellBridge, scope: "chapter" | "book") =>
     if (book === undefined || project === undefined) return;
     const chapter = scope === "chapter" ? chapterAtCaret(book) : undefined;
     if (scope === "chapter" && chapter === undefined) {
-      bridge.report(t("put the cursor in a chapter first"));
+      bridge.report(m.command_put_the_cursor_in_a());
       return;
     }
     const source = yield* boundSource(bridge, project.root);
     if (source === undefined) {
-      bridge.report(t("no source text is bound to this project"));
+      bridge.report(m.command_no_source_text_is_bound());
       return;
     }
     const text = yield* bridge.services.library.readBook(source.id, book.id);
     if (Option.isNone(text)) {
-      bridge.report(t("the source has no {book}", { book: book.id }));
+      bridge.report(m.command_the_source_has_no_book({ book: book.id }));
       return;
     }
     const previewed = overlayBook(
@@ -783,15 +804,15 @@ const overlayFocused = (bridge: ShellBridge, scope: "chapter" | "book") =>
     if (previewed.success.empty) {
       bridge.report(
         chapter === undefined
-          ? t("{book} already matches the source's formatting", { book: book.id })
-          : t("chapter {chapter} already matches the source's formatting", { chapter }),
+          ? m.command_book_already_matches_the_sources({ book: book.id })
+          : m.command_chapter_chapter_already_matches_the({ chapter }),
       );
       return;
     }
     const applied = withoutScrolling(() => applyOverlay(previewed.success, book));
     if (TextResult.isFailure(applied)) {
       bridge.report(
-        t("match formatting refused: {reason}", { reason: applied.failure.description }),
+        m.command_match_formatting_refused_reason({ reason: applied.failure.description }),
       );
       return;
     }
@@ -801,8 +822,8 @@ const overlayFocused = (bridge: ShellBridge, scope: "chapter" | "book") =>
       bridge,
       book,
       chapter === undefined
-        ? t("matched {book} to {source}", { book: book.id, source: source.title })
-        : t("matched chapter {chapter} to {source}", { chapter, source: source.title }),
+        ? m.command_matched_book_to_source({ book: book.id, source: source.title })
+        : m.command_matched_chapter_chapter_to_source({ chapter, source: source.title }),
       extent,
     );
   });
@@ -813,17 +834,17 @@ const overlayProject = (bridge: ShellBridge, multibook: Helpers["multibook"]) =>
     if (project === undefined) return;
     const source = yield* boundSource(bridge, project.root);
     if (source === undefined) {
-      bridge.report(t("no source text is bound to this project"));
+      bridge.report(m.command_no_source_text_is_bound());
       return;
     }
-    bridge.report(t("reading {source}…", { source: source.title }));
+    bridge.report(m.command_reading_source({ source: source.title }));
     const texts = new Map<string, string>();
     for (const book of project.books) {
       const text = yield* bridge.services.library.readBook(source.id, book.id);
       if (Option.isSome(text)) texts.set(book.id, text.value);
     }
     if (texts.size === 0) {
-      bridge.report(t("{source} has none of this project's books", { source: source.title }));
+      bridge.report(m.command_source_has_none_of_this({ source: source.title }));
       return;
     }
     let refusal = "";
@@ -842,13 +863,13 @@ const overlayProject = (bridge: ShellBridge, multibook: Helpers["multibook"]) =>
     if (operation === null) {
       bridge.report(
         refusal === ""
-          ? t("every book already matches {source}", { source: source.title })
+          ? m.command_every_book_already_matches_source({ source: source.title })
           : refusal,
       );
       return;
     }
     bridge.changed({ kind: "book.apply", books: operation.books });
-    const done = t("matched {count} book(s) to {source}", {
+    const done = m.command_matched_count_books_to({
       count: operation.books.length,
       source: source.title,
     });
@@ -866,7 +887,7 @@ const overlayProject = (bridge: ShellBridge, multibook: Helpers["multibook"]) =>
 const chapterLabelCommands = (bridge: ShellBridge, h: Helpers) => [
   registerCommand({
     id: "chapterLabels.standardize",
-    title: t("Standardize chapter labels"),
+    title: m.command_standardize_chapter_labels,
     when: h.hasProject,
     run: (argument) => {
       if (!(argument instanceof Map)) return;
@@ -897,19 +918,19 @@ const overlayCommands = (bridge: ShellBridge, h: Helpers) => {
   return [
     registerCommand({
       id: "overlay.chapter",
-      title: t("Match formatting from source: this chapter"),
+      title: m.command_match_formatting_from_source_this,
       when: hasBook,
       run: () => overlayFocused(bridge, "chapter"),
     }),
     registerCommand({
       id: "overlay.book",
-      title: t("Match formatting from source: this book"),
+      title: m.command_match_formatting_from_source_this_book,
       when: hasBook,
       run: () => overlayFocused(bridge, "book"),
     }),
     registerCommand({
       id: "overlay.project",
-      title: t("Match formatting from source: every book"),
+      title: m.command_match_formatting_from_source_every,
       when: hasProject,
       run: () => overlayProject(bridge, h.multibook),
     }),
@@ -921,7 +942,7 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
   setCommandObservability(services.composition.observability);
   setCommandRunner((effect) => {
     void services.run(effect).catch((cause: unknown) => {
-      bridge.report(t("failed: {cause}", { cause: String(cause) }));
+      bridge.report(m.command_failed_cause({ cause: String(cause) }));
     });
   });
   const h = shellHelpers(bridge);

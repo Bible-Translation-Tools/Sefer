@@ -13,10 +13,10 @@ import {
 } from "@wycliffeassociates/sefer-text/location/names";
 import { createMemo, type Accessor } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import { stampMatches, tocViewOf, type Analysis, type EngineStamp } from "#core/galley";
 import type { Project } from "#core/project/project";
 
-import { t } from "./i18n";
 import { bookName } from "./ui/workspace/books";
 import { metadataOf } from "./ui/workspace/project";
 
@@ -45,7 +45,7 @@ export const createLocation = (project: Accessor<Project | undefined>): Location
       return nameCatalogue({
         named: (id) => Object.values(metadata?.bookNames[id] ?? {}).filter((name) => name !== ""),
         extraIds: open?.books.map((book) => book.id) ?? [],
-        intro: [t("Intro")],
+        intro: [m.common_intro()],
       });
     },
     { name: "nameCatalogue" },
@@ -56,7 +56,11 @@ export const createLocation = (project: Accessor<Project | undefined>): Location
     books: (text) => booksMatching(citationWords(text), catalogue()),
     holds: (book) => held().has(book.toUpperCase()),
     label: (address, heading) =>
-      addressLabel(address, bookName(address.book, metadataOf(project()), heading), t("Intro")),
+      addressLabel(
+        address,
+        bookName(address.book, metadataOf(project()), heading),
+        m.common_intro(),
+      ),
     addressAt: (book, offset, measured, analysis) => {
       if (analysis === undefined || !stampMatches(measured, analysis)) return undefined;
       return addressAt(book, tocViewOf(analysis), offset);

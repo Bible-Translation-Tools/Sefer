@@ -3,10 +3,10 @@ import { Cause, Exit } from "effect";
 import Library from "lucide-solid/icons/library";
 import { createEffect, createSignal } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import type { OpenHandle, Unavailable } from "#core/resources/kinds/handle";
 import type { Resource, Role } from "#core/resources/library";
 
-import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { DelayedSpinner, EmptyState } from "../primitives";
 import { ReferencePane } from "../workspace/ReferencePane";
@@ -37,7 +37,7 @@ const useHandle = (resource: () => Resource) => {
 const NotShown = (props: { readonly resource: Resource; readonly reason: string }) => (
   <EmptyState
     icon={<Library size={22} />}
-    title={t("Sefer cannot show {title} yet", { title: props.resource.title })}
+    title={m.kinds_sefer_cannot_show_title_yet({ title: props.resource.title })}
     description={props.reason}
   />
 );
@@ -82,7 +82,7 @@ export function ResourcePane(props: ResourcePaneProps) {
       return (
         <NotShown
           resource={props.resource}
-          reason={reason?.error.description ?? t("It could not be opened.")}
+          reason={reason?.error.description ?? m.kinds_it_could_not_be_opened()}
         />
       );
     }
@@ -99,7 +99,7 @@ export function ResourcePane(props: ResourcePaneProps) {
       ),
       tn: (handle) => <NotesPane resource={props.resource} handle={handle} />,
       unsupported: () => (
-        <NotShown resource={props.resource} reason={t("There is no reader for it yet.")} />
+        <NotShown resource={props.resource} reason={m.kinds_there_is_no_reader_for()} />
       ),
     });
   };

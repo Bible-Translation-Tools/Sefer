@@ -49,8 +49,8 @@ export const notesTour: Tour = {
   id: "notes",
   kind: "tutorial",
   audience: "internal",
-  title: "Translation Notes",
-  summary:
+  title: () => "Translation Notes",
+  summary: () =>
     "Download WA's Translation Notes, read them beside your text as you move verse to verse, and search them in Find.",
   needsProject: false,
   start: "/projects",

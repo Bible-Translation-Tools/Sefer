@@ -2,11 +2,11 @@ import { HeadContent, Outlet, createRootRoute, useNavigate } from "@tanstack/sol
 import { Effect, Fiber, Stream } from "effect";
 import { Show, createEffect, onCleanup, type ParentProps } from "solid-js";
 
-import { t } from "#app/i18n";
 import { applyLocale, uiLocale } from "#app/locale";
+import { m } from "#app/paraglide/messages";
 import { ProjectProvider, readyShell, useShellState } from "#app/ProjectContext";
-import { shellKeys } from "#app/settings";
 import "#app/ui/theme";
+import { shellKeys } from "#app/settings";
 
 const useDesignSurface = (): void => {
   if (!__SEFER_DESIGN__) return;
@@ -70,7 +70,7 @@ export const Route = createRootRoute({
   component: Root,
   notFoundComponent: () => (
     <main class="mx-auto w-full max-w-3xl p-10 text-small text-on-surface-tertiary">
-      {t("Page not found.")}
+      {m.shell_page_not_found()}
     </main>
   ),
 });

@@ -15,6 +15,7 @@ import CodeIcon from "lucide-solid/icons/code";
 import SquareArrowOutUpRightIcon from "lucide-solid/icons/square-arrow-out-up-right";
 import { Show, createEffect, createMemo, createSignal } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import {
   pairedExcerpt,
   type BookText,
@@ -23,7 +24,6 @@ import {
 } from "#core/excerpts/excerpts";
 import { tocViewOf, type Analysis } from "#core/galley";
 
-import { t } from "../../i18n";
 import { useShell } from "../../ProjectContext";
 import { CardActions, type CardAction } from "../multibuffer/CardAction";
 import { CardEditor } from "../multibuffer/CardEditor";
@@ -262,13 +262,14 @@ export function ExcerptCard(props: ExcerptCardProps) {
     const next =
       side === "up" ? all[unitIndexAt(all, span.from) - 1] : all[unitIndexAt(all, span.to - 1) + 1];
     const verse = next?.verse;
-    if (verse === undefined || verse.first === 0 || next?.row !== home?.row) return t("Show Verse");
+    if (verse === undefined || verse.first === 0 || next?.row !== home?.row)
+      return m.excerpts_show_verse();
     const label = verse.last > verse.first ? `${verse.first}-${verse.last}` : `${verse.first}`;
-    return t("Show Verse {verse}", { verse: label });
+    return m.excerpts_show_verse_verse({ verse: label });
   };
   const stepLabel = (side: "up" | "down"): string => {
-    if (chapterOpen()) return t("Show fewer verses");
-    if (doubled()) return t("Show the whole chapter");
+    if (chapterOpen()) return m.excerpts_show_fewer_verses();
+    if (doubled()) return m.excerpts_show_the_whole_chapter();
     return verseLabel(side);
   };
   const stepIcon = (side: "up" | "down") => {
@@ -317,7 +318,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
         fallback={
           <Show when={refused()} fallback={reader()}>
             <p class="px-3 py-2 text-small text-on-surface-primary">
-              {t("That book could not be opened for editing.")}
+              {m.excerpts_that_book_could_not_be()}
             </p>
           </Show>
         }
@@ -358,7 +359,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
             when={pairedView()}
             fallback={
               <p class="px-3 py-2 text-small text-on-surface-primary italic">
-                {t("{place} is not in {name}.", { place: props.excerpt.label, name: text().name })}
+                {m.excerpts_place_is_not_in_name({ place: props.excerpt.label, name: text().name })}
               </p>
             }
           >
@@ -415,7 +416,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
           {
             kind: "icon",
             id: "usfm",
-            label: usfm() ? t("Show the reading") : t("Show the USFM"),
+            label: usfm() ? m.excerpts_show_the_reading() : m.excerpts_show_the_usfm(),
             icon: CodeIcon,
             pressed: usfm(),
             onPress: () => props.onView({ kind: "usfm" }),
@@ -428,7 +429,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
     return {
       kind: "icon",
       id: "open",
-      label: t("Open in editor"),
+      label: m.excerpts_open_in_editor(),
       icon: SquareArrowOutUpRightIcon,
       pressed: opening() ? true : undefined,
       onPress: () => {
@@ -471,7 +472,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
 
             <Show when={notes() === undefined && props.excerpt.hits.length > 1}>
               <span class="text-small text-on-surface-primary">
-                {t("{count} matches", { count: props.excerpt.hits.length })}
+                {m.excerpts_count_matches({ count: props.excerpt.hits.length })}
               </span>
             </Show>
           </>
@@ -588,10 +589,10 @@ export function ExcerptCard(props: ExcerptCardProps) {
                       }
                     >
                       <Button variant="primary" data-card-action="save" onClick={save}>
-                        {t("Save changes")}
+                        {m.excerpts_save_changes()}
                       </Button>
                       <Button variant="tertiary" data-card-action="cancel" onClick={cancel}>
-                        {t("Cancel")}
+                        {m.common_cancel()}
                       </Button>
                     </Show>
                   </div>

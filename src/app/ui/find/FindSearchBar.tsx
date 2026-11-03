@@ -4,7 +4,7 @@ import RegexIcon from "lucide-solid/icons/regex";
 import SearchIcon from "lucide-solid/icons/search";
 import WholeWordIcon from "lucide-solid/icons/whole-word";
 
-import { t } from "#app/i18n";
+import { m } from "#app/paraglide/messages";
 import { Button, IconButton, Input } from "#app/ui/primitives";
 
 import type { FindQuery } from "./createFindQuery";
@@ -17,7 +17,7 @@ export function FindSearchBar(props: { query: FindQuery; commit: () => void }) {
         type="search"
         icon={<SearchIcon />}
         wrapperClass="min-w-0 flex-1"
-        placeholder={t("Find in project")}
+        placeholder={m.find_find_in_project()}
         value={props.query.text()}
         onInput={(event) => props.query.setText(event.currentTarget.value)}
         onKeyDown={(event) => {
@@ -26,40 +26,40 @@ export function FindSearchBar(props: { query: FindQuery; commit: () => void }) {
       />
       <div
         role="group"
-        aria-label={t("Match options")}
+        aria-label={m.find_match_options()}
         class="flex h-12 shrink-0 items-center gap-0.5 rounded-lg border border-surface-border bg-surface-secondary px-1.5"
       >
         <IconButton
           size="sm"
-          label={t("Match case")}
+          label={m.find_match_case()}
           icon={<CaseSensitiveIcon />}
           aria-pressed={props.query.matchCase() ? "true" : "false"}
           onClick={() => props.query.setMatchCase((held) => !held)}
         />
         <IconButton
           size="sm"
-          label={t("Whole word")}
+          label={m.find_whole_word()}
           icon={<WholeWordIcon />}
           aria-pressed={props.query.wholeWord() ? "true" : "false"}
           onClick={() => props.query.setWholeWord((held) => !held)}
         />
         <IconButton
           size="sm"
-          label={t("Regular expression")}
+          label={m.find_regular_expression()}
           icon={<RegexIcon />}
           aria-pressed={props.query.regex() ? "true" : "false"}
           onClick={() => props.query.setRegex((held) => !held)}
         />
         <IconButton
           size="sm"
-          label={t("Search the markup, not the reading")}
+          label={m.find_search_the_markup_not_the()}
           icon={<CodeIcon />}
           aria-pressed={props.query.markup() ? "true" : "false"}
           onClick={() => props.query.setMarkup((held) => !held)}
         />
       </div>
       <Button variant="primary" class="shrink-0" onClick={props.commit}>
-        {t("Find")}
+        {m.find_find()}
       </Button>
     </div>
   );

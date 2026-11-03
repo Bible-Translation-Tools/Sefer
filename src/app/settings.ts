@@ -4,6 +4,7 @@ import { PRODUCERS, SEVERITIES } from "#core/findings/filter";
 import type { SettingKey, SettingsService } from "#core/host/settings";
 import { DEFAULT_JOURNAL_POLICY } from "#core/recovery/recovery";
 
+import type { Message } from "./i18n";
 import { automaticLocale, nativeName, shippedLocales } from "./locale";
 import { m } from "./paraglide/messages";
 import { SousOverrides } from "./sousSettings";
@@ -235,9 +236,8 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
 const appearanceRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
   {
     key: keys.locale,
-    label: "Language",
-    description:
-      "The language of Sefer's menus, buttons and messages. It does not change the text of your projects.",
+    label: m.settings_language(),
+    description: m.settings_the_language_of_sefers_menus(),
     kind: "choice",
     as: "select",
     group: "appearance",
@@ -251,20 +251,20 @@ const appearanceRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
   },
   {
     key: keys.theme,
-    label: "Display mode",
-    description: "Choose the theme used throughout the application.",
+    label: m.settings_display_mode(),
+    description: m.settings_choose_the_theme_used_throughout(),
     kind: "choice",
     group: "appearance",
     options: [
-      { value: "system", label: "System" },
-      { value: "light", label: "Light" },
-      { value: "dark", label: "Dark" },
+      { value: "system", label: m.settings_system() },
+      { value: "light", label: m.settings_light() },
+      { value: "dark", label: m.settings_dark() },
     ],
   },
   {
     key: keys.fontSize,
-    label: "Interface text size",
-    description: "Scales every size in the interface, in pixels.",
+    label: m.settings_interface_text_size(),
+    description: m.settings_scales_every_size_in_the(),
     kind: "number",
     group: "appearance",
     min: 12,
@@ -274,8 +274,8 @@ const appearanceRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
   },
   {
     key: keys.zoom,
-    label: "Zoom",
-    description: "Adjust the overall application zoom.",
+    label: m.settings_zoom(),
+    description: m.settings_adjust_the_overall_application_zoom(),
     kind: "number",
     group: "appearance",
     min: 50,
@@ -288,26 +288,25 @@ const appearanceRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
 const diffRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
   {
     key: keys.diffPalette,
-    label: "Change colours",
-    description:
-      "The colours Review draws added and removed words in. Blue and orange are for readers who find red and green hard to tell apart.",
+    label: m.settings_change_colours(),
+    description: m.settings_the_colours_review_draws_added(),
     kind: "choice",
     group: "appearance",
     options: [
-      { value: "standard", label: "Red and green" },
-      { value: "blue-orange", label: "Blue and orange" },
+      { value: "standard", label: m.settings_red_and_green() },
+      { value: "blue-orange", label: m.settings_blue_and_orange() },
     ],
   },
   {
     key: keys.diffRemoved,
-    label: "Removed words",
-    description: "How a removed word is marked besides its colour.",
+    label: m.settings_removed_words(),
+    description: m.settings_how_a_removed_word_is(),
     kind: "choice",
     group: "appearance",
     options: [
-      { value: "strike", label: "Struck through" },
-      { value: "underline", label: "Underlined" },
-      { value: "none", label: "Colour only" },
+      { value: "strike", label: m.settings_struck_through() },
+      { value: "underline", label: m.settings_underlined() },
+      { value: "none", label: m.settings_colour_only() },
     ],
     preview: "diff",
   },
@@ -316,8 +315,8 @@ const diffRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
 const editorRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
   {
     key: keys.editorFontSize,
-    label: "Scripture text size",
-    description: "How large the book itself is set, in pixels.",
+    label: m.settings_scripture_text_size(),
+    description: m.settings_how_large_the_book_itself(),
     kind: "number",
     group: "editor",
     min: EDITOR_FONT_SIZE_RANGE.min,
@@ -327,9 +326,8 @@ const editorRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
   },
   {
     key: keys.excerptContext,
-    label: "Context around a result",
-    description:
-      "How many verses or headings a card in Find, Spiritual terms, Findings and Review shows either side of its own verse. Each card's arrows widen it from there.",
+    label: m.settings_context_around_a_result(),
+    description: m.settings_how_many_verses_or_headings(),
     kind: "number",
     group: "editor",
     min: 0,
@@ -338,27 +336,25 @@ const editorRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
   },
   {
     key: keys.reviewLayout,
-    label: "Review layout",
-    description:
-      "How Review draws a difference: side by side, as one text with the other's words struck through, or side by side only when there is room.",
+    label: m.settings_review_layout(),
+    description: m.settings_how_review_draws_a_difference(),
     kind: "choice",
     group: "editor",
     options: [
-      { value: "auto", label: "Side by side when there is room" },
-      { value: "split", label: "Side by side" },
-      { value: "unified", label: "Unified" },
+      { value: "auto", label: m.settings_side_by_side_when_there() },
+      { value: "split", label: m.settings_side_by_side() },
+      { value: "unified", label: m.settings_unified() },
     ],
   },
   {
     key: keys.reviewScope,
-    label: "Review shows",
-    description:
-      "Each change as a card with its context, across every book, or the whole book with its changes drawn in place.",
+    label: m.settings_review_shows(),
+    description: m.settings_each_change_as_a_card(),
     kind: "choice",
     group: "editor",
     options: [
-      { value: "changes", label: "Changes" },
-      { value: "book", label: "The whole book" },
+      { value: "changes", label: m.settings_changes() },
+      { value: "book", label: m.settings_the_whole_book() },
     ],
   },
 ];
@@ -366,51 +362,47 @@ const editorRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
 const editorBehaviourRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
   {
     key: keys.startInUsfmMode,
-    label: "Editor mode default",
-    description: "Open books in USFM mode instead of the reading projection.",
+    label: m.settings_editor_mode_default(),
+    description: m.settings_open_books_in_usfm_mode(),
     kind: "boolean",
     group: "editor",
   },
   {
     key: keys.preferChapterView,
-    label: "Open books one chapter at a time",
-    description: "A book is one document; turn this on to clip the view to a chapter.",
+    label: m.settings_open_books_one_chapter_at(),
+    description: m.settings_a_book_is_one_document(),
     kind: "boolean",
     group: "editor",
   },
   {
     key: keys.annotateEmptyParagraphs,
-    label: "Name paragraphs that have no text",
-    description:
-      "A paragraph or poetry marker with nothing after it is invisible. Turn this on to show its name where the words would go — it is never written to the file.",
+    label: m.settings_name_paragraphs_that_have_no(),
+    description: m.settings_a_paragraph_or_poetry_marker(),
     kind: "boolean",
     group: "editor",
   },
   {
     key: keys.pairBlocks,
-    label: "Show what a block corresponds to",
-    description:
-      "Marks the block you are in, and the block at the same place in every reference open beside it — so you can see which paragraph or poetry line answers which.",
+    label: m.settings_show_what_a_block_corresponds(),
+    description: m.settings_marks_the_block_you_are(),
     kind: "boolean",
     group: "editor",
   },
   {
     key: keys.verseShortcuts,
-    label: "Verse shortcuts",
-    description:
-      'Typing "1", "1.", "v1" or "verse 1" and then a space starts that verse, when it is the next verse or within the reference\'s count for the chapter, and never one the chapter already has. Pasted text follows the same rule, and Backspace just after a verse\'s number turns it back into the number. Turn this off to keep such numbers as words.',
+    label: m.settings_verse_shortcuts(),
+    description: m.settings_typing_1_1_v1_or(),
     kind: "boolean",
     group: "editor",
   },
   {
     key: keys.indentSpaces,
-    label: "Spaces that indent a line",
-    description:
-      "In Refine, this many spaces typed at the start of a line make it a poetry line, or move it one level in, as Tab does. Off, spaces are only spaces.",
+    label: m.settings_spaces_that_indent_a_line(),
+    description: m.settings_in_refine_this_many_spaces(),
     kind: "choice",
     group: "editor",
     options: [
-      { value: "0", label: "Off" },
+      { value: "0", label: m.settings_off() },
       { value: "2", label: "2" },
       { value: "4", label: "4" },
       { value: "8", label: "8" },
@@ -418,9 +410,8 @@ const editorBehaviourRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
   },
   {
     key: keys.syncReferences,
-    label: "References follow the book you are reading",
-    description:
-      "Scrolling the book moves every reference beside it to the same place. Each pane can be unpinned on its own from its header; this is what a newly opened one starts as.",
+    label: m.settings_references_follow_the_book_you(),
+    description: m.settings_scrolling_the_book_moves_every(),
     kind: "boolean",
     group: "editor",
   },
@@ -429,9 +420,8 @@ const editorBehaviourRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
 const advancedRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
   {
     key: keys.backupIdleMs,
-    label: "Back up work after",
-    description:
-      "How long typing must pause before the working-state backup is written. The file itself is written only when you record a version.",
+    label: m.settings_back_up_work_after(),
+    description: m.settings_how_long_typing_must_pause(),
     kind: "number",
     group: "advanced",
     min: 200,
@@ -441,24 +431,22 @@ const advancedRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
   },
   {
     key: keys.offerRecovery,
-    label: "Offer unsaved work on open",
-    description:
-      "Ask about unsaved work found when a project opens. Off, Sefer still backs up as you type; it only stops asking. Useful while developing with hot reload.",
+    label: m.settings_offer_unsaved_work_on_open(),
+    description: m.settings_ask_about_unsaved_work_found(),
     kind: "boolean",
     group: "advanced",
   },
   {
     key: keys.enableReplaceAll,
-    label: "Enable Replace all",
-    description: "Allow Find to replace every matching occurrence in one action.",
+    label: m.settings_enable_replace_all(),
+    description: m.settings_allow_find_to_replace_every(),
     kind: "boolean",
     group: "advanced",
   },
   {
     key: keys.showGatewayProjects,
-    label: "Show gateway languages on the projects page",
-    description:
-      "Lists the gateway languages on the projects page too. A download from there goes to Source texts, never Your projects; to revise one, use Edit as your own project in Settings.",
+    label: m.settings_show_gateway_languages_on_the(),
+    description: m.settings_lists_the_gateway_languages_on(),
     kind: "boolean",
     group: "advanced",
   },
@@ -467,24 +455,22 @@ const advancedRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
 const networkRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
   {
     key: keys.contentHost,
-    label: "Content host",
-    description: "The WACS server a sign-in, the repository list and a publish go to.",
+    label: m.settings_content_host(),
+    description: m.settings_the_wacs_server_a_sign(),
     kind: "string",
     group: "network",
   },
   {
     key: keys.catalogueUrl,
-    label: "Catalogue",
-    description:
-      "The Language API the projects page lists from. Each project it lists carries its own address, so this can point at a different server from the content host.",
+    label: m.settings_catalogue(),
+    description: m.settings_the_language_api_the_projects(),
     kind: "string",
     group: "network",
   },
   {
     key: keys.webTransport,
-    label: "Browser transport",
-    description:
-      "How this browser reaches each server, as host=proxy pairs separated by commas. Each proxy serves exactly one server, so a wrong pair breaks every transfer to it.",
+    label: m.settings_browser_transport(),
+    description: m.settings_how_this_browser_reaches_each(),
     kind: "string",
     group: "network",
     hosts: ["web"],
@@ -507,19 +493,19 @@ export const shellSettings = (settings: SettingsService): readonly AnyDescriptor
 /** The cards `/settings` draws, in display order, with their headings. */
 export const SETTING_GROUPS: readonly {
   readonly id: SettingGroup;
-  readonly title: string;
-  readonly subtitle: string;
+  readonly title: Message;
+  readonly subtitle: Message;
 }[] = [
   {
     id: "appearance",
-    title: "App appearance",
-    subtitle: "How Sefer looks on this device.",
+    title: m.settings_app_appearance,
+    subtitle: m.settings_how_sefer_looks_on_this,
   },
-  { id: "editor", title: "Editor", subtitle: "What a book does when it opens." },
+  { id: "editor", title: m.settings_editor, subtitle: m.settings_what_a_book_does_when },
   {
     id: "network",
-    title: "Network",
-    subtitle: "Which servers this build talks to. Changing one needs a reload.",
+    title: m.settings_network,
+    subtitle: m.settings_which_servers_this_build_talks,
   },
-  { id: "advanced", title: "Advanced", subtitle: "Timings and machinery." },
+  { id: "advanced", title: m.settings_advanced, subtitle: m.settings_timings_and_machinery },
 ];

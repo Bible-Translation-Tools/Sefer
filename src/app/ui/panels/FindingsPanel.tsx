@@ -10,13 +10,13 @@ import Wrench from "lucide-solid/icons/wrench";
 import X from "lucide-solid/icons/x";
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import type { Excerpt } from "#core/excerpts/excerpts";
 import * as Filter from "#core/findings/filter";
 import type { Finding } from "#core/findings/finding";
 import * as Findings from "#core/findings/findings";
 import * as Fixes from "#core/fixes/fixes";
 
-import { t } from "../../i18n";
 import { useShell, type Shell } from "../../ProjectContext";
 import { excerptCard, ExcerptList, type ExcerptCardSpec, type OutlineSpec } from "../excerpts";
 import type { CardAction } from "../multibuffer/CardAction";
@@ -181,7 +181,7 @@ const createFixOffer = (shell: Shell) => {
     if (book === undefined || analysis === undefined) {
       setPreview(undefined);
       setNote(
-        t("Open {book} first — a fix is applied to the book, not to the list.", {
+        m.findings_open_book_first_a_fix({
           book: finding.bookId,
         }),
       );
@@ -190,7 +190,7 @@ const createFixOffer = (shell: Shell) => {
     const previewed = Fixes.preview(finding, book, analysis.analysis);
     if (Result.isFailure(previewed)) {
       setPreview(undefined);
-      setNote(t("no fix: {reason}", { reason: previewed.failure.reason }));
+      setNote(m.findings_no_fix_reason({ reason: previewed.failure.reason }));
       return;
     }
     setNote("");
@@ -203,8 +203,8 @@ const createFixOffer = (shell: Shell) => {
     const applied = Fixes.applyFix(fix, book);
     setNote(
       TextResult.isSuccess(applied)
-        ? t("applied {label}", { label: fix.label })
-        : t("refused by {rule}", { rule: applied.failure.rule }),
+        ? m.findings_applied_label({ label: fix.label })
+        : m.findings_refused_by_rule({ rule: applied.failure.rule }),
     );
     setPreview(undefined);
     shell.changed({ kind: "book.apply", books: [fix.finding.bookId] });
@@ -301,7 +301,7 @@ const findingLine = (
               icon={isWhyOpen(row, finding) ? <ChevronDown /> : <ChevronRight />}
               onClick={() => toggleWhy(row, finding)}
             >
-              {t("Why?")}
+              {m.findings_why()}
             </Button>
           </Show>
           <Show when={folded}>
@@ -311,8 +311,8 @@ const findingLine = (
               aria-expanded={isOpen(row, finding) ? "true" : "false"}
               aria-label={
                 isOpen(row, finding)
-                  ? t("Fold {count} identical findings", { count: run?.members.length ?? 0 })
-                  : t("Unfold {count} identical findings", { count: run?.members.length ?? 0 })
+                  ? m.findings_fold_count_identical_findings({ count: run?.members.length ?? 0 })
+                  : m.findings_unfold_count_identical_findings({ count: run?.members.length ?? 0 })
               }
               class="tabular-nums"
               icon={isOpen(row, finding) ? <ChevronDown /> : <ChevronRight />}
@@ -358,7 +358,7 @@ const createFindingsCard = (
           {(severity) => <Badge tone={severityTone(severity)}>{severity}</Badge>}
         </For>
         <Show when={row.findings.some(isStale)}>
-          <Badge tone="muted">{t("stale")}</Badge>
+          <Badge tone="muted">{m.findings_stale()}</Badge>
         </Show>
       </>
     );
@@ -372,7 +372,7 @@ const createFindingsCard = (
     return fixable.map((finding) => ({
       kind: "button",
       id: `fix:${finding.code}`,
-      label: fixable.length === 1 ? t("Fix") : t("Fix {code}", { code: finding.code }),
+      label: fixable.length === 1 ? m.findings_fix() : m.findings_fix_code({ code: finding.code }),
       icon: Wrench,
       onPress: () => offer(finding),
     }));
@@ -404,7 +404,9 @@ const createFindingsCard = (
       },
       title: (_excerpt, key) => {
         const row = feed.row(key);
-        return row?.front === true ? t("{book} · front matter", { book: row.bookName }) : undefined;
+        return row?.front === true
+          ? m.findings_book_front_matter({ book: row.bookName })
+          : undefined;
       },
       info: badges,
       notes,
@@ -433,10 +435,10 @@ function FixPreviewCard(props: {
           class="ms-auto"
           onClick={() => props.onApply(props.fix)}
         >
-          {t("Apply")}
+          {m.findings_apply()}
         </Button>
         <Button size="sm" onClick={() => props.onDismiss()}>
-          {t("Dismiss")}
+          {m.common_dismiss()}
         </Button>
       </div>
       <ul class="flex flex-col gap-1">
@@ -447,7 +449,7 @@ function FixPreviewCard(props: {
                 {change.from}–{change.to}
               </code>
               <code class="min-w-0 break-all">
-                {change.insert === "" ? t("(delete)") : change.insert}
+                {change.insert === "" ? m.findings_delete() : change.insert}
               </code>
             </li>
           )}
@@ -460,16 +462,16 @@ function FixPreviewCard(props: {
 function SettingsAside(props: { readonly onClose: () => void }) {
   return (
     <aside
-      aria-label={t("Proofreading settings")}
+      aria-label={m.findings_proofreading_settings()}
       class="flex w-[26rem] shrink-0 flex-col gap-3 overflow-y-auto rounded-lg border border-surface-border bg-surface-primary p-4"
     >
       <div class="flex items-center justify-between gap-2">
         <h3 class="text-small font-semibold text-on-surface-primary">
-          {t("Proofreading settings")}
+          {m.findings_proofreading_settings()}
         </h3>
         <IconButton
           size="sm"
-          label={t("Close settings")}
+          label={m.findings_close_settings()}
           icon={<X />}
           onClick={() => props.onClose()}
         />
@@ -534,11 +536,11 @@ export function FindingsPanel() {
 
   const sections: OutlineSpec = {
     rowKey: (group, excerpt) => `${group.bookId}|${excerpt.sid}`,
-    title: t("Groups with findings"),
+    title: m.findings_groups_with_findings(),
     label: (row) => {
       const head = feed.head(row.bookId);
       if (head === undefined) return row.bookId;
-      return head.front ? t("{book} front", { book: head.label }) : head.label;
+      return head.front ? m.findings_book_front({ book: head.label }) : head.label;
     },
   };
 
@@ -549,11 +551,11 @@ export function FindingsPanel() {
   return (
     <main class="flex h-full min-w-0 flex-col gap-4 p-6" data-findings-panel>
       <PanelHeader
-        title={t("Findings")}
+        title={m.common_findings()}
         actions={
           <>
             <span class="text-small text-on-surface-tertiary" data-findings-count={summary().shown}>
-              {t("{shown} of {total} shown", { shown: summary().shown, total: summary().total })}
+              {m.findings_shown_of_total_shown({ shown: summary().shown, total: summary().total })}
             </span>
 
             <Button
@@ -562,16 +564,16 @@ export function FindingsPanel() {
               aria-pressed={showingSuppressed() ? "true" : "false"}
               data-findings-hidden={hiddenCount()}
               disabled={hiddenCount() === 0 && !showingSuppressed()}
-              title={t("Findings you marked fine, on this device")}
+              title={m.findings_findings_you_marked_fine_on()}
               onClick={() => setShowingSuppressed((on) => !on)}
             >
               {showingSuppressed()
-                ? t("Back to findings")
-                : t("{count} marked fine", { count: hiddenCount() })}
+                ? m.findings_back_to_findings()
+                : m.findings_count_marked_fine({ count: hiddenCount() })}
             </Button>
             <SegmentedControl<FindingsView>
-              label={t("Group findings by")}
-              items={VIEWS.map((view) => ({ value: view.value, label: t(view.label) }))}
+              label={m.findings_group_findings_by()}
+              items={VIEWS.map((view) => ({ value: view.value, label: view.label() }))}
               value={filters.view()}
               onChange={(view) => filters.setView(view)}
             />
@@ -591,7 +593,7 @@ export function FindingsPanel() {
 
           <IconButton
             size="sm"
-            label={t("Proofreading settings")}
+            label={m.findings_proofreading_settings()}
             icon={<SettingsIcon />}
             aria-pressed={settingsOpen() ? "true" : "false"}
             onClick={() => setSettingsOpen((open) => !open)}
@@ -599,8 +601,8 @@ export function FindingsPanel() {
         </div>
         <Show when={pattern() !== undefined}>
           <p class="flex flex-wrap items-center gap-2 text-smallest text-on-surface-tertiary">
-            <Badge tone="brand">{t("one pattern")}</Badge>
-            {t("Showing only the sites of the pattern /inventory sent over.")}
+            <Badge tone="brand">{m.findings_one_pattern()}</Badge>
+            {m.findings_showing_only_the_sites_of()}
             <Button
               size="sm"
               variant="tertiary"
@@ -612,7 +614,7 @@ export function FindingsPanel() {
                 })
               }
             >
-              {t("Show every finding")}
+              {m.findings_show_every_finding()}
             </Button>
           </p>
         </Show>
@@ -646,12 +648,12 @@ export function FindingsPanel() {
                 fallback={
                   <EmptyState
                     icon={<CircleCheck size={22} />}
-                    title={t("Nothing to report — or no project is open.")}
+                    title={m.findings_nothing_to_report_or_no()}
                   />
                 }
               >
                 <EmptyState
-                  title={t("{total} findings, all hidden by the filter.", {
+                  title={m.findings_total_findings_all_hidden_by({
                     total: summary().total,
                   })}
                 />
@@ -660,7 +662,7 @@ export function FindingsPanel() {
           >
             <Show when={body()} fallback={<div class="min-h-0 flex-1" aria-busy="true" />}>
               <ExcerptList
-                goneLabel={t("Resolved")}
+                goneLabel={m.findings_resolved()}
                 resultsKey={JSON.stringify(filters.filter())}
                 groups={feed.groups()}
                 views={feed.excerpts.views}
@@ -679,7 +681,7 @@ export function FindingsPanel() {
                 empty={
                   <EmptyState
                     icon={<CircleCheck size={22} />}
-                    title={t("Nothing to report in the books that are open.")}
+                    title={m.findings_nothing_to_report_in_the()}
                   />
                 }
               />

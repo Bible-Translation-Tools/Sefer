@@ -11,7 +11,6 @@ import SettingsIcon from "lucide-solid/icons/settings";
 import TypeIcon from "lucide-solid/icons/type";
 import { Show, createSignal, For } from "solid-js";
 
-import { t } from "../../i18n";
 import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
 import { SyncPopover, createSync, syncGlyph } from "../cloud/SyncButton";
@@ -61,20 +60,20 @@ function MoreMenu() {
   const sync = createSync(shell);
 
   const items: ReadonlyArray<{ label: string; to: ProjectScreen; icon: JSX.Element }> = [
-    { label: t("Findings"), to: "/project/$slug/findings", icon: <Bell size={16} /> },
-    { label: t("History"), to: "/project/$slug/history", icon: <HistoryIcon size={16} /> },
+    { label: m.common_findings(), to: "/project/$slug/findings", icon: <Bell size={16} /> },
+    { label: m.common_history(), to: "/project/$slug/history", icon: <HistoryIcon size={16} /> },
     {
-      label: t("Character inventory"),
+      label: m.common_character_inventory(),
       to: "/project/$slug/inventory",
       icon: <TypeIcon size={16} />,
     },
-    { label: t("Compare"), to: "/project/$slug/review", icon: <GitCompare size={16} /> },
+    { label: m.common_compare(), to: "/project/$slug/review", icon: <GitCompare size={16} /> },
   ];
 
   return (
     <span class="relative inline-flex">
       <Menu
-        label={t("More")}
+        label={m.common_more()}
         side="bottom"
         align="end"
         open={open()}
@@ -82,7 +81,7 @@ function MoreMenu() {
         class="w-52"
         trigger={
           <BarButton
-            label={t("More")}
+            label={m.common_more()}
             testId="app-bar-more"
             pressed={open() ? "true" : "false"}
             icon={<Ellipsis size={20} />}
@@ -143,8 +142,8 @@ function HomeButton() {
       <button
         type="button"
         data-testid="app-bar-home"
-        aria-label={t("Home")}
-        title={t("Home")}
+        aria-label={m.workspace_home()}
+        title={m.workspace_home()}
         class="flex h-12 shrink-0 cursor-pointer items-center gap-3 rounded-lg px-2 transition-colors hover:bg-surface-secondary"
         onClick={goHome}
       >
@@ -162,7 +161,7 @@ function HomeButton() {
           aria-hidden="true"
           class="text-h4 font-semibold text-on-surface-primary max-md:sr-only"
         >
-          {t("Sefer")}
+          {m.common_sefer()}
         </span>
       </button>
     </div>
@@ -178,7 +177,7 @@ function ModeControl(props: {
     // The id is the line-by-line tour's anchor (tour/tours/lineByLine.ts).
     <div id="app-mode-control" class="mx-auto w-full max-w-[30rem] max-md:w-auto">
       <SegmentedControl<Mode>
-        label={t("Mode")}
+        label={m.workspace_mode()}
         iconsWhenNarrow
         class="w-full max-md:w-auto"
         value={props.mode}
@@ -186,19 +185,19 @@ function ModeControl(props: {
         items={[
           {
             value: "refine",
-            label: t("Refine"),
+            label: m.workspace_refine(),
             icon: <FileText aria-hidden="true" />,
             disabled: !props.open,
           },
           {
             value: "form",
-            label: t("Form Mode"),
+            label: m.workspace_form_mode(),
             icon: <Rows3 aria-hidden="true" />,
             disabled: !props.open,
           },
           {
             value: "terms",
-            label: t("Spiritual terms"),
+            label: m.common_spiritual_terms(),
             icon: <ListChecks aria-hidden="true" />,
             disabled: !props.open,
           },
@@ -240,7 +239,7 @@ export function AppBar() {
   return (
     <nav
       data-testid="app-bar"
-      aria-label={t("Sefer")}
+      aria-label={m.common_sefer()}
       class="scrollbar-subtle flex h-18 w-full shrink-0 items-center gap-4 overflow-x-auto overflow-y-hidden border-b border-surface-border bg-surface-primary px-4 py-2"
     >
       <HomeButton />
@@ -252,12 +251,12 @@ export function AppBar() {
         <MoreMenu />
 
         <BarButton
-          label={t("Settings")}
+          label={m.common_settings()}
           testId="app-bar-settings"
           pressed={at("/settings")}
           icon={<SettingsIcon size={20} />}
           disabled={!open()}
-          title={open() ? undefined : t("Open a project to see Settings")}
+          title={open() ? undefined : m.workspace_open_a_project_to_see()}
           onClick={() =>
             void navigate({ to: "/project/$slug/settings", params: { slug: shell.slug() } })
           }

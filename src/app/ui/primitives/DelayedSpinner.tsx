@@ -1,6 +1,6 @@
 import { Show, createSignal, onCleanup } from "solid-js";
 
-import { t } from "../../i18n";
+import { m } from "#app/paraglide/messages";
 
 export const PENDING_MS = 750;
 
@@ -14,7 +14,7 @@ export function DelayedSpinner() {
       <Show when={late()}>
         <span
           role="status"
-          aria-label={t("Loading")}
+          aria-label={m.common_loading()}
           class="size-5 animate-spin rounded-full border-2 border-on-surface-tertiary border-t-transparent"
         />
       </Show>

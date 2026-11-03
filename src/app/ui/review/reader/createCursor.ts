@@ -1,10 +1,10 @@
 import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import { createMemo, createSignal, onCleanup, untrack, type Accessor } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
 import type { DecisionUnit } from "#core/galley";
 
 import { registerCommand } from "../../../commands";
-import { t } from "../../../i18n";
 import type { BookDiffApi, Hunk } from "../../diff";
 import { cardOnScreen, chapterOf, stepTarget, visibleCardIndex } from "./helpers";
 import type { Observability, Prepared, Scope } from "./types";
@@ -140,13 +140,13 @@ function createStep(options: CursorOptions, refs: CursorRefs, signals: CursorSig
 
   const releaseNext = registerCommand({
     id: "review.change.next",
-    title: t("Next change"),
+    title: m.review_next_change,
     keys: "Alt-F5",
     run: () => step(1),
   });
   const releasePrevious = registerCommand({
     id: "review.change.previous",
-    title: t("Previous change"),
+    title: m.review_previous_change,
     keys: "Alt-Shift-F5",
     run: () => step(-1),
   });
@@ -260,8 +260,8 @@ export function createCursor(options: CursorOptions): Cursor {
     const total = scope() === "changes" ? cardKeys().length : (selectedBook()?.shown.length ?? 0);
     const at = place();
     return at === undefined
-      ? t("{total} changes", { total })
-      : t("{at} of {total}", { at: at + 1, total });
+      ? m.review_total_changes({ total })
+      : m.review_at_of_total({ at: at + 1, total });
   };
 
   return {

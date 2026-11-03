@@ -1,6 +1,6 @@
 import { Show } from "solid-js";
 
-import { t } from "#app/i18n";
+import { m } from "#app/paraglide/messages";
 import { Card, Input, SegmentedControl } from "#app/ui/primitives";
 
 import type { FindExpect } from "./createFindExpect";
@@ -17,9 +17,9 @@ export function FindExpectCard(props: FindExpectCardProps) {
     <Card data-tour="find-expect">
       <div class="flex flex-wrap items-center gap-3">
         <Input
-          aria-label={t("Expected in your text")}
+          aria-label={m.find_expected_in_your_text()}
           wrapperClass="w-64"
-          placeholder={t("Expected in your text, e.g. Yesu")}
+          placeholder={m.find_expected_in_your_text_e()}
           value={props.params().expect ?? ""}
           onChange={(event) =>
             props.updateSearch({ expect: event.currentTarget.value.trim() || undefined })
@@ -33,26 +33,24 @@ export function FindExpectCard(props: FindExpectCardProps) {
           when={props.expect.expectation()}
           fallback={
             <span class="text-small text-on-surface-tertiary">
-              {t(
-                "Where the source matched, what should your text say? Sefer shows the verses that do not say it.",
-              )}
+              {m.find_where_the_source_matched_what()}
             </span>
           }
         >
           {(split) => (
             <div data-tour="find-expect-split">
               <SegmentedControl<Expected>
-                label={t("Which verses to show")}
+                label={m.find_which_verses_to_show()}
                 items={[
                   {
                     value: "without",
-                    label: t("Without it ({count})", { count: split().missing.length }),
+                    label: m.find_without_it_count({ count: split().missing.length }),
                   },
                   {
                     value: "with",
-                    label: t("With it ({count})", { count: split().has.length }),
+                    label: m.find_with_it_count({ count: split().has.length }),
                   },
-                  { value: "all", label: t("All") },
+                  { value: "all", label: m.find_all() },
                 ]}
                 value={props.expect.showing()}
                 onChange={(show) => props.updateSearch({ show })}

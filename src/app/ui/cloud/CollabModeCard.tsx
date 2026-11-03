@@ -2,9 +2,10 @@ import type { JSX } from "@solidjs/web";
 import Lock from "lucide-solid/icons/lock";
 import { Show, createSignal, untrack } from "solid-js";
 
+import { m } from "#app/paraglide/messages";
+
 import { collaboration } from "../../collaboration";
 import { describe } from "../../describe";
-import { t } from "../../i18n";
 import { useShell, type Shell } from "../../ProjectContext";
 import { suggestTo } from "../../suggestions";
 import { syncWatch } from "../../syncWatch";
@@ -24,20 +25,17 @@ const suggestToTarget = async (
     if (done.related) {
       onRelated();
       toasts.success({
-        title: t("This project now suggests to {shared}", { shared: done.shared }),
-        message: t("Your project is your copy; offer your changes when ready."),
+        title: m.cloud_this_project_now_suggests_to({ shared: done.shared }),
+        message: m.cloud_your_project_is_your_copy(),
       });
     } else
       toasts.error({
-        title: t("Nothing changed"),
-        message: t(
-          "{shared} shares no history with this project, so suggesting to it would offer the whole project.",
-          { shared: done.shared },
-        ),
+        title: m.cloud_nothing_changed(),
+        message: m.cloud_shared_shares_no_history_with({ shared: done.shared }),
         autoClose: false,
       });
   } catch (cause) {
-    toasts.error({ title: t("Could not attach that project"), message: describe(cause) });
+    toasts.error({ title: m.cloud_could_not_attach_that_project(), message: describe(cause) });
   } finally {
     await Promise.all([
       collaboration.refresh(services, project),
@@ -157,21 +155,17 @@ const SuggestToForm = (props: {
   readonly onTarget: (value: string) => void;
 }) => (
   <form class="space-y-2" onSubmit={(event) => props.onSubmit(event)} data-collab="suggest-to">
-    <p class="text-small text-on-surface-secondary">
-      {t(
-        "This shared project is yours. To work on it as your copy of another project, name the project it should suggest to.",
-      )}
-    </p>
+    <p class="text-small text-on-surface-secondary">{m.cloud_this_shared_project_is_yours()}</p>
     <div class="flex flex-wrap items-center gap-2">
       <Input
         size="sm"
         wrapperClass="min-w-0 flex-1"
-        placeholder={t("owner/project, or its address")}
+        placeholder={m.cloud_owner_project_or_its_address()}
         value={props.target}
         onInput={(event) => props.onTarget(event.currentTarget.value)}
       />
       <Button size="sm" type="submit" loading={props.busy} disabled={props.target.trim() === ""}>
-        {t("Suggest to it")}
+        {m.cloud_suggest_to_it()}
       </Button>
     </div>
   </form>
@@ -181,28 +175,24 @@ const ModeChoices = (props: { readonly mode: ReturnType<typeof createCollabMode>
   <div class="space-y-2">
     <ModeOption
       mode="shared"
-      title={t("Together in the shared project")}
-      detail={t("Your changes are sent straight to the shared project everyone works in.")}
+      title={m.cloud_together_in_the_shared_project()}
+      detail={m.cloud_your_changes_are_sent_straight()}
       checked={props.mode.effective() === "shared"}
       disabled={props.mode.busy() || props.mode.facts() === undefined}
       onChoose={props.mode.shared}
       blocked={
-        props.mode.facts()?.canWrite === false
-          ? t("You can suggest changes to this project, not change it directly.")
-          : undefined
+        props.mode.facts()?.canWrite === false ? m.cloud_you_can_suggest_changes_to() : undefined
       }
     />
     <ModeOption
       mode="copy"
-      title={t("In my own copy, offering changes when ready")}
-      detail={t(
-        "Your changes go to your own copy. Offer them when they are ready, and an editor of the shared project brings them in.",
-      )}
+      title={m.cloud_in_my_own_copy_offering()}
+      detail={m.cloud_your_changes_go_to_your()}
       checked={props.mode.effective() === "copy"}
       disabled={props.mode.busy() || props.mode.facts() === undefined}
       onChoose={props.mode.copy}
       blocked={
-        props.mode.facts()?.canWrite === undefined ? t("Sign in to choose this.") : undefined
+        props.mode.facts()?.canWrite === undefined ? m.cloud_sign_in_to_choose_this() : undefined
       }
       extra={() => (
         <Show when={props.mode.copyToMake()}>
@@ -213,10 +203,10 @@ const ModeChoices = (props: { readonly mode: ReturnType<typeof createCollabMode>
               loading={props.mode.busy()}
               onClick={props.mode.copy}
             >
-              {t("Work in my own copy")}
+              {m.cloud_work_in_my_own_copy()}
             </Button>
             <span class="text-smallest text-on-surface-tertiary">
-              {t("Your copy is made on the shared project's server.")}
+              {m.cloud_your_copy_is_made_on()}
             </span>
           </span>
         </Show>
@@ -233,15 +223,13 @@ export function CollabModeCard() {
     <Card class="space-y-3" data-cloud-card="collab-mode">
       <PanelHeader
         level={3}
-        title={t("How you work on this project")}
-        subtitle={t(
-          "The shared project only changes when someone who can edit it sends or accepts.",
-        )}
+        title={m.cloud_how_you_work_on_this()}
+        subtitle={m.cloud_the_shared_project_only_changes()}
       />
       <Show
         when={facts()}
         fallback={
-          <p class="text-small text-on-surface-tertiary">{t("Asking the shared project…")}</p>
+          <p class="text-small text-on-surface-tertiary">{m.cloud_asking_the_shared_project()}</p>
         }
       >
         <ModeChoices mode={mode} />

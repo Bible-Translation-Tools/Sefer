@@ -1,11 +1,5 @@
-export type Params = Readonly<Record<string, string | number>>;
-
-const PLACEHOLDER = /\{(\w+)\}/g;
-
-export const t = (message: string, params?: Params): string => {
-  if (params === undefined) return message;
-  return message.replace(PLACEHOLDER, (whole, name: string) => {
-    const value = params[name];
-    return value === undefined ? whole : String(value);
-  });
-};
+/**
+ * A message not yet said: `m.some_id` itself, not `m.some_id()`. A table of copy holds these,
+ * never strings, because the interface language can change while the app runs.
+ */
+export type Message = () => string;
