@@ -8,7 +8,7 @@ import { t } from "../../i18n";
 import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
 import { createAccount, type Account } from "../cloud/account";
-import { SignInForm, wacsPage } from "../cloud/SignInForm";
+import { SignInForm, openOutside, wacsPage } from "../cloud/SignInForm";
 import { Button, ButtonLink, IconButton, Popover, cx } from "../primitives";
 
 /** Up to two letters for the avatar: the first of each part of the name ("thomas_hajny" → "TH"). */
@@ -55,6 +55,7 @@ const Avatar = (props: { readonly account: Account; readonly class: string }) =>
  */
 export function AccountButton() {
   const account = createAccount(useShell());
+  const outside = openOutside();
   const label = (): string => {
     const held = account.session();
     return held === undefined
@@ -138,6 +139,7 @@ export function AccountButton() {
                       href={wacsPage(base(), "/user/settings")}
                       target="_blank"
                       rel="noopener noreferrer"
+                      onClick={outside}
                       data-testid="account-settings"
                     >
                       {m.account_settings()}

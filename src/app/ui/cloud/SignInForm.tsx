@@ -8,12 +8,28 @@ import SquareArrowOutUpRight from "lucide-solid/icons/square-arrow-out-up-right"
 import { Show, createSignal } from "solid-js";
 
 import { m } from "../../paraglide/messages";
-import { Button, ButtonLink, IconButton, Input } from "../primitives";
+import { useServices } from "../../ProjectContext";
+import { Button, ButtonLink, IconButton, Input, toasts } from "../primitives";
 import type { Account } from "./account";
 
 /** A page on the WACS server itself; Gitea owns recovery and registration, so Sefer links to them. */
 export const wacsPage = (host: string, path: string): string =>
   `${host.replace(/\/+$/u, "")}${path}`;
+
+/**
+ * A link's click, sent to the person's browser through the host: on desktop a
+ * `target="_blank"` link opens nothing. The `href` stays for hover and copy.
+ */
+export const openOutside = () => {
+  const services = useServices();
+  return (event: MouseEvent & { readonly currentTarget: HTMLAnchorElement }): void => {
+    event.preventDefault();
+    const url = event.currentTarget.href;
+    void services.run(services.dialogs.openExternal(url)).then((opened) => {
+      if (!opened) toasts.error({ title: m.open_external_failed({ url }) });
+    });
+  };
+};
 
 const Label = (props: {
   readonly for: string;
@@ -43,6 +59,7 @@ export function SignInForm(props: { readonly account: Account; readonly host: st
   const [password, setPassword] = createSignal("", { name: "cloudPassword" });
   const [otp, setOtp] = createSignal("", { name: "cloudOtp" });
   const [shown, setShown] = createSignal(false, { name: "cloudPasswordShown" });
+  const outside = openOutside();
 
   // Blue, and pressable, only once both fields have something in them.
   const filled = (): boolean => identifier().trim() !== "" && password() !== "";
@@ -110,6 +127,7 @@ export function SignInForm(props: { readonly account: Account; readonly host: st
           href={wacsPage(props.host, "/user/forgot_password")}
           target="_blank"
           rel="noopener noreferrer"
+          onClick={outside}
           data-testid="sign-in-forgot"
         >
           {m.sign_in_forgot_password()}
@@ -150,6 +168,7 @@ export function SignInForm(props: { readonly account: Account; readonly host: st
           href={wacsPage(props.host, "/user/sign_up")}
           target="_blank"
           rel="noopener noreferrer"
+          onClick={outside}
           data-testid="sign-in-create"
         >
           {m.sign_in_create_account()}

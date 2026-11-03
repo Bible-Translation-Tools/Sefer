@@ -222,5 +222,6 @@
   "account_sign_out": "Sign out",
   "account_settings": "Account settings",
   "sync_sign_in_prompt": "Sign in to WACS",
-  "sign_in_button": "Sign in"
+  "sign_in_button": "Sign in",
+  "open_external_failed": "Could not open {url} in your browser."
 }

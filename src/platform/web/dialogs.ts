@@ -98,6 +98,14 @@ export const WebDialogsLive: Layer.Layer<Dialogs> = Layer.effect(
           }
           return ask(message);
         }),
+
+      openExternal: (url) =>
+        Effect.sync(() => {
+          // noopener makes `open` return null whether or not it opened, so a blocked tab is not known here.
+          globalThis.open(url, "_blank", "noopener,noreferrer");
+          note("consumed", "openExternal");
+          return true;
+        }),
     };
   }),
 );
