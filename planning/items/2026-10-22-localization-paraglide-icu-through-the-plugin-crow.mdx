@@ -156,3 +156,19 @@ needed").
 
 <Followup id="crowdin">One plural message through Crowdin and back, once the Crowdin project exists.</Followup>
 
+
+## Full move and Spanish (2026-11-03, branch `i18n-spanish`)
+
+Phase 3 done in one pass: `t()` is deleted, every interface string is a message (1,667), tables
+hold `Message` functions, command and tour titles are functions, every count is an ICU plural.
+`es.json` is complete (machine-translated with a glossary, unreviewed). Checked in the app.
+
+<Question id="register">Spanish register: tú (as the pilot had it) or usted? One global change.</Question>
+
+<Question id="es-review">Who reviews the Spanish? Doubtful renderings: hallazgo (finding), Corrección (Proofreading), Con ello / Sin ello (Expect's With it / Without it), Origen (Producer), Sin señales (inventory Quiet), confirmando (Git commit).</Question>
+
+<Question id="copy-drift">33 drift groups to settle (Open project… / Open Project, Done / Done., Checking / Checking… / checking…); 58 texts held under several ids, to merge.</Question>
+
+<Question id="jargon">Internal words on screen, to rewrite in plain words for the PO's copy pass: "the engine", "diff door", "Sous publishes a pattern row… when a channel has a claim", "Staging files", "Committing books", "Timings and machinery", "reading projection", "working-state backup", bare "stale".</Question>
+
+<Followup id="crowdin-setup">Crowdin: crowdin.yml mapping src/app/messages/en.json to %two_letters_code%.json, plus the Crowdin GitHub Action; needs the WA OSS project id and an API token secret.</Followup>
