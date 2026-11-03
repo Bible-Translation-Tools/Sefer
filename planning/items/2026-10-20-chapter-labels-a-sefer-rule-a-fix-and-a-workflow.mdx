@@ -71,11 +71,14 @@ judge(byBook: Map<bookId, Label[]>): Finding[]   // the cross-book reduction, in
 ```
 
 <Files id="files">
-  ``` + src/core/rules/ -- project-wide consistency rules: pure, framework-free +
-  src/core/rules/chapterLabels.ts -- labelsOf, styleOf, judge ~ src/core/analysis/ -- run the rules
-  after each publish; memoise like crossBook ~ src/core/findings/finding.ts -- a third producer,
-  "sefer", beside onion and sous ~ src/core/fixes/ -- a second fix kind: edits computed by a rule +
-  src/app/ui/rules/ChapterLabels.tsx -- the per-book dialog ```
+```
++ src/core/rules/                      -- project-wide consistency rules: pure, framework-free
++ src/core/rules/chapterLabels.ts      -- labelsOf, styleOf, judge
+~ src/core/analysis/                   -- run the rules after each publish; memoise like crossBook
+~ src/core/findings/finding.ts         -- a third producer, "sefer", beside onion and sous
+~ src/core/fixes/                      -- a second fix kind: edits computed by a rule
++ src/app/ui/rules/ChapterLabels.tsx   -- the per-book dialog
+```
 </Files>
 
 ### It joins the sinks the way Sous does
