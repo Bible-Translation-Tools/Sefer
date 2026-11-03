@@ -50,8 +50,11 @@ GH_TAG_PREFIX = "v"
 CHANNEL = "stable"
 
 # The zone's bot check answers this host with a 403 challenge page (seen
-# 2026-11-03), which an updater cannot pass: it needs a WAF skip rule before a
-# production binary is built against it.
+# 2026-11-03), which an updater cannot pass. The zone's existing skip rule
+# lets through `wacs-proxy.bibletranslationtools.org` by hostname; this host
+# needs the same clause before a production binary is built against it. (The
+# rule's `X-Requested-With: sefer` clause does not help: the updater sends no
+# such header.)
 [[env.production.routes]]
 pattern = "sefer-updater.bibletranslationtools.org"
 custom_domain = true

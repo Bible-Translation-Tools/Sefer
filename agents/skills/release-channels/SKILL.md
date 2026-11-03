@@ -248,8 +248,9 @@ means one place to look, and the desktop job already authenticates there.
 
 ### Still to do
 
-1. Exempt `sefer-updater.bibletranslationtools.org` from the zone's bot check
-   (a WAF skip rule), or keep production binaries on the workers.dev address.
+1. Add `or (http.host eq "sefer-updater.bibletranslationtools.org")` to the
+   `bibletranslationtools.org` zone's existing WAF skip rule, beside its
+   `wacs-proxy` clause. Preview is unaffected: `bttdev.org` has no challenge.
 2. Before the first `v0.1.0`, decide what `updater-host-production` in
    1Password holds: every production install asks that address for good. Point
    it at the custom domain only once item 1 is done.
