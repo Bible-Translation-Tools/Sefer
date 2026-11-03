@@ -43,11 +43,14 @@ const SUPPRESSION =
 
 const SOURCE = new Set([".ts", ".tsx", ".mts", ".cts", ".js", ".mjs"]);
 const GENERATED = /\.gen\.[a-z]+$/u;
+/** Generated directories: Paraglide writes one file per message, each opening with `eslint-disable`. */
+const GENERATED_DIRECTORIES = new Set(["paraglide"]);
 
 const walk = (directory: string, out: string[]): void => {
   if (!statSync(directory, { throwIfNoEntry: false })?.isDirectory()) return;
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
+    if (entry.isDirectory() && GENERATED_DIRECTORIES.has(entry.name)) continue;
     const full = path.join(directory, entry.name);
     if (entry.isDirectory()) walk(full, out);
     else if (SOURCE.has(path.extname(entry.name)) && !GENERATED.test(entry.name)) out.push(full);
