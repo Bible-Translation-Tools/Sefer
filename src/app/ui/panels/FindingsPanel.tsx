@@ -277,7 +277,9 @@ const findingLine = (
     >
       <div class="flex flex-wrap items-center gap-2">
         <Show when={severitiesOf(row).length > 1}>
-          <Badge tone={severityTone(finding.severity)}>{finding.severity}</Badge>
+          <Badge tone={severityTone(finding.severity)}>
+            {m.findings_severity_name({ severity: finding.severity })}
+          </Badge>
         </Show>
         <span class="text-smallest text-on-surface-tertiary" title={finding.code}>
           {codeLabel(finding.code)}
@@ -355,7 +357,9 @@ const createFindingsCard = (
     return (
       <>
         <For each={severitiesOf(row)}>
-          {(severity) => <Badge tone={severityTone(severity)}>{severity}</Badge>}
+          {(severity) => (
+            <Badge tone={severityTone(severity)}>{m.findings_severity_name({ severity })}</Badge>
+          )}
         </For>
         <Show when={row.findings.some(isStale)}>
           <Badge tone="muted">{m.findings_stale()}</Badge>

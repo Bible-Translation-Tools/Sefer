@@ -19,6 +19,7 @@ export const PHRASES = {
   "verseMenu.addVerseAfter": "Add verse after",
   "verseLines.verse": "Verse",
   "verseLines.chapter": "Chapter",
+  "versePip.title": "verse {number}",
   "emptyChapter.prompt": "Click here to start editing {title}",
 } as const;
 

@@ -305,10 +305,10 @@ class VersePipWidget extends WidgetType {
   eq(other: VersePipWidget) {
     return other.num === this.num;
   }
-  toDOM() {
+  toDOM(view: EditorView) {
     const span = document.createElement("span");
     span.className = "usfm-verse-pip";
-    span.title = `verse ${this.num}`;
+    span.title = phrase(view.state, "versePip.title", { number: this.num });
     span.textContent = this.num;
     return span;
   }

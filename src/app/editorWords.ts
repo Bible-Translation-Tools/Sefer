@@ -16,6 +16,7 @@ const PHRASES: Readonly<Record<PhraseKey, (values: Readonly<Record<string, strin
   "verseMenu.addVerseAfter": () => m.editor_verse_menu_add_verse_after(),
   "verseLines.verse": () => m.editor_verse_label(),
   "verseLines.chapter": () => m.editor_chapter_label(),
+  "versePip.title": (values) => m.editor_verse_pip_title({ number: values.number ?? "" }),
   "emptyChapter.prompt": (values) => m.editor_empty_chapter_prompt({ title: values.title ?? "" }),
 };
 

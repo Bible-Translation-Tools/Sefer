@@ -1664,5 +1664,6 @@
   "page_find": "Find",
   "page_history": "History",
   "page_book": "Book",
-  "page_settings": "Settings"
+  "page_settings": "Settings",
+  "editor_verse_pip_title": "verse {number}"
 }
