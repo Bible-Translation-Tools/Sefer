@@ -299,7 +299,7 @@ export const createReader = ({
     );
     const editing = seated === undefined ? undefined : services.seated(bookId);
     if (editing === undefined) {
-      report(m.reader_could_not_open_book_book({ book: bookId }));
+      report(m.common_could_not_open_book_book({ book: bookId }));
       return;
     }
     setFocused(editing);

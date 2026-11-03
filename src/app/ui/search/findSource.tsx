@@ -177,7 +177,7 @@ export function createFindSource(onBound: () => void) {
       message:
         held.kind === "loading"
           ? m.search_loading()
-          : m.search_place_is_not_in_name({ place: excerpt.label, name: source.title }),
+          : m.common_place_is_not_in_name({ place: excerpt.label, name: source.title }),
     };
   };
 
@@ -191,7 +191,7 @@ export function createFindSource(onBound: () => void) {
 
   const Picker = () => (
     <SourcePicker
-      summary={shown() ? (resource()?.title ?? "") : m.search_none()}
+      summary={shown() ? (resource()?.title ?? "") : m.common_none()}
       narrowed={shown()}
       rows={rows()}
       chosen={chosen()}

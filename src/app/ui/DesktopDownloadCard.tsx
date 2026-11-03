@@ -95,7 +95,7 @@ function DownloadRow(props: {
             disabled
           >
             {props.release.state === "loading"
-              ? m.desktop_download_button()
+              ? m.common_download()
               : m.desktop_download_unavailable()}
           </Button>
         }
@@ -108,7 +108,7 @@ function DownloadRow(props: {
             download={found().name}
             data-desktop-download-link
           >
-            {m.desktop_download_button()}
+            {m.common_download()}
           </ButtonLink>
         )}
       </Show>

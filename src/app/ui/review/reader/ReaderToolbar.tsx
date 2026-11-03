@@ -85,13 +85,13 @@ export function ViewMenu(props: { readonly toolbar: ViewSettings }) {
           checked={props.toolbar.layout === "auto"}
           onSelect={() => props.toolbar.onLayout?.("auto")}
         >
-          {m.review_side_by_side_when_there()}
+          {m.common_side_by_side_when_there()}
         </MenuRadio>
         <MenuRadio
           checked={props.toolbar.layout === "split"}
           onSelect={() => props.toolbar.onLayout?.("split")}
         >
-          {m.review_side_by_side()}
+          {m.common_side_by_side()}
         </MenuRadio>
         <MenuRadio
           checked={props.toolbar.layout === "unified"}

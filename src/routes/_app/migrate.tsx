@@ -23,7 +23,7 @@ function MigrateRoute() {
         crumbs={[
           { label: m.common_sefer(), to: "/" },
           { label: m.common_projects(), to: "/projects" },
-          { label: m.migrate_migrate_from_writer() },
+          { label: m.common_migrate_from_writer() },
         ]}
       />
       <MigrateScreen into={search().into} language={search().language} />
@@ -40,6 +40,6 @@ export const Route = createFileRoute("/_app/migrate")({
       ...(language === undefined ? {} : { language }),
     };
   },
-  head: () => ({ meta: [{ title: m.page_title({ page: m.page_migrate() }) }] }),
+  head: () => ({ meta: [{ title: m.page_title({ page: m.common_migrate_from_writer() }) }] }),
   component: () => <ShellGate>{() => <MigrateRoute />}</ShellGate>,
 });

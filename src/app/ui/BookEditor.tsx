@@ -58,7 +58,7 @@ function labelAnswers(shell: Shell, finding: Finding, openLabels: () => void): C
   const word = finding.values?.word ?? "";
   return [
     { name: m.chapter_labels_review(), run: openLabels },
-    { name: m.chapter_labels_fine_here(), run: () => fineHere(shell, finding) },
+    { name: m.common_fine_here(), run: () => fineHere(shell, finding) },
     ...(finding.suppression?.everywhere === undefined
       ? []
       : [
@@ -96,13 +96,13 @@ function watchCorpus(
         ? []
         : [
             {
-              name: m.editor_always_allow_text({ text: flaggedText(shell, finding) }),
+              name: m.common_always_allow_text({ text: flaggedText(shell, finding) }),
               run: () => allow(shell, finding),
             },
           ]),
       ...(check === undefined
         ? []
-        : [{ name: m.editor_turn_off_check({ check }), run: () => turnOff(shell, finding) }]),
+        : [{ name: m.common_turn_off_check({ check }), run: () => turnOff(shell, finding) }]),
     ];
   };
   const corpus = (): void => {

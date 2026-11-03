@@ -26,6 +26,6 @@ export const Route = createFileRoute("/_app/project/$slug/findings")({
       ...(pattern === undefined ? {} : { pattern }),
     };
   },
-  head: () => ({ meta: [{ title: m.page_title({ page: m.page_findings() }) }] }),
+  head: () => ({ meta: [{ title: m.page_title({ page: m.common_findings() }) }] }),
   component: () => <ShellGate>{() => <FindingsPanel />}</ShellGate>,
 });

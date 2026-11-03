@@ -152,9 +152,7 @@ function FindStep(props: {
     <>
       <Card class="flex flex-col gap-3">
         <PanelHeader
-          title={
-            !props.adding ? m.migrate_migrate_from_writer() : m.migrate_add_books_from_writer()
-          }
+          title={!props.adding ? m.common_migrate_from_writer() : m.migrate_add_books_from_writer()}
           subtitle={
             !props.adding
               ? m.migrate_assemble_one_project_from_btt()

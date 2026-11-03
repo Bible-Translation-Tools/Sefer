@@ -305,7 +305,7 @@ const usfmAction = (props: DiffCardProps, markup: boolean): CardAction[] =>
         {
           kind: "icon",
           id: "usfm",
-          label: markup ? m.diff_show_the_reading() : m.diff_show_the_usfm(),
+          label: markup ? m.common_show_the_reading() : m.common_show_the_usfm(),
           icon: CodeIcon,
           pressed: markup,
           onPress: () => props.onView({ kind: "usfm" }),
@@ -474,7 +474,7 @@ export function DiffCard(props: DiffCardProps) {
               when={editingBook()}
               fallback={
                 <p class="px-3 py-2 text-small text-on-surface-tertiary">
-                  {refused() ? m.diff_that_book_could_not_be() : m.diff_opening()}
+                  {refused() ? m.common_that_book_could_not_be() : m.diff_opening()}
                 </p>
               }
             >

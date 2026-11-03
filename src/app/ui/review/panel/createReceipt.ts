@@ -72,7 +72,7 @@ function offerChanges(
             }
           : {
               tone: "error",
-              title: m.review_could_not_offer_your_changes(),
+              title: m.common_could_not_offer_your_changes(),
               detail: describe(cause),
               action: "offer",
             },

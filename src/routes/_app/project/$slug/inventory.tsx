@@ -5,6 +5,6 @@ import { InventoryPanel } from "#app/ui/inventory";
 import { ShellGate } from "#app/ui/ShellGate";
 
 export const Route = createFileRoute("/_app/project/$slug/inventory")({
-  head: () => ({ meta: [{ title: m.page_title({ page: m.page_inventory() }) }] }),
+  head: () => ({ meta: [{ title: m.page_title({ page: m.common_character_inventory() }) }] }),
   component: () => <ShellGate>{() => <InventoryPanel />}</ShellGate>,
 });

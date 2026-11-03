@@ -236,7 +236,7 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
 const appearanceRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
   {
     key: keys.locale,
-    label: m.settings_language(),
+    label: m.common_language(),
     description: m.settings_the_language_of_sefers_menus(),
     kind: "choice",
     as: "select",
@@ -341,8 +341,8 @@ const editorRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
     kind: "choice",
     group: "editor",
     options: [
-      { value: "auto", label: m.settings_side_by_side_when_there() },
-      { value: "split", label: m.settings_side_by_side() },
+      { value: "auto", label: m.common_side_by_side_when_there() },
+      { value: "split", label: m.common_side_by_side() },
       { value: "unified", label: m.settings_unified() },
     ],
   },
@@ -353,7 +353,7 @@ const editorRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
     kind: "choice",
     group: "editor",
     options: [
-      { value: "changes", label: m.settings_changes() },
+      { value: "changes", label: m.common_changes() },
       { value: "book", label: m.settings_the_whole_book() },
     ],
   },
@@ -507,5 +507,5 @@ export const SETTING_GROUPS: readonly {
     title: m.settings_network,
     subtitle: m.settings_which_servers_this_build_talks,
   },
-  { id: "advanced", title: m.settings_advanced, subtitle: m.settings_timings_and_machinery },
+  { id: "advanced", title: m.common_advanced, subtitle: m.settings_timings_and_machinery },
 ];

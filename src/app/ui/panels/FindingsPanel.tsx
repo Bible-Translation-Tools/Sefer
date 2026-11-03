@@ -559,7 +559,7 @@ export function FindingsPanel() {
         actions={
           <>
             <span class="text-small text-on-surface-tertiary" data-findings-count={summary().shown}>
-              {m.findings_shown_of_total_shown({ shown: summary().shown, total: summary().total })}
+              {m.common_shown_of_total_shown({ shown: summary().shown, total: summary().total })}
             </span>
 
             <Button

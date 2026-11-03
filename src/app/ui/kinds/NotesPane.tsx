@@ -106,7 +106,9 @@ export function NotesPane(props: NotesPaneProps) {
         </h3>
 
         <Show when={props.handle.edit === undefined}>
-          <span class="shrink-0 text-smallest text-on-surface-tertiary">{m.kinds_read_only()}</span>
+          <span class="shrink-0 text-smallest text-on-surface-tertiary">
+            {m.common_read_only()}
+          </span>
         </Show>
       </header>
 

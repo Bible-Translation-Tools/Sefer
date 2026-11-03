@@ -215,12 +215,12 @@ function Find() {
 
   return (
     <main class="flex h-full min-w-0 flex-col gap-4 p-6">
-      <PanelHeader title={m.find_find()} />
+      <PanelHeader title={m.common_find()} />
 
       <Show
         when={shell.project()}
         fallback={
-          <p class="text-small text-on-surface-tertiary">{m.find_open_a_project_first()}</p>
+          <p class="text-small text-on-surface-tertiary">{m.common_open_a_project_first()}</p>
         }
       >
         <FindControls model={model} />
@@ -254,6 +254,6 @@ export const Route = createFileRoute("/_app/project/$slug/find")({
     if (new URLSearchParams(location.searchStr).get("mode") === "stet")
       throw redirect({ to: "/project/$slug/terms", params: { slug: params.slug }, search: {} });
   },
-  head: () => ({ meta: [{ title: m.page_title({ page: m.page_find() }) }] }),
+  head: () => ({ meta: [{ title: m.page_title({ page: m.common_find() }) }] }),
   component: () => <ShellGate>{() => <Find />}</ShellGate>,
 });

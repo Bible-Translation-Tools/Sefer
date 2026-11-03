@@ -699,7 +699,7 @@ function ChangedBooks(props: {
               fallback={
                 <>
                   <Badge tone="warning">
-                    {m.history_count_changes({ count: changeCount(changes) })}
+                    {m.common_count_changes({ count: changeCount(changes) })}
                   </Badge>
                   <Show when={changes.added > 0}>
                     <Badge tone="success">{m.history_count_added({ count: changes.added })}</Badge>
@@ -854,7 +854,7 @@ export function HistoryPanel() {
         fallback={
           <EmptyState
             icon={<GitCommitVertical size={22} />}
-            title={m.history_open_a_project_first()}
+            title={m.common_open_a_project_first()}
             description={m.history_history_is_read_from_the()}
           />
         }

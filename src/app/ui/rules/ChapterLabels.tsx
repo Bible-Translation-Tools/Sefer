@@ -125,7 +125,7 @@ export function ChapterLabelsDialog(props: {
       footer={
         <>
           <Button variant="tertiary" onClick={() => props.onOpenChange(false)}>
-            {m.chapter_labels_cancel()}
+            {m.common_cancel()}
           </Button>
           <Button
             variant="primary"

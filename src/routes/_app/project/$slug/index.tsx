@@ -34,7 +34,7 @@ function ProjectDoor() {
   return (
     <Show when={target === undefined}>
       <main data-testid="empty-project" class="p-6 text-small text-on-surface-tertiary">
-        {m.shell_this_project_has_no_books()}
+        {m.common_this_project_has_no_books()}
       </main>
     </Show>
   );

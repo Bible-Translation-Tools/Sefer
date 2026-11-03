@@ -42,15 +42,15 @@ export const quickLabel = (action: QuickAction): string => {
     case "see":
       return m.cloud_see_the_changes();
     case "send":
-      return m.cloud_send_my_changes();
+      return m.common_send_my_changes();
     case "check":
       return m.cloud_check_for_changes();
     case "resolve":
       return m.cloud_finish_the_transfer();
     case "sign-in":
-      return m.cloud_sign_in();
+      return m.common_sign_in();
     case "open":
-      return m.cloud_set_up_sharing();
+      return m.common_set_up_sharing();
   }
 };
 

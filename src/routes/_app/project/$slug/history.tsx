@@ -22,6 +22,6 @@ export const Route = createFileRoute("/_app/project/$slug/history")({
     if (search.review === true)
       throw redirect({ to: "/project/$slug/review", params: { slug: params.slug } });
   },
-  head: () => ({ meta: [{ title: m.page_title({ page: m.page_history() }) }] }),
+  head: () => ({ meta: [{ title: m.page_title({ page: m.common_history() }) }] }),
   component: () => <ShellGate>{() => <HistoryPanel />}</ShellGate>,
 });

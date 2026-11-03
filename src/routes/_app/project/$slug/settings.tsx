@@ -245,7 +245,7 @@ function NetworkRow(props: {
           size="sm"
           wrapperClass="min-w-0 flex-1"
           class="font-mono"
-          placeholder={built() || m.settings_none()}
+          placeholder={built() || m.common_none()}
           value={draft()}
           aria-invalid={invalid() === "" ? undefined : "true"}
           onInput={(event) => setDraft(event.currentTarget.value)}
@@ -268,7 +268,7 @@ function NetworkRow(props: {
           {stored() === ""
             ? m.settings_in_use_this_builds_value()
             : m.settings_in_use_your_override_this({
-                built: built() || m.settings_none(),
+                built: built() || m.common_none(),
               })}
         </Show>
       </p>
@@ -578,6 +578,6 @@ const SETTINGS_TABS: readonly {
 export const Route = createFileRoute("/_app/project/$slug/settings")({
   validateSearch: (search: Record<string, unknown>): { readonly tab?: SettingsTab } =>
     search["tab"] === "tutorials" || search["tab"] === "workflows" ? { tab: search["tab"] } : {},
-  head: () => ({ meta: [{ title: m.page_title({ page: m.page_settings() }) }] }),
+  head: () => ({ meta: [{ title: m.page_title({ page: m.common_settings() }) }] }),
   component: () => <ShellGate>{() => <SettingsPage />}</ShellGate>,
 });

@@ -376,7 +376,7 @@ const CatalogueToolbar = (props: {
   readonly onRepos: (repos: Repos) => void;
 }) => (
   <div data-tour="wacs-repos" class="flex flex-wrap items-center gap-3">
-    <PanelHeader title={m.landing_projects_available_on_wacs()} />
+    <PanelHeader title={m.common_projects_available_on_wacs()} />
     <SegmentedControl
       size="md"
       label={m.landing_repos_label()}
@@ -398,7 +398,7 @@ const CatalogueToolbar = (props: {
       icon={<SearchIcon size={20} aria-hidden="true" />}
       aria-label={
         props.repos === "writer"
-          ? m.landing_search_writer_projects_by_language()
+          ? m.common_search_writer_projects_by_language()
           : m.landing_search_or_link()
       }
       placeholder={
@@ -598,7 +598,7 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
         <Card
           padded={false}
           role="table"
-          aria-label={m.landing_projects_available_on_wacs_2()}
+          aria-label={m.common_projects_available_on_wacs()}
           aria-rowcount={rows().length + 1}
           class="flex min-h-0 flex-1 flex-col overflow-hidden"
           style={{ "--code-column": codeColumn() }}

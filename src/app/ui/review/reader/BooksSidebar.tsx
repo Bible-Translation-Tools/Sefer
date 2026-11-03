@@ -104,7 +104,7 @@ export function BooksSidebar(props: BooksSidebarProps): JSX.Element {
           {(() => {
             const count = props.books.reduce((sum, held) => sum + held.shown.length, 0);
             const books = props.books.length;
-            return m.review_changes_in_books({
+            return m.common_changes_in_books({
               changes: changeCount(count),
               books: bookCount(books),
             });

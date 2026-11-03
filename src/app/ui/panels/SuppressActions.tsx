@@ -40,7 +40,7 @@ function MoreMenu(props: { readonly finding: Finding; readonly everywhere: boole
       <Show when={props.everywhere}>
         <MenuItem onSelect={() => allow(shell, props.finding)} data-testid="suppress-allow">
           <span class="flex flex-col gap-0.5">
-            <span>{m.findings_always_allow_text({ text: flagged() })}</span>
+            <span>{m.common_always_allow_text({ text: flagged() })}</span>
             <span class="text-smallest font-normal text-on-surface-tertiary">
               {m.findings_never_flag_this_in_this({
                 check: check(),
@@ -52,7 +52,7 @@ function MoreMenu(props: { readonly finding: Finding; readonly everywhere: boole
       <Show when={checkSwitchOf(props.finding.code) !== undefined}>
         <MenuItem onSelect={() => turnOff(shell, props.finding)} data-testid="suppress-turn-off">
           <span class="flex flex-col gap-0.5">
-            <span>{m.findings_turn_off_check({ check: check() })}</span>
+            <span>{m.common_turn_off_check({ check: check() })}</span>
             <span class="text-smallest font-normal text-on-surface-tertiary">
               {m.findings_stop_this_check_in_every()}
             </span>

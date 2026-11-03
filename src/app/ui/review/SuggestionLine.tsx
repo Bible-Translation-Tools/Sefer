@@ -29,7 +29,7 @@ function declineHeld(
   declineSuggestion(shell.services, project, held.suggestion, staticNote)
     .then(() => {
       toasts.success({
-        title: m.review_declined(),
+        title: m.common_declined(),
         message:
           staticNote.trim() === ""
             ? m.review_the_suggestion_is_closed_author({
@@ -62,7 +62,7 @@ function DeclineForm(props: {
       <Input
         size="sm"
         wrapperClass="min-w-0 flex-1"
-        placeholder={m.review_why_author_will_read_this({
+        placeholder={m.common_why_author_will_read_this({
           author: props.held.suggestion.author,
         })}
         value={props.note()}

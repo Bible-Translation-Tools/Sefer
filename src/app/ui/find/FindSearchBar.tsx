@@ -17,7 +17,7 @@ export function FindSearchBar(props: { query: FindQuery; commit: () => void }) {
         type="search"
         icon={<SearchIcon />}
         wrapperClass="min-w-0 flex-1"
-        placeholder={m.find_find_in_project()}
+        placeholder={m.common_find_in_project()}
         value={props.query.text()}
         onInput={(event) => props.query.setText(event.currentTarget.value)}
         onKeyDown={(event) => {
@@ -59,7 +59,7 @@ export function FindSearchBar(props: { query: FindQuery; commit: () => void }) {
         />
       </div>
       <Button variant="primary" class="shrink-0" onClick={props.commit}>
-        {m.find_find()}
+        {m.common_find()}
       </Button>
     </div>
   );

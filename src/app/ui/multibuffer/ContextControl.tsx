@@ -62,7 +62,7 @@ export function ContextControl(props: {
           aria-pressed={chapter() ? "true" : "false"}
           onClick={() => props.onStep("chapter")}
         >
-          {m.multibuffer_chapter()}
+          {m.common_chapter()}
         </button>
         <button
           type="button"

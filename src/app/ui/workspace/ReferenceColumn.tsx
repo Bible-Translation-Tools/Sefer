@@ -811,17 +811,15 @@ export function ReferenceColumn() {
                               fallback={
                                 <span class="flex shrink-0 items-center gap-1.5 font-medium text-brand">
                                   <Download aria-hidden="true" class="size-5" />
-                                  {m.reference_download()}
+                                  {m.common_download()}
                                 </span>
                               }
                             >
                               <span class="flex shrink-0 items-center gap-3">
-                                <span class="text-on-surface-secondary">
-                                  {m.reference_download_starting()}
-                                </span>
+                                <span class="text-on-surface-secondary">{m.common_starting()}</span>
                                 <span class="flex items-center gap-1.5 font-medium text-brand">
                                   <X aria-hidden="true" class="size-5" />
-                                  {m.reference_cancel()}
+                                  {m.common_cancel()}
                                 </span>
                               </span>
                             </Show>
@@ -830,7 +828,7 @@ export function ReferenceColumn() {
                           {/* No byte count to show, so the bar runs until the copy lands. */}
                           <span
                             role="progressbar"
-                            aria-label={m.reference_downloading_named({ name: offer.name })}
+                            aria-label={m.common_downloading_name({ name: offer.name })}
                             class="relative h-2 w-24 shrink-0 overflow-hidden rounded-full bg-surface-secondary"
                           >
                             <span class="absolute inset-y-0 w-1/3 animate-pulse rounded-full bg-brand" />
@@ -887,7 +885,7 @@ export function ReferenceColumn() {
       <GatewayPicker />
       <Show when={fetching() !== ""}>
         <p role="status" class="text-small text-on-surface-secondary">
-          {m.reference_getting({ language: fetching() })}
+          {m.common_getting_language({ language: fetching() })}
         </p>
       </Show>
 
@@ -923,7 +921,7 @@ export function ReferenceColumn() {
               title={
                 fetching() === ""
                   ? m.workspace_no_source_text_yet()
-                  : m.workspace_getting_language({ language: fetching() })
+                  : m.common_getting_language({ language: fetching() })
               }
               description={
                 fetching() === ""

@@ -68,7 +68,7 @@ function declineFromDialog(
   declineSuggestion(services, project, { number }, staticNote)
     .then(() => {
       toasts.success({
-        title: m.review_declined(),
+        title: m.common_declined(),
         message:
           staticNote.trim() === ""
             ? m.review_the_suggestion_is_closed_its()

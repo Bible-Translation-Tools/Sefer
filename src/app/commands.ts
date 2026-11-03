@@ -409,7 +409,7 @@ const searchCommands = (bridge: ShellBridge, h: Helpers) => {
   return [
     registerCommand({
       id: "search.open",
-      title: m.command_find_in_project,
+      title: m.common_find_in_project,
       keys: "Mod-Shift-f",
       when: hasProject,
       run: () => {
@@ -575,7 +575,7 @@ const syncCommands = (bridge: ShellBridge, h: Helpers) => {
 
     registerCommand({
       id: "remote.push",
-      title: m.command_send_my_changes,
+      title: m.common_send_my_changes,
       when: hasProject,
       run: () => {
         sendMine(bridge);

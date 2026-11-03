@@ -45,7 +45,7 @@ const watchProgress = (
             });
           else
             toasts.advance(toast, {
-              title: m.landing_downloading_name({ name: entry.repo }),
+              title: m.common_downloading_name({ name: entry.repo }),
               message: describeTransfer(progress),
             });
         }),
@@ -84,7 +84,7 @@ const beginTracking = (
 ): Toast | undefined => {
   const toast =
     kind === "sourceText"
-      ? toasts.progress({ title: m.landing_downloading_name({ name: entry.repo }), message: "" })
+      ? toasts.progress({ title: m.common_downloading_name({ name: entry.repo }), message: "" })
       : undefined;
   if (toast === undefined)
     downloads.start(

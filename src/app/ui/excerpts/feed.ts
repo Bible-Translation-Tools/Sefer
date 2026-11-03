@@ -175,7 +175,7 @@ const createSeats = (shell: Shell): Pick<ExcerptFeed, "seatedOf" | "seat"> => {
     if (project === undefined) return undefined;
     const opened = await shell.services.run(Effect.result(project.instantiate(bookId)));
     if (Result.isFailure(opened)) {
-      shell.report(m.excerpts_could_not_open_book_book({ book: bookId }));
+      shell.report(m.common_could_not_open_book_book({ book: bookId }));
       return undefined;
     }
     setSeats((held) => held + 1);

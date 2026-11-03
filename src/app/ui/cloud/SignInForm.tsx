@@ -73,7 +73,9 @@ export function SignInForm(props: { readonly account: Account; readonly host: st
 
   return (
     <form class="space-y-4" onSubmit={submit} data-cloud="sign-in">
-      <h2 class="text-center text-h4 font-semibold text-on-surface-primary">{m.sign_in_title()}</h2>
+      <h2 class="text-center text-h4 font-semibold text-on-surface-primary">
+        {m.common_sign_in_to_wacs()}
+      </h2>
 
       <div class="space-y-2">
         <Label for="sign-in-identifier" icon={<Mail />}>
@@ -159,7 +161,7 @@ export function SignInForm(props: { readonly account: Account; readonly host: st
           disabled={!filled() || props.account.busy()}
           loading={props.account.busy()}
         >
-          {m.sign_in_button()}
+          {m.common_sign_in()}
         </Button>
         <ButtonLink
           variant="secondary"

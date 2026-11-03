@@ -28,8 +28,8 @@ function ToolbarSearch(props: { query: string; onQuery: (value: string) => void 
       data-testid="toolbar-search"
       wrapperClass="w-44"
       icon={<SearchIcon />}
-      aria-label={m.workspace_find_in_project()}
-      placeholder={m.workspace_search()}
+      aria-label={m.common_find_in_project()}
+      placeholder={m.common_search()}
       value={props.query}
       onInput={(event) => props.onQuery(event.currentTarget.value)}
       onKeyDown={(event) => {
@@ -157,7 +157,7 @@ function KebabMenu(props: {
 
       <KebabItem
         testId="kebab-export-zip"
-        label={m.workspace_export_as_zip()}
+        label={m.common_export_as_zip()}
         onSelect={() => {
           props.onOpenChange(false);
           runCommand("project.export");

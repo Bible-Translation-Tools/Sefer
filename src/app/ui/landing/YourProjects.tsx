@@ -290,7 +290,7 @@ const DownloadLine = (props: { readonly download: PendingDownload }) => (
 const DownloadBar = (props: { readonly download: PendingDownload }) => (
   <div
     role="progressbar"
-    aria-label={m.landing_downloading_name({ name: props.download.language })}
+    aria-label={m.common_downloading_name({ name: props.download.language })}
     aria-valuemin={0}
     aria-valuemax={100}
     aria-valuenow={props.download.percent}
@@ -376,7 +376,7 @@ const ProjectMenu = (props: {
         {m.landing_rename()}
       </MenuItem>
       <MenuItem icon={<Download aria-hidden="true" />} onSelect={props.onExport}>
-        {m.landing_export_as_zip()}
+        {m.common_export_as_zip()}
       </MenuItem>
       <MenuItem icon={<Trash2 aria-hidden="true" />} onSelect={props.onDelete}>
         {m.landing_delete()}

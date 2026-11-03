@@ -38,7 +38,7 @@ const offerChanges = async (
   } catch (cause) {
     const needed = reviewNeeded(cause);
     if (needed === undefined)
-      toasts.error({ title: m.cloud_could_not_offer_your_changes(), message: describe(cause) });
+      toasts.error({ title: m.common_could_not_offer_your_changes(), message: describe(cause) });
     else {
       toasts.info(offerRefusalCopy(needed));
       toReview(needed.search);

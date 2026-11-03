@@ -118,5 +118,5 @@ export const copyPlaceLink = async (services: Services, root: string): Promise<v
       () => false,
     ));
   if (copied) toasts.success({ title: m.common_link_copied(), message: link });
-  else toasts.error({ title: m.share_link_could_not_copy_the_link(), message: link });
+  else toasts.error({ title: m.common_could_not_copy_the_link(), message: link });
 };

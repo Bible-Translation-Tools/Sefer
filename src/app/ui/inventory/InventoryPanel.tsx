@@ -168,7 +168,7 @@ export function InventoryPanel() {
         fallback={
           <EmptyState
             icon={<Type size={22} />}
-            title={m.inventory_no_project_is_open()}
+            title={m.common_no_project_is_open()}
             description={m.inventory_the_inventory_is_a_reading()}
             action={
               <Link to="/" class="text-small text-brand hover:underline">
@@ -227,7 +227,7 @@ export function InventoryPanel() {
                 <For each={POOLS}>{(name) => <option value={name}>{name}</option>}</For>
               </Select>
               <span class="ms-auto text-smallest text-on-surface-tertiary">
-                {m.inventory_shown_of_total_shown({
+                {m.common_shown_of_total_shown({
                   shown: shown().length,
                   total: held().glyphs.length,
                 })}

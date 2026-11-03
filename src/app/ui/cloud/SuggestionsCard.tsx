@@ -61,7 +61,7 @@ const SuggestionRow = (props: {
         <Input
           size="sm"
           wrapperClass="min-w-0 flex-1"
-          placeholder={m.cloud_why_author_will_read_this({
+          placeholder={m.common_why_author_will_read_this({
             author: props.suggestion.author,
           })}
           value={props.note}
@@ -193,7 +193,7 @@ export function SuggestionsCard(props: CardProps) {
                     setDeclining(undefined);
                     act(
                       declineSuggestion(services, props.project, suggestion, note()),
-                      m.cloud_declined(),
+                      m.common_declined(),
                       props.project,
                       props.signedIn,
                     );

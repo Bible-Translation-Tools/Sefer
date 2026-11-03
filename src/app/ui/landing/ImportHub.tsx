@@ -119,7 +119,7 @@ const ImportButtons = (props: { readonly pick: Picker }) => {
         icon={<BookCopy size={24} aria-hidden="true" />}
         onClick={() => void navigate({ to: "/migrate" })}
       >
-        {m.landing_migrate_from_writer()}
+        {m.common_migrate_from_writer()}
       </Button>
     </div>
   );

@@ -44,7 +44,7 @@ const projectChoice = ({ services, project }: ChoiceContext): SourceChoice => ({
   label: m.review_in_the_editor(),
   shortLabel: m.review_the_editor(),
   explainer:
-    project === undefined ? m.review_no_project_is_open() : m.review_the_books_as_they_are(),
+    project === undefined ? m.common_no_project_is_open() : m.review_the_books_as_they_are(),
   available: project !== undefined,
   immediate: () =>
     project === undefined

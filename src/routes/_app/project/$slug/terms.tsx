@@ -324,7 +324,7 @@ function Terms() {
       <Show
         when={shell.project()}
         fallback={
-          <p class="text-small text-on-surface-primary">{m.terms_open_a_project_first()}</p>
+          <p class="text-small text-on-surface-primary">{m.common_open_a_project_first()}</p>
         }
       >
         <Show when={load.problem() !== ""}>
@@ -349,6 +349,6 @@ export const Route = createFileRoute("/_app/project/$slug/terms")({
       ? { locale: search["locale"] }
       : {}),
   }),
-  head: () => ({ meta: [{ title: m.page_title({ page: m.page_terms() }) }] }),
+  head: () => ({ meta: [{ title: m.page_title({ page: m.common_spiritual_terms() }) }] }),
   component: () => <ShellGate>{() => <Terms />}</ShellGate>,
 });

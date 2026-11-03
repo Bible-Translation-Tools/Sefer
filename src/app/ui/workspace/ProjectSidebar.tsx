@@ -113,7 +113,7 @@ export function ProjectSidebar() {
   );
   const searching = (): boolean => search() !== undefined;
   const emptyNote = (): string => {
-    if (rows().length === 0) return m.workspace_this_project_has_no_books();
+    if (rows().length === 0) return m.common_this_project_has_no_books();
     if (searching()) return m.workspace_no_book_matches_query({ query: query().trim() });
     return m.workspace_no_books_in_this_testament();
   };
@@ -229,7 +229,7 @@ export function ProjectSidebar() {
             data-testid="sidebar-search"
             icon={<SearchIcon />}
             aria-label={m.sidebar_search_label()}
-            placeholder={m.sidebar_search_placeholder()}
+            placeholder={m.common_search()}
             value={query()}
             onInput={(event) => setQuery(event.currentTarget.value)}
             onKeyDown={(event) => {
@@ -253,8 +253,8 @@ export function ProjectSidebar() {
               <For
                 each={
                   [
-                    { testament: "ot", label: m.sidebar_old_testament() },
-                    { testament: "nt", label: m.sidebar_new_testament() },
+                    { testament: "ot", label: m.common_old_testament() },
+                    { testament: "nt", label: m.common_new_testament() },
                   ] as const
                 }
               >
@@ -323,7 +323,7 @@ export function ProjectControl() {
                 {m.workspace_find_a_project()}
               </span>
               <span class="block truncate text-body leading-normal">
-                {m.workspace_projects_available_on_wacs()}
+                {m.common_projects_available_on_wacs()}
               </span>
             </span>
             <ArrowRight size={20} aria-hidden="true" class="shrink-0" />

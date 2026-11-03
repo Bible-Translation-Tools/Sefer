@@ -95,7 +95,7 @@ function MoreMenu() {
             class={sync.pop.attention() !== "none" ? "text-on-surface-warning" : undefined}
             onSelect={() => setTimeout(() => sync.pop.openChanged(true))}
           >
-            {m.sync_menu_item()}
+            {m.common_sync()}
           </MenuItem>
           <MenuSeparator />
         </Show>

@@ -71,7 +71,7 @@ const copyToClipboard = (held: string): void => {
   void navigator.clipboard
     .writeText(held)
     .then(() => toasts.success({ title: m.common_link_copied() }))
-    .catch(() => toasts.error({ title: m.cloud_could_not_copy_the_link(), message: held }));
+    .catch(() => toasts.error({ title: m.common_could_not_copy_the_link(), message: held }));
 };
 
 const createSyncPopover = (shell: Shell, quick: QuickSync, account: Account) => {
@@ -285,7 +285,7 @@ const AccountRow = (props: {
           onClick={props.onSignIn}
           data-testid="sync-sign-in"
         >
-          {m.sync_sign_in_prompt()}
+          {m.common_sign_in_to_wacs()}
         </Button>
       }
     >
@@ -304,7 +304,7 @@ const AccountRow = (props: {
             onClick={props.account.signOut}
             disabled={props.account.busy()}
           >
-            {m.cloud_sign_out()}
+            {m.common_sign_out()}
           </Button>
         </div>
       )}
@@ -334,7 +334,7 @@ export function SyncPopover(props: { readonly sync: SyncHandle }) {
   const { quick, account, pop } = untrack(() => props.sync);
   return (
     <Popover
-      label={m.cloud_sync()}
+      label={m.common_sync()}
       side="bottom"
       align="end"
       class="w-[min(480px,92vw)]"

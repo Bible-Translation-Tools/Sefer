@@ -38,7 +38,7 @@ export function DecideAll(props: {
             const changes = changeCount(props.count);
             if (props.scope !== "changes")
               return m.review_changes_in_book({ changes, book: props.bookName });
-            return m.review_changes_in_books({ changes, books: bookCount(props.books) });
+            return m.common_changes_in_books({ changes, books: bookCount(props.books) });
           })()}
         </MenuLabel>
         <MenuItem data-review-take-all onSelect={() => props.onDecide("baseline")}>

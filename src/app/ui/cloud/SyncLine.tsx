@@ -23,7 +23,7 @@ const comparisonWords = (count: ComparisonCount): string => {
   if (count.changes === 0) return m.cloud_no_differences();
   const changes = m.common_count_changes({ count: count.changes });
   const books = m.common_count_books({ count: count.books });
-  const said = m.cloud_changes_in_books({ changes, books });
+  const said = m.common_changes_in_books({ changes, books });
   return count.decided === 0
     ? said
     : m.cloud_said_decided_decided({ said, decided: count.decided });

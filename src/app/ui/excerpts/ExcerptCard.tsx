@@ -318,7 +318,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
         fallback={
           <Show when={refused()} fallback={reader()}>
             <p class="px-3 py-2 text-small text-on-surface-primary">
-              {m.excerpts_that_book_could_not_be()}
+              {m.common_that_book_could_not_be()}
             </p>
           </Show>
         }
@@ -359,7 +359,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
             when={pairedView()}
             fallback={
               <p class="px-3 py-2 text-small text-on-surface-primary italic">
-                {m.excerpts_place_is_not_in_name({ place: props.excerpt.label, name: text().name })}
+                {m.common_place_is_not_in_name({ place: props.excerpt.label, name: text().name })}
               </p>
             }
           >
@@ -416,7 +416,7 @@ export function ExcerptCard(props: ExcerptCardProps) {
           {
             kind: "icon",
             id: "usfm",
-            label: usfm() ? m.excerpts_show_the_reading() : m.excerpts_show_the_usfm(),
+            label: usfm() ? m.common_show_the_reading() : m.common_show_the_usfm(),
             icon: CodeIcon,
             pressed: usfm(),
             onPress: () => props.onView({ kind: "usfm" }),

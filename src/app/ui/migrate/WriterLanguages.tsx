@@ -225,7 +225,7 @@ export function WriterLanguages(props: {
           wrapperClass="w-full sm:w-[24rem]"
           class="w-full"
           icon={<SearchIcon size={20} aria-hidden="true" />}
-          aria-label={m.migrate_search_writer_projects_by_language()}
+          aria-label={m.common_search_writer_projects_by_language()}
           placeholder={m.writer_languages_placeholder()}
           data-testid="writer-languages-search"
           value={query()}

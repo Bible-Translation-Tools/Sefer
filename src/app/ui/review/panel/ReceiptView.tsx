@@ -33,7 +33,7 @@ function labelOf(action: ReceiptAction): string {
     case "send":
       return m.review_send_now();
     case "open":
-      return m.review_set_up_sharing();
+      return m.common_set_up_sharing();
     case "offer":
       return m.review_offer_these_changes();
   }

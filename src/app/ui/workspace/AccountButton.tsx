@@ -127,7 +127,7 @@ export function AccountButton() {
                       disabled={account.busy()}
                       data-testid="account-sign-out"
                     >
-                      {m.account_sign_out()}
+                      {m.common_sign_out()}
                     </Button>
                     <ButtonLink
                       variant="secondary"

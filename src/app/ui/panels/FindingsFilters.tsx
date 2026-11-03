@@ -34,10 +34,10 @@ export interface FindingsFiltersProps {
 }
 
 const some = (kept: number, total: number): string =>
-  kept >= total ? m.findings_all() : m.findings_kept_of_total({ kept, total });
+  kept >= total ? m.findings_all() : m.common_kept_of_total({ kept, total });
 
 const narrowedSummary = (held: readonly string[] | null, total: number): string =>
-  held === null ? m.findings_all() : m.findings_kept_of_total({ kept: held.length, total });
+  held === null ? m.findings_all() : m.common_kept_of_total({ kept: held.length, total });
 
 const byText = (value: string, query: string): boolean =>
   value.toLowerCase().includes(query.toLowerCase());

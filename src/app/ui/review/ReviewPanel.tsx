@@ -292,7 +292,7 @@ export function ReviewPanel() {
     <main class="flex h-full min-w-0 flex-col gap-2 px-4 pt-3 pb-2" data-review>
       <Show
         when={shell.project()}
-        fallback={<EmptyState icon={<Scale size={22} />} title={m.review_open_a_project_first()} />}
+        fallback={<EmptyState icon={<Scale size={22} />} title={m.common_open_a_project_first()} />}
       >
         <ReviewHeaderView panel={panel} />
 

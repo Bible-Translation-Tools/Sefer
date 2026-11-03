@@ -536,7 +536,7 @@ function ImportInto(props: { readonly onClose: () => void }) {
       footer={
         <>
           <Button variant="tertiary" onClick={props.onClose}>
-            {m.import_document_cancel()}
+            {m.common_cancel()}
           </Button>
           <Button
             variant="primary"
@@ -667,7 +667,7 @@ function ImportInto(props: { readonly onClose: () => void }) {
               )}
             </For>
             <details class="text-small">
-              <summary class="cursor-pointer">{m.import_document_advanced()}</summary>
+              <summary class="cursor-pointer">{m.common_advanced()}</summary>
               <div class="mt-2 flex flex-col gap-2">
                 <label class="flex flex-col gap-1">
                   <span>{m.import_document_verses()}</span>
@@ -719,7 +719,7 @@ function ImportInto(props: { readonly onClose: () => void }) {
                 onChange={setView}
                 items={[
                   { value: "result", label: m.import_document_view_result() },
-                  { value: "changes", label: m.import_document_view_changes() },
+                  { value: "changes", label: m.common_changes() },
                 ]}
               />
               <ViewMenu
