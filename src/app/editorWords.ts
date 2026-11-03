@@ -2,6 +2,8 @@ import type { EditorWords, PhraseKey } from "@wycliffeassociates/sefer-editor";
 
 import { m } from "#app/paraglide/messages";
 
+import { usfmFixLabel, usfmSentence } from "./ui/panels/usfmWords";
+
 /** Each of the editor's UI phrases as a message, read when the editor draws it. */
 const PHRASES: Readonly<Record<PhraseKey, (values: Readonly<Record<string, string>>) => string>> = {
   "chip.pageBreak": () => m.editor_chip_page_break(),
@@ -17,8 +19,18 @@ const PHRASES: Readonly<Record<PhraseKey, (values: Readonly<Record<string, strin
   "verseLines.verse": () => m.editor_verse_label(),
   "verseLines.chapter": () => m.common_chapter(),
   "versePip.title": (values) => m.editor_verse_pip_title({ number: values.number ?? "" }),
+  "lint.fix": (values) => m.editor_lint_fix({ label: values.label ?? "" }),
+  "lint.repair": () => m.editor_lint_repair(),
+  "lint.verseSlot": () => m.editor_lint_verse_slot(),
+  "lint.chapterSlot": () => m.editor_lint_chapter_slot(),
+  "lint.removeVerseMarker": () => m.editor_lint_remove_verse_marker(),
+  "lint.removeChapterMarker": () => m.editor_lint_remove_chapter_marker(),
   "emptyChapter.prompt": (values) => m.editor_empty_chapter_prompt({ title: values.title ?? "" }),
 };
 
 /** The editor's words in the interface language; a screen remounts when it changes. */
-export const editorWords: EditorWords = { phrase: (key, values) => PHRASES[key](values) };
+export const editorWords: EditorWords = {
+  phrase: (key, values) => PHRASES[key](values),
+  diagnostic: (name, values) => usfmSentence(name, values),
+  fixLabel: (name) => usfmFixLabel(name),
+};

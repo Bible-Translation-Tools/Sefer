@@ -20,6 +20,12 @@ export const PHRASES = {
   "verseLines.verse": "Verse",
   "verseLines.chapter": "Chapter",
   "versePip.title": "verse {number}",
+  "lint.fix": "Fix: {label}",
+  "lint.repair": "repair",
+  "lint.verseSlot": "Either type a verse number here, or remove the verse marker.",
+  "lint.chapterSlot": "Either type a chapter number here, or remove the chapter marker.",
+  "lint.removeVerseMarker": "remove the verse marker",
+  "lint.removeChapterMarker": "remove the chapter marker",
   "emptyChapter.prompt": "Click here to start editing {title}",
 } as const;
 
@@ -64,6 +70,16 @@ export interface EditorWords {
     key: PhraseKey,
     values: Readonly<Record<string, string>>,
   ) => string | undefined;
+  /**
+   * A USFM finding's sentence, by the engine code's `name`, from what it names
+   * (`diagnosticValues`); `undefined` keeps the engine's English.
+   */
+  readonly diagnostic?: (
+    name: string,
+    values: { readonly anchor: string; readonly second: string; readonly aux: string },
+  ) => string | undefined;
+  /** The repair a code offers, by its `name`; `undefined` keeps the engine's English. */
+  readonly fixLabel?: (name: string) => string | undefined;
 }
 
 export const editorWords = Facet.define<EditorWords, EditorWords>({
@@ -78,6 +94,18 @@ export const phrase = (
 ): string =>
   state.facet(editorWords).phrase?.(key, values) ??
   PHRASES[key].replace(/\{(\w+)\}/g, (all, name: string) => values[name] ?? all);
+
+/** A USFM finding's sentence in the host's words, or the engine's English. */
+export const diagnosticWords = (
+  state: EditorState,
+  name: string,
+  values: { readonly anchor: string; readonly second: string; readonly aux: string },
+  english: () => string,
+): string => state.facet(editorWords).diagnostic?.(name, values) ?? english();
+
+/** A code's repair in the host's words, or the engine's English. */
+export const fixWords = (state: EditorState, name: string, english: string | null): string | null =>
+  state.facet(editorWords).fixLabel?.(name) ?? english;
 
 /** A CSS string literal: the phrase quoted, its quotes and backslashes escaped. */
 const cssString = (text: string): string => `"${text.replace(/["\\]/g, "\\$&")}"`;

@@ -53,6 +53,7 @@ import {
 import { FindingsFilters } from "./FindingsFilters";
 import { SousSentence } from "./SousSentence";
 import { SuppressActions } from "./SuppressActions";
+import { usfmFixLabel } from "./usfmWords";
 
 const LINE_HEIGHT = 30;
 
@@ -203,7 +204,7 @@ const createFixOffer = (shell: Shell) => {
     const applied = Fixes.applyFix(fix, book);
     setNote(
       TextResult.isSuccess(applied)
-        ? m.findings_applied_label({ label: fix.label })
+        ? m.findings_applied_label({ label: fixLabelOf(fix) })
         : m.findings_refused_by_rule({ rule: applied.failure.rule }),
     );
     setPreview(undefined);
@@ -423,6 +424,9 @@ const createFindingsCard = (
   );
 };
 
+/** The repair in the interface language; the engine's English when the code is not Sefer's. */
+const fixLabelOf = (fix: Fixes.FixPreview): string => usfmFixLabel(fix.finding.code) ?? fix.label;
+
 function FixPreviewCard(props: {
   readonly fix: Fixes.FixPreview;
   readonly onApply: (fix: Fixes.FixPreview) => void;
@@ -432,7 +436,7 @@ function FixPreviewCard(props: {
     <Card class="space-y-2.5 border-brand/40">
       <div class="flex flex-wrap items-center gap-2">
         <Wrench size={14} class="text-brand" aria-hidden="true" />
-        <strong class="text-small font-semibold">{props.fix.label}</strong>
+        <strong class="text-small font-semibold">{fixLabelOf(props.fix)}</strong>
         <Button
           variant="primary"
           size="sm"

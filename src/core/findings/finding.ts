@@ -5,6 +5,7 @@ import type { SourceStamp } from "@wycliffeassociates/sefer-text/source";
 import {
   booksByPattern,
   diagnosticMessage,
+  diagnosticValues,
   diagnosticName,
   diagnosticSeverity,
   stampOf,
@@ -59,7 +60,7 @@ export interface Finding {
   readonly pattern?: number;
   readonly comparison?: readonly FindingQuery[];
   readonly suppression?: SuppressionKeys;
-  /** What a host-made finding's message names, for the app to word it in the interface language (by `code`). */
+  /** What the finding's message names, for the app to word it in the interface language (by `code`). */
   readonly values?: Readonly<Record<string, string>>;
 }
 
@@ -115,6 +116,7 @@ const fromDiagnostics = (input: {
       code,
       producer: "onion",
       message: diagnosticMessage(view, slice),
+      values: diagnosticValues(view, slice),
       from: span.from,
       to: span.to,
       stamp,

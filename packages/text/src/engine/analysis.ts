@@ -1,4 +1,4 @@
-import { declaredVersion } from "@wycliffeassociates/scripture-kitchen/reader";
+import { declaredVersion, USFM_VERSIONS } from "@wycliffeassociates/scripture-kitchen/reader";
 import type { AttrList, Dish, DiagnosticView } from "@wycliffeassociates/scripture-kitchen/reader";
 import {
   Category,
@@ -282,6 +282,26 @@ export const diagnosticMessage = (
   finding: DiagnosticView,
   slice: (from: number, to: number) => string,
 ): string => finding.message(slice);
+
+/**
+ * What a finding's sentence names, for a host to say it in its own words, keyed
+ * by the code's `name`: the marker it is about (`anchor`), the one it refers back
+ * to (`second`, or ""), and its number (`aux`: an expected verse, a USFM version,
+ * a level). `diagnosticMessage` is the same sentence in English.
+ */
+export const diagnosticValues = (
+  finding: DiagnosticView,
+  slice: (from: number, to: number) => string,
+): { readonly anchor: string; readonly second: string; readonly aux: string } => {
+  const span = finding.span();
+  const second = finding.second();
+  const aux = finding.aux();
+  return {
+    anchor: slice(span.from, span.to),
+    second: second === null ? "" : slice(second.from, second.to),
+    aux: finding.code().aux === "version" ? (USFM_VERSIONS[aux] ?? String(aux)) : String(aux),
+  };
+};
 
 /**
  * The severity this finding carries in a document declaring `usfmVersion`, or

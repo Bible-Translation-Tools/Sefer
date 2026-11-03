@@ -10,6 +10,7 @@ import * as Fixes from "#core/fixes/fixes";
 import { tocViewOf } from "#core/galley";
 
 import { codeLabel } from "../../ui/panels/findingLabels";
+import { findingMessage } from "../../ui/rules/labelMessages";
 import type { Step, Tour, TourContext } from "../machine";
 
 const CODES = new Set([
@@ -109,7 +110,7 @@ const stepFor = (context: TourContext, finding: Finding): Step => {
     ready: () => onBook(finding.bookId),
     panel: {
       title: m.tour_place_problem({ place: place.label, problem: codeLabel(finding.code) }),
-      body: finding.message,
+      body: findingMessage(finding),
       actions: [
         {
           label: () => {

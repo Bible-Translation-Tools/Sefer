@@ -7,6 +7,7 @@ import {
   diagnosticMessage,
   diagnosticName,
   diagnosticSeverity,
+  diagnosticValues,
   stampMatches,
   stampOf,
   versionOf,
@@ -29,6 +30,7 @@ import {
   removesMarker,
   suggestedNumber,
 } from "../core/verseLines";
+import { diagnosticWords, fixWords, phrase, type PhraseKey } from "../core/words";
 
 interface Finding {
   code: number;
@@ -46,15 +48,9 @@ interface Finding {
   stamp: EngineStamp;
 }
 
-const SLOT_FINDINGS: Readonly<Record<string, { kind: "v" | "c"; message: string }>> = {
-  "verse-without-designator": {
-    kind: "v",
-    message: "Either type a verse number here, or remove the verse marker.",
-  },
-  "chapter-without-designator": {
-    kind: "c",
-    message: "Either type a chapter number here, or remove the chapter marker.",
-  },
+const SLOT_FINDINGS: Readonly<Record<string, { kind: "v" | "c"; message: PhraseKey }>> = {
+  "verse-without-designator": { kind: "v", message: "lint.verseSlot" },
+  "chapter-without-designator": { kind: "c", message: "lint.chapterSlot" },
 };
 
 const slotAt = (
@@ -80,9 +76,9 @@ const slotAt = (
   return undefined;
 };
 
-const SLOT_FIX_LABEL: Readonly<Record<"v" | "c", string>> = {
-  v: "remove the verse marker",
-  c: "remove the chapter marker",
+const SLOT_FIX_LABEL: Readonly<Record<"v" | "c", PhraseKey>> = {
+  v: "lint.removeVerseMarker",
+  c: "lint.removeChapterMarker",
 };
 
 export type HiddenTest = (state: EditorState, from: number, to: number) => boolean;
@@ -111,11 +107,15 @@ function findings(state: EditorState, isHidden?: HiddenTest): Finding[] {
       to: slot?.to ?? at.to,
       second: f.second(),
       message:
-        slot !== undefined && asSlot !== undefined ? asSlot.message : diagnosticMessage(f, slice),
+        slot !== undefined && asSlot !== undefined
+          ? phrase(state, asSlot.message)
+          : diagnosticWords(state, name, diagnosticValues(f, slice), () =>
+              diagnosticMessage(f, slice),
+            ),
       fixLabel:
         slot !== undefined && asSlot !== undefined && f.fix() === null
-          ? SLOT_FIX_LABEL[asSlot.kind]
-          : diagnosticFixLabel(f),
+          ? phrase(state, SLOT_FIX_LABEL[asSlot.kind])
+          : fixWords(state, name, diagnosticFixLabel(f)),
       fix:
         slot !== undefined && f.fix() === null
           ? [{ from: slot.marker.from, to: slot.marker.to, insert: "" }]
@@ -303,7 +303,9 @@ function onionDiagnostics(
           ? undefined
           : [
               {
-                name: `Fix: ${f.fixLabel ?? "repair"}`,
+                name: phrase(state, "lint.fix", {
+                  label: f.fixLabel ?? phrase(state, "lint.repair"),
+                }),
                 markClass: "usfm-fix-action",
                 apply(target) {
                   applyFix(target, fix, stamp);

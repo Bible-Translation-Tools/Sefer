@@ -10,24 +10,45 @@ import {
   type Pattern,
 } from "../galley";
 
-const LOCALE = "en";
-
 export type Tier = "headline" | "details";
 
-const formatters = new Map<`${FindingMessageId}:${Tier}`, IntlMessageFormat>();
+/**
+ * Every Sous message in one language, by kitchen's stable id: kitchen ships the
+ * id and its params, the host owns the words. A partial catalog falls back to
+ * kitchen's English for an id it lacks.
+ */
+export type SousCatalog = Readonly<
+  Partial<Record<FindingMessageId, { readonly headline: string; readonly details: string }>>
+>;
 
-const formatterOf = (message: FindingMessage, tier: Tier): IntlMessageFormat => {
-  const key = `${message.id}:${tier}` as const;
+/** A catalog and the locale its plurals follow. */
+export interface SousWords {
+  readonly locale: string;
+  readonly catalog: SousCatalog;
+}
+
+const ENGLISH: SousWords = { locale: "en", catalog: FINDING_MESSAGES_EN };
+
+const formatters = new Map<string, IntlMessageFormat>();
+
+const formatterOf = (message: FindingMessage, tier: Tier, words: SousWords): IntlMessageFormat => {
+  const own = words.catalog[message.id];
+  const locale = own === undefined ? ENGLISH.locale : words.locale;
+  const key = `${locale}:${message.id}:${tier}`;
   let formatter = formatters.get(key);
   if (formatter === undefined) {
-    formatter = new IntlMessageFormat(FINDING_MESSAGES_EN[message.id][tier], LOCALE);
+    formatter = new IntlMessageFormat((own ?? FINDING_MESSAGES_EN[message.id])[tier], locale);
     formatters.set(key, formatter);
   }
   return formatter;
 };
 
-export const render = (message: FindingMessage, tier: Tier = "headline"): string => {
-  const out = formatterOf(message, tier).format<string>({
+export const render = (
+  message: FindingMessage,
+  tier: Tier = "headline",
+  words: SousWords = ENGLISH,
+): string => {
+  const out = formatterOf(message, tier, words).format<string>({
     ...message.params,
     g: (chunks) => chunks.join(""),
   });
@@ -38,8 +59,9 @@ export const renderRich = <T>(
   message: FindingMessage,
   tier: Tier,
   glyph: (text: string) => T,
+  words: SousWords = ENGLISH,
 ): readonly (string | T)[] => {
-  const out = formatterOf(message, tier).format<T>({
+  const out = formatterOf(message, tier, words).format<T>({
     ...message.params,
     g: (chunks) => glyph(chunks.join("")),
   });
