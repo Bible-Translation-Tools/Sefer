@@ -123,6 +123,9 @@ export function CommandPalette(props: PaletteProps) {
         >
           <input
             type="search"
+            spellcheck="false"
+            autocorrect="off"
+            autocapitalize="off"
             ref={setBox}
             data-testid="palette-input"
             class="border-b border-surface-border bg-transparent px-4 py-3 text-h4 text-on-surface-primary placeholder:text-on-surface-tertiary focus:outline-none"

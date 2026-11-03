@@ -245,7 +245,6 @@ function NetworkRow(props: {
           size="sm"
           wrapperClass="min-w-0 flex-1"
           class="font-mono"
-          spellcheck={false}
           placeholder={built() || t("none")}
           value={draft()}
           aria-invalid={invalid() === "" ? undefined : "true"}

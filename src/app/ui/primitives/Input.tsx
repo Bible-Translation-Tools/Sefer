@@ -39,9 +39,21 @@ export interface InputProps extends Omit<ComponentProps<"input">, "size"> {
   readonly wrapperClass?: ClassValue;
 }
 
+/**
+ * No spelling help unless a field asks for it: what people type here is
+ * language names, project titles and scripture in minority languages, which an
+ * English dictionary would "correct". `autocorrect` is WebKit's, so Safari and
+ * the macOS desktop app; CodeMirror sets the same three on the editor.
+ */
+const NO_SPELLING_HELP = {
+  spellcheck: "false",
+  autocorrect: "off",
+  autocapitalize: "off",
+} as const;
+
 export function Input(props: InputProps) {
   const rest = omit(props, "size", "icon", "class", "wrapperClass");
-  const merged = merge(rest, {
+  const merged = merge(NO_SPELLING_HELP, rest, {
     get class() {
       return cx(
         field({ size: props.size }),
