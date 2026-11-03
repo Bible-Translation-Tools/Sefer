@@ -77,28 +77,27 @@ export function SignInForm(props: { readonly account: Account; readonly host: st
         <Label for="sign-in-password" icon={<Lock />}>
           {m.sign_in_password()}
         </Label>
-        <span class="relative block">
+        {/* The eye sits beside the field, not in it: a password manager draws its own icon at the field's end. */}
+        <div class="flex items-center gap-2">
           <Input
             id="sign-in-password"
             type={shown() ? "text" : "password"}
             required
-            wrapperClass="w-full"
-            class="pe-12"
+            wrapperClass="min-w-0 flex-1"
             autocomplete="current-password"
             value={password()}
             onInput={(event) => setPassword(event.currentTarget.value)}
           />
-          <span class="absolute inset-y-0 end-0 flex items-center">
-            <IconButton
-              variant="bare"
-              label={shown() ? m.sign_in_hide_password() : m.sign_in_show_password()}
-              icon={shown() ? <EyeOff /> : <Eye />}
-              aria-pressed={shown() ? "true" : "false"}
-              onClick={() => setShown(!shown())}
-              data-testid="sign-in-show-password"
-            />
-          </span>
-        </span>
+          <IconButton
+            variant="outlined"
+            label={shown() ? m.sign_in_hide_password() : m.sign_in_show_password()}
+            icon={shown() ? <EyeOff /> : <Eye />}
+            aria-pressed={shown() ? "true" : "false"}
+            aria-controls="sign-in-password"
+            onClick={() => setShown(!shown())}
+            data-testid="sign-in-show-password"
+          />
+        </div>
         <Show when={props.account.problem() !== ""}>
           <p class="text-small break-words text-on-surface-error" data-cloud="problem">
             {props.account.problem()}
