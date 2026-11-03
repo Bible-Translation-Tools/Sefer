@@ -11,6 +11,8 @@ const classes = variants({
   base: [
     "inline-flex items-center justify-center border transition-colors",
     "cursor-pointer disabled:cursor-not-allowed disabled:opacity-60",
+    // The button, not the icon's paths, is what the pointer is over: keeps hover and the pointer cursor steady.
+    "[&_svg]:pointer-events-none",
     "aria-pressed:bg-brand-light aria-pressed:border-brand aria-pressed:text-brand",
   ].join(" "),
   variants: {
