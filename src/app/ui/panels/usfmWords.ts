@@ -5,7 +5,7 @@ import { m } from "#app/paraglide/messages";
 import type { Message } from "../../i18n";
 
 /** What a USFM finding names, from `diagnosticValues`: its marker, the one it refers to, its number. */
-export interface UsfmValues {
+interface UsfmValues {
   readonly anchor: string;
   readonly second: string;
   readonly aux: string;
