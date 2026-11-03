@@ -356,7 +356,7 @@ export function GlyphDetail(props: GlyphDetailProps) {
             <TableHead>
               <TableRow>
                 <TableHeader>{m.inventory_signal()}</TableHeader>
-                <TableHeader>{m.common_channel()}</TableHeader>
+                <TableHeader>{m.inventory_check()}</TableHeader>
                 <TableHeader class="text-end">{m.inventory_count()}</TableHeader>
                 <TableHeader class="text-end">{m.inventory_share()}</TableHeader>
                 <TableHeader class="text-end">{m.inventory_flagged()}</TableHeader>
