@@ -1,12 +1,13 @@
 import { Effect, Option } from "effect";
 import { createEffect, createRoot, createSignal, type Accessor } from "solid-js";
 
-import { Gitea, type Session } from "#core/remote/gitea";
+import { Gitea, type Profile, type Session } from "#core/remote/gitea";
 
 import { collaboration } from "../../collaboration";
-import { describe } from "../../describe";
+import { describe, reasonOf } from "../../describe";
 import { contentHostFor } from "../../endpoints";
 import { t } from "../../i18n";
+import { m } from "../../paraglide/messages";
 import type { Shell } from "../../ProjectContext";
 
 const reask = (shell: Shell): void => {
@@ -36,6 +37,8 @@ const restoreSession = (
 export interface Account {
   readonly host: string | null;
   readonly session: Accessor<Session | undefined>;
+  /** Name, email and picture, read from WACS after signing in; undefined until it answers. */
+  readonly profile: Accessor<Profile | undefined>;
   readonly busy: Accessor<boolean>;
   readonly problem: Accessor<string>;
   readonly otpWanted: Accessor<boolean>;
@@ -75,6 +78,20 @@ const makeAccount = (shell: Shell): Account => {
   const [busy, setBusy] = createSignal(false, { name: "cloudBusy" });
   const [problem, setProblem] = createSignal("", { name: "cloudProblem" });
   const [otpWanted, setOtpWanted] = createSignal(false, { name: "cloudOtpWanted" });
+  const [profile, setProfile] = createSignal<Profile | undefined>(undefined, {
+    name: "accountProfile",
+  });
+  createEffect(
+    () => session()?.username,
+    (user) => {
+      setProfile(undefined);
+      if (user === undefined || host === null) return;
+      void services
+        .run(Effect.flatMap(Gitea, (gitea) => gitea.profile(host)))
+        .then(setProfile)
+        .catch(() => undefined);
+    },
+  );
   const [panelOpen, setPanelOpen] = createSignal(false, { name: "accountPanelOpen" });
 
   const attempt = (work: () => Promise<void>): void => {
@@ -82,6 +99,10 @@ const makeAccount = (shell: Shell): Account => {
     setBusy(true);
     void work()
       .catch((cause: unknown) => {
+        if (reasonOf(cause) === "Unauthorized") {
+          setProblem(m.sign_in_incorrect());
+          return;
+        }
         const message = describe(cause);
         setProblem(message);
         if (/OtpRequired/u.test(message)) setOtpWanted(true);
@@ -94,6 +115,7 @@ const makeAccount = (shell: Shell): Account => {
   return {
     host,
     session,
+    profile,
     busy,
     problem,
     otpWanted,

@@ -25,7 +25,28 @@ export interface PopoverProps {
   readonly triggerClass?: ClassValue;
   readonly fitViewport?: boolean;
   readonly initialFocus?: string;
+  /**
+   * Stay open when a click or focus lands on a password manager's own overlay
+   * (an injected iframe or custom element) — filling a sign-in form otherwise
+   * closes the popover under it.
+   */
+  readonly keepOpenForPasswordManagers?: boolean;
 }
+
+/**
+ * Whether an element belongs to something a browser extension put in the
+ * page rather than to Sefer: an iframe, or inside a custom element (a tag with
+ * a dash, which Sefer's own markup does not use).
+ */
+const injected = (target: EventTarget | null): boolean => {
+  for (
+    let node = target instanceof Element ? target : null;
+    node !== null;
+    node = node.parentElement
+  )
+    if (node.tagName === "IFRAME" || node.tagName.includes("-")) return true;
+  return false;
+};
 
 export function Popover(props: PopoverProps) {
   return (
@@ -41,6 +62,15 @@ export function Popover(props: PopoverProps) {
         if (first === undefined || first === null) return;
         event.preventDefault();
         first.focus();
+      }}
+      onOutsidePointer={(event) => {
+        if (props.keepOpenForPasswordManagers === true && injected(event.target))
+          event.preventDefault();
+      }}
+      onOutsideFocus={(event) => {
+        // corvu's event is its own, dispatched on the content: what took focus is the active element.
+        if (props.keepOpenForPasswordManagers === true && injected(document.activeElement))
+          event.preventDefault();
       }}
       placement={placementOf(props.side ?? "bottom", props.align ?? "center")}
       floatingOptions={{

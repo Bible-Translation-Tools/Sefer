@@ -48,7 +48,7 @@ The generated half looks after itself; the judgement half does not. When a gate 
 | oxlint warnings | 0 | `pnpm lint` fails on any, every commit |
 | fallow dead code (`pnpm deadcode`) | 0 issue(s) | every deploy; advisory on branches |
 | fallow duplication | 1.6% in 65 clone group(s) | none — advisory |
-| suppression comments | 231 | each listed below with its reason |
+| suppression comments | 241 | each listed below with its reason |
 
 ### Oxlint warnings, by rule and file
 
@@ -63,6 +63,8 @@ None.
 | `src/app/paraglide/messages.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/_index.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/account_button.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/account_settings.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/account_sign_out.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/account_signed_in_as.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/block_name_d.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/block_name_ip.js` | `eslint-disable` | — |
@@ -263,14 +265,22 @@ None.
 | `src/app/paraglide/messages/sidebar_show_key_terms.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/sidebar_show_results.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/sidebar_show_suggestions.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/sign_in_button.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/sign_in_create_account.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/sign_in_forgot_password.js` | `eslint-disable` | — |
-| `src/app/paraglide/messages/sign_in_no_account.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/sign_in_hide_password.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/sign_in_identifier.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/sign_in_incorrect.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/sign_in_one_time_code.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/sign_in_password.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/sign_in_show_password.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/sign_in_title.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/sync_local_detail_signed_in.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/sync_local_detail.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/sync_local_headline_signed_out.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/sync_local_headline.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/sync_menu_item.js` | `eslint-disable` | — |
+| `src/app/paraglide/messages/sync_sign_in_prompt.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/typed_usfm_message.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/typed_usfm_switch.js` | `eslint-disable` | — |
 | `src/app/paraglide/messages/typed_usfm_title.js` | `eslint-disable` | — |

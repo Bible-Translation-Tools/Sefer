@@ -57,6 +57,14 @@ export interface HttpResponse {
 
 export type HttpFetch = (input: string, init?: HttpRequest) => Promise<HttpResponse>;
 
+/** Who the signed-in person is, for showing them: Gitea's `/user`. */
+export interface Profile {
+  readonly username: string;
+  readonly fullName: string;
+  readonly email: string;
+  readonly avatarUrl: string;
+}
+
 export interface GiteaService {
   readonly login: (args: {
     readonly host: string;
@@ -67,6 +75,7 @@ export interface GiteaService {
   /** The token is left alive: Gitea's token endpoints refuse token auth, so revoking needs the password. */
   readonly logout: (host: string) => Effect.Effect<void>;
   readonly session: (host: string) => Effect.Effect<Option.Option<Session>>;
+  readonly profile: (host: string) => Effect.Effect<Profile, GiteaError>;
   readonly listWritableRepos: (
     host: string,
     search?: string,
@@ -152,7 +161,13 @@ const RepoRecord = Schema.Struct({
 const RepoArray = Schema.Array(RepoRecord);
 const RepoSearch = Schema.Struct({ data: Schema.optionalKey(Schema.Array(RepoRecord)) });
 
-const CurrentUser = Schema.Struct({ id: NumberOrString });
+const CurrentUser = Schema.Struct({
+  id: NumberOrString,
+  login: Schema.optionalKey(Schema.String),
+  full_name: Schema.optionalKey(Schema.String),
+  email: Schema.optionalKey(Schema.String),
+  avatar_url: Schema.optionalKey(Schema.String),
+});
 
 const decodeCreatedToken = Schema.decodeUnknownResult(CreatedToken);
 const decodeRepoRecord = Schema.decodeUnknownResult(RepoRecord);
@@ -340,18 +355,33 @@ const makeGitea = (options: {
    * So every listing resolves `/user` first and passes `uid`. This is v1's
    * hard-won detail, not defensiveness.
    */
-  const currentUserId = (session: Session): Effect.Effect<string, GiteaError> =>
+  const currentUser = (
+    host: string,
+    headers: Readonly<Record<string, string>>,
+  ): Effect.Effect<typeof CurrentUser.Type, GiteaError> =>
     Effect.gen(function* () {
-      const response = yield* request(url(session.host, "/api/v1/user"), {
-        headers: tokenHeaders(session),
-      });
+      const response = yield* request(url(host, "/api/v1/user"), { headers });
       if (!response.ok) return yield* refuse(response);
       const decoded = decodeCurrentUser(yield* json(response));
       if (decoded._tag === "Failure") {
         return yield* Effect.fail(failed("Io", "Gitea did not identify the current user"));
       }
-      return String(decoded.success.id);
+      return decoded.success;
     });
+
+  const currentUserId = (session: Session): Effect.Effect<string, GiteaError> =>
+    Effect.map(currentUser(session.host, tokenHeaders(session)), (user) => String(user.id));
+
+  /** The username behind an email, from `/user` under the person's own basic auth. */
+  const loginOf = (
+    host: string,
+    headers: Readonly<Record<string, string>>,
+  ): Effect.Effect<string, GiteaError> =>
+    Effect.flatMap(currentUser(host, headers), (user) =>
+      user.login === undefined || user.login === ""
+        ? Effect.fail(failed("Io", "Gitea did not say which username this email belongs to"))
+        : Effect.succeed(user.login),
+    );
 
   const search = (
     host: string,
@@ -389,13 +419,16 @@ const makeGitea = (options: {
       Effect.gen(function* () {
         const key = normaliseHost(host);
         const basic = `Basic ${base64(`${username}:${password}`)}`;
-        const tokensUrl = url(key, `/api/v1/users/${encodeURIComponent(username)}/tokens`);
         const headers = {
           Authorization: basic,
           "Content-Type": "application/json",
           Accept: "application/json",
           ...(otp === undefined || otp === "" ? {} : { "X-Gitea-OTP": otp }),
         };
+        // Gitea's basic auth takes the email as well as the username, but the
+        // token endpoint is addressed by username: an email asks `/user` first.
+        const login = username.includes("@") ? yield* loginOf(key, headers) : username;
+        const tokensUrl = url(key, `/api/v1/users/${encodeURIComponent(login)}/tokens`);
 
         const mint = (name: string): Effect.Effect<HttpResponse, GiteaError> =>
           request(tokensUrl, {
@@ -428,7 +461,7 @@ const makeGitea = (options: {
         const created = decoded.success;
         const session: Session = {
           host: key,
-          username,
+          username: login,
           token: created.sha1,
           tokenName: created.name,
           tokenId: String(created.id),
@@ -440,6 +473,18 @@ const makeGitea = (options: {
           tokenId: session.tokenId,
         });
         return session;
+      }),
+
+    profile: (host) =>
+      Effect.gen(function* () {
+        const session = yield* authorised(host);
+        const user = yield* currentUser(session.host, tokenHeaders(session));
+        return {
+          username: user.login ?? session.username,
+          fullName: user.full_name ?? "",
+          email: user.email ?? "",
+          avatarUrl: user.avatar_url ?? "",
+        };
       }),
 
     logout: (host) => options.credentials.clear(normaliseHost(host)),

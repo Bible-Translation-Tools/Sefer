@@ -211,6 +211,16 @@
   "sync_menu_item": "Sync",
   "sync_local_headline_signed_out": "Sign in to sync to WACS",
   "sign_in_forgot_password": "Forgot password?",
-  "sign_in_no_account": "New to WACS?",
-  "sign_in_create_account": "Create an account"
+  "sign_in_incorrect": "Incorrect username or password. Try again.",
+  "sign_in_title": "Sign in to WACS",
+  "sign_in_identifier": "Email or username",
+  "sign_in_password": "Password",
+  "sign_in_one_time_code": "One-time code",
+  "sign_in_show_password": "Show password",
+  "sign_in_hide_password": "Hide password",
+  "sign_in_create_account": "Create new account",
+  "account_sign_out": "Sign out",
+  "account_settings": "Account settings",
+  "sync_sign_in_prompt": "Sign in to WACS",
+  "sign_in_button": "Sign in"
 }

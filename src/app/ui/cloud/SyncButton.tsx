@@ -6,6 +6,7 @@ import CloudDownload from "lucide-solid/icons/cloud-download";
 import CloudOff from "lucide-solid/icons/cloud-off";
 import CloudUpload from "lucide-solid/icons/cloud-upload";
 import Copy from "lucide-solid/icons/copy";
+import LogIn from "lucide-solid/icons/log-in";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import { Show, createEffect, createSignal, untrack } from "solid-js";
 
@@ -13,6 +14,7 @@ import type { Sync } from "#core/sync";
 
 import { collaboration } from "../../collaboration";
 import { t } from "../../i18n";
+import { m } from "../../paraglide/messages";
 import type { Shell } from "../../ProjectContext";
 import { syncStatus } from "../../syncStatus";
 import { syncWatch } from "../../syncWatch";
@@ -34,7 +36,6 @@ import {
   type QuickAction,
   type QuickSync,
 } from "./quick";
-import { SignInForm } from "./SignInForm";
 import { WriterSection } from "./WriterSection";
 
 const glyphOf = (sync: Sync | undefined) => {
@@ -267,17 +268,25 @@ const SyncDetails = (props: {
   </div>
 );
 
-const AccountRow = (props: { readonly account: Account; readonly host: string }) => (
-  <div
-    class={cx(
-      "mt-4",
-      props.account.session() !== undefined && "border-t border-surface-border pt-3",
-    )}
-    data-sync-account
-  >
+const AccountRow = (props: {
+  readonly account: Account;
+  readonly host: string;
+  readonly onSignIn: () => void;
+}) => (
+  <div class="mt-4 border-t border-surface-border pt-3" data-sync-account>
     <Show
       when={props.account.session()}
-      fallback={<SignInForm account={props.account} host={props.host} bare />}
+      fallback={
+        <Button
+          variant="primary"
+          class="w-full justify-center"
+          icon={<LogIn size={20} />}
+          onClick={props.onSignIn}
+          data-testid="sync-sign-in"
+        >
+          {m.sync_sign_in_prompt()}
+        </Button>
+      }
     >
       {(held) => (
         <div class="flex items-center gap-2">
@@ -339,7 +348,11 @@ export function SyncPopover(props: { readonly sync: SyncHandle }) {
         {(held) => <SyncDetails held={held()} pop={pop} quick={quick} account={account} />}
       </Show>
 
-      <Show when={account.host}>{(host) => <AccountRow account={account} host={host()} />}</Show>
+      <Show when={account.host}>
+        {(host) => (
+          <AccountRow account={account} host={host()} onSignIn={() => pop.run("sign-in")} />
+        )}
+      </Show>
     </Popover>
   );
 }
