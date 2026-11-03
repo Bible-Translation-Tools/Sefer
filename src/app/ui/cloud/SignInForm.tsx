@@ -77,27 +77,38 @@ export function SignInForm(props: { readonly account: Account; readonly host: st
         <Label for="sign-in-password" icon={<Lock />}>
           {m.sign_in_password()}
         </Label>
-        {/* The eye sits beside the field, not in it: a password manager draws its own icon at the field's end. */}
-        <div class="flex items-center gap-2">
+        {/*
+          paisano: the show/hide eye's pointer is unreliable for Thomas (2026-11-03). Moving onto
+          it slowly, the pointer cursor and hover style show for about a second, then drop,
+          worst straight over the eye. Not reproduced in the agent browser. Already tried, and
+          kept: the icon's SVG ignores pointer events (IconButton), and tooltips sit above
+          popovers (z-70). Suspects left: the Tooltip wrapper inside this Popover (body has
+          pointer-events: none while it is open), or his password manager's overlay at the
+          field's end. It was moved beside the field once (b605156e); that didn't help either.
+        */}
+        <span class="relative block">
           <Input
             id="sign-in-password"
             type={shown() ? "text" : "password"}
             required
-            wrapperClass="min-w-0 flex-1"
+            wrapperClass="w-full"
+            class="pe-12"
             autocomplete="current-password"
             value={password()}
             onInput={(event) => setPassword(event.currentTarget.value)}
           />
-          <IconButton
-            variant="outlined"
-            label={shown() ? m.sign_in_hide_password() : m.sign_in_show_password()}
-            icon={shown() ? <EyeOff /> : <Eye />}
-            aria-pressed={shown() ? "true" : "false"}
-            aria-controls="sign-in-password"
-            onClick={() => setShown(!shown())}
-            data-testid="sign-in-show-password"
-          />
-        </div>
+          <span class="absolute inset-y-0 end-0 flex items-center">
+            <IconButton
+              variant="bare"
+              label={shown() ? m.sign_in_hide_password() : m.sign_in_show_password()}
+              icon={shown() ? <EyeOff /> : <Eye />}
+              aria-pressed={shown() ? "true" : "false"}
+              aria-controls="sign-in-password"
+              onClick={() => setShown(!shown())}
+              data-testid="sign-in-show-password"
+            />
+          </span>
+        </span>
         <Show when={props.account.problem() !== ""}>
           <p class="text-small break-words text-on-surface-error" data-cloud="problem">
             {props.account.problem()}
