@@ -77,15 +77,6 @@ export function SignInForm(props: { readonly account: Account; readonly host: st
         <Label for="sign-in-password" icon={<Lock />}>
           {m.sign_in_password()}
         </Label>
-        {/*
-          paisano: the show/hide eye's pointer is unreliable for Thomas (2026-11-03). Moving onto
-          it slowly, the pointer cursor and hover style show for about a second, then drop,
-          worst straight over the eye. Not reproduced in the agent browser. Already tried, and
-          kept: the icon's SVG ignores pointer events (IconButton), and tooltips sit above
-          popovers (z-70). Suspects left: the Tooltip wrapper inside this Popover (body has
-          pointer-events: none while it is open), or his password manager's overlay at the
-          field's end. It was moved beside the field once (b605156e); that didn't help either.
-        */}
         <span class="relative block">
           <Input
             id="sign-in-password"

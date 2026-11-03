@@ -18,9 +18,10 @@ export function Dialog(props: DialogProps) {
     <CorvuDialog open={props.open} onOpenChange={props.onOpenChange} closeOnOutsideFocus={false}>
       <CorvuDialog.Portal>
         <CorvuDialog.Overlay class="fixed inset-0 z-40 bg-surface-overlay" />
+        {/* pointer-events-auto: a Tooltip inside is a layer above this one; see Popover. */}
         <CorvuDialog.Content
           class={cx(
-            "fixed left-1/2 top-1/2 z-50 w-[min(34rem,90vw)] -translate-x-1/2 -translate-y-1/2",
+            "pointer-events-auto fixed left-1/2 top-1/2 z-50 w-[min(34rem,90vw)] -translate-x-1/2 -translate-y-1/2",
             "rounded-xl border border-surface-border bg-surface-primary p-5 shadow-large",
             props.class,
           )}

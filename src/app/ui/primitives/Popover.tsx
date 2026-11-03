@@ -84,11 +84,16 @@ export function Popover(props: PopoverProps) {
         {props.trigger}
       </CorvuPopover.Trigger>
       <CorvuPopover.Portal>
-        {/* Above a Dialog (z-50): a menu opened inside one must not open behind it. */}
+        {/*
+          Above a Dialog (z-50): a menu opened inside one must not open behind it.
+          pointer-events-auto because corvu gives the content `auto` only while it is the
+          top layer, over a body set to `none`; a Tooltip opened inside is a layer too,
+          so hovering an icon button here took the pointer off the whole popover.
+        */}
         <CorvuPopover.Content
           aria-label={props.label}
           class={cx(
-            "z-60 border border-surface-border bg-surface-primary text-small",
+            "pointer-events-auto z-60 border border-surface-border bg-surface-primary text-small",
             "text-on-surface-primary shadow-large",
             props.variant === "menu" ? "rounded-xl py-2" : "rounded-lg p-3",
             props.fitViewport === true && "scrollbar-subtle overflow-y-auto",
