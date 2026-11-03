@@ -1,4 +1,5 @@
 import { confirm as tauriConfirm, open, save } from "@tauri-apps/plugin-dialog";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { Effect, Layer, Option } from "effect";
 
 import { Dialogs } from "#core/host/dialogs";
@@ -49,6 +50,15 @@ export const TauriDialogsLive: Layer.Layer<Dialogs> = Layer.succeed(Dialogs, {
           ...(options?.confirmLabel === undefined ? {} : { okLabel: options.confirmLabel }),
           ...(options?.cancelLabel === undefined ? {} : { cancelLabel: options.cancelLabel }),
         }),
+      ),
+      () => false,
+    ),
+
+  openExternal: (url) =>
+    Effect.orElseSucceed(
+      Effect.as(
+        Effect.tryPromise(() => openUrl(url)),
+        true,
       ),
       () => false,
     ),

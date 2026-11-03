@@ -1,12 +1,13 @@
 import { Effect, Option } from "effect";
-import { createEffect, createSignal, type Accessor } from "solid-js";
+import { createEffect, createRoot, createSignal, type Accessor } from "solid-js";
 
-import { Gitea, type Session } from "#core/remote/gitea";
+import { Gitea, type Profile, type Session } from "#core/remote/gitea";
 
 import { collaboration } from "../../collaboration";
-import { describe } from "../../describe";
+import { describe, reasonOf } from "../../describe";
 import { contentHostFor } from "../../endpoints";
 import { t } from "../../i18n";
+import { m } from "../../paraglide/messages";
 import type { Shell } from "../../ProjectContext";
 
 const reask = (shell: Shell): void => {
@@ -36,6 +37,8 @@ const restoreSession = (
 export interface Account {
   readonly host: string | null;
   readonly session: Accessor<Session | undefined>;
+  /** Name, email and picture, read from WACS after signing in; undefined until it answers. */
+  readonly profile: Accessor<Profile | undefined>;
   readonly busy: Accessor<boolean>;
   readonly problem: Accessor<string>;
   readonly otpWanted: Accessor<boolean>;
@@ -46,6 +49,9 @@ export interface Account {
   }) => void;
   readonly signOut: () => void;
   readonly attempt: (work: () => Promise<void>) => void;
+  /** Whether the app bar's Account popover is open; the sync popover opens it to sign in. */
+  readonly panelOpen: Accessor<boolean>;
+  readonly setPanelOpen: (open: boolean) => void;
 }
 
 const login = (
@@ -64,7 +70,7 @@ const login = (
     ),
   );
 
-export const createAccount = (shell: Shell): Account => {
+const makeAccount = (shell: Shell): Account => {
   const { services } = shell;
   const host = contentHostFor(services.settings);
 
@@ -72,12 +78,31 @@ export const createAccount = (shell: Shell): Account => {
   const [busy, setBusy] = createSignal(false, { name: "cloudBusy" });
   const [problem, setProblem] = createSignal("", { name: "cloudProblem" });
   const [otpWanted, setOtpWanted] = createSignal(false, { name: "cloudOtpWanted" });
+  const [profile, setProfile] = createSignal<Profile | undefined>(undefined, {
+    name: "accountProfile",
+  });
+  createEffect(
+    () => session()?.username,
+    (user) => {
+      setProfile(undefined);
+      if (user === undefined || host === null) return;
+      void services
+        .run(Effect.flatMap(Gitea, (gitea) => gitea.profile(host)))
+        .then(setProfile)
+        .catch(() => undefined);
+    },
+  );
+  const [panelOpen, setPanelOpen] = createSignal(false, { name: "accountPanelOpen" });
 
   const attempt = (work: () => Promise<void>): void => {
     setProblem("");
     setBusy(true);
     void work()
       .catch((cause: unknown) => {
+        if (reasonOf(cause) === "Unauthorized") {
+          setProblem(m.sign_in_incorrect());
+          return;
+        }
         const message = describe(cause);
         setProblem(message);
         if (/OtpRequired/u.test(message)) setOtpWanted(true);
@@ -90,10 +115,13 @@ export const createAccount = (shell: Shell): Account => {
   return {
     host,
     session,
+    profile,
     busy,
     problem,
     otpWanted,
     attempt,
+    panelOpen,
+    setPanelOpen,
     signIn: (fields) => {
       const base = host;
       if (base === null) return;
@@ -115,4 +143,19 @@ export const createAccount = (shell: Shell): Account => {
       });
     },
   };
+};
+
+const accounts = new WeakMap<Services, Account>();
+
+/**
+ * The one account for this composition. The app bar's Account button, the
+ * sync popover and Settings' Cloud cards all read it, so signing in at one
+ * shows everywhere. It lives as long as the app, under its own root.
+ */
+export const createAccount = (shell: Shell): Account => {
+  const held = accounts.get(shell.services);
+  if (held !== undefined) return held;
+  const made = createRoot(() => makeAccount(shell));
+  accounts.set(shell.services, made);
+  return made;
 };

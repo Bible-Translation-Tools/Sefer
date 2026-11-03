@@ -8,6 +8,7 @@ import type {
 import { FRONT_MATTER } from "#core/sync";
 
 import { t, type Params } from "../../i18n";
+import { m } from "../../paraglide/messages";
 import type { SendOutcome } from "../../syncActions";
 import type { BadgeTone } from "../primitives";
 
@@ -115,10 +116,9 @@ export const stateCopy = (state: SyncState, context: StateContext = {}): StateCo
     case "detached":
       return {
         chip: t("Not shared"),
-        headline: t("This project is only on this device"),
-        detail: t(
-          "Your work is saved here. Choose a shared project to back it up and work with others.",
-        ),
+        headline:
+          context.signedIn === true ? m.sync_local_headline() : m.sync_local_headline_signed_out(),
+        detail: context.signedIn === true ? m.sync_local_detail_signed_in() : m.sync_local_detail(),
         tone: "neutral",
       };
     case "unpublished":

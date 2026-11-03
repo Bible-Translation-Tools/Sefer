@@ -9,6 +9,7 @@ import { Remote } from "#core/remote/remote";
 import { collaboration } from "../../collaboration";
 import { describeTransfer } from "../../describe";
 import { t } from "../../i18n";
+import { m } from "../../paraglide/messages";
 import { useShell, type Shell } from "../../ProjectContext";
 import { syncWatch } from "../../syncWatch";
 import { Button, Card, FilterList, Input, PanelHeader, Popover } from "../primitives";
@@ -291,7 +292,7 @@ export function SharedProjectCard(props: {
         when={account.host !== null && account.session() !== undefined}
         fallback={
           <p class="text-small text-on-surface-tertiary" data-cloud="signed-out">
-            {t("Sign in above to choose a shared project for this one.")}
+            {m.cloud_sign_in_from_account()}
           </p>
         }
       >

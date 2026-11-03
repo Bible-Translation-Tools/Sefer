@@ -6,6 +6,7 @@ import CloudDownload from "lucide-solid/icons/cloud-download";
 import CloudOff from "lucide-solid/icons/cloud-off";
 import CloudUpload from "lucide-solid/icons/cloud-upload";
 import Copy from "lucide-solid/icons/copy";
+import LogIn from "lucide-solid/icons/log-in";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import { Show, createEffect, createSignal, untrack } from "solid-js";
 
@@ -13,6 +14,7 @@ import type { Sync } from "#core/sync";
 
 import { collaboration } from "../../collaboration";
 import { t } from "../../i18n";
+import { m } from "../../paraglide/messages";
 import type { Shell } from "../../ProjectContext";
 import { syncStatus } from "../../syncStatus";
 import { syncWatch } from "../../syncWatch";
@@ -20,7 +22,6 @@ import { writerWatch } from "../../writerWatch";
 import { ago } from "../panels/format";
 import { Button, IconButton, Input, Popover, cx, toasts } from "../primitives";
 import { createAccount, type Account } from "./account";
-import { SignInForm } from "./AccountCard";
 import { CollabSection } from "./CollabSection";
 import { stateCopy, type StateCopy } from "./copy";
 import { PlanBooks } from "./IncomingPlanCard";
@@ -267,11 +268,25 @@ const SyncDetails = (props: {
   </div>
 );
 
-const AccountRow = (props: { readonly account: Account; readonly host: string }) => (
+const AccountRow = (props: {
+  readonly account: Account;
+  readonly host: string;
+  readonly onSignIn: () => void;
+}) => (
   <div class="mt-4 border-t border-surface-border pt-3" data-sync-account>
     <Show
       when={props.account.session()}
-      fallback={<SignInForm account={props.account} host={props.host} />}
+      fallback={
+        <Button
+          variant="primary"
+          class="w-full justify-center"
+          icon={<LogIn size={20} />}
+          onClick={props.onSignIn}
+          data-testid="sync-sign-in"
+        >
+          {m.sync_sign_in_prompt()}
+        </Button>
+      }
     >
       {(held) => (
         <div class="flex items-center gap-2">
@@ -306,9 +321,8 @@ export const createSync = (shell: Shell) => {
 
 export type SyncHandle = ReturnType<typeof createSync>;
 
-/** The state's glyph and one-line headline, for a row that opens the popover. */
+/** The state's glyph, for a row that opens the popover. */
 export const syncGlyph = (sync: SyncHandle): JSX.Element => glyphOf(sync.quick.sync());
-export const syncHeadline = (sync: SyncHandle): string => sync.pop.copy()?.headline ?? t("Sync");
 
 /**
  * The sync popover, opened from somewhere else (the app bar's More menu):
@@ -334,7 +348,11 @@ export function SyncPopover(props: { readonly sync: SyncHandle }) {
         {(held) => <SyncDetails held={held()} pop={pop} quick={quick} account={account} />}
       </Show>
 
-      <Show when={account.host}>{(host) => <AccountRow account={account} host={host()} />}</Show>
+      <Show when={account.host}>
+        {(host) => (
+          <AccountRow account={account} host={host()} onSignIn={() => pop.run("sign-in")} />
+        )}
+      </Show>
     </Popover>
   );
 }

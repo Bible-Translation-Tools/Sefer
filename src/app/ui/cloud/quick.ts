@@ -12,6 +12,7 @@ import type { Shell } from "../../ProjectContext";
 import { checkForChanges, sendNow } from "../../syncActions";
 import { syncWatch } from "../../syncWatch";
 import { toasts } from "../primitives";
+import { createAccount } from "./account";
 import { sendOutcomeCopy } from "./copy";
 
 export type QuickAction = "see" | "send" | "check" | "resolve" | "sign-in" | "open";
@@ -124,8 +125,11 @@ export const createQuickSync = (shell: Shell, onSee?: () => void): QuickSync => 
             search: { against: "shared" },
           });
         return;
-      case "open":
       case "sign-in":
+        // After the sync popover has closed, so its dismissal does not close this one.
+        setTimeout(() => createAccount(shell).setPanelOpen(true));
+        return;
+      case "open":
         void navigate({ to: "/project/$slug/settings", params: { slug: shell.slug() } });
         return;
       case "resolve":

@@ -20,6 +20,8 @@ export interface DialogsService {
     filters: readonly FileFilter[],
   ) => Effect.Effect<Option.Option<string>>;
   readonly confirm: (message: string, options?: ConfirmOptions) => Effect.Effect<boolean>;
+  /** Open a web page in the person's browser, outside Sefer; false when the host could not. */
+  readonly openExternal: (url: string) => Effect.Effect<boolean>;
 }
 
 export class Dialogs extends Context.Service<Dialogs, DialogsService>()("Dialogs") {}

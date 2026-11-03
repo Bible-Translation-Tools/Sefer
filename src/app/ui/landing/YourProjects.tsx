@@ -1,11 +1,10 @@
-import { useNavigate, useSearch } from "@tanstack/solid-router";
+import { useSearch } from "@tanstack/solid-router";
 import { Effect, FileSystem, Result } from "effect";
 import ArrowRight from "lucide-solid/icons/arrow-right";
 import Download from "lucide-solid/icons/download";
 import FolderOpen from "lucide-solid/icons/folder-open";
 import MoreVertical from "lucide-solid/icons/more-vertical";
 import PencilLine from "lucide-solid/icons/pencil-line";
-import Share2 from "lucide-solid/icons/share-2";
 import Trash2 from "lucide-solid/icons/trash-2";
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 
@@ -125,11 +124,7 @@ const deleteProject = (services: Shell["services"], keys: Keys, row: ProjectSumm
 
 const createRowActions = (shell: Shell, keys: Keys) => {
   const { services } = shell;
-  const navigate = useNavigate();
   return {
-    share: (row: ProjectSummary): void => {
-      void navigate({ to: "/project/$slug", params: { slug: shell.slugFor(row.root) } });
-    },
     open: (row: ProjectSummary): void => {
       rememberOpened(services, keys, row);
       shell.openProjectAtStart(row.root);
@@ -356,7 +351,6 @@ const DownloadCard = (props: {
 const ProjectMenu = (props: {
   readonly row: ProjectSummary;
   readonly onOpen: () => void;
-  readonly onShare: () => void;
   readonly onRename: () => void;
   readonly onExport: () => void;
   readonly onDelete: () => void;
@@ -378,9 +372,6 @@ const ProjectMenu = (props: {
     </MenuItem>
 
     <Show when={!props.row.fixture}>
-      <MenuItem icon={<Share2 aria-hidden="true" />} onSelect={props.onShare}>
-        {t("Share…")}
-      </MenuItem>
       <MenuItem icon={<PencilLine aria-hidden="true" />} onSelect={props.onRename}>
         {t("Rename…")}
       </MenuItem>
@@ -398,7 +389,6 @@ const ProjectCard = (props: {
   readonly row: ProjectSummary;
   readonly folder: string;
   readonly onOpen: () => void;
-  readonly onShare: () => void;
   readonly onRename: () => void;
   readonly onExport: () => void;
   readonly onDelete: () => void;
@@ -431,7 +421,6 @@ const ProjectCard = (props: {
         <ProjectMenu
           row={props.row}
           onOpen={props.onOpen}
-          onShare={props.onShare}
           onRename={props.onRename}
           onExport={props.onExport}
           onDelete={props.onDelete}
@@ -460,7 +449,6 @@ const ProjectStrip = (props: {
           row={row}
           folder={props.folderLabel(row)}
           onOpen={() => props.actions.open(row)}
-          onShare={() => props.actions.share(row)}
           onRename={() => props.actions.startRename(row)}
           onExport={() => props.actions.exportZip(row)}
           onDelete={() => props.actions.startDelete(row)}
