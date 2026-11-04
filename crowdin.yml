@@ -3,6 +3,10 @@
 # translates it. Both catalogs are ICU MessageFormat JSON; see documentation/architecture/i18n.md.
 preserve_hierarchy: true
 commit_message: "Translations from Crowdin: %language%"
+# A string nobody has translated yet is left out, not filled with English: Paraglide and the Sous
+# words fall back to English by themselves, and English in es.json would come back to Crowdin as if
+# it were Spanish.
+skip_untranslated_strings: true
 files:
   # The interface: Paraglide's catalogs, one flat file per language.
   - source: /src/app/messages/en.json

@@ -18,7 +18,7 @@ export type Tier = "headline" | "details";
  * kitchen's English for an id it lacks.
  */
 export type SousCatalog = Readonly<
-  Partial<Record<FindingMessageId, { readonly headline: string; readonly details: string }>>
+  Partial<Record<FindingMessageId, { readonly headline?: string; readonly details?: string }>>
 >;
 
 /** A catalog and the locale its plurals follow. */
@@ -32,12 +32,13 @@ const ENGLISH: SousWords = { locale: "en", catalog: FINDING_MESSAGES_EN };
 const formatters = new Map<string, IntlMessageFormat>();
 
 const formatterOf = (message: FindingMessage, tier: Tier, words: SousWords): IntlMessageFormat => {
-  const own = words.catalog[message.id];
+  // Per tier: a translation may carry the headline before anyone has translated the details.
+  const own = words.catalog[message.id]?.[tier];
   const locale = own === undefined ? ENGLISH.locale : words.locale;
   const key = `${locale}:${message.id}:${tier}`;
   let formatter = formatters.get(key);
   if (formatter === undefined) {
-    formatter = new IntlMessageFormat((own ?? FINDING_MESSAGES_EN[message.id])[tier], locale);
+    formatter = new IntlMessageFormat(own ?? FINDING_MESSAGES_EN[message.id][tier], locale);
     formatters.set(key, formatter);
   }
   return formatter;
