@@ -648,52 +648,55 @@ export function FindingsPanel() {
           data-findings={summary().shown}
           data-view={filters.view()}
         >
-          <Show
-            when={summary().shown > 0}
-            fallback={
-              <Show
-                when={summary().total > 0}
-                fallback={
-                  <EmptyState
-                    icon={<CircleCheck size={22} />}
-                    title={m.findings_nothing_to_report_or_no()}
-                  />
-                }
-              >
-                <EmptyState
-                  title={m.findings_total_findings_all_hidden_by({
-                    total: summary().total,
-                  })}
-                />
-              </Show>
-            }
-          >
-            <Show when={body()} fallback={<div class="min-h-0 flex-1" aria-busy="true" />}>
-              <ExcerptList
-                goneLabel={m.findings_resolved()}
-                resultsKey={JSON.stringify(filters.filter())}
-                groups={feed.groups()}
-                views={feed.excerpts.views}
-                outline={feed.outline()}
-                seat={feed.excerpts.seat}
-                seatedOf={feed.excerpts.seatedOf}
-                shownOf={feed.excerpts.shownOf}
-                analyze={feed.excerpts.analyze}
-                onEdited={feed.excerpts.edited}
-                focus={focused()}
-                activeHit={focusedAt()}
-                mode={mode()}
-                card={card}
-                sections={sections}
-                pairedOf={source.shown() ? source.pairedOf : undefined}
-                empty={
-                  <EmptyState
-                    icon={<CircleCheck size={22} />}
-                    title={m.findings_nothing_to_report_in_the()}
-                  />
-                }
-              />
-            </Show>
+          {/* The list stays mounted when nothing is left to show: a card being edited is held by
+              the list, so fixing the last finding in scope must leave it standing as Resolved
+              rather than swap the whole list for the empty state. */}
+          <Show when={body()} fallback={<div class="min-h-0 flex-1" aria-busy="true" />}>
+            <ExcerptList
+              goneLabel={m.findings_resolved()}
+              resultsKey={JSON.stringify(filters.filter())}
+              groups={feed.groups()}
+              views={feed.excerpts.views}
+              outline={feed.outline()}
+              seat={feed.excerpts.seat}
+              seatedOf={feed.excerpts.seatedOf}
+              shownOf={feed.excerpts.shownOf}
+              analyze={feed.excerpts.analyze}
+              onEdited={feed.excerpts.edited}
+              focus={focused()}
+              activeHit={focusedAt()}
+              mode={mode()}
+              card={card}
+              sections={sections}
+              pairedOf={source.shown() ? source.pairedOf : undefined}
+              empty={
+                <Show
+                  when={summary().shown === 0}
+                  fallback={
+                    <EmptyState
+                      icon={<CircleCheck size={22} />}
+                      title={m.findings_nothing_to_report_in_the()}
+                    />
+                  }
+                >
+                  <Show
+                    when={summary().total > 0}
+                    fallback={
+                      <EmptyState
+                        icon={<CircleCheck size={22} />}
+                        title={m.findings_nothing_to_report_or_no()}
+                      />
+                    }
+                  >
+                    <EmptyState
+                      title={m.findings_total_findings_all_hidden_by({
+                        total: summary().total,
+                      })}
+                    />
+                  </Show>
+                </Show>
+              }
+            />
           </Show>
         </div>
         <Show when={settingsOpen()}>
