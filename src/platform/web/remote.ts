@@ -57,6 +57,7 @@ const fail = (reason: RemoteFailureReason, description: string): RemoteError =>
 
 const classify = (error: unknown): RemoteError => {
   const message = messageOf(error);
+  if (/permission denied|not allowed to push/iu.test(message)) return fail("Unauthorized", message);
   if (
     /non-fast-forward|fetch first|failed to push some refs|push rejected|PushRejectedError/iu.test(
       message,

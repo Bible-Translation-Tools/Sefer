@@ -10,6 +10,7 @@ import { reviewNeeded, suggestMyChanges } from "../../../suggestions";
 import { sendNow, type SendOutcome } from "../../../syncActions";
 import { syncWatch } from "../../../syncWatch";
 import { offerRefusalCopy, sendOutcomeCopy } from "../../cloud/copy";
+import { putOnline, suggestedName } from "../../cloud/PublishSection";
 import type { SaveForm } from "./createSaveForm";
 import type { Sides } from "./createSides";
 import { sendAction, type ReceiptAction, type ReceiptLine } from "./helpers";
@@ -26,7 +27,7 @@ type SetSendLine = (line: ReceiptLine | "sending" | undefined) => void;
 
 function lineOfSend(shell: Shell, outcome: SendOutcome): ReceiptLine | undefined {
   const project = shell.project();
-  if (outcome.kind === "detached") return undefined;
+  if (outcome.kind === "detached") return project === undefined ? undefined : onlyHere(project);
   const copy = sendOutcomeCopy(outcome, syncWatch.sync(project?.root)?.state);
   if (outcome.kind === "sent" && outcome.toCopy === true) {
     const waiting = collaboration.facts(project?.root)?.mine?.kind === "waiting";
@@ -43,6 +44,50 @@ function lineOfSend(shell: Shell, outcome: SendOutcome): ReceiptLine | undefined
   }
   const action = sendAction(outcome);
   return { ...copy, ...(action === undefined ? {} : { action }) };
+}
+
+function onlyHere(project: NonNullable<ReturnType<Shell["project"]>>): ReceiptLine {
+  const signedIn = syncWatch.sync(project.root)?.reading.signedIn === true;
+  return signedIn
+    ? {
+        tone: "muted",
+        title: m.review_kept_on_this_device_only(),
+        detail: m.review_put_it_online_to_keep({ name: suggestedName(project) }),
+        action: "publish",
+      }
+    : {
+        tone: "muted",
+        title: m.review_kept_on_this_device_only(),
+        detail: m.review_sign_in_to_wacs_to_keep(),
+        action: "open",
+      };
+}
+
+function publishHere(
+  services: Services,
+  project: NonNullable<ReturnType<Shell["project"]>>,
+  setSendLine: SetSendLine,
+): void {
+  const name = suggestedName(project);
+  setSendLine("sending");
+  void putOnline(services, project, name)
+    .then(() =>
+      setSendLine({
+        tone: "success",
+        title: m.review_online_as_name({ name }),
+        detail: m.review_it_is_in_your_wacs(),
+      }),
+    )
+    .catch((cause: unknown) =>
+      setSendLine({
+        tone: "error",
+        title: m.review_could_not_put_it_online(),
+        detail: m.cloud_your_work_is_safe_on({
+          description: describe(cause),
+        }),
+        action: "publish",
+      }),
+    );
 }
 
 function offerChanges(
@@ -111,6 +156,9 @@ function createReceiptAction(
         return;
       case "offer":
         offerChanges(services, project, setSendLine);
+        return;
+      case "publish":
+        publishHere(services, project, setSendLine);
         return;
     }
   };

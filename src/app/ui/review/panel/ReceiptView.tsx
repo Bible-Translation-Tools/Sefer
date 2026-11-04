@@ -36,6 +36,8 @@ function labelOf(action: ReceiptAction): string {
       return m.common_set_up_sharing();
     case "offer":
       return m.review_offer_these_changes();
+    case "publish":
+      return m.review_put_it_online();
   }
 }
 

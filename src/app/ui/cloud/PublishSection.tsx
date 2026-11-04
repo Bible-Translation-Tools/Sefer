@@ -14,7 +14,7 @@ import { syncWatch } from "../../syncWatch";
 import { Button, Input, toasts } from "../primitives";
 import { metadataOf } from "../workspace/project";
 
-const suggestedName = (project: Project): string => {
+export const suggestedName = (project: Project): string => {
   const metadata = metadataOf(project);
   const language = metadata?.language.tag ?? "";
   const resource = metadata?.id ?? "";
@@ -25,13 +25,13 @@ const suggestedName = (project: Project): string => {
   return named.toLowerCase().replace(/[^a-z0-9._-]+/gu, "-");
 };
 
-const publishProject = (
+/** Makes the project on WACS under the signed-in account, sends this device's versions there, and refreshes what the cloud menu knows. */
+export const putOnline = (
   services: Shell["services"],
   project: Project,
   staticName: string,
-  settled: () => void,
-): void => {
-  void services
+): Promise<void> =>
+  services
     .run(
       Effect.gen(function* () {
         const git = yield* Git;
@@ -39,15 +39,23 @@ const publishProject = (
         yield* remote.publish(yield* git.init(project.root), staticName);
       }),
     )
+    .finally(() => {
+      void syncWatch.refresh(services, project).catch(() => undefined);
+      void collaboration.refresh(services, project);
+    });
+
+const publishProject = (
+  services: Shell["services"],
+  project: Project,
+  staticName: string,
+  settled: () => void,
+): void => {
+  void putOnline(services, project, staticName)
     .then(() => toasts.success({ title: m.cloud_published_as_name({ name: staticName }) }))
     .catch((cause: unknown) =>
       toasts.error({ title: m.cloud_could_not_publish(), message: describe(cause) }),
     )
-    .finally(() => {
-      settled();
-      void syncWatch.refresh(services, project).catch(() => undefined);
-      void collaboration.refresh(services, project);
-    });
+    .finally(settled);
 };
 
 const NameRow = (props: {

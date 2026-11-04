@@ -1698,5 +1698,19 @@
   "editor_lint_verse_slot": "Either type a verse number here, or remove the verse marker.",
   "editor_lint_chapter_slot": "Either type a chapter number here, or remove the chapter marker.",
   "editor_lint_remove_verse_marker": "remove the verse marker",
-  "editor_lint_remove_chapter_marker": "remove the chapter marker"
+  "editor_lint_remove_chapter_marker": "remove the chapter marker",
+  "sync_no_write_shared": "this account may not write to the shared project",
+  "cloud_saved_here_not_sent_no_write": "Saved here. Not sent: you can't change the shared project directly",
+  "cloud_no_write_send_again": "Your changes go to your own copy, and you offer them from there. Your work is safe on this device — send again to set up your copy.",
+  "cloud_no_write_copy_failed": "Your changes go to your own copy, but it could not be set up: {description}. Your work is safe on this device.",
+  "cloud_sent_to_your_own_copy_name": "Sent to your own copy, {copy}",
+  "review_put_it_online": "Put it online",
+  "review_kept_on_this_device_only": "Kept on this device only",
+  "review_put_it_online_to_keep": "Put it online to keep a copy safe and work on it with others. It goes in your WACS account as {name}.",
+  "review_sign_in_to_wacs_to_keep": "Sign in to WACS to keep a copy safe online and work on it with others.",
+  "review_online_as_name": "Online as {name}",
+  "review_it_is_in_your_wacs": "It is in your WACS account. From now on, saving sends your changes there.",
+  "review_could_not_put_it_online": "Could not put it online",
+  "review_you_cant_change_the_shared": "You can't change the shared project directly, so this sends your changes to your own copy of it. Sefer makes the copy if you don't have one yet.",
+  "review_you_cant_change_name": "You can't change {name} directly, so this sends your changes to your own copy of it. Sefer makes the copy if you don't have one yet."
 }

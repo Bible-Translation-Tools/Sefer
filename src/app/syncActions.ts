@@ -1,10 +1,11 @@
 import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import { Effect, Option } from "effect";
 
+import { m } from "#app/paraglide/messages";
 import { Git, type Author } from "#core/git/git";
 import type { Verdict } from "#core/observability";
 import type { Project } from "#core/project/project";
-import { Remote, remoteVerdict, type RemoteFailureReason } from "#core/remote/remote";
+import { COPY_REMOTE, Remote, remoteVerdict, type RemoteFailureReason } from "#core/remote/remote";
 import {
   combine,
   receive,
@@ -18,7 +19,14 @@ import { collaboration } from "./collaboration";
 import { describe, remoteReasonOf } from "./describe";
 import { recordVersion, type RecordOutcome } from "./recordVersion";
 import type { Services } from "./services";
-import { copyStanding, fetchCopy, modeOf, sendingTo } from "./suggestions";
+import {
+  canWriteShared,
+  copyStanding,
+  fetchCopy,
+  modeOf,
+  sendingTo,
+  workInOwnCopy,
+} from "./suggestions";
 import { syncPreferences } from "./syncSettings";
 import { syncStatus } from "./syncStatus";
 import { syncWatch } from "./syncWatch";
@@ -100,13 +108,15 @@ const checkShared = async (
 };
 
 export type SendOutcome =
-  | { readonly kind: "sent"; readonly toCopy?: true }
+  | { readonly kind: "sent"; readonly toCopy?: true; readonly ownCopy?: string }
   | { readonly kind: "detached" }
   | { readonly kind: "held" }
   | {
       readonly kind: "refused";
       readonly reason: RemoteFailureReason;
       readonly toCopy?: true;
+      /** This account may not write to the shared project: not a conflict, so nothing to compare. */
+      readonly noWrite?: true;
       readonly description?: string;
     };
 
@@ -124,7 +134,34 @@ export const sendNow = async (
     await collaboration.refresh(services, project);
   if (outcome.kind === "refused" && outcome.reason === "Unauthorized")
     await collaboration.refresh(services, project);
+  if (outcome.kind === "sent" && outcome.ownCopy !== undefined)
+    await collaboration.refresh(services, project);
   return outcome;
+};
+
+type Route = { readonly to: string; readonly ownCopy?: string } | { readonly noWrite: string };
+
+/**
+ * Where a send goes. Someone who may not write to the shared project and has no copy yet
+ * sends to their own copy: the one they already hold on the server, or a new one. Sending is
+ * already on (send on save, or Send pressed), so making the copy is part of the send.
+ */
+const routeOf = async (
+  services: Services,
+  project: Project,
+  explicit: string | undefined,
+): Promise<Route> => {
+  const to = explicit ?? (await destination(services, project));
+  if (explicit !== undefined || to === COPY_REMOTE) return { to };
+  if ((await canWriteShared(services, project)) !== false) return { to };
+  try {
+    const made = await workInOwnCopy(services, project);
+    if (made.kind === "copy") return { to: COPY_REMOTE, ownCopy: made.copy };
+    if (made.kind === "rerooted") return { to: COPY_REMOTE };
+    return { noWrite: m.sync_no_write_shared() };
+  } catch (cause) {
+    return { noWrite: describe(cause) };
+  }
 };
 
 const attemptSend = async (
@@ -143,8 +180,15 @@ const attemptSend = async (
     "sync.cause": cause,
   });
   let to: string | undefined;
+  let ownCopy: string | undefined;
   try {
-    to = explicit ?? (await destination(services, project));
+    const route = await routeOf(services, project, explicit);
+    if ("noWrite" in route) {
+      operation.end("refused", { "sync.reason": "NoWrite" });
+      return { kind: "refused", reason: "Unauthorized", noWrite: true, description: route.noWrite };
+    }
+    to = route.to;
+    ownCopy = route.ownCopy;
     const target = to;
     const sent = await services.run(
       Effect.gen(function* () {
@@ -160,9 +204,21 @@ const attemptSend = async (
     if (sent && target === "copy") await fetchCopy(services, project);
     operation.end("passed", { "sync.sent": sent });
     if (!sent) return { kind: "detached" };
-    return target === "copy" ? { kind: "sent", toCopy: true } : { kind: "sent" };
+    if (target !== COPY_REMOTE) return { kind: "sent" };
+    return ownCopy === undefined
+      ? { kind: "sent", toCopy: true }
+      : { kind: "sent", toCopy: true, ownCopy };
   } catch (cause) {
     const reason = remoteReasonOf(cause) ?? "Rejected";
+    if (
+      to === "origin" &&
+      reason !== "Network" &&
+      reason !== "Unavailable" &&
+      (await canWriteShared(services, project)) === false
+    ) {
+      operation.end("refused", { "sync.reason": "NoWrite", "sync.to": to });
+      return { kind: "refused", reason: "Unauthorized", noWrite: true };
+    }
     const standing =
       to === "copy" && reason === "Rejected"
         ? await fetchCopy(services, project).then(() => copyStanding(services, project))

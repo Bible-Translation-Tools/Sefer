@@ -40,7 +40,7 @@ export const settledMessage = (copyReview: boolean, settledNames: readonly strin
     : m.review_combined_books_with_the_shared({ books });
 };
 
-export type ReceiptAction = "see" | "copy" | "retry" | "send" | "open" | "offer";
+export type ReceiptAction = "see" | "copy" | "retry" | "send" | "open" | "offer" | "publish";
 
 export interface ReceiptLine {
   readonly tone: "success" | "warning" | "error" | "muted";
@@ -55,7 +55,7 @@ export const sendAction = (
   if (outcome.kind === "held") return "send";
   if (outcome.kind !== "refused") return undefined;
   if (outcome.reason === "Rejected") return outcome.toCopy === true ? "copy" : "see";
-  if (outcome.reason === "Unauthorized") return "open";
+  if (outcome.reason === "Unauthorized") return outcome.noWrite === true ? "retry" : "open";
   return "retry";
 };
 

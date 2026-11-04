@@ -203,7 +203,9 @@ export function SaveDialog(props: SaveDialogProps) {
         }
       }}
       title={m.common_save()}
-      description={props.form.saveDescription()}
+      description={
+        props.receipt.recordedLine() === undefined ? props.form.saveDescription() : undefined
+      }
       footer={<SaveFooter dialog={props} />}
     >
       <SaveReceipt dialog={props} />

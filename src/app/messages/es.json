@@ -1698,5 +1698,19 @@
   "editor_lint_verse_slot": "Escribe aquí un número de versículo o quita el marcador de versículo.",
   "editor_lint_chapter_slot": "Escribe aquí un número de capítulo o quita el marcador de capítulo.",
   "editor_lint_remove_verse_marker": "quitar el marcador de versículo",
-  "editor_lint_remove_chapter_marker": "quitar el marcador de capítulo"
+  "editor_lint_remove_chapter_marker": "quitar el marcador de capítulo",
+  "sync_no_write_shared": "esta cuenta no puede escribir en el proyecto compartido",
+  "cloud_saved_here_not_sent_no_write": "Guardado aquí. No enviado: no puedes cambiar el proyecto compartido directamente",
+  "cloud_no_write_send_again": "Tus cambios van a tu propia copia, y los ofreces desde allí. Tu trabajo está a salvo en este dispositivo: vuelve a enviar para crear tu copia.",
+  "cloud_no_write_copy_failed": "Tus cambios van a tu propia copia, pero no se pudo crear: {description}. Tu trabajo está a salvo en este dispositivo.",
+  "cloud_sent_to_your_own_copy_name": "Enviado a tu propia copia, {copy}",
+  "review_put_it_online": "Ponerlo en línea",
+  "review_kept_on_this_device_only": "Guardado solo en este dispositivo",
+  "review_put_it_online_to_keep": "Ponlo en línea para tener una copia a salvo y trabajar en él con otros. Se guarda en tu cuenta de WACS como {name}.",
+  "review_sign_in_to_wacs_to_keep": "Inicia sesión en WACS para tener una copia a salvo en línea y trabajar en ella con otros.",
+  "review_online_as_name": "En línea como {name}",
+  "review_it_is_in_your_wacs": "Está en tu cuenta de WACS. A partir de ahora, al guardar se envían allí tus cambios.",
+  "review_could_not_put_it_online": "No se pudo poner en línea",
+  "review_you_cant_change_the_shared": "No puedes cambiar el proyecto compartido directamente, así que esto envía tus cambios a tu propia copia. Sefer crea la copia si aún no la tienes.",
+  "review_you_cant_change_name": "No puedes cambiar {name} directamente, así que esto envía tus cambios a tu propia copia. Sefer crea la copia si aún no la tienes."
 }

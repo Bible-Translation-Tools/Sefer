@@ -274,6 +274,15 @@ const refusedCopy = (
         detail: m.cloud_you_may_be_offline_your(),
       };
     case "Unauthorized":
+      if (outcome.noWrite === true)
+        return {
+          tone: "warning",
+          title: m.cloud_saved_here_not_sent_no_write(),
+          detail:
+            outcome.description === undefined
+              ? m.cloud_no_write_send_again()
+              : m.cloud_no_write_copy_failed({ description: outcome.description }),
+        };
       return {
         tone: "warning",
         title: m.cloud_saved_here_not_sent_sign(),
@@ -295,7 +304,10 @@ export const sendOutcomeCopy = (
       return outcome.toCopy === true
         ? {
             tone: "success",
-            title: m.cloud_sent_to_your_copy(),
+            title:
+              outcome.ownCopy === undefined
+                ? m.cloud_sent_to_your_copy()
+                : m.cloud_sent_to_your_own_copy_name({ copy: outcome.ownCopy }),
             detail: m.cloud_offer_your_changes_from_the(),
           }
         : {

@@ -26,6 +26,10 @@ function sendsLineOf(shell: Shell): string {
   const facts = collaboration.facts(shell.project()?.root);
   const copy = facts?.mode === "copy";
   const name = facts?.sendsTo;
+  if (!copy && facts?.canWrite === false)
+    return name === undefined
+      ? m.review_you_cant_change_the_shared()
+      : m.review_you_cant_change_name({ name });
   if (name === undefined)
     return copy
       ? m.review_this_also_sends_your_changes()
