@@ -193,13 +193,17 @@ const pasteAsOneLine = EditorState.transactionFilter.of((tr): TransactionSpec | 
   };
 });
 
-/** A selection stays inside the verse it starts in. */
+/**
+ * A selection stays inside the verse it starts in. Select all starts at the top of the book,
+ * outside every verse, so it takes the verse the caret was in: Mod-a selects that verse.
+ */
 const selectionStaysInVerse = EditorState.transactionFilter.of((tr) => {
   if (!tr.selection || tr.docChanged || !isVerseLines(tr.state)) return tr;
   const range = tr.selection.main;
   if (range.empty) return tr;
   const structure = structureAt(tr.state);
-  const k = verseIndexAt(structure, range.anchor);
+  const whole = range.from === 0 && range.to === tr.state.doc.length;
+  const k = verseIndexAt(structure, whole ? tr.startState.selection.main.head : range.anchor);
   if (k < 0) return tr;
   const from = structure.verses[k].contentFrom;
   const to = Math.max(from, verseEnd(structure, docText(tr.state), k));
