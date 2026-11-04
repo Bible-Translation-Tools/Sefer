@@ -41,7 +41,6 @@ export interface Inserted {
   readonly address: BlockAddress;
   readonly marker: string;
   readonly at: number;
-  readonly empty: boolean;
 }
 
 export interface Removed {
@@ -153,7 +152,6 @@ const decodeReport = (json: string): OverlayReport => {
             address: readAddress(entry.address),
             marker: text(entry.marker),
             at: num(entry.at),
-            empty: flag(entry.empty),
           }
         : undefined,
     ),

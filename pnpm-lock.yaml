@@ -164,8 +164,8 @@ importers:
         specifier: ^2.12.0
         version: 2.12.0
       '@wycliffeassociates/scripture-kitchen':
-        specifier: 0.1.19
-        version: 0.1.19
+        specifier: 0.1.20
+        version: 0.1.20
       '@wycliffeassociates/sefer-editor':
         specifier: workspace:*
         version: link:packages/editor
@@ -325,8 +325,8 @@ importers:
         specifier: ^6.43.13
         version: 6.43.13
       '@wycliffeassociates/scripture-kitchen':
-        specifier: 0.1.19
-        version: 0.1.19
+        specifier: 0.1.20
+        version: 0.1.20
       '@wycliffeassociates/sefer-text':
         specifier: workspace:*
         version: link:../text
@@ -337,8 +337,8 @@ importers:
   packages/text:
     devDependencies:
       '@wycliffeassociates/scripture-kitchen':
-        specifier: 0.1.19
-        version: 0.1.19
+        specifier: 0.1.20
+        version: 0.1.20
 
   planning:
     dependencies:
@@ -3569,8 +3569,8 @@ packages:
     resolution: {integrity: sha512-K1DL05PngTMKY8mkzMNYpKNqZNPTrdJheuvTeWwwYlm4Yn9hLc8V3hw6EDsuEYw4cyEyiVeukLbLOEW+AhvqVw==}
     engines: {node: '>=18.20.0'}
 
-  '@wycliffeassociates/scripture-kitchen@0.1.19':
-    resolution: {integrity: sha512-HefaDGR4R9Q9k7U2lNsIwqrMcXMf6+eRbqNMrB0zShja4QHtswS0aLFTOCfNOBqaJdQAfqp4hfguXWaf8VZANA==, tarball: https://nexus-registry.walink.org/repository/wa-npm/@wycliffeassociates/scripture-kitchen/-/scripture-kitchen-0.1.19.tgz}
+  '@wycliffeassociates/scripture-kitchen@0.1.20':
+    resolution: {integrity: sha512-qdq+vYba5eCbqAok8ceUhZ46H7l6KTkZB1zmibv6izWgKLccYdFcTpn3HsN4QjgBUgiuGAtnuaW8/rjVbwFabA==, tarball: https://nexus-registry.walink.org/repository/wa-npm/@wycliffeassociates/scripture-kitchen/-/scripture-kitchen-0.1.20.tgz}
 
   '@xmldom/xmldom@0.9.12':
     resolution: {integrity: sha512-5AXjrcMClTryPe9LgZrygpB1lj7s0S9E0+W+AHaVKAVyHanafK86iPSvG5xHVSp/jC+VH1UXu0TAEmY279xH7A==}
@@ -10160,7 +10160,7 @@ snapshots:
     dependencies:
       '@wdio/logger': 9.29.1
 
-  '@wycliffeassociates/scripture-kitchen@0.1.19': {}
+  '@wycliffeassociates/scripture-kitchen@0.1.20': {}
 
   '@xmldom/xmldom@0.9.12': {}
 

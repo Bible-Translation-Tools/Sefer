@@ -105,7 +105,7 @@ describe("empty blocks", () => {
       expect(labelsIn(off(OVERLAID))).toEqual([]);
     }));
 
-  it("finds what match formatting actually leaves behind", () =>
+  it("finds no hole after match formatting, which opens no empty inside-verse lines", () =>
     withEngine(({ on }, galley) => {
       const target = [
         `${BS}id PHM`,
@@ -134,8 +134,8 @@ describe("empty blocks", () => {
       applyOverlay(previewed.success, book);
 
       const after = book.source().text;
-      expect(emptyBlocks(on(after)).map((row) => row.marker)).toEqual(["q2"]);
-      expect(labelsIn(on(after))).toEqual(["Needs text — Q2"]);
+      expect(emptyBlocks(on(after))).toEqual([]);
+      expect(labelsIn(on(after))).toEqual([]);
     }));
 
   it("goes away when the block gets words", () =>
