@@ -1,0 +1,12 @@
+# Read by Crowdin's GitHub integration (the WA organization's Sefer project), which supplies the
+# project and the credentials itself. English is written here, in code review; Crowdin only
+# translates it. Both catalogs are ICU MessageFormat JSON; see documentation/architecture/i18n.md.
+preserve_hierarchy: true
+commit_message: "Translations from Crowdin: %language%"
+files:
+  # The interface: Paraglide's catalogs, one flat file per language.
+  - source: /src/app/messages/en.json
+    translation: /src/app/messages/%two_letters_code%.json
+  # Sous findings, worded by Sefer from kitchen's stable ids; nested { headline, details }.
+  - source: /src/app/messages/sous/en.json
+    translation: /src/app/messages/sous/%two_letters_code%.json
