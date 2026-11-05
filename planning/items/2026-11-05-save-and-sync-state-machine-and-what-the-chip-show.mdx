@@ -1,6 +1,6 @@
 ---
 id: f26024e8-56d1-4991-b476-44c4bafbadda
-title: "Save and sync state machine, and what the chip shows"
+title: "Save and sync states: which to show, and when"
 kind: plan
 status: discussing
 created: 2026-11-05
@@ -10,131 +10,221 @@ tags: [design, sync]
 ---
 
 SEFER-92 (REQ-22) and SEFER-83 (REQ-12). The app bar's sync chip (branch `design/sync-chip`)
-names every state the code knows. Talking it over with paisano:
+names every state the code knows. From the conversation with paisano:
 
 > some states may not need to always be explicitly stated. For example, Sefer tracks whether
 > you're on a shared repo, but thats only relevant when you want to push content to WACS and
 > you're out of date... so it makes sense to expose that information only when its relevant.
 
-His suggestion: draw the whole flow first, then decide what surfaces. These diagrams are the
-code as it is today (`src/core/sync/state.ts`, `documentation/architecture/review.md` §4,
-`documentation/architecture/sync.md`), not a proposal.
+Each state below says what is happening, when it happens, and what the chip does today. Answer
+each with one of:
 
-## 1. A piece of work, from typing to WACS
+- **Explicit** — always visible on the chip.
+- **Progressive** — appears only when it changes what the person should do (the popover, a
+  badge, a colour, or a message at the moment they act).
+- **Hidden** — Sefer handles it; the person never needs to know.
 
-Three layers, each written by something different. Only the first is automatic.
+The states are as the code has them today (`src/core/sync/state.ts`,
+`documentation/architecture/review.md` §4, `documentation/architecture/sync.md`).
 
-<Mermaid id="work-lifecycle" caption="One edit's life. Solid arrows are automatic; labelled ones are a person's press.">
-```mermaid
-stateDiagram-v2
-  direction LR
-  [*] --> Edited: typing
-  Edited --> BackedUp: ~500 ms pause (Recovery journal)
-  BackedUp --> Edited: more typing
-  BackedUp --> Saved: Save (Review, or skip review)
-  Saved --> Saved: commit failed, file on disk
-  Saved --> Sent: Send / Sync now<br/>(or "send on save")
-  Sent --> [*]
+## Part 1: the work on this device
 
-  BackedUp: Backed up on this device
-  Saved: Saved (file + version)
-  Sent: On WACS
-```
-</Mermaid>
+These are about the person's own text, before WACS is involved at all.
 
-## 2. Where the project stands against WACS
+### Edited
 
-The sync state is a ladder; the first rule that matches wins, so the order is the policy.
+**What:** the person has typed something since the last backup, within the last half second.
 
-<Mermaid id="sync-ladder" caption="syncStateOf: checked top to bottom.">
-```mermaid
-flowchart TD
-  R[Reading] --> C1{mid-merge left<br/>by another tool?}
-  C1 -- yes --> conflicted
-  C1 -- no --> C2{checking<br/>right now?}
-  C2 -- yes --> checking
-  C2 -- no --> C3{network down, or last<br/>transfer failed on network?}
-  C3 -- yes --> offline
-  C3 -- no --> C4{signed in and<br/>accepted?}
-  C4 -- no --> unauthorized
-  C4 -- yes --> C5{attached to a<br/>shared project?}
-  C5 -- no --> detached
-  C5 -- yes --> C6{branch on<br/>WACS yet?}
-  C6 -- no --> unpublished
-  C6 -- yes --> C7{versions only here?<br/>versions only on WACS?}
-  C7 -- neither --> clean[attached-clean]
-  C7 -- only here --> ahead
-  C7 -- only there --> behind
-  C7 -- both --> diverged
-```
-</Mermaid>
+**When:** constantly, while typing.
 
-## 3. How the states move
+**Today:** nothing shows. The Save item in the book's ⋮ menu is enabled.
 
-<Mermaid id="sync-transitions" caption="The common paths between states. Offline, checking and unauthorized can interrupt any of them.">
-```mermaid
-stateDiagram-v2
-  [*] --> detached: project made or imported here
-  [*] --> clean: cloned from WACS
-  detached --> unpublished: choose a shared project
-  detached --> clean: publish (new project on WACS)
-  unpublished --> clean: publish
-  clean --> ahead: Save
-  clean --> behind: a teammate sends
-  ahead --> clean: Send
-  behind --> clean: Receive
-  ahead --> diverged: a teammate sends
-  behind --> diverged: Save
-  diverged --> clean: Combine (+ Send)
-  diverged --> Review: same book touched by both
-  Review --> clean: decisions applied (+ Send)
-  clean: attached-clean
-```
-</Mermaid>
+<Question id="edited">Edited: explicit, progressive or hidden?</Question>
 
-## 4. Who it is sent to
+### Backed up on this device
 
-Orthogonal to the states above, per project on this device (`CollabMode`).
+**What:** Sefer writes the working state to a backup journal outside the project. It survives
+closing the app or a crash, and is restored on the next open. It is not the project file and
+not a version, so it cannot be sent.
 
-<Mermaid id="collab-mode" caption="Two ways to work.">
-```mermaid
-stateDiagram-v2
-  direction LR
-  [*] --> Together: account can write
-  [*] --> OwnCopy: account cannot write
-  Together --> OwnCopy: a send is refused for permission,<br/>or the person chooses a paper trail
-  OwnCopy --> Together: permission gained<br/>(said in the popover, never automatic)
-  Together: Together in the shared project<br/>(send to origin)
-  OwnCopy: In my own copy<br/>(send to a fork, "Offer my changes")
-```
-</Mermaid>
+**When:** automatically, about half a second after typing pauses. Almost always true.
 
-## What a translator needs to see, and when
+**Today:** nothing shows. You asked for "some subtle indication when the app is autosaving".
 
-The proposal: the chip answers one question — *is my work safe, and how long since WACS got
-it?* Everything else stays quiet until it changes what the person should do.
+<Question id="backed-up">Backed up: explicit, progressive or hidden? And if shown, what subtle signal (a brief dot, the icon pulsing, "Saved on this device" fading in)?</Question>
 
-| Fact | Always on the chip | Only when it matters | Only in the popover |
-| --- | --- | --- | --- |
-| Work is backed up on this device | | while backing up (subtle) | yes |
-| Edits not saved as a version | | Save is highlighted | count of books |
-| How long since WACS got the work | yes | | exact time |
-| Saves waiting to go up | count badge | amber after N days | yes |
-| Offline | yes, calmly | | what still works |
-| Signed out | | when there is something to send | Sign in |
-| Shared project vs not attached | | when they try to send | choose / publish |
-| Behind (teammate sent) | | yes: "Updates on WACS" | who, which books |
-| Diverged / contested | | yes: needs attention | Combine or Review |
-| Together vs own copy | | when a send is refused | mode switch |
-| Checking | | spinner on the icon only | |
-| Conflicted (other tool) | | yes: needs attention | Finish the transfer |
+### Unsaved changes (not yet a version)
 
-<Question id="hide-detached">Is "not attached to a shared project" ever worth saying before the person tries to send? Paisano's view: no.</Question>
+**What:** the text differs from the last version. The work is safe (backed up) but has not
+been saved as a version, so it cannot go to WACS.
 
-<Question id="amber-after">After how many days of unsent saves should the chip turn amber? Field data may settle it.</Question>
+**When:** from the first edit after a Save until the next Save. Most of a working session.
 
-<Question id="autosave-signal">What subtle signal shows the backup happening — a brief dot, the icon pulsing, nothing at all?</Question>
+**Today:** the chip's popover counts "Books with edits not saved yet". The book screen stopped
+showing this in October.
 
-<Question id="behind-on-chip">Should "Updates on WACS" (behind) take over the chip, or only badge it? Today it turns the chip amber.</Question>
+<Question id="unsaved">Unsaved changes: explicit, progressive or hidden? Should anything nudge people to Save at the end of a session?</Question>
+
+### Saved (a version)
+
+**What:** Save writes the project file and records a version in one step. Review comes first
+unless "Skip review of my changes" is on. This is what can be sent to WACS.
+
+**When:** whenever the person presses Save (⋮ menu, or Ctrl/Cmd+S).
+
+**Today:** a "Saved" message after pressing; the chip's waiting count goes up by one if the
+project is on WACS.
+
+<Question id="saved">Saved: explicit, progressive or hidden? Is a message at the moment of saving enough?</Question>
+
+### Saved on disk, but no version
+
+**What:** the file was written but recording the version failed. Rare: the text is in the
+file, but nothing can be sent until a version is recorded.
+
+**When:** only if the version step fails after the write succeeded.
+
+**Today:** an error message at the time; nothing lasting.
+
+<Question id="on-disk-not-recorded">On disk, not recorded: explicit, progressive or hidden?</Question>
+
+## Part 2: this project and WACS
+
+These compare this device's versions with WACS. Sefer checks on open, after a save, and when
+the popover opens. Only one is true at a time; the order below is the order the code checks.
+
+### Conflicted
+
+**What:** the project folder is in the middle of a git merge. Sefer never starts one; only
+someone using another git tool on the same folder can leave it like this.
+
+**When:** almost never; only on desktop, after outside tools touched the folder.
+
+**Today:** the chip turns amber and the popover offers "Finish the transfer".
+
+<Question id="conflicted">Conflicted: explicit, progressive or hidden?</Question>
+
+### Checking
+
+**What:** Sefer is asking WACS what changed. Sending and receiving wait for it.
+
+**When:** for a second or two on open, after a save, and when the popover opens.
+
+**Today:** the chip says "Checking…".
+
+<Question id="checking">Checking: explicit, progressive or hidden? (A spinning icon with the old label kept is one option.)</Question>
+
+### Offline
+
+**What:** no network, or the last send or receive failed on the network. Work carries on;
+everything is saved here and waits.
+
+**When:** whenever the device is offline, which for many translators is most of the time.
+
+**Today:** the chip says "Offline". The popover says the work is safe on this device.
+
+<Question id="offline">Offline: explicit, progressive or hidden? Should it keep "uploaded 3 days ago" beside it?</Question>
+
+### Signed out
+
+**What:** there is no WACS sign-in on this device, or WACS refused it (expired or changed
+password). Nothing can be sent or received.
+
+**When:** before the first sign-in, after Sign out, or when the session is rejected.
+
+**Today:** the chip says "Uploaded yesterday" in amber, with Sign in in the popover. Reads oddly.
+
+<Question id="signed-out">Signed out: explicit, progressive or hidden? Only when there is something to send?</Question>
+
+### Not on WACS at all
+
+**What:** the project was made or imported on this device and has never been linked to a
+project on WACS.
+
+**When:** from creating or importing a project until it is published or linked.
+
+**Today:** the chip says "Not uploaded"; the popover offers sign in, then choose or publish a
+shared project.
+
+<Question id="detached">Not on WACS: explicit, progressive or hidden? Paisano's view is progressive: only when they want to send.</Question>
+
+### Linked, but never sent
+
+**What:** linked to a project on WACS, but this device's work has never been sent there.
+
+**When:** briefly, between linking and the first send.
+
+**Today:** the chip says "Not uploaded"; the popover offers Publish.
+
+<Question id="unpublished">Linked, never sent: explicit, progressive or hidden? Can it just be "Not on WACS" to the person?</Question>
+
+### Up to date
+
+**What:** this device and WACS have the same versions. (Edits not saved as a version can still
+exist; see Part 1.)
+
+**When:** right after sending or receiving, until someone saves or sends again.
+
+**Today:** the chip says "Uploaded \<when\>".
+
+<Question id="clean">Up to date: explicit, progressive or hidden?</Question>
+
+### Saves waiting to send (ahead)
+
+**What:** this device has versions WACS does not.
+
+**When:** after any Save, until the next send. The normal state while working online without
+"send on save".
+
+**Today:** "Uploaded \<when\>" plus a count badge. Not amber, however long it waits.
+
+<Question id="ahead">Saves waiting: explicit, progressive or hidden? After how many days should it turn amber?</Question>
+
+### Updates on WACS (behind)
+
+**What:** a teammate sent versions this device does not have.
+
+**When:** after someone else sends, noticed at the next check.
+
+**Today:** the chip turns amber; the popover names who and which books, with Receive.
+
+<Question id="behind">Updates on WACS: explicit, progressive or hidden? Take over the chip, or just a badge?</Question>
+
+### Both changed (diverged)
+
+**What:** both sides have versions the other lacks. Sefer combines them automatically when
+different books were touched; when the same book was, it goes to Review.
+
+**When:** when two people save while out of contact and both send.
+
+**Today:** the chip turns amber; the popover offers Combine, or Compare when a book clashes.
+
+<Question id="diverged">Both changed: explicit, progressive or hidden? Is it only worth saying when a book clashes?</Question>
+
+## Part 3: who the work goes to
+
+Separate from the states above; set per project on this device.
+
+### Working together in the shared project
+
+**What:** sending goes straight into the team's project on WACS.
+
+**When:** the default when the account may write to it.
+
+**Today:** not shown anywhere except the popover's project details.
+
+<Question id="together">Working together: explicit, progressive or hidden?</Question>
+
+### Working in my own copy
+
+**What:** sending goes to the person's own copy on WACS, and "Offer my changes" proposes them
+to the team. Someone with permission reviews and accepts them.
+
+**When:** when a send is refused for lack of permission, or when the person chooses a paper
+trail. If permission arrives later, the popover says so; it never switches by itself.
+
+**Today:** the popover says "Sent to your copy" and offers "Offer these changes".
+
+<Question id="own-copy">Own copy: explicit, progressive or hidden? Does a translator need to know the difference, or only that the team still has to accept their changes?</Question>
 
 <Followup id="remove-tweak">Remove the chip's "Sync state" design tweak from `src/app/ui/cloud/SyncButton.tsx` once the states are settled.</Followup>
