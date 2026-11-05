@@ -8,9 +8,9 @@ import CloudUpload from "lucide-solid/icons/cloud-upload";
 import Copy from "lucide-solid/icons/copy";
 import LogIn from "lucide-solid/icons/log-in";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
-import { Show, createEffect, createSignal, untrack } from "solid-js";
+import { Show, createEffect, createSignal, onCleanup, untrack } from "solid-js";
 
-import type { Sync } from "#core/sync";
+import { emptyReading, sync as syncOf, type Sync, type SyncReading } from "#core/sync";
 
 import { collaboration } from "../../collaboration";
 import { m } from "../../paraglide/messages";
@@ -370,7 +370,12 @@ export const syncGlyph = (sync: SyncHandle): JSX.Element => glyphOf(sync.quick.s
  * The sync popover, opened from somewhere else (the app bar's More menu):
  * anchored to an invisible point, so it drops from where its opener sits.
  */
-export function SyncPopover(props: { readonly sync: SyncHandle; readonly trigger?: JSX.Element }) {
+export function SyncPopover(props: {
+  readonly sync: SyncHandle;
+  readonly trigger?: JSX.Element;
+  /** A stand-in state to draw instead of the real one (the chip's design tweak). */
+  readonly shown?: () => Sync | undefined;
+}) {
   // The handle is made once by the caller and never swapped.
   const { quick, account, pop } = untrack(() => props.sync);
   return (
@@ -410,6 +415,102 @@ const chipLabel = (held: Sync | undefined): string => {
   return m.sync_chip_uploaded({ when: ago(at) });
 };
 
+const DAY = 86_400_000;
+const commit = (id: string, at: number) => ({
+  id,
+  message: "",
+  author: { name: "teammate", email: "" },
+  at,
+});
+const ORIGIN = "https://content.bibletranslationtools.org/team/project";
+
+/** Stand-in readings for the chip's design tweak; "live" is the real one. */
+const PREVIEWS: Readonly<Record<string, Partial<SyncReading>>> = {
+  "not uploaded": { signedIn: true },
+  "uploaded today": {
+    signedIn: true,
+    origin: ORIGIN,
+    remoteKnown: true,
+    remoteHead: commit("a", Date.now() - 2 * 3_600_000),
+  },
+  "3 saves waiting": {
+    signedIn: true,
+    origin: ORIGIN,
+    remoteKnown: true,
+    remoteHead: commit("a", Date.now() - 3 * DAY),
+    ahead: [commit("b", Date.now()), commit("c", Date.now()), commit("d", Date.now())],
+  },
+  "updates on WACS": {
+    signedIn: true,
+    origin: ORIGIN,
+    remoteKnown: true,
+    remoteHead: commit("e", Date.now() - DAY),
+    behind: [commit("e", Date.now() - DAY)],
+  },
+  diverged: {
+    signedIn: true,
+    origin: ORIGIN,
+    remoteKnown: true,
+    remoteHead: commit("e", Date.now() - 9 * DAY),
+    ahead: [commit("b", Date.now())],
+    behind: [commit("e", Date.now() - 9 * DAY)],
+  },
+  offline: { signedIn: true, origin: ORIGIN, remoteKnown: true, online: false },
+  "signed out": { origin: ORIGIN, remoteKnown: true, remoteHead: commit("a", Date.now() - DAY) },
+};
+
+/**
+ * Design scaffolding: a "Sync state" tweak on the chip, so each state can be
+ * seen without a WACS account. The design surface loads lazily and installs
+ * its handle after the app bar has mounted, so wait for it.
+ */
+function useStateTweak(choose: (state: string) => void): void {
+  let release: (() => void) | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let tries = 0;
+  const attempt = (): void => {
+    // SAFETY: under `__SEFER_DESIGN__` the design surface installs this handle
+    // (`src/dev/designSurface.ts`) with `register` of this shape; `unknown` in
+    // the global's type only because platform may not import a dev tool.
+    const design = globalThis.__sefer?.design as
+      | {
+          readonly register?: (registration: {
+            readonly namespace: string;
+            readonly tweaks: readonly {
+              readonly key: string;
+              readonly label: string;
+              readonly kind: "choice";
+              readonly options: readonly string[];
+            }[];
+            readonly onChange: (values: Readonly<Record<string, string>>) => void;
+          }) => () => void;
+        }
+      | undefined;
+    if (design?.register === undefined) {
+      tries += 1;
+      if (tries < 100) timer = setTimeout(attempt, 50);
+      return;
+    }
+    release = design.register({
+      namespace: "syncChip",
+      tweaks: [
+        {
+          key: "state",
+          label: "Sync state",
+          kind: "choice",
+          options: ["live", ...Object.keys(PREVIEWS)],
+        },
+      ],
+      onChange: (values) => choose(values["syncChip.state"] ?? "live"),
+    });
+  };
+  attempt();
+  onCleanup(() => {
+    if (timer !== undefined) clearTimeout(timer);
+    release?.();
+  });
+}
+
 /**
  * The app bar's sync chip (SEFER-92, SEFER-83): one short line on how out of
  * date WACS is, never a bare "Synced", which would almost never show while
@@ -418,21 +519,29 @@ const chipLabel = (held: Sync | undefined): string => {
  */
 export function SyncChip() {
   const sync = createSync(useShell());
-  const waiting = (): number => sync.quick.sync()?.reading.ahead.length ?? 0;
-  const tone = (): "none" | "tint" | "alert" => sync.pop.attention();
+  const [preview, setPreview] = createSignal("live", { name: "syncChipPreview", ownedWrite: true });
+  if (__SEFER_DESIGN__) useStateTweak(setPreview);
+  const held = (): Sync | undefined => {
+    const stand = PREVIEWS[preview()];
+    return stand === undefined ? sync.quick.sync() : syncOf({ ...emptyReading, ...stand });
+  };
+  const waiting = (): number => held()?.reading.ahead.length ?? 0;
+  const tone = (): "none" | "tint" | "alert" =>
+    preview() === "live" ? sync.pop.attention() : attentionOf(held());
   return (
     <SyncPopover
       sync={sync}
+      shown={held}
       trigger={
         <Button
           variant="secondary"
           class={cx("shrink-0 rounded-full", tone() === "alert" && "text-on-surface-warning")}
-          icon={syncGlyph(sync)}
-          aria-label={`${m.sync_chip_label()}: ${chipLabel(sync.quick.sync())}`}
+          icon={glyphOf(held())}
+          aria-label={`${m.sync_chip_label()}: ${chipLabel(held())}`}
           aria-pressed={sync.pop.open() ? "true" : "false"}
           data-testid="app-bar-sync-chip"
         >
-          <span class="whitespace-nowrap">{chipLabel(sync.quick.sync())}</span>
+          <span class="whitespace-nowrap">{chipLabel(held())}</span>
           <Show when={waiting() > 0}>
             <span
               class="min-w-5 rounded-full bg-surface-secondary px-1.5 text-center text-smallest font-semibold"
