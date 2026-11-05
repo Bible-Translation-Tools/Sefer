@@ -14,7 +14,7 @@ import type { Sync } from "#core/sync";
 
 import { collaboration } from "../../collaboration";
 import { m } from "../../paraglide/messages";
-import type { Shell } from "../../ProjectContext";
+import { useShell, type Shell } from "../../ProjectContext";
 import { syncStatus } from "../../syncStatus";
 import { syncWatch } from "../../syncWatch";
 import { writerWatch } from "../../writerWatch";
@@ -217,6 +217,46 @@ const ShareLink = (props: { readonly href: string; readonly onCopy: () => void }
   </details>
 );
 
+const StatusRow = (props: {
+  readonly label: string;
+  readonly value: string;
+  readonly test: string;
+}) => (
+  <div class="flex items-baseline justify-between gap-4" data-sync-status={props.test}>
+    <dt class="text-small text-on-surface-tertiary">{props.label}</dt>
+    <dd class="text-end text-small font-medium text-on-surface-primary">{props.value}</dd>
+  </div>
+);
+
+/** Where the work stands, in one glance: connection, how old WACS's copy is, and what is waiting. */
+const StatusSummary = (props: { readonly held: Sync }) => {
+  const shell = useShell();
+  const unsavedBooks = (): number =>
+    shell.project()?.books.filter((book) => shell.unsaved(book)).length ?? 0;
+  const lastUpload = (): string => {
+    const at = props.held.reading.remoteHead?.at;
+    return props.held.reading.origin === undefined || at === undefined
+      ? m.sync_status_never()
+      : ago(at);
+  };
+  return (
+    <dl class="space-y-2 border-b border-surface-border pb-3" data-sync-status-summary>
+      <StatusRow
+        test="connection"
+        label={m.sync_status_connection()}
+        value={props.held.state === "offline" ? m.sync_status_offline() : m.sync_status_online()}
+      />
+      <StatusRow test="last-upload" label={m.sync_status_last_upload()} value={lastUpload()} />
+      <StatusRow
+        test="waiting"
+        label={m.sync_status_waiting()}
+        value={String(props.held.reading.ahead.length)}
+      />
+      <StatusRow test="unsaved" label={m.sync_status_unsaved()} value={String(unsavedBooks())} />
+    </dl>
+  );
+};
+
 const SyncDetails = (props: {
   readonly held: Sync;
   readonly pop: ReturnType<typeof createSyncPopover>;
@@ -224,6 +264,7 @@ const SyncDetails = (props: {
   readonly account: Account;
 }) => (
   <div class="space-y-4" data-sync-popover={props.held.state}>
+    <StatusSummary held={props.held} />
     <StateHeading copy={props.pop.copy()} />
 
     <Show when={props.held.reading.origin !== undefined}>
@@ -329,7 +370,7 @@ export const syncGlyph = (sync: SyncHandle): JSX.Element => glyphOf(sync.quick.s
  * The sync popover, opened from somewhere else (the app bar's More menu):
  * anchored to an invisible point, so it drops from where its opener sits.
  */
-export function SyncPopover(props: { readonly sync: SyncHandle }) {
+export function SyncPopover(props: { readonly sync: SyncHandle; readonly trigger?: JSX.Element }) {
   // The handle is made once by the caller and never swapped.
   const { quick, account, pop } = untrack(() => props.sync);
   return (
@@ -340,7 +381,7 @@ export function SyncPopover(props: { readonly sync: SyncHandle }) {
       class="w-[min(480px,92vw)]"
       open={pop.open()}
       onOpenChange={pop.openChanged}
-      trigger={<span class="block size-px" aria-hidden="true" />}
+      trigger={props.trigger ?? <span class="block size-px" aria-hidden="true" />}
     >
       <Show
         when={quick.sync()}
@@ -357,5 +398,51 @@ export function SyncPopover(props: { readonly sync: SyncHandle }) {
         )}
       </Show>
     </Popover>
+  );
+}
+
+/** The chip's words: how long since WACS last got this project, or why that can't be said. */
+const chipLabel = (held: Sync | undefined): string => {
+  if (held === undefined) return m.sync_chip_reading();
+  if (held.state === "offline") return m.sync_chip_offline();
+  const at = held.reading.remoteHead?.at;
+  if (held.reading.origin === undefined || at === undefined) return m.sync_chip_never();
+  return m.sync_chip_uploaded({ when: ago(at) });
+};
+
+/**
+ * The app bar's sync chip (SEFER-92, SEFER-83): one short line on how out of
+ * date WACS is, never a bare "Synced", which would almost never show while
+ * someone works. Saves waiting to go up show as a count. It opens the sync
+ * popover, which starts with the full status.
+ */
+export function SyncChip() {
+  const sync = createSync(useShell());
+  const waiting = (): number => sync.quick.sync()?.reading.ahead.length ?? 0;
+  const tone = (): "none" | "tint" | "alert" => sync.pop.attention();
+  return (
+    <SyncPopover
+      sync={sync}
+      trigger={
+        <Button
+          variant="secondary"
+          class={cx("shrink-0 rounded-full", tone() === "alert" && "text-on-surface-warning")}
+          icon={syncGlyph(sync)}
+          aria-label={`${m.sync_chip_label()}: ${chipLabel(sync.quick.sync())}`}
+          aria-pressed={sync.pop.open() ? "true" : "false"}
+          data-testid="app-bar-sync-chip"
+        >
+          <span class="whitespace-nowrap">{chipLabel(sync.quick.sync())}</span>
+          <Show when={waiting() > 0}>
+            <span
+              class="min-w-5 rounded-full bg-surface-secondary px-1.5 text-center text-smallest font-semibold"
+              title={m.sync_chip_waiting({ count: waiting() })}
+            >
+              {waiting()}
+            </span>
+          </Show>
+        </Button>
+      }
+    />
   );
 }

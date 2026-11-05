@@ -1712,5 +1712,18 @@
   "review_it_is_in_your_wacs": "It is in your WACS account. From now on, saving sends your changes there.",
   "review_could_not_put_it_online": "Could not put it online",
   "review_you_cant_change_the_shared": "You can't change the shared project directly, so this sends your changes to your own copy of it. Sefer makes the copy if you don't have one yet.",
-  "review_you_cant_change_name": "You can't change {name} directly, so this sends your changes to your own copy of it. Sefer makes the copy if you don't have one yet."
+  "review_you_cant_change_name": "You can't change {name} directly, so this sends your changes to your own copy of it. Sefer makes the copy if you don't have one yet.",
+  "sync_chip_label": "Sync status",
+  "sync_chip_reading": "Checking…",
+  "sync_chip_offline": "Offline",
+  "sync_chip_never": "Not uploaded",
+  "sync_chip_uploaded": "Uploaded {when}",
+  "sync_chip_waiting": "{count} saves not uploaded",
+  "sync_status_connection": "Connection",
+  "sync_status_online": "Online",
+  "sync_status_offline": "Offline · your work is safe on this device",
+  "sync_status_last_upload": "Last upload to WACS",
+  "sync_status_never": "Never",
+  "sync_status_waiting": "Saves not uploaded yet",
+  "sync_status_unsaved": "Books with edits not saved yet"
 }

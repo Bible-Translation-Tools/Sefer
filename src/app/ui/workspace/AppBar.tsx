@@ -13,7 +13,7 @@ import { Show, createSignal, For } from "solid-js";
 
 import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
-import { SyncPopover, createSync, syncGlyph } from "../cloud/SyncButton";
+import { SyncChip, SyncPopover, createSync, syncGlyph } from "../cloud/SyncButton";
 import { IconButton, Menu, MenuItem, MenuSeparator, SegmentedControl } from "../primitives";
 import { AccountButton } from "./AccountButton";
 import { ProjectTools } from "./Toolbar";
@@ -247,6 +247,9 @@ export function AppBar() {
       <ModeControl mode={mode()} open={open()} onChange={goTo} />
 
       <div class="flex shrink-0 items-center gap-2">
+        <Show when={open()}>
+          <SyncChip />
+        </Show>
         <ProjectTools />
         <MoreMenu />
 
