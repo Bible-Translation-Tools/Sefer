@@ -22,7 +22,12 @@ export interface CatalogueEntry {
   readonly gitUrl: string;
 }
 
-type CatalogueFailure = "http" | "payload";
+/**
+ * `server` is a GraphQL answer that carries `errors` and no `data`: the
+ * request reached the API, which could not serve it (its database down, say).
+ * The API answers those with HTTP 200, so the status alone cannot tell.
+ */
+type CatalogueFailure = "http" | "server" | "payload";
 
 class CatalogueError extends Error {
   override readonly name = "CatalogueError";
@@ -30,13 +35,15 @@ class CatalogueError extends Error {
     message: string,
     readonly failure: CatalogueFailure,
     readonly httpStatus?: number,
+    readonly serverCode?: string,
   ) {
     super(message);
   }
 }
 
 export const catalogueVerdict = (cause: unknown): Verdict => {
-  if (cause instanceof CatalogueError) return cause.failure === "http" ? "unavailable" : "failed";
+  if (cause instanceof CatalogueError)
+    return cause.failure === "payload" ? "failed" : "unavailable";
   return cause instanceof TypeError ? "unavailable" : "failed";
 };
 
@@ -46,6 +53,7 @@ export const catalogueFailureAttrs = (cause: unknown): Attrs => {
   return {
     "catalogue.failure": cause.failure,
     ...(cause.httpStatus === undefined ? {} : { "http.status": cause.httpStatus }),
+    ...(cause.serverCode === undefined ? {} : { "graphql.code": cause.serverCode }),
   };
 };
 
@@ -254,6 +262,16 @@ const FACTS_QUERY = `query ($codes: [String!], $ids: [String!]) {
   content(where: { id: { _in: $ids } }) { id modified_on }
 }`;
 
+const GraphqlRefusal = Schema.Struct({
+  data: Schema.optional(Schema.NullOr(Schema.Unknown)),
+  errors: Schema.NonEmptyArray(
+    Schema.Struct({
+      message: Schema.String,
+      extensions: Schema.optional(Schema.Struct({ code: Schema.optional(Schema.String) })),
+    }),
+  ),
+});
+
 const graphql = async (
   origin: string,
   query: string,
@@ -266,7 +284,19 @@ const graphql = async (
   });
   if (!response.ok)
     throw new CatalogueError(`Language API error: ${response.status}`, "http", response.status);
-  return response.json();
+  const body: unknown = await response.json();
+  const refused = Schema.decodeUnknownResult(GraphqlRefusal)(body);
+  if (Result.isSuccess(refused) && (refused.success.data ?? null) === null) {
+    const [first] = refused.success.errors;
+    const messages = [...new Set(refused.success.errors.map((error) => error.message))].join("; ");
+    throw new CatalogueError(
+      `Language API error: ${messages}`,
+      "server",
+      undefined,
+      first?.extensions?.code,
+    );
+  }
+  return body;
 };
 
 const typeOf = (owner: string): ProjectType =>
