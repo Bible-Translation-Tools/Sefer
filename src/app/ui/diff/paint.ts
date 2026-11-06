@@ -8,13 +8,24 @@ export type Side = "baseline" | "current";
 
 export const changed = (unit: DecisionUnit): boolean => unit.status !== "unchanged";
 
+/**
+ * Which way the colours read. The column on the right is "now": green for its
+ * words, red for the other's. Normally that is `current` (the editor, against
+ * its past); with `currentFirst` the current side is drawn on the left, so the
+ * baseline is now — a suggestion, read as a change to the shared project.
+ */
+const nowSide = (currentFirst: boolean): Side => (currentFirst ? "baseline" : "current");
+
 const tint = (
   unit: DecisionUnit,
   decision: MergeSide | undefined,
   live: boolean,
   marked: boolean,
+  currentFirst: boolean,
 ): string =>
-  live && changed(unit) ? statusTint(unit, marked) : decidedTint(decision, unit, marked);
+  live && changed(unit)
+    ? statusTint(unit, marked, currentFirst)
+    : decidedTint(decision, unit, marked, currentFirst);
 
 const modifiedRuns = (unit: DecisionUnit, side: Side) => {
   if (unit.status !== "modified") return undefined;
@@ -35,15 +46,17 @@ const decidedTint = (
   decision: MergeSide | undefined,
   unit: DecisionUnit,
   marked: boolean,
+  currentFirst: boolean,
 ): string => {
   if (decision === "current") return "cm-diff-kept";
   if (decision === "baseline") return "cm-diff-taken";
-  return statusTint(unit, marked);
+  return statusTint(unit, marked, currentFirst);
 };
 
-const statusTint = (unit: DecisionUnit, marked: boolean): string => {
-  if (unit.status === "added") return "cm-diff-added-unit";
-  if (unit.status === "deleted") return "cm-diff-deleted-unit";
+const statusTint = (unit: DecisionUnit, marked: boolean, currentFirst: boolean): string => {
+  const onlyNow = currentFirst ? "deleted" : "added";
+  if (unit.status === "added" || unit.status === "deleted")
+    return unit.status === onlyNow ? "cm-diff-added-unit" : "cm-diff-deleted-unit";
   return unit.isUsfmStructureChange || !marked ? "cm-diff-markup-unit" : "";
 };
 
@@ -80,12 +93,13 @@ const button = (
   controls: Controls,
   side: MergeSide,
   title: string,
+  currentFirst: boolean,
 ): HTMLButtonElement => {
   const on = controls.decision(unit) === side;
   const element = document.createElement("button");
   element.type = "button";
   element.title = title;
-  element.append(chevron(side === "baseline" ? "left" : "right"));
+  element.append(chevron((side === "baseline") === currentFirst ? "right" : "left"));
   element.dataset["on"] = on ? "true" : "false";
   element.dataset["side"] = side;
   element.setAttribute("aria-pressed", on ? "true" : "false");
@@ -95,7 +109,7 @@ const button = (
 };
 
 const controlFor =
-  (unit: DecisionUnit, controls: Controls): (() => HTMLElement) =>
+  (unit: DecisionUnit, controls: Controls, currentFirst: boolean): (() => HTMLElement) =>
   () => {
     const box = document.createElement("span");
     box.className = "cm-diff-control";
@@ -104,11 +118,10 @@ const controlFor =
     const ref = document.createElement("span");
     ref.className = "cm-diff-control-ref";
     ref.textContent = reference.slice(reference.indexOf(":") + 1);
-    box.append(
-      button(unit, controls, "baseline", controls.takeTitle),
-      ref,
-      button(unit, controls, "current", controls.keepTitle),
-    );
+    const take = button(unit, controls, "baseline", controls.takeTitle, currentFirst);
+    const keep = button(unit, controls, "current", controls.keepTitle, currentFirst);
+    if (currentFirst) box.append(keep, ref, take);
+    else box.append(take, ref, keep);
     return box;
   };
 
@@ -118,6 +131,7 @@ export const sidePaint = (
   usfm: boolean,
   controls: Controls | undefined,
   analysis: Analysis,
+  currentFirst = false,
 ): DiffPaint => {
   const lines: DiffPaint["lines"][number][] = [];
   const marks: DiffPaint["marks"][number][] = [];
@@ -134,7 +148,7 @@ export const sidePaint = (
         (controls.live === true ? side === "baseline" : decision !== side);
       const line = unchosen
         ? "cm-diff-unchosen"
-        : tint(unit, decision, controls?.live === true, marksWords(unit, usfm));
+        : tint(unit, decision, controls?.live === true, marksWords(unit, usfm), currentFirst);
       if (line !== "")
         lines.push({ from: span.from, to: Math.max(span.from + 1, end), class: line });
       const runs = modifiedRuns(unit, side);
@@ -143,14 +157,14 @@ export const sidePaint = (
           marks.push({
             from: run.from,
             to: run.to,
-            class: side === "baseline" ? "cm-diff-removed" : "cm-diff-added",
+            class: side === nowSide(currentFirst) ? "cm-diff-added" : "cm-diff-removed",
           });
     }
     if (controls !== undefined && controls.gutter !== false && side === "current")
       buttons.push({
         at: span?.from ?? unit.place[side],
         key: `${unit.id} ${decision ?? "-"}`,
-        render: controlFor(unit, controls),
+        render: controlFor(unit, controls, currentFirst),
       });
   }
   return { lines, marks, controls: buttons };
@@ -189,7 +203,9 @@ export const hunkPaint = (
       kind: hunkKind(unit),
       from: span.from,
       to: Math.max(span.from + 1, end),
-      tint: changed(unit) ? "cm-diff-now" : tint(unit, decision, controls?.live === true, true),
+      tint: changed(unit)
+        ? "cm-diff-now"
+        : tint(unit, decision, controls?.live === true, true, false),
       marks: runs
         .filter((run) => run.kind !== "unchanged" && visibleRun(run.what, usfm))
         .map((run) => ({ from: run.from, to: run.to, class: "cm-diff-added" })),

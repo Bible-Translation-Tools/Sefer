@@ -116,6 +116,7 @@ interface Paints {
 
 const createPaints = (props: DiffCardProps): Paints => {
   const now = () => untrack(() => ({ hunk: props.hunk, sides: props.sides }));
+  const first = (): boolean => untrack(() => props.currentFirst === true);
   const controls = (): Controls | undefined => {
     const held = untrack(() => props.controls);
     return held === undefined ? undefined : { ...held, gutter: false };
@@ -125,12 +126,12 @@ const createPaints = (props: DiffCardProps): Paints => {
     const { hunk, sides } = now();
     const mode = markup ? "usfm" : "default";
     return split
-      ? sidePaint(hunk.all, "current", markup, controls(), sides.current)
+      ? sidePaint(hunk.all, "current", markup, controls(), sides.current, first())
       : hunkPaint(hunk.all, markup, controls(), wasBlock(sides.baseline, mode), sides.current);
   };
   const baselinePaint = (markup: boolean) => (): DiffPaint => {
     const { hunk, sides } = now();
-    return sidePaint(hunk.all, "baseline", markup, undefined, sides.baseline);
+    return sidePaint(hunk.all, "baseline", markup, undefined, sides.baseline, first());
   };
   return { now, currentPaint, baselinePaint };
 };
