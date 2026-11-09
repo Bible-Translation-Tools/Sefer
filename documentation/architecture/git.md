@@ -7,18 +7,18 @@ USFM bytes on disk; git records what Save already wrote.
 
 `src/core/git/git.ts` defines `Git` (`Context.Service`) as the intersection of the user's jobs, not the
 union of two libraries' APIs: `open`, `init`, `status`, `commit`, `mergeBase`, `log`, `logFrom`,
-`resolve`, `branch`, `changedPathsBetween`, `show`, `previousVersions`, `walk`, `blobs`. `mergeBase` and the four after
+`resolve`, `branch`, `changedPathsBetween`, `show`, `previousVersions`, `objectReader`. `mergeBase` and the four after
 `log` exist for the sync surface — the commit two histories share, the cloud's side of a comparison,
 whether it exists at all, what to call the tracking ref, and which paths differ between two revisions
 ([sync.md](sync.md)) — and BOTH hosts answer them. A repository Sefer creates starts on
 `DEFAULT_BRANCH`, `"master"`, on both hosts; a clone takes whatever the server's HEAD names. A `Repo` is just its work-tree `root`. Every method fails with `GitError`, whose `reason` is
 `NotARepository`, `Io`, `Conflict`, or `Refused` — a read that could not fail would force a host layer
 to lie. `Version` pairs a `Commit` with `bytes()`, so a history list stays cheap and content is read
-only when something displays or diffs it. `walk` is HEAD's first-parent line oldest first — each
-commit's author and committer with their zones (`Signature`: seconds and minutes east of UTC), its
-message, and the files it changed from its first parent as blob ids — and `blobs` reads the bytes of
-the ids a caller chose: two calls, so desktop crosses the Tauri bridge twice for a history of
-hundreds of commits (Writer migration's replay, below). Core names no library; `repositoryPath(root, path)` is the one
+only when something displays or diffs it. `objectReader(repo)` gives a reader of raw objects by id
+(`GitObject`: `commit`, `tree` or `blob`, and its content without git's header), batched, an id it
+cannot find left out: bttwriter's history walk drives its own rounds through it (one per commit, one
+per tree depth, one for the changed files), and one reader serves a whole walk so the Web layer keeps
+isomorphic-git's pack cache between rounds. Desktop answers each round with one `git_objects` call. Core names no library; `repositoryPath(root, path)` is the one
 path rule the port owns — a saved path becomes repository-relative or `None`, and `None` means refuse.
 
 ## The receipts rule
@@ -187,31 +187,15 @@ the device's own corner — provenance, the name chosen here — never reaches a
 ARRIVAL COMMIT: the files the import wrote, as receipts, when git sees any of them as new, authored
 "Sefer" with an empty email because no person made it.
 
-## Writing a history directly: the pack writer
+## Writing a history directly
 
-`src/core/git/pack.ts` writes a whole history as ONE pack (v2) and its index (v2), with no loose
-objects and no repack. It exists for Writer migration, which replays thousands of autosaves
-(`src/core/migrate/writerHistory.ts`): through a git library each object is a loose file — thousands
-of OPFS writes at a measured 1–9 ms each — and isomorphic-git's own `packObjects` stores every version
-whole (35 MB for one New Testament). Here the same history is one 2.7 MB pack, and the new `.git` is
-five files.
-
-- **Objects are git's.** `objectId` is SHA-1 over `"<type> <size>\0"` and the body; `treeBody` and
-  `commitBody` serialise as git does (a tree of `100644` files sorted bytewise; author and committer
-  with their zones; the message verbatim). Each object is hashed once and deflated once.
-- **Deltas per lane.** An object added with a lane — a book's file, the root tree — may be stored as
-  an `OFS_DELTA` on that lane's previous object: copy the shared head, insert what differs, copy the
-  shared tail. A Writer save changes one chunk, so that is nearly all of the saving. Only the newest
-  body per lane is held. Chains stop at 50, git's own default, so no read replays more.
-- **Native identical, where it can be.** The ids are the ones `git fast-import` gives the same input,
-  and `git index-pack --strict` rebuilds the index byte for byte from the pack. The pack bytes
-  themselves are this writer's, as any two writers' differ.
-- **Pure and portable.** Web Crypto (`crypto.subtle`) and `CompressionStream("deflate")`, which the
-  browser, the desktop webview and Node all have, and no imports — so desktop runs the same code, and
-  it can move to a shared package unchanged (Will, 2026-10-09). It reports counts (objects, deltas,
-  bytes); the caller instruments.
-- **Its one test** checks it against real git (`src/platform/web/pack.test.ts`; see
-  [testing](testing.md)).
+Writer migration writes a whole history as ONE pack (v2) and its index (v2), with no loose objects
+and no repack: through a git library each object is a loose file — thousands of OPFS writes at a
+measured 1–9 ms each — and isomorphic-git's own `packObjects` stores every version whole (35 MB for
+one New Testament). The pack writer is the kitchen's (bttwriter's `PackWriter`, inside `replay` and
+`consolidate`; [resources](resources.md), "The Writer migration"), checked against real git in the
+kitchen's own tests. Sefer writes the `.pack` and `.idx` it is handed under `objects/pack/`, points a
+branch at the head, and the new `.git` is five files.
 
 A replayed history is not shallow, so History's deepen never runs for it, and the Web's book-change
 index (above) builds over the pack the first time History opens, as for any project.
@@ -395,9 +379,10 @@ project rather than its text; `AdminError` reasons are `NotFound`, `Invalid`, `R
   metadata: the name goes in `<root>/.sefer/project.json`, which never reaches a commit. A shared
   project's `identification.name` belongs to everyone who receives it, and a rename on one laptop
   used to rewrite it for all of them.
-- `metadata(root)` is `Option<BurritoMetadata>` — `None` when there is no file, `Invalid` when there is
-  one and it is broken. `updateMetadata(root, patch)` shallow-merges top-level members and writes only
-  through `decodeBurritoMetadata`, so an edit cannot leave the file invalid for the next reader.
+- `metadata(root)` is `Option<ProjectMetadata>`, read through bento — `None` when there is no
+  manifest, `Invalid` when `metadata.json` is there and not JSON. `updateMetadata(root, patch)`
+  shallow-merges top-level members and writes only when bento finds no error and no `manifest-valid`
+  problem the file did not already have, so an edit cannot leave the file worse for the next reader.
 - `delete(root, confirm)` asks first, always; `confirm` is a plain port (composition passes
   `Dialogs.confirm`) and a `false` answer is `Refused`.
 - `export(root, format, to)` returns the path written: `"burrito"` copies the folder, `"usfm-zip"`
