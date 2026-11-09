@@ -1,4 +1,4 @@
-import { lastVerseOf } from "@wycliffeassociates/sefer-text/location/units";
+import { lastVerseOf } from "@wycliffeassociates/sefer-text/location/toc";
 import { Option } from "effect";
 
 import { tocViewOf } from "#core/galley";

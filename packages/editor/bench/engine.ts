@@ -50,6 +50,7 @@ export const loadEngine = async (): Promise<{
         ...placesOf(text.length, {
           resolve: (address) => handle.resolve(id, address, { utf16: true }),
           addressAt: (offset) => handle.addressAt(id, offset, { utf16: true }),
+          places: () => handle.places(id, { utf16: true }),
         }),
       };
     };

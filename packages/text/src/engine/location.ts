@@ -1,4 +1,4 @@
-import type { TocChapter, TocVerse, TocView } from "../location/units";
+import type { TocChapter, TocVerse, TocView } from "../location/toc";
 import type { Analysis } from "./analysis";
 
 const views = new WeakMap<Analysis["dish"], TocView>();

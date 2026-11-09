@@ -70,9 +70,9 @@ The rules are galley's (`onion/src/resolve.md` in the kitchen): a bridge is labe
 
 **Tiles.** A verse owns the heading and paragraph marker that introduce it. `\s1 Heading` / `\p` / `\v 14` are verse 14's, so a heading is never in the verse before it. Chapters stay hard breaks.
 
-**Binding.** galley answers a registered book from what it already holds (about 0.03 ms on Psalms) and any other text by lexing it again (1 to 3 ms). `src/core/galley/galley.ts` binds a book analysis to its id's doors while the id still holds that analysis's text, and to the text doors after; every other text (a reference, a review side) gets the text doors. `addressAt` answers are kept per offset on the analysis.
+**Binding.** galley answers a registered book from what it already holds (about 0.03 ms on Psalms) and any other text by lexing it again (1 to 3 ms). `src/core/galley/galley.ts` asks a book analysis's id doors with `expect` set to the analysis's own `sourceHash`; galley refuses with "stale" once the id holds a newer text, and from then on that analysis uses the text doors. Every other text (a reference, a review side) uses the text doors. `addressAt` answers are kept per offset on the analysis.
 
-**Stepping** is the one walk Sefer keeps: `packages/text/src/location/units.ts` lists a TOC's units (introduction, chapter head, each verse's tile, cut at the census's `start`) for an excerpt's "one more above", a diff's grouping and a suppression's verse. A unit is named by `analysis.addressAt(book, unit.from)`, never by Sefer.
+**Stepping** is galley's too: `analysis.units(book)` is galley's `places` (the introduction, each chapter's head, each title, each verse's tile, in order, with the address `addressAt` answers anywhere inside) as `Unit`s whose `from..to` is the whole tile (`packages/text/src/engine/places.ts`). An excerpt's "one more above", a diff's grouping and a suppression's verse all walk that list. `packages/text/src/location/toc.ts` keeps only the TOC rows for the few readers that want a designator's numbers.
 
 ## The application's location service
 

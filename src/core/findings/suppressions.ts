@@ -1,9 +1,7 @@
 import { formatReference } from "@wycliffeassociates/scripture-kitchen/web";
 import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import type { Analysis } from "@wycliffeassociates/sefer-text/engine/analysis";
-import { tocViewOf } from "@wycliffeassociates/sefer-text/engine/location";
-import { bookAddress } from "@wycliffeassociates/sefer-text/location/address";
-import { tocUnits, unitIndexAt, type TocUnit } from "@wycliffeassociates/sefer-text/location/units";
+import { unitIndexAt } from "@wycliffeassociates/sefer-text/engine/places";
 import { Result, Schema } from "effect";
 
 import { ordinalOf, siteIdentityOf } from "../galley";
@@ -94,21 +92,17 @@ interface Verse {
   readonly text: string;
 }
 
-/** A unit's reference, named where it starts, so a site and its verse always agree. */
-const refOf = (bookId: BookId, analysis: Analysis, unit: TocUnit): string =>
-  formatReference([analysis.addressAt(bookId, unit.from) ?? bookAddress(bookId)]);
-
 const verseAt = (
   bookId: BookId,
   text: string,
   analysis: Analysis,
   at: number,
 ): Verse | undefined => {
-  const units = tocUnits(tocViewOf(analysis));
+  const units = analysis.units(bookId);
   const unit = units[unitIndexAt(units, at)];
   if (unit === undefined) return undefined;
   return {
-    ref: refOf(bookId, analysis, unit),
+    ref: formatReference(unit.address),
     from: unit.from,
     text: text.slice(unit.from, unit.to),
   };
@@ -154,8 +148,8 @@ export const versesOf = (
   analysis: Analysis,
 ): ReadonlyMap<string, readonly string[]> => {
   const out = new Map<string, string[]>();
-  for (const unit of tocUnits(tocViewOf(analysis))) {
-    const ref = refOf(bookId, analysis, unit);
+  for (const unit of analysis.units(bookId)) {
+    const ref = formatReference(unit.address);
     const held = out.get(ref);
     const verse = text.slice(unit.from, unit.to);
     if (held === undefined) out.set(ref, [verse]);

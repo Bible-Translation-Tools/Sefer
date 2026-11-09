@@ -362,34 +362,43 @@ const makeService = (
   };
 
   /**
-   * The text each book id holds right now, by identity: an analysis answers
-   * places through its id's doors only while its own text is still the one
-   * registered, and through the text doors once the book has moved on.
+   * galley's place doors over one analysis. A book analysis asks its id's
+   * doors with `expect` set to its own hash, so galley answers from what it
+   * already holds (about 0.03 ms on Psalms) while the id still holds this
+   * text, and says "stale" once the book has moved on; then, and for every
+   * text that is not a project book, the text doors answer (1 to 3 ms).
    */
-  const registered = new Map<string, string>();
-  const register = (id: string, text: string): string => {
-    registered.set(id, text);
-    return handle.update(id, text);
-  };
-
-  const places = (text: string, id: string | undefined) => {
-    const utf16 = { utf16: true } as const;
-    const own = () => id !== undefined && registered.get(id) === text;
+  const places = (text: string, id: string | undefined, expect: bigint) => {
+    const markers = id === undefined ? textMarkers(text) : {};
+    const ofText = { utf16: true, ...markers } as const;
+    let stale = id === undefined;
+    const byId = <T>(ask: (id: string) => T, otherwise: () => T): T => {
+      if (stale || id === undefined) return otherwise();
+      try {
+        return ask(id);
+      } catch (error) {
+        if (!String(error).includes("stale")) throw error;
+        stale = true;
+        return otherwise();
+      }
+    };
+    const own = { utf16: true, expect } as const;
     return placesOf(text.length, {
       resolve: (address) =>
-        own()
-          ? handle.resolve(id ?? "", address, utf16)
-          : handle.resolveOf(text, address, {
-              ...utf16,
-              ...(id === undefined ? textMarkers(text) : {}),
-            }),
+        byId(
+          (book) => handle.resolve(book, address, own),
+          () => handle.resolveOf(text, address, ofText),
+        ),
       addressAt: (offset) =>
-        own()
-          ? handle.addressAt(id ?? "", offset, utf16)
-          : handle.addressAtOf(text, offset, {
-              ...utf16,
-              ...(id === undefined ? textMarkers(text) : {}),
-            }),
+        byId(
+          (book) => handle.addressAt(book, offset, own),
+          () => handle.addressAtOf(text, offset, ofText),
+        ),
+      places: () =>
+        byId(
+          (book) => handle.places(book, own),
+          () => handle.placesOf(text, ofText),
+        ),
     });
   };
 
@@ -413,7 +422,7 @@ const makeService = (
     const dish = deserialize(
       id === undefined
         ? handle.parseText(text, { ...PARSE_ALL, ...textMarkers(text) })
-        : (register(id, text), handle.parse(id, PARSE_ALL)),
+        : (handle.update(id, text), handle.parse(id, PARSE_ALL)),
     );
     const engineMs = Math.round((performance.now() - started) * 1000) / 1000;
     done?.({ "galley.diagnostics": dish.diagnostics.length, "galley.engine_ms": engineMs });
@@ -427,7 +436,7 @@ const makeService = (
       engineMs,
       usfmVersion: declaredVersion(dish),
       attrs: (from, to) => attrList(wasmModule.attrs(text, from, to, { utf16: true })),
-      ...places(text, id),
+      ...places(text, id, dish.sourceHash),
     };
   };
 
@@ -544,12 +553,10 @@ const makeService = (
     find: (id, query) => decodeHits(handle.find(id, query.text, findOptions(query))),
     findAll: (query, scope) =>
       decodeHits(handle.findAll(query.text, findOptions(query, scope ?? "targets"))),
-    update: register,
-    updateReference: (id, text, keepText) => (
-      registered.delete(id),
-      handle.updateReference(id, text, { keepText: keepText === true, ...textMarkers(text) })
-    ),
-    remove: (id) => (registered.delete(id), handle.remove(id)),
+    update: (id, text) => handle.update(id, text),
+    updateReference: (id, text, keepText) =>
+      handle.updateReference(id, text, { keepText: keepText === true, ...textMarkers(text) }),
+    remove: (id) => handle.remove(id),
     publish: () => FindingsSnapshot.open(handle.publish()),
     diff: (baseline, current, opts) => engineDiff(wasmModule, baseline, current, opts),
     merge: (baseline, current, decisions, fallback) =>

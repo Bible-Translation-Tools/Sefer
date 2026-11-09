@@ -1,9 +1,9 @@
 import { formatReference } from "@wycliffeassociates/scripture-kitchen/web";
-import { bookAddress, type Address } from "@wycliffeassociates/sefer-text/location/address";
-import { tocUnits, unitIndexAt, type TocUnit } from "@wycliffeassociates/sefer-text/location/units";
+import { unitIndexAt, type Unit } from "@wycliffeassociates/sefer-text/engine/places";
+import type { Address } from "@wycliffeassociates/sefer-text/location/address";
 
 import type { Extent } from "#core/excerpts/excerpts";
-import { tocViewOf, type Analysis } from "#core/galley";
+import type { Analysis } from "#core/galley";
 import type { DecisionUnit } from "#core/galley/diff";
 
 import { changed } from "./paint";
@@ -29,7 +29,7 @@ export interface Hunk {
 }
 
 const stretchOf = (
-  all: readonly TocUnit[],
+  all: readonly Unit[],
   first: number,
   last: number,
   extent: Extent,
@@ -37,11 +37,11 @@ const stretchOf = (
   let low: number;
   let high: number;
   if (extent.chapter === true) {
-    const row = all[first]?.row;
+    const row = all[first]?.chapter;
     low = first;
     high = last;
-    while (low > 0 && all[low - 1]?.row === row) low -= 1;
-    while (high < all.length - 1 && all[high + 1]?.row === row) high += 1;
+    while (low > 0 && all[low - 1]?.chapter === row) low -= 1;
+    while (high < all.length - 1 && all[high + 1]?.chapter === row) high += 1;
   } else {
     low = Math.max(0, first - Math.max(0, extent.up));
     high = Math.min(all.length - 1, last + Math.max(0, extent.down));
@@ -65,7 +65,7 @@ interface HunkOptions {
   readonly keep?: (unit: DecisionUnit) => boolean;
 }
 
-const groupByUnit = (options: HunkOptions, current: ReturnType<typeof tocUnits>) => {
+const groupByUnit = (options: HunkOptions, current: readonly Unit[]) => {
   const groups = new Map<number, DecisionUnit[]>();
   for (const unit of options.units) {
     const shown = changed(unit) ? options.include?.(unit) !== false : options.keep?.(unit) === true;
@@ -90,11 +90,7 @@ const firstUnitAt = (units: readonly DecisionUnit[], at: number): number => {
   return low;
 };
 
-const baselineRange = (
-  own: readonly DecisionUnit[],
-  baseline: ReturnType<typeof tocUnits>,
-  extent: Extent,
-) => {
+const baselineRange = (own: readonly DecisionUnit[], baseline: readonly Unit[], extent: Extent) => {
   let from = Number.POSITIVE_INFINITY;
   let to = Number.NEGATIVE_INFINITY;
   for (const unit of own)
@@ -113,8 +109,8 @@ const baselineRange = (
 };
 
 export const hunksOf = (options: HunkOptions): Hunk[] => {
-  const current = tocUnits(tocViewOf(options.current));
-  const baseline = tocUnits(tocViewOf(options.baseline));
+  const current = options.current.units(options.bookId);
+  const baseline = options.baseline.units(options.bookId);
   const groups = groupByUnit(options, current);
   const count = options.units.length;
   const firstAt = (at: number): number => firstUnitAt(options.units, at);
@@ -123,9 +119,8 @@ export const hunksOf = (options: HunkOptions): Hunk[] => {
   for (const [at, own] of [...groups.entries()].sort((a, b) => a[0] - b[0])) {
     const toc = current[at];
     if (toc === undefined) continue;
-    const address =
-      options.current.addressAt(options.bookId, toc.from) ?? bookAddress(options.bookId);
-    const key = `${options.bookId} ${formatReference([address])}`;
+    const address = toc.address;
+    const key = `${options.bookId} ${formatReference(address)}`;
     const extent = options.extentOf?.(key) ?? { up: options.steps, down: options.steps };
     const shownCurrent = stretchOf(current, at, at, extent);
     const shownBaseline = baselineRange(own, baseline, extent);

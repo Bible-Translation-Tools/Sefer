@@ -34,7 +34,7 @@ function NoteItem(props: NoteItemProps) {
   return (
     <li
       data-testid="note"
-      data-address={formatReference([props.note.address])}
+      data-address={formatReference(props.note.address)}
       class="rounded-2xl bg-surface-primary p-4"
     >
       <Show when={props.note.quote}>
@@ -49,8 +49,8 @@ function NoteItem(props: NoteItemProps) {
       <Show
         when={
           props.note.openEnded === true ||
-          formatReference([props.note.address]) !==
-            formatReference([props.answeredPlace ?? props.note.address])
+          formatReference(props.note.address) !==
+            formatReference(props.answeredPlace ?? props.note.address)
         }
       >
         <p class="text-smallest text-on-surface-tertiary">
@@ -80,7 +80,7 @@ export function NotesPane(props: NotesPaneProps) {
     },
     ({ handle, place }) =>
       handle.places === undefined ? Effect.succeed([]) : handle.places.at(place, context),
-    (a, b) => a.handle === b.handle && formatReference([a.place]) === formatReference([b.place]),
+    (a, b) => a.handle === b.handle && formatReference(a.place) === formatReference(b.place),
   );
 
   const answeredPlace = (): Address | undefined => held.answered()?.place;
@@ -91,7 +91,7 @@ export function NotesPane(props: NotesPaneProps) {
 
   const placeCode = (): string => {
     const place = answeredPlace();
-    return place === undefined ? "" : formatReference([place]);
+    return place === undefined ? "" : formatReference(place);
   };
 
   return (

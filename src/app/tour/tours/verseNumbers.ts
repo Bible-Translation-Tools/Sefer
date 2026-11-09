@@ -40,7 +40,7 @@ const placeOf = (
   return address === undefined
     ? { key: `${finding.bookId}@${String(finding.from)}`, label: name }
     : {
-        key: formatReference([address]),
+        key: formatReference(address),
         label: showReference(address, name, m.tour_introduction()),
       };
 };

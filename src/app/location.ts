@@ -1,4 +1,4 @@
-import { name, type NameTable } from "@wycliffeassociates/scripture-kitchen/canon";
+import type { NameTable } from "@wycliffeassociates/scripture-kitchen/canon";
 import {
   Citations,
   showReference,
@@ -68,9 +68,8 @@ export const createLocation = (project: Accessor<Project | undefined>): Location
       }
       return new Citations({
         names,
-        books: (open?.books ?? [])
-          .map((book) => book.id)
-          .filter((id) => name(id, "long") === undefined),
+        // Every held book, so a peripheral (FRT) or one outside canon still matches.
+        books: (open?.books ?? []).map((book) => book.id),
         intro: [m.common_intro()],
       });
     },
@@ -78,9 +77,7 @@ export const createLocation = (project: Accessor<Project | undefined>): Location
   );
 
   return {
-    // SAFETY: `Citations.read` answers a `Citation` in JSON (usfm_galley.d.ts).
-    read: (text) =>
-      JSON.parse(citations().read(text, { grammar: "navigation", held: heldList() })) as Citation,
+    read: (text) => citations().read(text, { grammar: "navigation", held: heldList() }),
     books: (text) => citations().booksMatching(text),
     holds: (book) => held().has(book.toUpperCase()),
     label: (address, heading) =>

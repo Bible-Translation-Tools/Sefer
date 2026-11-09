@@ -136,14 +136,12 @@ const list = <T>(value: unknown, read: (entry: unknown) => T | undefined): reado
   return out;
 };
 
-export const decodeBlockSkeleton = (json: string): Skeleton => {
-  const parsed: unknown = JSON.parse(json);
+export const decodeBlockSkeleton = (parsed: unknown): Skeleton => {
   if (!isRecord(parsed)) return { verses: [], blocks: [] };
   return { verses: list(parsed.verses, readVerse), blocks: list(parsed.blocks, readRow) };
 };
 
-const decodeReport = (json: string): OverlayReport => {
-  const parsed: unknown = JSON.parse(json);
+const decodeReport = (parsed: unknown): OverlayReport => {
   if (!isRecord(parsed)) return { inserted: [], removed: [], collapsed: [], unpaired: [] };
   return {
     inserted: list(parsed.inserted, (entry) =>
@@ -182,8 +180,7 @@ const decodeReport = (json: string): OverlayReport => {
   };
 };
 
-export const decodeEquivalent = (json: string): Equivalent => {
-  const parsed: unknown = JSON.parse(json);
+export const decodeEquivalent = (parsed: unknown): Equivalent => {
   if (!isRecord(parsed)) return { kind: "unpaired", reason: "absent" };
   if (parsed.found !== undefined) {
     const row = readRow(parsed.found);
@@ -201,9 +198,9 @@ export const overlayOptions = (options?: OverlayOptions): object => ({
   ...(options?.scope === undefined ? {} : { scope: options.scope }),
 });
 
-export const decodeOverlay = (edits: readonly FormatEdit[], reportJson: string): OverlayEdits => ({
+export const decodeOverlay = (edits: readonly FormatEdit[], report: unknown): OverlayEdits => ({
   edits,
-  report: decodeReport(reportJson),
+  report: decodeReport(report),
 });
 
 export const blockAtOffset = (

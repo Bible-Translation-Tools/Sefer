@@ -1,7 +1,7 @@
 import { formatReference } from "@wycliffeassociates/scripture-kitchen/web";
 import type { BookId } from "@wycliffeassociates/sefer-text/book";
+import { unitIndexAt, type Unit } from "@wycliffeassociates/sefer-text/engine/places";
 import { bookAddress, type Address } from "@wycliffeassociates/sefer-text/location/address";
-import { tocUnits, unitIndexAt, type TocUnit } from "@wycliffeassociates/sefer-text/location/units";
 
 import {
   CLASS,
@@ -11,7 +11,6 @@ import {
   classWordOf,
   coarse,
   has,
-  tocViewOf,
   type Analysis,
 } from "../galley";
 
@@ -211,23 +210,22 @@ const DEFAULT_EXTENT: Extent = { up: 1, down: 1 };
 
 interface Units {
   readonly analysis: Analysis;
-  readonly all: readonly TocUnit[];
+  readonly all: readonly Unit[];
 }
 
-const unitsOf = (analysis: Analysis): Units => ({ analysis, all: tocUnits(tocViewOf(analysis)) });
-
-/** What a unit is called: galley's name for where it starts. */
-const unitAddress = (book: BookId, units: Units, unit: TocUnit): Address =>
-  units.analysis.addressAt(book, unit.from) ?? bookAddress(book);
+const unitsOf = (analysis: Analysis, book: BookId): Units => ({
+  analysis,
+  all: analysis.units(book),
+});
 
 const window = (units: Units, own: number, extent: Extent): { low: number; high: number } => {
   const { all } = units;
   if (extent.chapter === true) {
-    const row = all[own]?.row;
+    const row = all[own]?.chapter;
     let low = own;
     let high = own;
-    while (low > 0 && all[low - 1]?.row === row) low -= 1;
-    while (high < all.length - 1 && all[high + 1]?.row === row) high += 1;
+    while (low > 0 && all[low - 1]?.chapter === row) low -= 1;
+    while (high < all.length - 1 && all[high + 1]?.chapter === row) high += 1;
     return { low, high };
   }
   return {
@@ -281,7 +279,7 @@ class LazyExcerpt implements Excerpt {
     extent: Extent,
   ) {
     this.bookId = book.bookId;
-    this.sid = formatReference([address]);
+    this.sid = formatReference(address);
     this.address = address;
     const from = units.all[low]?.from ?? own.from;
     this.span = {
@@ -330,7 +328,7 @@ class LazyExcerpt implements Excerpt {
   get shown(): { readonly first: Address; readonly last: Address } {
     const name = (index: number): Address => {
       const unit = this.units.all[index];
-      return unit === undefined ? this.address : unitAddress(this.bookId, this.units, unit);
+      return unit === undefined ? this.address : unit.address;
     };
     return { first: name(this.low), last: name(this.high) };
   }
@@ -373,7 +371,7 @@ const buildExcerpt = (
 ): Excerpt | undefined => {
   const unit = units.all[own];
   if (unit === undefined) return undefined;
-  const address = unitAddress(book.bookId, units, unit);
+  const address = unit.address;
   return new LazyExcerpt(book, units, range.low, range.high, unit, held, address, extent);
 };
 
@@ -383,7 +381,7 @@ const excerptsOf = (
   extent: Extent,
 ): readonly Excerpt[] => {
   if (hits.length === 0) return [];
-  const units = unitsOf(book.analysis);
+  const units = unitsOf(book.analysis, book.bookId);
 
   const grouped = new Map<number, Occurrence[]>();
   const order: number[] = [];
@@ -405,7 +403,7 @@ const excerptsOf = (
 };
 
 export const extend = (book: BookText, excerpt: Excerpt, extent: Extent): Excerpt => {
-  const units = unitsOf(book.analysis);
+  const units = unitsOf(book.analysis, book.bookId);
   const own = unitIndexAt(units.all, excerpt.own.from);
   return buildExcerpt(book, units, own, excerpt.hits, extent) ?? excerpt;
 };
@@ -424,7 +422,7 @@ export const pairedExcerpt = (
   hits: readonly Occurrence[],
   collapsed: boolean,
 ): Excerpt | undefined => {
-  const units = unitsOf(book.analysis);
+  const units = unitsOf(book.analysis, book.bookId);
   const first = hits[0];
   const own =
     first === undefined

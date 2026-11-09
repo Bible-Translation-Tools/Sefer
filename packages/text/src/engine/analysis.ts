@@ -67,6 +67,8 @@ export interface Analysis {
   readonly resolve: Places["resolve"];
   /** galley's `addressAt` over this text, bound likewise. */
   readonly addressAt: Places["addressAt"];
+  /** galley's `places` over this text, as stepping units, bound likewise. */
+  readonly units: Places["units"];
 }
 
 /**

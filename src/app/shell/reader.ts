@@ -161,7 +161,7 @@ const createPlace = ({
       name: "place",
       equals: (a, b) =>
         a === b ||
-        (a !== undefined && b !== undefined && formatReference([a]) === formatReference([b])),
+        (a !== undefined && b !== undefined && formatReference(a) === formatReference(b)),
     },
   );
 

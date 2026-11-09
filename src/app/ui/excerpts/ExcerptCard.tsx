@@ -6,7 +6,7 @@ import {
   type Following,
   type MarkedRange,
 } from "@wycliffeassociates/sefer-editor";
-import { tocUnits, unitIndexAt } from "@wycliffeassociates/sefer-text/location/units";
+import { unitIndexAt } from "@wycliffeassociates/sefer-text/engine/places";
 import ChevronDownIcon from "lucide-solid/icons/chevron-down";
 import ChevronUpIcon from "lucide-solid/icons/chevron-up";
 import ChevronsDownIcon from "lucide-solid/icons/chevrons-down";
@@ -22,7 +22,7 @@ import {
   type Excerpt,
   type Occurrence,
 } from "#core/excerpts/excerpts";
-import { tocViewOf, type Analysis } from "#core/galley";
+import type { Analysis } from "#core/galley";
 
 import { useShell } from "../../ProjectContext";
 import { CardActions, type CardAction } from "../multibuffer/CardAction";
@@ -256,15 +256,17 @@ export function ExcerptCard(props: ExcerptCardProps) {
     return up - from.up + (down - from.down) >= 2;
   };
   const verseLabel = (side: "up" | "down"): string => {
-    const all = tocUnits(tocViewOf(props.excerpt.analysis));
+    const all = props.excerpt.analysis.units(props.excerpt.bookId);
     const { span, own } = props.excerpt;
     const home = all[unitIndexAt(all, own.from)];
     const next =
       side === "up" ? all[unitIndexAt(all, span.from) - 1] : all[unitIndexAt(all, span.to - 1) + 1];
-    const verse = next?.verse;
-    if (verse === undefined || verse.first === 0 || next?.row !== home?.row)
+    const place = next?.address;
+    if (place?.kind !== "verses" || place.from.verse === 0 || next?.chapter !== home?.chapter)
       return m.excerpts_show_verse();
-    const label = verse.last > verse.first ? `${verse.first}-${verse.last}` : `${verse.first}`;
+    const first = `${place.from.verse}${place.from.segment ?? ""}`;
+    const last = `${place.to.verse}${place.to.segment ?? ""}`;
+    const label = first === last ? first : `${first}-${last}`;
     return m.excerpts_show_verse_verse({ verse: label });
   };
   const stepLabel = (side: "up" | "down"): string => {
