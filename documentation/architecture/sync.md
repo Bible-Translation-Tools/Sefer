@@ -483,12 +483,13 @@ Settings' Cloud section by `SyncSettingsCard`, while a project is open):
 | Setting                         | Default | What it does                                        |
 | ------------------------------- | ------- | --------------------------------------------------- |
 | Check for changes on open       | on      | `checkForChanges` when the project opens.           |
-| Send my changes on save         | on      | `sendAfterSave` after a version is recorded.        |
+| Send my changes on save         | off     | `sendAfterSave` after a version is recorded.        |
 | Skip review of my changes       | off     | Record a version without opening Review first.      |
 | Skip review of incoming changes | off     | Receive after a check, when no book needs a person. |
 
-The two that reach the network are on, so an ordinary translator never learns the words fetch and
-push. The same file keeps this device's author name.
+Checking on open is on, so the app bar can say when a teammate sent something; sending on save is
+off, because sending is something the person does on purpose (Thomas, 2026-11-09): Upload to WACS in
+the connection popover or the ☰ menu. The same file keeps this device's author name.
 
 ### Who a version is by
 

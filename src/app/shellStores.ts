@@ -13,6 +13,13 @@ import { booksOf, type ShellEvent } from "./shellEvent";
 
 export type SaveState = "unsaved" | "onDisk" | "recorded";
 
+/** `idle` until the first edit; then `saving` until the backup reports in. */
+export type BackupStatus =
+  | { readonly kind: "idle" }
+  | { readonly kind: "saving" }
+  | { readonly kind: "saved" }
+  | { readonly kind: "failed"; readonly reason: string };
+
 interface BookRow {
   readonly saveState: SaveState;
   readonly stamp: SourceStamp;
@@ -27,6 +34,8 @@ export interface ShellStores {
 
   readonly unsaved: (book: Book) => boolean;
   readonly saveState: (book: Book) => SaveState;
+  /** Where the backup of this session's edits stands, as the backup itself reports it. */
+  readonly backup: Accessor<BackupStatus>;
   readonly stampOf: (bookId: BookId) => SourceStamp | undefined;
   readonly historyDepth: (bookId: BookId) => { readonly undo: number; readonly redo: number };
 
@@ -216,7 +225,12 @@ export const makeShellStores = (options: {
   const { onDisk, refreshBooks, clearBooks, unsaved, saveState, stampOf, historyDepth } =
     createBooksStore(services, open);
 
+  const [backup, setBackup] = createSignal<BackupStatus>({ kind: "idle" }, { name: "backup" });
+
   const changed = (event: ShellEvent): void => {
+    if (event.kind === "project.open") {
+      setBackup({ kind: "idle" });
+    }
     if (event.kind === "book.write")
       for (const bookId of event.books) {
         if (event.recorded) onDisk.delete(bookId);
@@ -234,6 +248,19 @@ export const makeShellStores = (options: {
 
   watchAnalysis(services, changed);
 
+  const watchingBackups = services.runtime.runFork(
+    Stream.runForEach(services.recovery.backups(), (state) =>
+      Effect.sync(() => {
+        if (state.kind === "pending") setBackup({ kind: "saving" });
+        else if (state.kind === "written") setBackup({ kind: "saved" });
+        else setBackup({ kind: "failed", reason: state.reason });
+      }),
+    ),
+  );
+  onCleanup(() => {
+    Effect.runFork(Fiber.interrupt(watchingBackups));
+  });
+
   const noteWritten = (bookIds: readonly BookId[], recorded: boolean): void => {
     changed({ kind: "book.write", books: bookIds, recorded });
   };
@@ -249,6 +276,7 @@ export const makeShellStores = (options: {
     clear,
     unsaved,
     saveState,
+    backup,
     stampOf,
     historyDepth,
     findings,
