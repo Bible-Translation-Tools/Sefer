@@ -1,6 +1,7 @@
 import { createSignal } from "solid-js";
 
 import { m } from "#app/paraglide/messages";
+import { stepRecord, type RecordEvent, type RecordPhase } from "#core/save/recordPhase";
 
 import { collaboration } from "../../../collaboration";
 import { describe } from "../../../describe";
@@ -167,17 +168,35 @@ function createReceiptAction(
 export function createReceipt(inputs: ReceiptInputs) {
   const { shell } = inputs;
   const { setRecordOpen } = inputs.form;
-  const [recordedLine, setRecordedLine] = createSignal<ReceiptLine | undefined>(undefined, {
-    name: "reviewRecordedLine",
-  });
-  const [sendLine, setSendLine] = createSignal<ReceiptLine | "sending" | undefined>(undefined, {
-    name: "reviewSendLine",
-  });
+  // The one phase of a record: `src/core/save/recordPhase.ts`. Everything below reads it or sends to it.
+  const [phase, setPhase] = createSignal<RecordPhase<ReceiptLine>>(
+    { kind: "editing" },
+    { name: "reviewRecordPhase" },
+  );
+  // The plain value is the truth and the signal draws it: Solid 2 batches writes, so a second
+  // press in the same instant would still read the old signal.
+  let now: RecordPhase<ReceiptLine> = { kind: "editing" };
+  const send = (event: RecordEvent<ReceiptLine>): void => {
+    now = stepRecord(now, event);
+    setPhase(now);
+  };
+
+  const recording = (): boolean => phase().kind === "recording";
+  const recordedLine = (): ReceiptLine | undefined => {
+    const held = phase();
+    return held.kind === "recorded" ? held.line : undefined;
+  };
+  const sendLine = (): ReceiptLine | "sending" | undefined => {
+    const held = phase();
+    return held.kind === "recorded" ? held.send : undefined;
+  };
+  const setRecordedLine = (line: ReceiptLine): void => send({ kind: "answered", line });
+  const setSendLine: SetSendLine = (line) =>
+    send(line === "sending" ? { kind: "sending" } : { kind: "sent", line });
 
   const closeRecord = (): void => {
     setRecordOpen(false);
-    setRecordedLine(undefined);
-    setSendLine(undefined);
+    send({ kind: "close" });
   };
 
   const sentLine = (): ReceiptLine | undefined => {
@@ -188,10 +207,24 @@ export function createReceipt(inputs: ReceiptInputs) {
   const follow = (sending: Promise<SendOutcome> | undefined): void => {
     if (sending === undefined) return;
     setSendLine("sending");
-    void sending.then((outcome) => setSendLine(lineOfSend(shell, outcome)));
+    void sending.then(
+      (outcome) => setSendLine(lineOfSend(shell, outcome)),
+      (cause: unknown) =>
+        setSendLine({
+          tone: "warning",
+          title: m.review_saved_here_not_sent_yet(),
+          detail: describe(cause),
+          action: "retry",
+        }),
+    );
   };
 
   return {
+    recording,
+    /** Whether a run is in flight right now, for a guard; `recording` is the same for drawing. */
+    inFlight: (): boolean => now.kind === "recording",
+    start: (): void => send({ kind: "start" }),
+    stopped: (): void => send({ kind: "stopped" }),
     recordedLine,
     setRecordedLine,
     sendLine,

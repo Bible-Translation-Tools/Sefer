@@ -65,4 +65,5 @@ Preconditions:
   there is no Review step. A fresh session has it off.
 
 Last walked end to end: 2026-11-09, Web, fixture, on kitchen 0.1.22 (`.verify/2026-11-09T18-41-14-108Z-e1523d10/`), driven with Playwright and the system Chrome because agent-browser was not installed.
-Not walked: the More menu entry point, desktop.
+Walked again 2026-11-09 with agent-browser after the record machine went in (`.verify/2026-11-09T22-29-52-781Z-24bc40c5/`): the first-ever save, Save pressed twice in one instant, one version in History.
+Not walked: the More menu entry point, desktop, a review against the shared project, a decline.

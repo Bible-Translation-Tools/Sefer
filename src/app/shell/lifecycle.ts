@@ -140,8 +140,11 @@ export const createLifecycle = ({
     { kind: "closed" },
     { name: "projectPhase" },
   );
+  // The plain value is the truth and the signal draws it: Solid 2 batches writes.
+  let now: ProjectPhase = { kind: "closed" };
   const send = (event: ProjectEvent): void => {
-    setPhase((held) => stepProject(held, event));
+    now = stepProject(now, event);
+    setPhase(now);
   };
 
   const tearDown = async (): Promise<void> => {

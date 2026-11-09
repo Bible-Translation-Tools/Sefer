@@ -1133,6 +1133,7 @@
   "review_not_combined": "No combinado",
   "review_saved_here_not_sent_yet": "Guardado aquí. Aún no enviado",
   "review_nothing_to_record": "Nada que registrar",
+  "review_could_not_record_this_version": "No se pudo registrar esta versión",
   "review_could_not_write_to_disk": "No se pudo escribir en el disco",
   "review_on_disk_but_not_recorded": "En el disco, pero sin registrar",
   "review_recorded_count_books_on_this_device": "{count, plural, one {Se registró # libro en este dispositivo} other {Se registraron # libros en este dispositivo}}",

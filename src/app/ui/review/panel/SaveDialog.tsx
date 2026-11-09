@@ -196,11 +196,8 @@ export function SaveDialog(props: SaveDialogProps) {
     <Dialog
       open={props.form.recordOpen()}
       onOpenChange={(open) => {
-        props.form.setRecordOpen(open);
-        if (!open) {
-          props.receipt.setRecordedLine(undefined);
-          props.receipt.setSendLine(undefined);
-        }
+        if (open) props.form.setRecordOpen(true);
+        else props.receipt.closeRecord();
       }}
       title={m.common_save()}
       description={

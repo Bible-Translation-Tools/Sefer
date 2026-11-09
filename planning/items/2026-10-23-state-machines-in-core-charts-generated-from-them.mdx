@@ -301,3 +301,47 @@ finish correctly; only the numbers are wrong while they overlap.
 </Tradeoff>
 
 <Followup id="record-twice">Once the action helper exists, Record a version takes its re-entry guard from it (ruled: "If free, sure once helper exists").</Followup>
+
+### The two machines are built (2026-11-09)
+
+On branch `fix/plausible-races`, with no library: a tagged union, an event union, a table of
+which events each phase answers, and one `step` function, in `src/core`. The shell or the
+panel keeps the phase and sends events; screens only read it.
+
+<Machine id="project-phase" machine={{
+  id: "project",
+  initial: "closed",
+  states: {
+    closed: { on: { ask: "opening" } },
+    opening: { note: "An answer about another root changes nothing. Opens run one at a time.", on: { ask: "opening", opened: "open", refused: "failed", close: "closed" } },
+    open: { on: { ask: "opening", close: "closed" } },
+    failed: { tone: "danger", note: "A screen that says why, with Try again and Back to projects.", on: { ask: "opening", close: "closed" } }
+  }
+}} />
+
+`src/core/project/lifecycle.ts`. The project route keeps no phase of its own. New for a
+person: a project that will not open says why (it was a blank page).
+
+<Machine id="record-phase" machine={{
+  id: "record",
+  initial: "editing",
+  states: {
+    editing: { on: { start: "recording" } },
+    recording: { note: "No way out by close or by a second start.", on: { stopped: "editing", answered: "recorded" } },
+    recorded: { note: "Carries the receipt line and the send line (nothing, sending, or a line).", on: { start: "recording", sending: "recorded", sent: "recorded", close: "editing" } }
+  }
+}} />
+
+`src/core/save/recordPhase.ts`. New for a person: a record that throws ends on a receipt
+that says so (the button spun for good), and Save pressed twice records once.
+
+- **Driven in the app:** opening the fixture project; a project folder with no books (the
+  failure screen, Try again, Back to projects); the first-ever save with Save pressed twice in
+  one instant, then History showing one version.
+- **Not driven:** two real projects opening at once, a review against the shared project, a
+  decline, a record that throws, desktop.
+- **Found on the way:** Solid 2 batches signal writes, so a guard that reads the phase signal
+  is blind to a second press in the same instant. Both machines keep the phase in a plain
+  variable and the signal only draws it. The action helper will need the same.
+
+<Followup id="charts-due">Two machines exist now, so the chart generator is no longer ahead of need: `tools/docs/charts.ts` reading the two transition tables into `shell.md` and `review.md`, with `--check`. The tables are not exported yet because nothing reads them.</Followup>

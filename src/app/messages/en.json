@@ -1133,6 +1133,7 @@
   "review_not_combined": "Not combined",
   "review_saved_here_not_sent_yet": "Saved here. Not sent yet",
   "review_nothing_to_record": "Nothing to record",
+  "review_could_not_record_this_version": "Could not record this version",
   "review_could_not_write_to_disk": "Could not write to disk",
   "review_on_disk_but_not_recorded": "On disk, but not recorded",
   "review_recorded_count_books_on_this_device": "{count, plural, one {Recorded # book on this device} other {Recorded # books on this device}}",

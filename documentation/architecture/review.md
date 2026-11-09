@@ -252,7 +252,11 @@ how far the review is; **Save** — the header's one primary button, and its
 largest thing, with the way back a small borderless × beside it
 (`BackToEditor quiet`) — opens a dialog for its message, and the dialog stays
 open on its receipt: a line for this device and a line for the shared
-project ([sync](sync.md), "One reading for every surface"); the ⋯ menu holds Clear every decision (in an
+project ([sync](sync.md), "One reading for every surface"). That dialog is one machine,
+`src/core/save/recordPhase.ts`: `editing`, `recording`, and `recorded` with its receipt line and
+its send line. `createReceipt.ts` holds the phase and sends the events; a run in flight is neither
+doubled by a second press nor abandoned by closing the dialog, a record that throws ends on a
+receipt that says so, and a send that answers after its receipt was closed changes nothing. The ⋯ menu holds Clear every decision (in an
 editable review it takes every take back out of the text, one Undo step per
 book, as each book's own Clear does), History and what aligned the diff.
 Choosing another source starts over: no decisions, and the takes already

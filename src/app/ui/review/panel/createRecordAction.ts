@@ -41,11 +41,6 @@ export interface RecordActionInputs {
 type Project = NonNullable<ReturnType<Shell["project"]>>;
 type SettleOutcome = Awaited<ReturnType<typeof settleWithShared>>;
 
-interface RecordState {
-  readonly recording: () => boolean;
-  readonly setRecording: (value: boolean) => void;
-}
-
 interface Settling {
   readonly project: Project;
   readonly by: { name: string; email: string };
@@ -54,17 +49,13 @@ interface Settling {
   readonly copyReview: boolean;
 }
 
-function declineFromDialog(
-  inputs: RecordActionInputs,
-  state: RecordState,
-  declineNote: () => string,
-): void {
+function declineFromDialog(inputs: RecordActionInputs, declineNote: () => string): void {
   const { shell, services, navigate } = inputs;
   const project = shell.project();
   const number = inputs.route.pull();
-  if (project === undefined || number === undefined || state.recording()) return;
+  if (project === undefined || number === undefined || inputs.receipt.inFlight()) return;
   const staticNote = declineNote();
-  state.setRecording(true);
+  inputs.receipt.start();
   declineSuggestion(services, project, { number }, staticNote)
     .then(() => {
       toasts.success({
@@ -81,7 +72,7 @@ function declineFromDialog(
     .catch((cause: unknown) =>
       toasts.error({ title: m.review_could_not_decline_it(), message: describe(cause) }),
     )
-    .finally(() => state.setRecording(false));
+    .finally(() => inputs.receipt.stopped());
 }
 
 function settleOptions(
@@ -324,14 +315,14 @@ async function recordPlain(
   reportRecorded(inputs, project, staticMessage, outcome);
 }
 
-async function record(inputs: RecordActionInputs, state: RecordState): Promise<void> {
+async function record(inputs: RecordActionInputs): Promise<void> {
   const { shell, services } = inputs;
   const { againstShared, againstWriter } = inputs.sides;
   const { reviewBooks, undecidedBoth } = inputs.units;
   const { message, typedName, author, setAuthor, unsaved, defaultMessage } = inputs.form;
   const project = shell.project();
   const review = unsaved();
-  if (project === undefined || state.recording()) return;
+  if (project === undefined || inputs.receipt.inFlight()) return;
   if (review.length === 0 && !againstShared() && !againstWriter()) return;
   const typedMessage = message().trim();
   const staticNote = typedMessage;
@@ -348,39 +339,46 @@ async function record(inputs: RecordActionInputs, state: RecordState): Promise<v
     });
     return;
   }
-  if (author() === undefined) {
-    await services.run(Effect.ignore(setAuthorName(services.settings, typed)));
-    setAuthor(by);
-  }
-  if (againstShared() && undecidedBoth() > 0) {
-    toasts.error({
-      title: m.review_choose_a_side_first(),
-      message: m.review_passages_changed_in_both_places({
-        count: undecidedBoth(),
-      }),
+  // Before the first await, so a second press finds a run already in flight.
+  inputs.receipt.start();
+  try {
+    if (author() === undefined) {
+      await services.run(Effect.ignore(setAuthorName(services.settings, typed)));
+      setAuthor(by);
+    }
+    if (againstShared() && undecidedBoth() > 0) {
+      toasts.error({
+        title: m.review_choose_a_side_first(),
+        message: m.review_passages_changed_in_both_places({
+          count: undecidedBoth(),
+        }),
+      });
+      return;
+    }
+    const context = { project, by, staticMessage, staticNote, copyReview };
+    if (againstShared()) await recordAgainstShared(inputs, context);
+    else await recordPlain(inputs, context, review, typedMessage);
+  } catch (cause) {
+    inputs.receipt.setRecordedLine({
+      tone: "error",
+      title: m.review_could_not_record_this_version(),
+      detail: describe(cause),
     });
-    return;
+  } finally {
+    // Only a run that ended with no receipt is still recording here.
+    inputs.receipt.stopped();
   }
-  state.setRecording(true);
-  inputs.receipt.setRecordedLine(undefined);
-  inputs.receipt.setSendLine(undefined);
-  const context = { project, by, staticMessage, staticNote, copyReview };
-  if (againstShared()) await recordAgainstShared(inputs, context);
-  else await recordPlain(inputs, context, review, typedMessage);
-  state.setRecording(false);
 }
 
 export function createRecordAction(inputs: RecordActionInputs) {
-  const [recording, setRecording] = createSignal(false, { name: "reviewRecording" });
   const [declineNote, setDeclineNote] = createSignal("", { name: "reviewDeclineOnlyNote" });
-  const state = { recording, setRecording };
 
   return {
-    recording,
+    recording: inputs.receipt.recording,
     declineNote,
     setDeclineNote,
-    declineFromDialog: (): void => declineFromDialog(inputs, state, declineNote),
-    record: (): Promise<void> => record(inputs, state),
+    declineFromDialog: (): void => declineFromDialog(inputs, declineNote),
+    record: (): Promise<void> => record(inputs),
   };
 }
 
