@@ -90,11 +90,13 @@ interface MountArgs {
   readonly controls: () => Controls | undefined;
   readonly report: (unit: DecisionUnit | undefined) => void;
   readonly linked: () => boolean;
+  readonly currentFirst: boolean;
 }
 
 const mountPanes = (args: MountArgs): { held: Mounted[]; release: () => void } => {
   const { split, markup, live, leftHost, rightHost, now, operation, controls, report, linked } =
     args;
+  const { currentFirst } = args;
   const { sides } = now();
   const mode = markup ? "usfm" : "default";
   const held: Mounted[] = [];
@@ -159,10 +161,10 @@ const mountPanes = (args: MountArgs): { held: Mounted[]; release: () => void } =
   const painted = operation.span("review.diff.mount");
   if (split && leftHost !== undefined) {
     const was = add("baseline", leftHost, sides.baselineText, () =>
-      sidePaint(now().units, "baseline", markup, undefined, now().sides.baseline),
+      sidePaint(now().units, "baseline", markup, undefined, now().sides.baseline, currentFirst),
     );
     const current = add("current", rightHost, sides.currentText, () =>
-      sidePaint(now().units, "current", markup, controls(), now().sides.current),
+      sidePaint(now().units, "current", markup, controls(), now().sides.current, currentFirst),
     );
     follow("baseline", was);
     follow("current", current);
@@ -281,6 +283,7 @@ export function BookDiff(props: BookDiffProps) {
         controls,
         report,
         linked,
+        currentFirst: untrack(() => props.currentFirst === true),
       });
       mounts = held;
       const first = untrack(() => props.initial);

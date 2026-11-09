@@ -102,9 +102,19 @@ function createChoices(inputs: SidesInputs, state: SideState) {
   const left = (): CompareSource | undefined => sourceFor(leftId(), leftPicked());
   const right = (): CompareSource | undefined => sourceFor(rightId(), rightPicked());
 
-  const leftShort = (): string => choiceOf(leftId())?.shortLabel ?? m.review_this_side();
+  // Against a suggestion the editor stands for the shared project the
+  // suggestion would change: the reader hides this device's own changes, so
+  // what it shows on this side is the latest shared text.
+  const editorAsShared = (): boolean => inputs.route.pull() !== undefined && leftId() === "project";
+  const leftShort = (): string =>
+    editorAsShared()
+      ? m.review_the_shared_project_2()
+      : (choiceOf(leftId())?.shortLabel ?? m.review_this_side());
   const rightShort = (): string => choiceOf(rightId())?.shortLabel ?? m.review_the_other_side();
-  const leftLabel = (): string => left()?.label ?? choiceOf(leftId())?.label ?? "";
+  const leftLabel = (): string =>
+    editorAsShared()
+      ? m.review_the_shared_project_latest()
+      : (left()?.label ?? choiceOf(leftId())?.label ?? "");
   const rightLabel = (): string => right()?.label ?? choiceOf(rightId())?.label ?? "";
 
   const target = (): "left" | "right" | undefined => {
@@ -126,6 +136,7 @@ function createChoices(inputs: SidesInputs, state: SideState) {
   return {
     choices,
     choiceOf,
+    editorAsShared,
     left,
     right,
     leftShort,

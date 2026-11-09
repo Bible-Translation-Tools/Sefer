@@ -176,6 +176,7 @@ function ReaderRegion(props: { readonly body: ReviewBodyProps }) {
         baselineLabel={props.body.sides.rightLabel()}
         currentShort={props.body.sides.leftShort()}
         baselineShort={props.body.sides.rightShort()}
+        currentFirst={props.body.sides.editorAsShared()}
         selected={props.body.compare.selected()}
         onSelect={props.body.compare.setSelected}
         seat={props.body.writes.seatBook}

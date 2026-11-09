@@ -70,7 +70,15 @@ option is disabled on the other side's picker rather than silently ignored.
   a left-to-right script reads was-then-now, the way History lays out time
   (`ReviewReader`'s `currentFirst`, off by default). The chip, the pickers and
   each card's buttons follow the same order: "On disk → In the editor",
-  "Take the file's", "Keep the editor's".
+  "Take the file's", "Keep the editor's". The colours follow the columns, not
+  the editor: the right column is "now", its words green, the left's red.
+  Against a suggestion `currentFirst` is on (Will, 2026-11-06): a pull request
+  reads as the shared project, then what the suggestion would make of it, so the
+  editor is drawn on the LEFT, labelled "The shared project (latest)", in red,
+  and the suggestion on the right in green; the chip reads "The shared project
+  (latest) → The suggested changes", and the screen is always two columns,
+  since the one-column reading is the editor's text with the other side as
+  "was".
 - neither side is the project → the review is **for reading**: a "Reading
   only" badge, no Edit, no double-click, no Keep / Take. A review between two
   copies neither of which is this project is a reading, and offering a write

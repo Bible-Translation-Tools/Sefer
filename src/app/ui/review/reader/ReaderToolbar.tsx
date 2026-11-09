@@ -25,7 +25,7 @@ interface ReaderToolbarProps {
   readonly onScope: (scope: Scope) => void;
   readonly filter: Filter;
   readonly onFilter: (filter: Filter) => void;
-  readonly layout: Layout;
+  readonly layout?: Layout;
   readonly onLayout: (layout: Layout) => void;
   readonly usfm: boolean;
   readonly onUsfm: (on: boolean) => void;

@@ -64,6 +64,12 @@ interface ReviewReaderProps {
   readonly seat: (bookId: BookId) => Promise<EditorBook | undefined>;
   readonly onEdited: (bookId: BookId) => void;
   readonly onEditing?: (editing: boolean) => void;
+  /**
+   * Draw the current (writable) side on the LEFT, and read the other side as
+   * "now": its words green, the current side's red. A suggestion is the change
+   * and the shared project, in the editor, is what it changes. Forces two
+   * columns, since the one-column reading is the current side's text.
+   */
   readonly currentFirst?: boolean;
   readonly writesDecisions?: boolean;
   readonly dimUnchosen?: boolean;
@@ -110,7 +116,7 @@ interface ReaderModel {
   readonly expand: (key: string, step: ContextStep) => void;
 }
 
-function createReaderState(services: Services, keys: Keys) {
+function createReaderState(services: Services, keys: Keys, twoColumns: () => boolean) {
   const [layout, setLayoutSignal] = createSignal<Layout>(
     toLayout(services.settings.get(keys.reviewLayout)),
     { name: "reviewLayout" },
@@ -133,7 +139,7 @@ function createReaderState(services: Services, keys: Keys) {
   };
 
   const split = (): boolean =>
-    layout() === "split" || (layout() === "auto" && width() >= AUTO_SPLIT_PX);
+    twoColumns() || layout() === "split" || (layout() === "auto" && width() >= AUTO_SPLIT_PX);
   return {
     layout,
     scope,
@@ -237,7 +243,7 @@ function cardDecisionFor(
   };
   const choose = (chosen: MergeSide): void =>
     props.decide(hunk.bookId, hunk.units, side === chosen ? undefined : chosen);
-  return [
+  const buttons: CardAction[] = [
     {
       kind: "button",
       id: "take",
@@ -257,6 +263,7 @@ function cardDecisionFor(
       onPress: () => choose("current"),
     },
   ];
+  return props.currentFirst === true ? buttons.toReversed() : buttons;
 }
 
 const createSections = (prepared: Accessor<readonly Prepared[]>) =>
@@ -287,7 +294,7 @@ function ReaderToolbarView(props: { readonly reader: ReaderModel }): JSX.Element
         props.reader.setFilter(value);
         props.reader.cursor.setPlace(undefined);
       }}
-      layout={props.reader.layout()}
+      layout={props.reader.props.currentFirst === true ? undefined : props.reader.layout()}
       onLayout={props.reader.setLayout}
       usfm={props.reader.props.usfm}
       onUsfm={props.reader.props.onUsfm}
@@ -316,7 +323,7 @@ function WholeBookView(props: { readonly reader: ReaderModel }): JSX.Element {
     <WholeBook
       selected={props.reader.selectedBook()}
       books={props.reader.prepared()}
-      ready={props.reader.layout() !== "auto" || props.reader.width() > 0}
+      ready={props.reader.split() || props.reader.layout() !== "auto" || props.reader.width() > 0}
       split={props.reader.split()}
       usfm={props.reader.props.usfm}
       linked={props.reader.linked}
@@ -387,7 +394,7 @@ export function ReviewReader(props: ReviewReaderProps) {
   const observability = services.composition.observability;
   const keys = shellKeys(services.settings);
 
-  const state = createReaderState(services, keys);
+  const state = createReaderState(services, keys, () => props.currentFirst === true);
   const { layout, scope, setScope, filter, width, split } = state;
   const analysisOf = createAnalysisOf(services);
   const { views, expand } = createViews(services, keys);
