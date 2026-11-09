@@ -105,9 +105,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-overrides:
-  '@wycliffeassociates/scripture-kitchen': file:/tmp/claude-1012/-home-kellyw-projects-sefer/2cd64587-d2b7-44b3-9a37-7a1d0b0f4d27/scratchpad/kitchen/wycliffeassociates-scripture-kitchen-0.1.21.tgz
-
 importers:
 
   .:
@@ -164,8 +161,8 @@ importers:
         specifier: ^2.12.0
         version: 2.12.0
       '@wycliffeassociates/scripture-kitchen':
-        specifier: file:/tmp/claude-1012/-home-kellyw-projects-sefer/2cd64587-d2b7-44b3-9a37-7a1d0b0f4d27/scratchpad/kitchen/wycliffeassociates-scripture-kitchen-0.1.21.tgz
-        version: file:../../../../tmp/claude-1012/-home-kellyw-projects-sefer/2cd64587-d2b7-44b3-9a37-7a1d0b0f4d27/scratchpad/kitchen/wycliffeassociates-scripture-kitchen-0.1.21.tgz
+        specifier: 0.1.21
+        version: 0.1.21
       '@wycliffeassociates/sefer-editor':
         specifier: workspace:*
         version: link:packages/editor
@@ -301,10 +298,6 @@ importers:
         version: 4.136.3(@types/node@26.6.2)
 
   packages/editor:
-    dependencies:
-      '@wycliffeassociates/scripture-kitchen':
-        specifier: file:/tmp/claude-1012/-home-kellyw-projects-sefer/2cd64587-d2b7-44b3-9a37-7a1d0b0f4d27/scratchpad/kitchen/wycliffeassociates-scripture-kitchen-0.1.21.tgz
-        version: file:../../../../tmp/claude-1012/-home-kellyw-projects-sefer/2cd64587-d2b7-44b3-9a37-7a1d0b0f4d27/scratchpad/kitchen/wycliffeassociates-scripture-kitchen-0.1.21.tgz
     devDependencies:
       '@codemirror/commands':
         specifier: ^6.11.1
@@ -318,6 +311,9 @@ importers:
       '@codemirror/view':
         specifier: ^6.43.13
         version: 6.43.13
+      '@wycliffeassociates/scripture-kitchen':
+        specifier: 0.1.21
+        version: 0.1.21
       '@wycliffeassociates/sefer-text':
         specifier: workspace:*
         version: link:../text
@@ -326,10 +322,10 @@ importers:
         version: 5.0.1(@types/node@26.6.2)(@vitest/browser-playwright@5.0.1)(@vitest/ui@5.0.1)(jsdom@25.0.1(supports-color@8.1.1))(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/text:
-    dependencies:
+    devDependencies:
       '@wycliffeassociates/scripture-kitchen':
-        specifier: file:/tmp/claude-1012/-home-kellyw-projects-sefer/2cd64587-d2b7-44b3-9a37-7a1d0b0f4d27/scratchpad/kitchen/wycliffeassociates-scripture-kitchen-0.1.21.tgz
-        version: file:../../../../tmp/claude-1012/-home-kellyw-projects-sefer/2cd64587-d2b7-44b3-9a37-7a1d0b0f4d27/scratchpad/kitchen/wycliffeassociates-scripture-kitchen-0.1.21.tgz
+        specifier: 0.1.21
+        version: 0.1.21
 
   planning:
     dependencies:
@@ -3567,9 +3563,8 @@ packages:
     resolution: {integrity: sha512-K1DL05PngTMKY8mkzMNYpKNqZNPTrdJheuvTeWwwYlm4Yn9hLc8V3hw6EDsuEYw4cyEyiVeukLbLOEW+AhvqVw==}
     engines: {node: '>=18.20.0'}
 
-  '@wycliffeassociates/scripture-kitchen@file:../../../../tmp/claude-1012/-home-kellyw-projects-sefer/2cd64587-d2b7-44b3-9a37-7a1d0b0f4d27/scratchpad/kitchen/wycliffeassociates-scripture-kitchen-0.1.21.tgz':
-    resolution: {integrity: sha512-8HcUGoHZoswzzgXZ1ZzifrFa191pRpEMAd2FK+KSFCLMsp3Kim4NbFsEVNMF5oHBmuJ0DCAWmZS7HvDTtfG6og==, tarball: file:../../../../tmp/claude-1012/-home-kellyw-projects-sefer/2cd64587-d2b7-44b3-9a37-7a1d0b0f4d27/scratchpad/kitchen/wycliffeassociates-scripture-kitchen-0.1.21.tgz}
-    version: 0.1.21
+  '@wycliffeassociates/scripture-kitchen@0.1.21':
+    resolution: {integrity: sha512-8HcUGoHZoswzzgXZ1ZzifrFa191pRpEMAd2FK+KSFCLMsp3Kim4NbFsEVNMF5oHBmuJ0DCAWmZS7HvDTtfG6og==, tarball: https://nexus-registry.walink.org/repository/wa-npm/@wycliffeassociates/scripture-kitchen/-/scripture-kitchen-0.1.21.tgz}
 
   '@zip.js/zip.js@2.23.0':
     resolution: {integrity: sha512-K5obAqfrO7zhycnCupM9aaoZ9kx0SA0kv7+Z2oOUsdpWquv4s/Z4zyD7AdTqxrK3pgPM+ozaUi8kdRQbCWaIrQ==}
@@ -10152,7 +10147,7 @@ snapshots:
     dependencies:
       '@wdio/logger': 9.29.1
 
-  '@wycliffeassociates/scripture-kitchen@file:../../../../tmp/claude-1012/-home-kellyw-projects-sefer/2cd64587-d2b7-44b3-9a37-7a1d0b0f4d27/scratchpad/kitchen/wycliffeassociates-scripture-kitchen-0.1.21.tgz': {}
+  '@wycliffeassociates/scripture-kitchen@0.1.21': {}
 
   '@zip.js/zip.js@2.23.0': {}
 

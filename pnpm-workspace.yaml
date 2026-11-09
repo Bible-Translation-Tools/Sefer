@@ -59,7 +59,3 @@ peerDependencyRules:
     "@corvu-next/tooltip>solid-js": "2.0.0-rc.6"
     "@corvu-next/tooltip>@solidjs/web": "2.0.0-rc.6"
     "lucide-solid>solid-js": "2.0.0-rc.6"
-
-# TEMPORARY (kitchen-0.1.21 branch): the local pack until 0.1.21 is on Nexus.
-overrides:
-  "@wycliffeassociates/scripture-kitchen": "file:/tmp/claude-1012/-home-kellyw-projects-sefer/2cd64587-d2b7-44b3-9a37-7a1d0b0f4d27/scratchpad/kitchen/wycliffeassociates-scripture-kitchen-0.1.21.tgz"
