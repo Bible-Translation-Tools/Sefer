@@ -64,5 +64,5 @@ Preconditions:
 - Settings has "Skip review of my changes". With it on, ⌘S saves at once and
   there is no Review step. A fresh session has it off.
 
-Last walked end to end: 2026-10-27, Web, fixture (`.verify/2026-10-27T16-11-57-459Z-9cc68c65/`).
+Last walked end to end: 2026-11-09, Web, fixture, on kitchen 0.1.22 (`.verify/2026-11-09T18-41-14-108Z-e1523d10/`), driven with Playwright and the system Chrome because agent-browser was not installed.
 Not walked: the More menu entry point, desktop.
