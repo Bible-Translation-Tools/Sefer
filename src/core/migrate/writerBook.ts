@@ -1,24 +1,15 @@
-import { read as readManifest } from "@wycliffeassociates/scripture-kitchen/bento";
+import {
+  writerProject,
+  type WriterProject as Bento,
+} from "@wycliffeassociates/scripture-kitchen/bento";
 import * as TextResult from "@wycliffeassociates/sefer-text/result";
 import { decode } from "@wycliffeassociates/sefer-text/source";
 import { Effect, FileSystem } from "effect";
 
 import { joinPath, lastSegment } from "../fileSystem/path";
-import { unreadable } from "../resources/projectMetadata";
-import type { RelatedResource } from "../resources/relationships";
 
-export interface WriterProject {
-  readonly root: string;
-  readonly book: string;
-  readonly language: {
-    readonly id: string;
-    readonly name: string | undefined;
-    readonly direction: "ltr" | "rtl";
-  };
-  readonly resource: string;
-  readonly sources: readonly RelatedResource[];
-  readonly translators: readonly string[];
-}
+/** A Writer book project as bento reads it, and the folder it was read from. */
+export type WriterProject = Bento & { readonly root: string };
 
 const readText = (
   fileSystem: FileSystem.FileSystem,
@@ -33,44 +24,22 @@ const readText = (
   );
 
 /**
- * The Writer book project at `root`, from its `manifest.json` as bento reads
- * it: a book of canon's table, a language and a resource (the folder name's
- * last part when the manifest names none, as Writer names its folders).
+ * The Writer book project at `root`: bento's `writerProject` over its
+ * `manifest.json` (a book of canon's table, a language, and a resource, the
+ * folder name's last part when the manifest names none, as Writer names its
+ * folders), with the root it was read from.
  */
 export const recognizeWriter = (
   fileSystem: FileSystem.FileSystem,
   root: string,
 ): Effect.Effect<WriterProject | undefined> =>
-  Effect.gen(function* () {
-    const bytes = yield* Effect.orElseSucceed(
-      fileSystem.readFile(joinPath(root, "manifest.json")),
-      () => undefined,
-    );
-    if (bytes === undefined) return undefined;
-    const read = readManifest("manifest.json", bytes);
-    if (unreadable(read) || read.manifest === undefined || read.detail?.format !== "bttwriter")
-      return undefined;
-    const { manifest } = read;
-    const written = read.detail.document;
-    const book = manifest.books[0]?.book;
-    const language = manifest.language.tag.trim();
-    const resource =
-      manifest.kind.declared.identifier?.trim() ||
-      (lastSegment(root).split("_").at(-1) ?? "").trim();
-    if (book === undefined || language === "" || resource === "") return undefined;
-    return {
-      root,
-      book,
-      language: {
-        id: language,
-        name: written.target_language?.name,
-        direction: manifest.language.direction,
-      },
-      resource: resource.toLowerCase(),
-      sources: manifest.sources,
-      translators: written.translators ?? [],
-    };
-  });
+  Effect.map(
+    Effect.orElseSucceed(fileSystem.readFile(joinPath(root, "manifest.json")), () => undefined),
+    (bytes) => {
+      const project = bytes === undefined ? undefined : writerProject(bytes, lastSegment(root));
+      return project === undefined ? undefined : { root, ...project };
+    },
+  );
 
 /**
  * Every text file of one Writer book project (`front/title.txt`, `05/03.txt`),

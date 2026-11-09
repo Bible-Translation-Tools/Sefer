@@ -161,8 +161,8 @@ importers:
         specifier: ^2.12.0
         version: 2.12.0
       '@wycliffeassociates/scripture-kitchen':
-        specifier: 0.1.22
-        version: 0.1.22
+        specifier: 0.1.23
+        version: 0.1.23
       '@wycliffeassociates/sefer-editor':
         specifier: workspace:*
         version: link:packages/editor
@@ -312,8 +312,8 @@ importers:
         specifier: ^6.43.13
         version: 6.43.13
       '@wycliffeassociates/scripture-kitchen':
-        specifier: 0.1.22
-        version: 0.1.22
+        specifier: 0.1.23
+        version: 0.1.23
       '@wycliffeassociates/sefer-text':
         specifier: workspace:*
         version: link:../text
@@ -324,8 +324,8 @@ importers:
   packages/text:
     devDependencies:
       '@wycliffeassociates/scripture-kitchen':
-        specifier: 0.1.22
-        version: 0.1.22
+        specifier: 0.1.23
+        version: 0.1.23
 
   planning:
     dependencies:
@@ -3556,8 +3556,8 @@ packages:
     resolution: {integrity: sha512-K1DL05PngTMKY8mkzMNYpKNqZNPTrdJheuvTeWwwYlm4Yn9hLc8V3hw6EDsuEYw4cyEyiVeukLbLOEW+AhvqVw==}
     engines: {node: '>=18.20.0'}
 
-  '@wycliffeassociates/scripture-kitchen@0.1.22':
-    resolution: {integrity: sha512-7CL595pnADjK8bW/ZH3aqqsiolDyi5qoXx+FtyKP/pwVqSLa7RXfizPURVHKZ7vqgddTdDUj+Df0QKIDHqIsfA==, tarball: https://nexus-registry.walink.org/repository/wa-npm/@wycliffeassociates/scripture-kitchen/-/scripture-kitchen-0.1.22.tgz}
+  '@wycliffeassociates/scripture-kitchen@0.1.23':
+    resolution: {integrity: sha512-DKPMabUEdj3130/g67PWaMPAkDVtRsXt/0+LnfpHM8QgyL/oNJqYrwFP90n3p1HZ6rhf45oRGSFUaRhjbYwA+Q==, tarball: https://nexus-registry.walink.org/repository/wa-npm/@wycliffeassociates/scripture-kitchen/-/scripture-kitchen-0.1.23.tgz}
 
   '@zip.js/zip.js@2.23.0':
     resolution: {integrity: sha512-K5obAqfrO7zhycnCupM9aaoZ9kx0SA0kv7+Z2oOUsdpWquv4s/Z4zyD7AdTqxrK3pgPM+ozaUi8kdRQbCWaIrQ==}
@@ -10140,7 +10140,7 @@ snapshots:
     dependencies:
       '@wdio/logger': 9.29.1
 
-  '@wycliffeassociates/scripture-kitchen@0.1.22': {}
+  '@wycliffeassociates/scripture-kitchen@0.1.23': {}
 
   '@zip.js/zip.js@2.23.0': {}
 
