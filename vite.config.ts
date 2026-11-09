@@ -177,6 +177,7 @@ export default defineConfig(({ mode }) => {
             environment: "node",
             include: ["src/**/*.test.ts", "packages/*/src/**/*.test.ts", "tools/**/*.test.ts"],
             exclude: [...configDefaults.exclude, "**/*.browser.test.*"],
+            setupFiles: ["src/platform/node/bento.setup.ts"],
           },
         },
         {

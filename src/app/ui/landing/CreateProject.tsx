@@ -1,11 +1,14 @@
 import type { JSX } from "@solidjs/web";
 import { Link } from "@tanstack/solid-router";
-import { Result } from "effect";
+import {
+  read as readManifest,
+  type BurritoMetadata,
+} from "@wycliffeassociates/scripture-kitchen/bento";
 import ArrowLeft from "lucide-solid/icons/arrow-left";
 import { For, Show, createSignal } from "solid-js";
 
 import { m } from "#app/paraglide/messages";
-import { decodeBurritoMetadata, type BurritoMetadata } from "#core/resources/burrito";
+import { unreadable } from "#core/resources/projectMetadata";
 
 import { useShell } from "../../ProjectContext";
 import { Badge, Button, Card, Input, PanelHeader, SegmentedControl, Select } from "../primitives";
@@ -120,21 +123,21 @@ const createProjectForm = () => {
   const build = (): void => {
     setProblem("");
     setStaged(undefined);
-    const decoded = decodeBurritoMetadata(
-      candidateFor({
-        locale,
-        build: services.hostInfo.build(),
-        type: type(),
-        name: name(),
-        abbreviation: abbreviation(),
-        languageName: languageName(),
-        languageTag: languageTag(),
-        direction: direction(),
-        books: books(),
-      }),
-    );
-    if (Result.isFailure(decoded)) setProblem(decoded.failure.message);
-    else setStaged(decoded.success);
+    const candidate = candidateFor({
+      locale,
+      build: services.hostInfo.build(),
+      type: type(),
+      name: name(),
+      abbreviation: abbreviation(),
+      languageName: languageName(),
+      languageTag: languageTag(),
+      direction: direction(),
+      books: books(),
+    });
+    const read = readManifest("metadata.json", new TextEncoder().encode(JSON.stringify(candidate)));
+    if (unreadable(read) || read.detail?.format !== "burrito")
+      setProblem(read.findings.map((finding) => finding.message).join(" "));
+    else setStaged(read.detail.document);
   };
 
   return {

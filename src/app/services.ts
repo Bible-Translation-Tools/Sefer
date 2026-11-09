@@ -46,6 +46,7 @@ import {
 } from "#core/save/saveCoordinator";
 import { detectHost } from "#platform/host";
 import { browserFacts } from "#platform/hostFacts";
+import { WebBentoLive } from "#platform/web/bento";
 import { WebCredentialsLive } from "#platform/web/credentials";
 import { WebDialogsLive } from "#platform/web/dialogs";
 import { OpfsFileSystemLive } from "#platform/web/fileSystem";
@@ -256,7 +257,7 @@ const domainLayer = (
 
   const account = accountLayer(build, tauri);
 
-  const engine = WebGalleyLive;
+  const engine = Layer.merge(WebGalleyLive, WebBentoLive);
 
   const host = Layer.mergeAll(
     engine,

@@ -11,18 +11,6 @@ export interface RelatedResource {
   readonly version?: string;
 }
 
-export interface BurritoRelationship {
-  readonly relationType: string;
-  readonly id: string;
-  readonly revision?: string | undefined;
-}
-
-export interface ResourceContainerSource {
-  readonly identifier: string;
-  readonly language?: string | undefined;
-  readonly version?: string | undefined;
-}
-
 export interface WriterSourceTranslation {
   readonly language_id: string;
   readonly resource_id: string;
@@ -47,24 +35,6 @@ const related = (
 };
 
 const present = <A>(value: A | undefined): value is A => value !== undefined;
-
-export const fromBurritoRelationships = (
-  relationships: readonly BurritoRelationship[],
-): readonly RelatedResource[] =>
-  relationships
-    .filter((entry) => entry.relationType === "source")
-    .map((entry) => {
-      const match = /^[^:]+::([^/\s]+)\/([^/\s]+)$/.exec(entry.id);
-      return match === null ? undefined : related(match[1] ?? "", match[2] ?? "", entry.revision);
-    })
-    .filter(present);
-
-export const fromResourceContainerSource = (
-  sources: readonly ResourceContainerSource[],
-): readonly RelatedResource[] =>
-  sources
-    .map((entry) => related(entry.language ?? "", entry.identifier, entry.version))
-    .filter(present);
 
 export const fromWriterSourceTranslations = (
   translations: readonly WriterSourceTranslation[],

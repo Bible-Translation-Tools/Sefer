@@ -1,12 +1,11 @@
+import { read as readManifest } from "@wycliffeassociates/scripture-kitchen/bento";
 import * as TextResult from "@wycliffeassociates/sefer-text/result";
 import { decode } from "@wycliffeassociates/sefer-text/source";
 import { Data, Effect, FileSystem, Result, type PlatformError } from "effect";
 
 import { joinPath, lastSegment, parentPath } from "../fileSystem/path";
 import { appendArrival } from "../project/provenance";
-import { decodeBurritoMetadata } from "./burrito";
-import { readResourceContainerManifest } from "./projectMetadata";
-import { decodeResourceContainerManifest } from "./resourceContainer";
+import { unreadable as stopped } from "./projectMetadata";
 
 export type Classification = "burrito" | "resourceContainer" | "looseUsfm" | "unknown";
 
@@ -101,9 +100,22 @@ export const readJson = (
     Result.isSuccess(result) ? result.success : undefined,
   );
 
-const readTextOrEmpty = (fileSystem: FileSystem.FileSystem, path: string): Effect.Effect<string> =>
-  Effect.orElseSucceed(fileSystem.readFileString(path), () => "");
+/** Whether bento reads the file at `path` as `name` without an error: a manifest Sefer can open. */
+const readsAs = (
+  fileSystem: FileSystem.FileSystem,
+  path: string,
+  name: string,
+): Effect.Effect<boolean> =>
+  Effect.orElseSucceed(
+    Effect.map(fileSystem.readFile(path), (bytes) => !stopped(readManifest(name, bytes))),
+    () => false,
+  );
 
+/**
+ * A Burrito when its metadata.json reads, else a Resource Container when its
+ * manifest.yaml does (bento reads both, leniently), else loose USFM. A BTT
+ * Writer `manifest.json` is neither: that is a book to migrate.
+ */
 export const classify = (
   fileSystem: FileSystem.FileSystem,
   staged: { readonly root: string },
@@ -111,16 +123,9 @@ export const classify = (
   Effect.gen(function* () {
     const { root } = staged;
 
-    const metadata = yield* readJson(fileSystem, joinPath(root, "metadata.json"));
-    if (metadata !== undefined && Result.isSuccess(decodeBurritoMetadata(metadata)))
+    if (yield* readsAs(fileSystem, joinPath(root, "metadata.json"), "metadata.json"))
       return "burrito";
-
-    const manifest = yield* readJson(fileSystem, joinPath(root, "manifest.json"));
-    if (manifest !== undefined && Result.isSuccess(decodeResourceContainerManifest(manifest)))
-      return "resourceContainer";
-
-    const yaml = yield* readTextOrEmpty(fileSystem, joinPath(root, "manifest.yaml"));
-    if (yaml !== "" && Result.isSuccess(readResourceContainerManifest(yaml)))
+    if (yield* readsAs(fileSystem, joinPath(root, "manifest.yaml"), "manifest.yaml"))
       return "resourceContainer";
 
     const files = yield* Effect.orElseSucceed(
