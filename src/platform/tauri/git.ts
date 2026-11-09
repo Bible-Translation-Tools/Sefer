@@ -13,8 +13,8 @@ import {
   type GitService,
   type Repo,
   type Status,
+  type GitObject,
   type Version,
-  type WalkedCommit,
 } from "#core/git/git";
 
 interface WireCommit {
@@ -25,7 +25,10 @@ interface WireCommit {
   readonly at: number;
 }
 
-type WireWalkedCommit = WalkedCommit;
+interface WireObject {
+  readonly type: GitObject["type"];
+  readonly bytes: readonly number[];
+}
 
 interface WireChangedPath {
   readonly path: string;
@@ -150,13 +153,18 @@ const tauriGit = {
         changed.map((entry) => ({ path: entry.path, kind: changeKindOf(entry.kind) })),
     ),
 
-  walk: (repo) => call<readonly WireWalkedCommit[]>("git_walk", { root: repo.root }),
-
-  blobs: (repo, ids) =>
+  objectReader: (repo) => (ids) =>
     Effect.map(
-      call<readonly (readonly number[])[]>("git_blobs", { root: repo.root, ids }),
-      (bytes): ReadonlyMap<string, Uint8Array> =>
-        new Map(ids.map((id, index) => [id, new Uint8Array(bytes[index] ?? [])])),
+      call<readonly (WireObject | null)[]>("git_objects", { root: repo.root, ids }),
+      (objects): ReadonlyMap<string, GitObject> => {
+        const out = new Map<string, GitObject>();
+        objects.forEach((object, index) => {
+          const id = ids[index];
+          if (object !== null && id !== undefined)
+            out.set(id, { type: object.type, bytes: new Uint8Array(object.bytes) });
+        });
+        return out;
+      },
     ),
 
   show,

@@ -1,10 +1,11 @@
+import { read as readManifest } from "@wycliffeassociates/scripture-kitchen/bento";
 import * as TextResult from "@wycliffeassociates/sefer-text/result";
 import { decode } from "@wycliffeassociates/sefer-text/source";
 import { Effect, FileSystem, Result, Schema } from "effect";
 
 import { writeFileStringAtomic } from "../../../fileSystem/atomic";
 import { joinPath, normalisePath } from "../../../fileSystem/path";
-import { readResourceContainerManifest } from "../../projectMetadata";
+import { unreadable } from "../../projectMetadata";
 import { Unavailable } from "../handle";
 import { filesBelow, treeInFolder, type PackProgress, type UpstreamTree } from "../tree";
 import { readHelpBook, type BookFile } from "./rcHelpMarkdown";
@@ -66,18 +67,23 @@ const unavailable = (reason: Unavailable["reason"], description: string): Unavai
 const packPath = (root: string, book: string): string =>
   joinPath(root, `${PACK_DIR}/${book.toUpperCase()}.json`);
 
-const booksIn = (text: string): Result.Result<readonly HelpBook[], Unavailable> => {
-  const manifest = readResourceContainerManifest(text);
-  if (Result.isFailure(manifest))
-    return Result.fail(unavailable("Unreadable", manifest.failure.description));
+/** The books an RC's manifest.yaml lists, read by bento; a path that leaves the resource stops it. */
+const booksIn = (bytes: Uint8Array): Result.Result<readonly HelpBook[], Unavailable> => {
+  const read = readManifest("manifest.yaml", bytes);
+  if (unreadable(read) || read.manifest === undefined)
+    return Result.fail(
+      unavailable("Unreadable", read.findings.map((finding) => finding.message).join(" ")),
+    );
   const books: HelpBook[] = [];
-  for (const project of manifest.success.projects) {
-    const path = normalisePath(project.path);
+  for (const entry of read.manifest.books) {
+    if (entry.path === undefined)
+      return Result.fail(unavailable("Unreadable", `${entry.book}: the manifest gives no path`));
+    const path = normalisePath(entry.path);
     if (path.startsWith("..") || path.startsWith("/"))
       return Result.fail(
-        unavailable("Unreadable", `${project.identifier}: ${project.path} leaves the resource`),
+        unavailable("Unreadable", `${entry.book}: ${entry.path} leaves the resource`),
       );
-    books.push({ book: project.identifier.toUpperCase(), path });
+    books.push({ book: entry.book, path });
   }
   return Result.succeed(books);
 };
@@ -87,10 +93,7 @@ const manifestOf = (tree: UpstreamTree): Effect.Effect<readonly HelpBook[], Unav
     const bytes = yield* tree.file("manifest.yaml");
     if (bytes === undefined)
       return yield* Effect.fail(unavailable("Unreadable", "no manifest.yaml"));
-    const text = decode(bytes);
-    if (TextResult.isFailure(text))
-      return yield* Effect.fail(unavailable("Unreadable", text.failure.description));
-    const books = booksIn(text.success.text);
+    const books = booksIn(bytes);
     return Result.isSuccess(books) ? books.success : yield* Effect.fail(books.failure);
   });
 

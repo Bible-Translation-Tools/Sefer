@@ -1,61 +1,76 @@
 # Resource metadata
 
-Scripture Burrito `metadata.json` and Resource Container `manifest.yaml` describe what a resource is. Sefer may receive those bytes from the `effect/FileSystem` port or from a Rust command behind Tauri; either way what reaches the application is an untyped JSON value. `burrito.ts` and `resourceContainer.ts` in `src/core/resources/` are the contract that turns such a value into a typed one, and they are nothing else: no reader, no I/O, no classification, no import flow. The rest of the folder — intake, classification, the Library — is below.
+Scripture Burrito `metadata.json`, Resource Container `manifest.yaml` and BTT Writer `manifest.json` describe what a resource is. Sefer does not read them itself: the kitchen's **bento** (`@wycliffeassociates/scripture-kitchen/bento`) reads, checks, creates and edits all three, the same code the hub runs, so a project migrated in Sefer and one consolidated by the hub carry the same manifests. Sefer keeps the I/O (finding the file in a folder, writing what bento returns) and its own policy (which related text to clone, what a new project's publisher is).
 
-Two Effect Schemas, with the same decode shape — a synchronous `Schema.decodeUnknownResult` wrapper that takes `unknown` and returns `Result<T, Schema.SchemaError>`, never an Effect, so a caller on any path can decode without a runtime.
+## Starting bento
 
-- `burrito.ts` — `decodeBurritoMetadata`. Requires `format` (the literal `"scripture burrito"`), `meta`, `identification`, `type`, `languages`, and `ingredients`; `idAuthorities`, `localizedNames` and `relationships` are optional.
-- `resourceContainer.ts` — `decodeResourceContainerManifest`. Requires `dublin_core` and `projects`; `checking` is optional. It decodes a parsed value; `projectMetadata.ts` parses `manifest.yaml` (the `yaml` package) before handing it over.
+bento is one wasm module whose functions are module-level. It starts at boot beside galley: `WebBentoLive` (`src/platform/web/bento.ts`) fetches the wasm and calls `initSync`, and the composition merges it into the engine layer, so a module that will not load fails the boot as galley's does (`EngineLoadError`). Desktop runs the same layer in its webview. The unit tests start it once in their setup file (`src/platform/node/bento.setup.ts`, from the wasm's bytes); a core module that reads a manifest calls bento directly.
 
-Both model a subset — the fields the previous application actually read, plus enough to identify a resource. Both are open records: Effect Schema ignores excess properties by default, so a real Burrito or manifest carrying spec fields we do not model still decodes, and the unmodelled fields are simply not carried into the decoded value. Adding a field to a schema is how it becomes visible to the rest of the application.
+## Reading
 
-A refusal is a `Schema.SchemaError` whose `message` names the failing path, for example `Missing key` followed by `at ["identification"]`. Fixtures live in `fixtures/resources/`; see that folder's README for what is real and what is constructed.
+`bento.find(rootNames)` picks the manifest among a folder's root names (`metadata.json`, then `manifest.yaml`, then `manifest.json`, in any case), and `bento.read(name, bytes)` reads it. Reading never throws and never refuses a shape: what it forgave or found wrong is a finding (`check`, `severity`, `at` as a JSON pointer, `message`), and only a file that is not JSON or YAML at all is an `error`. Missing fields, including those WA's Burrito fork requires that older projects lack, are `manifest-valid` warnings, so every project Sefer could open before still opens. `unreadable(read)` (`src/core/resources/projectMetadata.ts`) is the one test of "this stops here": no manifest, or an error finding, as `bento.readOrThrow` would throw.
+
+`readManifest(fileSystem, root)` in `src/core/project/discovery.ts` is the folder half: list the root, `find`, read the bytes, `read`. `readProjectMetadata` builds on it and is what a project's header, the Library and the arrival flows use.
+
+`ProjectMetadata` stays as an adapter over bento's `Manifest` (`fromManifest`), because callers store and compare its shape: the Library writes `container` and `declared` into `library.json`, and resource kinds are recognised on them. The mapping:
+
+| `ProjectMetadata`                             | from bento                                                                         |
+| --------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `container: "burrito" \| "resourceContainer"` | `format: "burrito" \| "rc"`; a `bttwriter` manifest is not a project (`undefined`) |
+| `id`                                          | a Burrito's primary repo (`Manifest.id`); an RC's `kind.declared.identifier`       |
+| `abbreviation`, `name`, `language`            | the same fields                                                                    |
+| `defaultLocale`                               | a Burrito's `meta.defaultLocale` (from `detail`); an RC's language tag             |
+| `bookNames`                                   | `books[].title`, by book code (only books of canon's table)                        |
+| `related`                                     | `sources`                                                                          |
+| `subject`                                     | as written: a Burrito's flavor (`kind.flavor`), an RC's `kind.declared.subject`    |
+| `declared { type, format }`                   | an RC's `kind.declared`; empty for a Burrito                                       |
+
+Other readers go to bento directly: `classify` (`import.ts`) asks whether `metadata.json`, else `manifest.yaml`, reads without an error; Translation Notes' `helpBooks` (`kinds/tn/pack.ts`) take `books[].path` from an RC's manifest; `recognizeWriter` (`src/core/migrate/writerBook.ts`) reads a Writer `manifest.json`; the Create screen's preview reads the Burrito it would write. Fixtures are in `fixtures/resources/`; `projectMetadata.test.ts` reads both through bento.
 
 ## The source texts a project declares
 
-`relationships.ts` reads what a project says it was translated from, whichever format said it — Burrito `relationships[]` with `relationType: "source"`, a Resource Container's `dublin_core.source[]`, or a BTT Writer manifest's `source_translations[]` — into one `RelatedResource { language, resource, version? }`. `ProjectMetadata.related` carries every listed version as written; `highestVersions` keeps one per language and resource, the highest listed, because a project that lists ULB `24-02` and `21-05` wants one copy of ULB, not two. None of the three names a repository: the WA-Catalog convention (`<host>/WA-Catalog/<language>_<resource>`, `catalogueUrl`) is the one place that turns a reference into a URL, and `normaliseRepoUrl` is how two URLs are compared (case-folded, no `.git`, no trailing slash — Gitea answers `wa-catalog` and `WA-Catalog` alike).
+bento reads what a project says it was translated from, whichever format said it (Burrito `relationships[]` with `relationType: "source"`, an RC's `dublin_core.source[]`, a Writer manifest's `source_translations[]`), into `Manifest.sources`: `{ relation: "source", language, resource, version? }`, which is `RelatedResource` as `relationships.ts` names it. `ProjectMetadata.related` carries every listed version as written; `highestVersions` keeps one per language and resource, the highest listed, because a project that lists ULB `24-02` and `21-05` wants one copy of ULB, not two. None names a repository: the WA-Catalog convention (`<host>/WA-Catalog/<language>_<resource>`, `catalogueUrl`) is the one place that turns a reference into a URL, and `normaliseRepoUrl` is how two URLs are compared (case-folded, no `.git`, no trailing slash — Gitea answers `wa-catalog` and `WA-Catalog` alike). Resolution is Sefer's policy and stays in `relationships.ts`.
 
-Sefer WRITES relationships the way WA's own tools do (`Tech_Advance/leb-x-bisa_reg`, commit `7bd978c`): the authority `wycliffeassociates` (`https://www.wycliffeassociates.org`), the id `wycliffeassociates::<language>/<resource>`, and `revision` holding the LISTED version (`"21-05"`), one relationship per listed version — not a commit (Will, 2026-10-06). The commit a copy holds is this device's fact, on the Library row. The code says "relationship" or "related resource" because Source is taken (the editable text of a Book); "source" appears only as the formats' own literals and in product copy ("Source texts").
+bento WRITES a relationship as WA's fork has it: `wacs::WA-Catalog/<language>_<resource>`, with the listed version as `revision`. The code says "relationship" or "related resource" because Source is taken (the editable text of a Book); "source" appears only as the formats' own literals and in product copy ("Source texts").
 
-`writeMetadata.ts` is the one place that writes a new project's description, from one form into both files: `metadata.json` (checked against `decodeBurritoMetadata` before it is returned, so a project Sefer writes is one it can open) and `manifest.yaml` (output only, for the organisation's other tools; the Burrito wins if they drift). Both follow what WA's converter wrote for `Tech_Advance/bwc_reg`, with contributors de-duplicated on a normalised key (`_` as a space, case-folded; a team written as one string stays one entry) and sources de-duplicated. The Writer migration is its first caller.
+## Writing
+
+A new project's manifests are bento's: `createBible(project)` writes `metadata.json` and `manifest.yaml` together (order, `sort`, paths and categories from canon; contributors de-duplicated on a normalised key), and `bttwriter.consolidate` calls it for the closing commit of a Writer migration ([the migration](#the-writer-migration), below). Every field but `canon` is required, because each app states its own policy; Sefer's is in `projectOf` (`src/core/migrate/assemble.ts`): publisher Wycliffe Associates, creator "Bible translation community", the form's rights and checking level, a copyright statement from the rights, the generator `Sefer` at its build, a full ISO `createdAt`, and the `owner/repo` it expects to be pushed to (the account the first cloned book came from, else the language tag; `src/app/migrate.ts`).
+
+What changed with the switch, deliberately: a new `metadata.json` passes WA's Burrito fork (`copyright`, a full ISO `dateCreated`, `generator.softwareVersion`, `identification.primary` under `wacs` with `revision: "latest"`); `defaultLocale` stays `en` and every name is written under `en` and the project's tag; an RC's `sort` is canon's place counted from 1 (Matthew 40, as the catalog writes it), where Sefer wrote it 0-based. Old manifests are not rewritten.
+
+`bento.edit(existing, change)` changes existing manifests and returns only the files that changed. `addBooks` lists new books with a minimal diff (a YAML edit changes only the new entry's lines, in the file's own style; an `addBooks` that lands on an old neighbour's `sort` reports the tie rather than renumbering); `checksums` brings a Burrito's ingredient md5 and size up to date.
 
 ## Checksums
 
-A Burrito ingredient carries the md5 and the size of the file it names, which
-means every save of a book makes `metadata.json` wrong about that book.
-`src/core/resources/checksum.ts` is what makes it right again, and it holds an
-md5 of Sefer's own: Web Crypto deliberately does not implement md5 — it is
-broken as a security primitive and the browsers will not grow it — and core may
-not import `node:crypto`. Burrito uses md5 as a content FINGERPRINT, not as a
-signature, so the weakness is not ours to fix; we only have to produce the same
-digits every other Burrito reader produces. RFC 1321 is sixty lines of
-arithmetic, and a package for it would be a supply-chain surface for nothing.
+A Burrito ingredient carries the md5 and the size of the file it names, which means every save of a book makes `metadata.json` wrong about that book. `ProjectAdmin.refreshChecksums(root, names?)` puts it right: it reads the named ingredients (every one by default), leaves one whose file it cannot read as it is, and when any fingerprint (`bento.fingerprint`) moved, writes what `bento.edit(existing, { checksums })` returns. Composition hangs it off `SaveCoordinatorOptions.onSaved` (`src/app/services.ts`). Save must not know what a burrito is and ProjectAdmin must not know when a save happened, so the two meet in composition; `ingredientFor(fileSystem, path)` answers which project a written path belongs to and what the ingredient is called inside it, by walking up at most four levels to the nearest `metadata.json`. A path under none is a folder of loose USFM, and nothing happens.
 
-`refreshIngredientChecksums(metadata, readBytes, names?)` is the policy: it
-recomputes the named ingredients (every one by default) through a reader the
-caller supplies, leaves an ingredient whose bytes it cannot read exactly as it
-is — a missing file is a fact about the project, not a reason to invent a
-checksum — and reports which rows moved, so nothing is written when nothing
-changed.
+`ProjectAdmin.updateMetadata(root, patch)` writes a patched `metadata.json` only when bento reads the result without an error or a `manifest-valid` finding the file did not already have, so an older project's own warnings never block an edit.
 
-Where it is called: `ProjectAdmin.refreshChecksums(root, names?)` wraps it over
-the `FileSystem` port and writes through the same schema gate as every other
-metadata edit, and composition hangs that off `SaveCoordinatorOptions.onSaved`
-(`src/app/services.ts`). Save must not know what a burrito is and ProjectAdmin
-must not know when a save happened, so the two meet in composition;
-`ingredientFor(fileSystem, path)` answers which project a written path belongs
-to and what the ingredient is called inside it, by walking up at most four
-levels to the nearest `metadata.json`. A path under none is a folder of loose
-USFM, and nothing happens.
+## The Writer migration
+
+The kitchen's **bttwriter** (`@wycliffeassociates/scripture-kitchen/bttwriter`) owns everything about a BTT Writer book project's history: the first-parent walk, the template that stitches chunks into USFM, interleaving books by time, dropping saves that changed no text, commit summaries and trailers, the estimated date and `Writer-Clock:` trailer for a save whose device clock cannot be right, and the git pack and idx v2 it all lands in. Sefer reads the filesystem and git, writes the pack files and refs it is handed, and owns the screen, the form and the closing commit's words.
+
+It loads lazily. `WriterEngine` (`src/core/migrate/writerEngine.ts`) is a service whose `load` imports the module and starts its wasm the first time a history is read; `WebWriterEngineLive` (`src/platform/web/bttwriter.ts`) is a dynamic import, so the module is its own chunk and nobody outside the migration pays for its 163 KB.
+
+- **Staging** (`openCandidate`, `src/core/migrate/candidate.ts`): `recognizeWriter` reads the folder's `manifest.json` through bento; `readHistory(root, source)` hands bttwriter an `ObjectSource` over the Git port (`objectSource`: HEAD, `.git/shallow`, and objects by id through `GitService.objectReader`, isomorphic-git on the Web and `git_objects` over libgit2 on desktop). The staged USFM is `history.usfm()`, the book at its last save. A folder with no `.git` is rendered from its files by `writerBookToUsfm`.
+- **A new project** (`assemble`): `bttwriter.consolidate` replays every staged history into one line and closes it with a commit, in Sefer's words (`assemblyMessage`), holding the books and the manifests `createBible` writes. Sefer writes the pack, points `master` at its head, and commits what follows in one more commit through `intakeRepository`: `.upstreams.json`, and any book that had no history (listed with `bento.edit`). With no history at all, `createBible` writes the manifests and that commit is the only one.
+- **Books into an existing project** (`addBooks`): `bttwriter.replay` makes the books' saves a line with no root in common, `bento.edit(existing, { addBooks })` lists them, and one merge commit brings the books and the edited manifests in, with the replayed head as its second parent.
+
+`replay` and `consolidate` use the histories they are given up; a second try after a failure reads them again from the staged repository.
+
+What still uses Sefer's own template (`writerBookToUsfm`, `treeFromFiles` in `writerBook.ts`): a Writer folder with no history, and `writerWork.ts`, which compares a migrated book's upstream at the migrated commit and at its head on the project screen, where bttwriter is not loaded. bttwriter's wasm has no entry that stitches files without a history; when it has one, these two move to it and the template goes.
+
+`src/platform/web/writerHistory.test.ts` reads two of the kitchen's Writer fixtures (`fixtures/writer/`) through real isomorphic-git and the port, and checks the replayed heads against the ones `bttwriter/tests/replay.rs` pins.
 
 ## Import and Library
 
-Two modules sit on top of those schemas. Neither redefines what a Burrito or a Resource Container is; both decide things _about_ a folder of files, through the `effect/FileSystem` port only.
+Two modules sit on top of bento's reading. Neither redefines what a Burrito or a Resource Container is; both decide things _about_ a folder of files, through the `effect/FileSystem` port only.
 
 `src/core/resources/import.ts` is the three-step path from foreign bytes to a project, and the steps are separate so that nothing unvalidated ever lands in a project.
 
 - `stage(fileSystem, paths, stagingRoot)` copies what the user picked into a fresh `<stagingRoot>/<stageId>/`. A picked directory contributes its _contents_, so a Resource Container folder puts `manifest.yaml` at the staging root; a picked file contributes itself. The staging directory comes from the port's `makeTempDirectory`, which is how core gets a fresh name without owning a source of randomness.
-- `classify(fileSystem, { root })` answers `burrito | resourceContainer | looseUsfm | unknown` and never fails: an unreadable or undecodable candidate simply is not that kind. A `metadata.json` that decodes as Burrito is a Burrito; a `manifest.json` or `manifest.yaml` that decodes as a Resource Container manifest is one (the YAML is parsed by `readResourceContainerManifest`, the same reader the Library describes a root with; it used to be sniffed for `dublin_core:`). Otherwise, any `.usfm` file under the root makes it `looseUsfm`, and nothing makes it `unknown`. The Library calls the same function, so classification lives in one place.
+- `classify(fileSystem, { root })` answers `burrito | resourceContainer | looseUsfm | unknown` and never fails: an unreadable or undecodable candidate simply is not that kind. A `metadata.json` that bento reads without an error is a Burrito; else a `manifest.yaml` it reads is a Resource Container (bento reads both leniently, the same reader the Library describes a root with). A `manifest.json` is a BTT Writer book now, never a Resource Container in JSON as it was before the switch to bento. Otherwise, any `.usfm` file under the root makes it `looseUsfm`, and nothing makes it `unknown`. The Library calls the same function, so classification lives in one place.
 - `commit(fileSystem, staged, { root }, via)` validates every staged `.usfm` file through `decode` from `packages/text/src/source.ts`, records provenance, copies the staged files into the project and removes the staging directory — a move. It refuses before writing: `Unclassified` when the staging directory is not one of the three kinds or holds no book, `InvalidBook` when a book is not canonical UTF-8 text. Provenance is a JSON list at `<root>/.sefer/provenance.json`, written with `writeFileAtomic`, one record per import, appended through `appendArrival` (`src/core/project/provenance.ts`): `via` (`zip` or `folder`), `stageId`, the source paths, the classification, an ISO timestamp and the committed book paths. It records **no content hash** — text identity is the engine's xxh3 at the Galley boundary, never core's.
 
 `src/core/resources/library.ts` is the registry, and it keeps the vision's two independent facts apart (§15.2): a resource's semantic _kind_ is what it is, its _role_ in a project is what it is for.

@@ -1,17 +1,7 @@
+import type { Manifest, Read } from "@wycliffeassociates/scripture-kitchen/bento";
 import type { LocalizedText } from "@wycliffeassociates/sefer-text/localized";
-import { Data, Result } from "effect";
-import { parse as parseYaml } from "yaml";
 
-import type { BurritoMetadata } from "./burrito";
-import {
-  fromBurritoRelationships,
-  fromResourceContainerSource,
-  type RelatedResource,
-} from "./relationships";
-import {
-  decodeResourceContainerManifest,
-  type ResourceContainerManifest,
-} from "./resourceContainer";
+import type { RelatedResource } from "./relationships";
 
 export type TextDirection = "ltr" | "rtl";
 
@@ -21,111 +11,73 @@ export interface ProjectLanguageMetadata {
   readonly direction: TextDirection;
 }
 
+/**
+ * What Sefer asks of a project's manifest, adapted from bento's `Manifest`
+ * (`fromManifest`). The shape stays because the library stores `container`
+ * and `declared` in `library.json`, and resource kinds are recognised on
+ * them; bento owns the reading, the leniency and the findings.
+ */
 export interface ProjectMetadata {
   readonly container: "burrito" | "resourceContainer";
+  /** A Burrito's primary id (`Tech_Advance/cdi_reg`); a Resource Container's `identifier`. */
   readonly id: string | undefined;
   readonly name: LocalizedText;
   /**
    * The text's shorthand (`ULB`, `REG`): a Burrito's `identification.abbreviation`,
-   * a Resource Container's `dublin_core` identifier. Not `id`, which for a
-   * Burrito is a GUID.
+   * a Resource Container's `dublin_core` identifier.
    */
   readonly abbreviation: LocalizedText;
   readonly language: ProjectLanguageMetadata;
   readonly defaultLocale: string | undefined;
   readonly bookNames: Readonly<Record<string, LocalizedText>>;
   readonly related: readonly RelatedResource[];
+  /** As written: a Burrito's flavor (`textTranslation`), a Resource Container's `subject`. */
   readonly subject: string | undefined;
   readonly version: string | undefined;
   readonly declared: Declared;
 }
 
+/** A Resource Container's own `type` and `format`; a Burrito declares neither here. */
 export interface Declared {
   readonly type: string | undefined;
   readonly format: string | undefined;
 }
 
-const ONE = (locale: string | undefined, value: string): LocalizedText =>
-  value === "" ? {} : { [locale === undefined || locale === "" ? "und" : locale]: value };
+const blank = (value: string | undefined): string | undefined =>
+  value === undefined || value === "" ? undefined : value;
 
-const primaryIdOf = (metadata: BurritoMetadata): string | undefined => {
-  for (const ids of Object.values(metadata.identification.primary ?? {}))
-    for (const id of Object.keys(ids)) return id;
-  return undefined;
-};
-
-export const fromBurrito = (metadata: BurritoMetadata): ProjectMetadata => {
-  const language = metadata.languages.at(0);
+/**
+ * A Burrito or Resource Container manifest as Sefer uses it; `undefined` for
+ * a BTT Writer `manifest.json`, which is a book project to migrate, not a
+ * project to open.
+ */
+export const fromManifest = (read: Read): ProjectMetadata | undefined => {
+  const manifest: Manifest | undefined = read.manifest;
+  if (manifest === undefined || manifest.format === "bttwriter") return undefined;
+  const rc = manifest.format === "rc";
   const bookNames: Record<string, LocalizedText> = {};
-  for (const [id, names] of Object.entries(metadata.localizedNames ?? {})) {
-    bookNames[id] = names.short;
-  }
+  for (const entry of manifest.books) bookNames[entry.book] = entry.title;
+  const defaultLocale =
+    read.detail?.format === "burrito"
+      ? blank(read.detail.document.meta?.defaultLocale)
+      : blank(manifest.language.tag);
   return {
-    container: "burrito",
-    id: primaryIdOf(metadata),
-    name: metadata.identification.name,
-    abbreviation: metadata.identification.abbreviation ?? {},
-    language: {
-      tag: language?.tag ?? "",
-      name: language?.name ?? {},
-      direction: language?.scriptDirection ?? "ltr",
-    },
-    defaultLocale: metadata.meta.defaultLocale,
+    container: rc ? "resourceContainer" : "burrito",
+    id: rc ? blank(manifest.kind.declared.identifier) : manifest.id,
+    name: manifest.name,
+    abbreviation: manifest.abbreviation,
+    language: manifest.language,
+    defaultLocale,
     bookNames,
-    related: fromBurritoRelationships(metadata.relationships ?? []),
-    subject: metadata.type.flavorType.flavor.name,
-    version: undefined,
-    declared: { type: undefined, format: undefined },
+    related: manifest.sources,
+    subject: rc ? manifest.kind.declared.subject : manifest.kind.flavor,
+    version: manifest.version,
+    declared: rc
+      ? { type: manifest.kind.declared.type, format: manifest.kind.declared.format }
+      : { type: undefined, format: undefined },
   };
 };
 
-const fromResourceContainer = (manifest: ResourceContainerManifest): ProjectMetadata => {
-  const core = manifest.dublin_core;
-  const locale = core.language.identifier;
-  const bookNames: Record<string, LocalizedText> = {};
-  for (const project of manifest.projects) {
-    bookNames[project.identifier.toUpperCase()] = ONE(locale, project.title);
-  }
-  return {
-    container: "resourceContainer",
-    id: core.identifier === "" ? undefined : core.identifier,
-    name: ONE(locale, core.title),
-    abbreviation: ONE(locale, core.identifier),
-    language: {
-      tag: locale,
-      name: ONE(locale, core.language.title),
-      direction: core.language.direction === "rtl" ? "rtl" : "ltr",
-    },
-    defaultLocale: locale === "" ? undefined : locale,
-    bookNames,
-    related: fromResourceContainerSource(core.source ?? []),
-    subject: core.subject,
-    version: core.version,
-    declared: { type: core.type, format: core.format },
-  };
-};
-
-class MetadataError extends Data.TaggedError("MetadataError")<{
-  readonly reason: "Syntax" | "Shape";
-  readonly description: string;
-}> {}
-
-export const readResourceContainer = (
-  text: string,
-): Result.Result<ProjectMetadata, MetadataError> =>
-  Result.map(readResourceContainerManifest(text), fromResourceContainer);
-
-export const readResourceContainerManifest = (
-  text: string,
-): Result.Result<ResourceContainerManifest, MetadataError> => {
-  let parsed: unknown;
-  try {
-    parsed = parseYaml(text);
-  } catch (cause) {
-    return Result.fail(new MetadataError({ reason: "Syntax", description: String(cause) }));
-  }
-  const decoded = decodeResourceContainerManifest(parsed);
-  return Result.isFailure(decoded)
-    ? Result.fail(new MetadataError({ reason: "Shape", description: decoded.failure.message }))
-    : Result.succeed(decoded.success);
-};
+/** Whether a read stopped at an error (`manifest-unreadable`), as `readOrThrow` would throw. */
+export const unreadable = (read: Read): boolean =>
+  read.manifest === undefined || read.findings.some((finding) => finding.severity === "error");

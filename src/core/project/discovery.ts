@@ -1,17 +1,16 @@
-import { Effect, FileSystem, Option, PlatformError, Result } from "effect";
+import {
+  find,
+  read as readManifestBytes,
+  type BurritoMetadata,
+  type Read,
+} from "@wycliffeassociates/scripture-kitchen/bento";
+import { Effect, FileSystem, Option, PlatformError } from "effect";
 
 import { joinPath, lastSegment, normalisePath } from "../fileSystem/path";
 import { compareCodeUnits } from "../ordering";
-import { decodeBurritoMetadata, type BurritoMetadata } from "../resources/burrito";
-import {
-  fromBurrito,
-  readResourceContainer,
-  type ProjectMetadata,
-} from "../resources/projectMetadata";
+import { fromManifest, unreadable, type ProjectMetadata } from "../resources/projectMetadata";
 
 export const METADATA_FILE = "metadata.json";
-
-export const MANIFEST_FILE = "manifest.yaml";
 
 const BOOK_EXTENSIONS: readonly string[] = [".usfm", ".sfm"];
 
@@ -46,22 +45,38 @@ export type MetadataRefusal = "absent" | "unreadable" | "unparsable" | "notAKnow
 
 export interface MetadataRead {
   readonly metadata: Option.Option<ProjectMetadata>;
+  /** The Burrito as written, when the manifest is one: its ingredients say where the books are. */
   readonly burrito: Option.Option<BurritoMetadata>;
   readonly declined?: MetadataRefusal;
 }
 
 const NOTHING = { metadata: Option.none(), burrito: Option.none() } as const;
 
-const readTextIfPresent = (
+/** A folder's manifest, found among its root names by bento, as file name, bytes and bento's read. */
+export interface ManifestFile {
+  readonly name: string;
+  readonly bytes: Uint8Array;
+  readonly read: Read;
+}
+
+/**
+ * The manifest at `root` (`metadata.json`, else `manifest.yaml`, else a Writer
+ * `manifest.json`), read by bento. None when there is none; fails when it is
+ * there but cannot be read off the disk.
+ */
+export const readManifest = (
   fileSystem: FileSystem.FileSystem,
-  path: string,
-): Effect.Effect<Option.Option<string>, "unreadable"> =>
+  root: string,
+): Effect.Effect<Option.Option<ManifestFile>, PlatformError.PlatformError> =>
   Effect.gen(function* () {
-    const present = yield* Effect.result(fileSystem.exists(path));
-    if (Result.isFailure(present) || !present.success) return Option.none();
-    const bytes = yield* Effect.result(fileSystem.readFile(path));
-    if (Result.isFailure(bytes)) return yield* Effect.fail("unreadable" as const);
-    return Option.some(new TextDecoder().decode(bytes.success));
+    const names = yield* Effect.orElseSucceed(
+      fileSystem.readDirectory(root),
+      (): readonly string[] => [],
+    );
+    const found = find(names);
+    if (found === undefined) return Option.none();
+    const bytes = yield* fileSystem.readFile(joinPath(root, found.name));
+    return Option.some({ name: found.name, bytes, read: readManifestBytes(found.name, bytes) });
   });
 
 export const readProjectMetadata = (
@@ -69,39 +84,18 @@ export const readProjectMetadata = (
   root: string,
 ): Effect.Effect<MetadataRead> =>
   Effect.gen(function* () {
-    const burritoText = yield* Effect.orElseSucceed(
-      readTextIfPresent(fileSystem, joinPath(root, METADATA_FILE)),
-      () => Option.none<string>(),
-    );
-    if (Option.isSome(burritoText)) {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(burritoText.value);
-      } catch {
-        return { ...NOTHING, declined: "unparsable" };
-      }
-      const decoded = decodeBurritoMetadata(parsed);
-      return Result.isFailure(decoded)
-        ? { ...NOTHING, declined: "notAKnownFormat" }
-        : {
-            metadata: Option.some(fromBurrito(decoded.success)),
-            burrito: Option.some(decoded.success),
-          };
-    }
-
-    const manifestText = yield* Effect.orElseSucceed(
-      readTextIfPresent(fileSystem, joinPath(root, MANIFEST_FILE)),
-      () => Option.none<string>(),
-    );
-    if (Option.isNone(manifestText)) return { ...NOTHING, declined: "absent" };
-
-    const read = readResourceContainer(manifestText.value);
-    return Result.isFailure(read)
-      ? {
-          ...NOTHING,
-          declined: read.failure.reason === "Syntax" ? "unparsable" : "notAKnownFormat",
-        }
-      : { metadata: Option.some(read.success), burrito: Option.none() };
+    const file = yield* Effect.result(readManifest(fileSystem, root));
+    if (file._tag === "Failure") return { ...NOTHING, declined: "unreadable" };
+    if (Option.isNone(file.success)) return { ...NOTHING, declined: "absent" };
+    const { read } = file.success.value;
+    if (unreadable(read)) return { ...NOTHING, declined: "unparsable" };
+    const metadata = fromManifest(read);
+    if (metadata === undefined) return { ...NOTHING, declined: "notAKnownFormat" };
+    return {
+      metadata: Option.some(metadata),
+      burrito:
+        read.detail?.format === "burrito" ? Option.some(read.detail.document) : Option.none(),
+    };
   });
 
 export const discoverBooks = (
@@ -115,8 +109,8 @@ export const discoverBooks = (
 
     const read = yield* readProjectMetadata(fileSystem, root);
     if (Option.isSome(read.burrito)) {
-      for (const [name, ingredient] of Object.entries(read.burrito.value.ingredients))
-        if (isUsfmIngredient(name, ingredient.mimeType)) paths.add(joinPath(root, name));
+      for (const [name, ingredient] of Object.entries(read.burrito.value.ingredients ?? {}))
+        if (isUsfmIngredient(name, ingredient.mimeType ?? "")) paths.add(joinPath(root, name));
     }
 
     return canonicalOrder([...paths].map(normalisePath));

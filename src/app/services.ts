@@ -29,6 +29,7 @@ import { Dialogs, type DialogsService } from "#core/host/dialogs";
 import { HostInfo, type HostInfoService, type HostPaths } from "#core/host/hostInfo";
 import { Settings, SettingsLive, type SettingsService } from "#core/host/settings";
 import { NoUpdaterLive, Updater, type UpdaterService } from "#core/host/updater";
+import { WriterEngine } from "#core/migrate/writerEngine";
 import { Observability } from "#core/observability";
 import { METADATA_FILE } from "#core/project/discovery";
 import type { Seat } from "#core/project/project";
@@ -46,6 +47,8 @@ import {
 } from "#core/save/saveCoordinator";
 import { detectHost } from "#platform/host";
 import { browserFacts } from "#platform/hostFacts";
+import { WebBentoLive } from "#platform/web/bento";
+import { WebWriterEngineLive } from "#platform/web/bttwriter";
 import { WebCredentialsLive } from "#platform/web/credentials";
 import { WebDialogsLive } from "#platform/web/dialogs";
 import { OpfsFileSystemLive } from "#platform/web/fileSystem";
@@ -94,7 +97,8 @@ export type Domain =
   | Gitea
   | Suggestions
   | Remote
-  | ProjectAdmin;
+  | ProjectAdmin
+  | WriterEngine;
 
 export interface Services {
   readonly composition: Composition;
@@ -256,10 +260,11 @@ const domainLayer = (
 
   const account = accountLayer(build, tauri);
 
-  const engine = WebGalleyLive;
+  const engine = Layer.merge(WebGalleyLive, WebBentoLive);
 
   const host = Layer.mergeAll(
     engine,
+    WebWriterEngineLive,
     tauri === undefined ? WebDialogsLive : tauri.TauriDialogsLive,
     account,
     hostInfo,

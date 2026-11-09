@@ -29,7 +29,7 @@ Instantiating **replaces the object** that holds a book's canonical text, and Pr
 
 ## Discovery order
 
-Two sources, unioned: `*.usfm` / `*.USFM` / `*.sfm` directly under the root, plus — when `<root>/metadata.json` decodes through `decodeBurritoMetadata` — every ingredient whose mime type is `text/x-usfm` or `text/usfm`, or whose path ends in a book extension. Burrito ingredients are the only way a nested path becomes a book; there is no recursive walk. Metadata that is absent, unreadable, unparsable or not a burrito degrades to the extension scan and one `project.metadata declined` note.
+Two sources, unioned: `*.usfm` / `*.USFM` / `*.sfm` directly under the root, plus — when the root's manifest is a Burrito bento can read — every ingredient whose mime type is `text/x-usfm` or `text/usfm`, or whose path ends in a book extension. Burrito ingredients are the only way a nested path becomes a book; there is no recursive walk. Metadata that is absent, unreadable, unparsable or not a burrito degrades to the extension scan and one `project.metadata declined` note.
 
 Order is the leading number in the file name (`19-PSA.usfm` before `58-PHM.usfm`), then the name, in codepoint order; unnumbered files sort after every numbered one. `ProjectId` is the root path, plus `#<id>` when the project's metadata declares one — a burrito's primary id, or a Resource Container's `dublin_core.identifier`. The metadata (title, language, id) comes from `metadata.json` first and `manifest.yaml` otherwise (`src/core/project/discovery.ts`); only a burrito's ingredients add book paths.
 

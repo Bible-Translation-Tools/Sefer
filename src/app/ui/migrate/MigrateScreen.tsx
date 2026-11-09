@@ -526,7 +526,7 @@ export function MigrateScreen(props: {
   };
 
   const assembleLabel = (): string => {
-    if (assembling() && ready().some((staged) => (staged.history?.saves.length ?? 0) > 0))
+    if (assembling() && ready().some((staged) => (staged.history?.saves ?? 0) > 0))
       return m.migrate_writing_count_books_history({ count: picked().length });
     if (props.into === undefined) return m.migrate_assemble_count_books({ count: picked().length });
     return m.migrate_add_count_books({ count: picked().length });

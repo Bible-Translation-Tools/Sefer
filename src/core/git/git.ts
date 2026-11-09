@@ -28,26 +28,16 @@ export interface Commit {
   readonly at: number;
 }
 
-export interface Signature {
-  readonly name: string;
-  readonly email: string;
-  readonly at: number;
-  readonly offset: number;
+/** A git object as stored: its kind, and its content without git's `"<type> <length>\0"` header. */
+export interface GitObject {
+  readonly type: "commit" | "tree" | "blob";
+  readonly bytes: Uint8Array;
 }
 
-export interface WalkedChange {
-  readonly path: string;
-  readonly blob: string | null;
-}
-
-export interface WalkedCommit {
-  readonly id: CommitId;
-  readonly parents: readonly CommitId[];
-  readonly message: string;
-  readonly author: Signature;
-  readonly committer: Signature;
-  readonly changes: readonly WalkedChange[];
-}
+/** Reads objects by id, batched; an id it cannot find is left out of the answer. */
+export type ObjectReader = (
+  ids: readonly string[],
+) => Effect.Effect<ReadonlyMap<string, GitObject>, GitError>;
 
 export type ChangeKind = "added" | "modified" | "deleted" | "untracked";
 
@@ -102,11 +92,12 @@ export interface GitService {
     from: string,
     to: string,
   ) => Effect.Effect<readonly ChangedPath[], GitError>;
-  readonly walk: (repo: Repo) => Effect.Effect<readonly WalkedCommit[], GitError>;
-  readonly blobs: (
-    repo: Repo,
-    ids: readonly string[],
-  ) => Effect.Effect<ReadonlyMap<string, Uint8Array>, GitError>;
+  /**
+   * The repository's objects by id, for a walk that drives its own rounds
+   * (bttwriter's `readHistory`). One reader per walk, so a host can keep what
+   * it loaded (isomorphic-git's pack cache) between rounds.
+   */
+  readonly objectReader: (repo: Repo) => ObjectReader;
   readonly show: (repo: Repo, rev: string, path: string) => Effect.Effect<Uint8Array, GitError>;
   readonly previousVersions: (
     repo: Repo,

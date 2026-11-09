@@ -33,8 +33,10 @@ export const serialiseGit = (git: GitService, repositories: RepositoriesService)
     shallow: (repo) => read(repo.root, git.shallow(repo)),
     changedPathsBetween: (repo, from, to) =>
       read(repo.root, git.changedPathsBetween(repo, from, to)),
-    walk: (repo) => read(repo.root, git.walk(repo)),
-    blobs: (repo, ids) => read(repo.root, git.blobs(repo, ids)),
+    objectReader: (repo) => {
+      const inner = git.objectReader(repo);
+      return (ids) => read(repo.root, inner(ids));
+    },
     show: (repo, rev, path) => read(repo.root, git.show(repo, rev, path)),
     previousVersions: (repo, path) => read(repo.root, git.previousVersions(repo, path)),
     timeline: (repo, paths, shared) => read(repo.root, git.timeline(repo, paths, shared)),

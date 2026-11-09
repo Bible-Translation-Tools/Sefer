@@ -1,4 +1,11 @@
 import {
+  edit,
+  fingerprint,
+  read as readManifestBytes,
+  type BurritoMetadata,
+  type ManifestFinding,
+} from "@wycliffeassociates/scripture-kitchen/bento";
+import {
   Context,
   Data,
   Effect,
@@ -12,15 +19,9 @@ import { zipSync } from "fflate";
 
 import { writeFileAtomic, writeFileStringAtomic } from "../fileSystem/atomic";
 import { joinPath, lastSegment, parentPath } from "../fileSystem/path";
-import { MANIFEST_FILE, METADATA_FILE } from "../project/discovery";
+import { METADATA_FILE, readManifest } from "../project/discovery";
 import { PROJECT_STATE_FILE, updateProjectState } from "../project/projectState";
-import { type BurritoMetadata, decodeBurritoMetadata } from "../resources/burrito";
-import { refreshIngredientChecksums } from "../resources/checksum";
-import {
-  fromBurrito,
-  readResourceContainer,
-  type ProjectMetadata,
-} from "../resources/projectMetadata";
+import { fromManifest, unreadable, type ProjectMetadata } from "../resources/projectMetadata";
 
 const SEFER_PROJECT_FILE = PROJECT_STATE_FILE;
 
@@ -120,31 +121,50 @@ const makeProjectAdmin = (fileSystem: FileSystem.FileSystem): ProjectAdminServic
       return Option.some({ ...(parsed as Record<string, unknown>) });
     });
 
+  const shapeFindings = (findings: readonly ManifestFinding[]): ReadonlySet<string> =>
+    new Set(
+      findings
+        .filter((finding) => finding.severity === "error" || finding.check === "manifest-valid")
+        .map((finding) => `${finding.at ?? ""} ${finding.message}`),
+    );
+
+  /**
+   * Writes `value` as the project's metadata.json, refused when bento finds it
+   * unreadable or finds a shape problem (`manifest-valid`) the file did not
+   * already have: an older project's own warnings never block an edit.
+   */
   const writeMetadata = (
     root: string,
     value: Record<string, unknown>,
-  ): Effect.Effect<BurritoMetadata, AdminError> => {
-    const decoded = decodeBurritoMetadata(value);
-    if (Result.isFailure(decoded)) {
+    before: Uint8Array | undefined,
+  ): Effect.Effect<void, AdminError> => {
+    const text = `${JSON.stringify(value, null, 2)}\n`;
+    const after = readManifestBytes(METADATA_FILE, new TextEncoder().encode(text));
+    const had =
+      before === undefined
+        ? new Set<string>()
+        : shapeFindings(readManifestBytes(METADATA_FILE, before).findings);
+    const fresh = after.findings.filter(
+      (finding) =>
+        (finding.severity === "error" || finding.check === "manifest-valid") &&
+        !had.has(`${finding.at ?? ""} ${finding.message}`),
+    );
+    if (fresh.length > 0)
       return Effect.fail(
         new AdminError({
           reason: "Invalid",
-          description: `${METADATA_FILE} would no longer be Scripture Burrito: ${decoded.failure.message}`,
+          description: `${METADATA_FILE} would no longer be Scripture Burrito: ${fresh.map((finding) => finding.message).join(" ")}`,
         }),
       );
-    }
-    return Effect.as(
-      Effect.mapError(
-        writeFileStringAtomic(
-          fileSystem,
-          metadataPath(root),
-          `${JSON.stringify(value, null, 2)}\n`,
-        ),
-        ioFailure,
-      ),
-      decoded.success,
-    );
+    return Effect.mapError(writeFileStringAtomic(fileSystem, metadataPath(root), text), ioFailure);
   };
+
+  const metadataBytes = (root: string): Effect.Effect<Option.Option<Uint8Array>, AdminError> =>
+    Effect.gen(function* () {
+      const path = metadataPath(root);
+      if (!(yield* Effect.mapError(fileSystem.exists(path), ioFailure))) return Option.none();
+      return Option.some(yield* Effect.mapError(fileSystem.readFile(path), ioFailure));
+    });
 
   const archive = (root: string): Effect.Effect<Uint8Array, AdminError> =>
     Effect.gen(function* () {
@@ -171,38 +191,21 @@ const makeProjectAdmin = (fileSystem: FileSystem.FileSystem): ProjectAdminServic
       });
     });
 
-  const burrito = (root: string): Effect.Effect<Option.Option<BurritoMetadata>, AdminError> =>
-    Effect.flatMap(rawMetadata(root), (raw) =>
-      Option.match(raw, {
-        onNone: () => Effect.succeed(Option.none<BurritoMetadata>()),
-        onSome: (value) => {
-          const decoded = decodeBurritoMetadata(value);
-          return Result.isFailure(decoded)
-            ? Effect.fail(
-                new AdminError({ reason: "Invalid", description: decoded.failure.message }),
-              )
-            : Effect.succeed(Option.some(decoded.success));
-        },
-      }),
-    );
-
   const metadata = (root: string): Effect.Effect<Option.Option<ProjectMetadata>, AdminError> =>
     Effect.gen(function* () {
-      const raw = yield* rawMetadata(root);
-      if (Option.isSome(raw)) {
-        const decoded = decodeBurritoMetadata(raw.value);
-        return Result.isFailure(decoded)
-          ? yield* Effect.fail(
-              new AdminError({ reason: "Invalid", description: decoded.failure.message }),
-            )
-          : Option.some(fromBurrito(decoded.success));
+      const file = yield* Effect.mapError(readManifest(fileSystem, root), ioFailure);
+      if (Option.isNone(file)) return Option.none();
+      const { name, read } = file.value;
+      if (unreadable(read)) {
+        if (read.detail?.format === "rc" || name !== METADATA_FILE) return Option.none();
+        return yield* Effect.fail(
+          new AdminError({
+            reason: "Invalid",
+            description: read.findings.map((finding) => finding.message).join(" "),
+          }),
+        );
       }
-      const path = `${root}/${MANIFEST_FILE}`;
-      const present = yield* Effect.mapError(fileSystem.exists(path), ioFailure);
-      if (!present) return Option.none();
-      const text = yield* Effect.mapError(fileSystem.readFileString(path), ioFailure);
-      const read = readResourceContainer(text);
-      return Result.isFailure(read) ? Option.none() : Option.some(read.success);
+      return Option.fromUndefinedOr(fromManifest(read));
     });
 
   return {
@@ -253,26 +256,38 @@ const makeProjectAdmin = (fileSystem: FileSystem.FileSystem): ProjectAdminServic
             new AdminError({ reason: "NotFound", description: metadataPath(root) }),
           );
         }
-        yield* writeMetadata(root, { ...raw.value, ...patch });
+        const before = Option.getOrUndefined(yield* metadataBytes(root));
+        yield* writeMetadata(root, { ...raw.value, ...patch }, before);
       }),
 
     refreshChecksums: (root, names) =>
       Effect.gen(function* () {
-        const raw = yield* rawMetadata(root);
-        if (Option.isNone(raw)) return [];
-        const current = yield* burrito(root);
-        if (Option.isNone(current)) return [];
-        const refreshed = yield* refreshIngredientChecksums(
-          current.value,
-          (name) =>
-            Effect.map(Effect.result(fileSystem.readFile(joinPath(root, name))), (read) =>
-              Result.isFailure(read) ? Option.none() : Option.some(read.success),
-            ),
-          names,
-        );
-        if (refreshed.changed.length === 0) return [];
-        yield* writeMetadata(root, { ...raw.value, ingredients: refreshed.ingredients });
-        return refreshed.changed;
+        const bytes = yield* metadataBytes(root);
+        if (Option.isNone(bytes)) return [];
+        const read = readManifestBytes(METADATA_FILE, bytes.value);
+        if (read.detail?.format !== "burrito" || unreadable(read)) return [];
+        const ingredients = read.detail.document.ingredients ?? {};
+        const checksums = new Map<string, Uint8Array>();
+        const changed: string[] = [];
+        for (const name of names ?? Object.keys(ingredients)) {
+          const ingredient = ingredients[name];
+          if (ingredient === undefined) continue;
+          const file = yield* Effect.result(fileSystem.readFile(joinPath(root, name)));
+          if (Result.isFailure(file)) continue;
+          checksums.set(name, file.success);
+          const fresh = fingerprint(file.success);
+          if (ingredient.checksum?.md5 !== fresh.md5 || ingredient.size !== fresh.size)
+            changed.push(name);
+        }
+        if (changed.length === 0) return [];
+        const edited = yield* Effect.try({
+          try: () => edit(new Map([[METADATA_FILE, bytes.value]]), { checksums }),
+          catch: (error) => new AdminError({ reason: "Invalid", description: String(error) }),
+        });
+        const next = edited.files.get(METADATA_FILE);
+        if (next === undefined) return [];
+        yield* Effect.mapError(writeFileAtomic(fileSystem, metadataPath(root), next), ioFailure);
+        return changed;
       }),
 
     archive,
