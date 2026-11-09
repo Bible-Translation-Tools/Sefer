@@ -26,6 +26,7 @@ import type { BookCensus as BookToc } from "@wycliffeassociates/scripture-kitche
 import { Galley as GalleyHandle, initSync } from "@wycliffeassociates/scripture-kitchen/web";
 import * as wasmModule from "@wycliffeassociates/scripture-kitchen/web";
 import type { Analysis, DiagnosticView } from "@wycliffeassociates/sefer-text/engine/analysis";
+import { placesOf } from "@wycliffeassociates/sefer-text/engine/places";
 import { Context, Data, Effect, Layer, Option, Result } from "effect";
 
 import { Observability, type ObservabilityService } from "../observability";
@@ -360,6 +361,38 @@ const makeService = (
     return { customMarkers: judged };
   };
 
+  /**
+   * The text each book id holds right now, by identity: an analysis answers
+   * places through its id's doors only while its own text is still the one
+   * registered, and through the text doors once the book has moved on.
+   */
+  const registered = new Map<string, string>();
+  const register = (id: string, text: string): string => {
+    registered.set(id, text);
+    return handle.update(id, text);
+  };
+
+  const places = (text: string, id: string | undefined) => {
+    const utf16 = { utf16: true } as const;
+    const own = () => id !== undefined && registered.get(id) === text;
+    return placesOf(text.length, {
+      resolve: (address) =>
+        own()
+          ? handle.resolve(id ?? "", address, utf16)
+          : handle.resolveOf(text, address, {
+              ...utf16,
+              ...(id === undefined ? textMarkers(text) : {}),
+            }),
+      addressAt: (offset) =>
+        own()
+          ? handle.addressAt(id ?? "", offset, utf16)
+          : handle.addressAtOf(text, offset, {
+              ...utf16,
+              ...(id === undefined ? textMarkers(text) : {}),
+            }),
+    });
+  };
+
   const parseAnalysis = (
     text: string,
     why: string,
@@ -380,7 +413,7 @@ const makeService = (
     const dish = deserialize(
       id === undefined
         ? handle.parseText(text, { ...PARSE_ALL, ...textMarkers(text) })
-        : (handle.update(id, text), handle.parse(id, PARSE_ALL)),
+        : (register(id, text), handle.parse(id, PARSE_ALL)),
     );
     const engineMs = Math.round((performance.now() - started) * 1000) / 1000;
     done?.({ "galley.diagnostics": dish.diagnostics.length, "galley.engine_ms": engineMs });
@@ -394,6 +427,7 @@ const makeService = (
       engineMs,
       usfmVersion: declaredVersion(dish),
       attrs: (from, to) => attrList(wasmModule.attrs(text, from, to, { utf16: true })),
+      ...places(text, id),
     };
   };
 
@@ -510,10 +544,12 @@ const makeService = (
     find: (id, query) => decodeHits(handle.find(id, query.text, findOptions(query))),
     findAll: (query, scope) =>
       decodeHits(handle.findAll(query.text, findOptions(query, scope ?? "targets"))),
-    update: (id, text) => handle.update(id, text),
-    updateReference: (id, text, keepText) =>
-      handle.updateReference(id, text, { keepText: keepText === true, ...textMarkers(text) }),
-    remove: (id) => handle.remove(id),
+    update: register,
+    updateReference: (id, text, keepText) => (
+      registered.delete(id),
+      handle.updateReference(id, text, { keepText: keepText === true, ...textMarkers(text) })
+    ),
+    remove: (id) => (registered.delete(id), handle.remove(id)),
     publish: () => FindingsSnapshot.open(handle.publish()),
     diff: (baseline, current, opts) => engineDiff(wasmModule, baseline, current, opts),
     merge: (baseline, current, decisions, fallback) =>

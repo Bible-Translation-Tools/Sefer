@@ -13,6 +13,7 @@ import {
 } from "@wycliffeassociates/scripture-kitchen/web";
 import wasmUrl from "@wycliffeassociates/scripture-kitchen/web/wasm?url";
 import type { Analysis } from "@wycliffeassociates/sefer-text/engine/analysis";
+import { placesOf } from "@wycliffeassociates/sefer-text/engine/places";
 
 /**
  * The engine as the bench's host brings it: the galley wasm, one handle, and
@@ -45,6 +46,11 @@ export const loadEngine = async (): Promise<{
         engineMs: performance.now() - started,
         usfmVersion: declaredVersion(dish),
         attrs: (from, to) => attrList(attrs(text, from, to, { utf16: true })),
+        // The bench holds one text per id, so the id doors always describe it.
+        ...placesOf(text.length, {
+          resolve: (address) => handle.resolve(id, address, { utf16: true }),
+          addressAt: (offset) => handle.addressAt(id, offset, { utf16: true }),
+        }),
       };
     };
 

@@ -165,8 +165,8 @@ Inside the editor, a rule notes its verdict (`note`/`noteTr`,
 ## 13. References, findings and files have one shape each
 
 - **A reference** a person types or a link carries is parsed by
-  `parseCitation` (`packages/text/src/location/citation.ts`) and labelled
-  by `addressLabel` (`location/address.ts`). Don't write a `/(\w+) (\d+):(\d+)/`.
+  galley's `Citations` (`shell.location.read`) and labelled
+  by `showReference` (`shell.location.label`); placed by `analysis.resolve`/`addressAt`. Don't write a `/(\w+) (\d+):(\d+)/`.
 - **A problem in the text** is a `Finding` (`src/core/findings/`), shown by
   the findings panel.
 - **Bytes on disk** go through the `effect/FileSystem` port

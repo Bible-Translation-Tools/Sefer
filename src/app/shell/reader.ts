@@ -1,11 +1,7 @@
+import { formatReference } from "@wycliffeassociates/scripture-kitchen/web";
 import { anchorFrom, type EditorBook } from "@wycliffeassociates/sefer-editor";
 import type { BookId } from "@wycliffeassociates/sefer-text/book";
-import {
-  addressCode,
-  chaptersAddress,
-  type Address,
-} from "@wycliffeassociates/sefer-text/location/address";
-import { addressAt, resolve } from "@wycliffeassociates/sefer-text/location/locate";
+import { chaptersAddress, type Address } from "@wycliffeassociates/sefer-text/location/address";
 import { Effect, Option, Result } from "effect";
 import {
   createEffect,
@@ -18,7 +14,6 @@ import {
 } from "solid-js";
 
 import { m } from "#app/paraglide/messages";
-import { tocViewOf } from "#core/galley";
 import type { SettingKey } from "#core/host/settings";
 import type { Project } from "#core/project/project";
 import { SaveCoordinator } from "#core/save/saveCoordinator";
@@ -160,12 +155,13 @@ const createPlace = ({
       const analysis = Option.getOrUndefined(services.projectAnalysis.analysis(book.id));
       if (stamp === undefined || analysis === undefined) return held;
       if (analysis.stamp.revision !== stamp.revision) return held;
-      return addressAt(book.id, tocViewOf(analysis.analysis), at) ?? held;
+      return analysis.analysis.addressAt(book.id, at) ?? held;
     },
     {
       name: "place",
       equals: (a, b) =>
-        a === b || (a !== undefined && b !== undefined && addressCode(a) === addressCode(b)),
+        a === b ||
+        (a !== undefined && b !== undefined && formatReference([a]) === formatReference([b])),
     },
   );
 
@@ -185,7 +181,7 @@ const arriveAt = (
   if (analysis == null) return;
   const place = (): string => location.label(want);
   untrack(() => {
-    const found = resolve(tocViewOf(analysis), want);
+    const found = analysis.resolve(want);
     const chapters = held.structure().chapters;
     const ordinalAt = (offset: number): number =>
       chapters.findIndex((chapter) => chapter.from <= offset && offset < chapter.to);

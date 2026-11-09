@@ -6,7 +6,7 @@ import {
   type Following,
   type MarkedRange,
 } from "@wycliffeassociates/sefer-editor";
-import { tocUnits, unitIndexAt } from "@wycliffeassociates/sefer-text/location/locate";
+import { tocUnits, unitIndexAt } from "@wycliffeassociates/sefer-text/location/units";
 import ChevronDownIcon from "lucide-solid/icons/chevron-down";
 import ChevronUpIcon from "lucide-solid/icons/chevron-up";
 import ChevronsDownIcon from "lucide-solid/icons/chevrons-down";

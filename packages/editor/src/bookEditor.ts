@@ -1,9 +1,7 @@
 import { forEachDiagnostic, setDiagnosticsEffect } from "@codemirror/lint";
 import { Compartment, EditorState, StateEffect, type TransactionSpec } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import { tocViewOf } from "@wycliffeassociates/sefer-text/engine/location";
 import type { Address } from "@wycliffeassociates/sefer-text/location/address";
-import { addressAt, resolve } from "@wycliffeassociates/sefer-text/location/locate";
 
 import { seatedOf, type EditorBook } from "./book";
 import {
@@ -404,15 +402,12 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
     return true;
   };
 
-  const toc = () => {
+  const current = () => {
     const analysis = book.structure().analysis;
     if (analysis === null || analysis.text.length !== created.state.doc.length) return undefined;
-    return tocViewOf(analysis);
+    return analysis;
   };
-  const addressOf = (offset: number): Address | undefined => {
-    const view = toc();
-    return view === undefined ? undefined : addressAt(book.id, view, offset);
-  };
+  const addressOf = (offset: number): Address | undefined => current()?.addressAt(book.id, offset);
   const jumpTo = (range: { readonly from: number; readonly to?: number }, at: "top" | "center") => {
     const length = created.state.doc.length;
     const from = Math.min(range.from, length);
@@ -545,9 +540,8 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
       return listen((head) => listener(addressOf(head)));
     },
     revealAddress: (address: Address, at: "top" | "center" = "center") => {
-      const view = toc();
-      if (view === undefined) return false;
-      const found = resolve(view, address);
+      const found = current()?.resolve(address);
+      if (found === undefined) return false;
       if (found.kind !== "found") return false;
       jumpTo({ from: found.from, to: found.to }, at);
       return true;

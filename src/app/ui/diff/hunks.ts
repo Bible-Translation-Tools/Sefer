@@ -1,10 +1,6 @@
-import { addressCode, type Address } from "@wycliffeassociates/sefer-text/location/address";
-import {
-  tocUnits,
-  unitAddress,
-  unitIndexAt,
-  type TocUnit,
-} from "@wycliffeassociates/sefer-text/location/locate";
+import { formatReference } from "@wycliffeassociates/scripture-kitchen/web";
+import { bookAddress, type Address } from "@wycliffeassociates/sefer-text/location/address";
+import { tocUnits, unitIndexAt, type TocUnit } from "@wycliffeassociates/sefer-text/location/units";
 
 import type { Extent } from "#core/excerpts/excerpts";
 import { tocViewOf, type Analysis } from "#core/galley";
@@ -117,8 +113,7 @@ const baselineRange = (
 };
 
 export const hunksOf = (options: HunkOptions): Hunk[] => {
-  const currentToc = tocViewOf(options.current);
-  const current = tocUnits(currentToc);
+  const current = tocUnits(tocViewOf(options.current));
   const baseline = tocUnits(tocViewOf(options.baseline));
   const groups = groupByUnit(options, current);
   const count = options.units.length;
@@ -128,8 +123,9 @@ export const hunksOf = (options: HunkOptions): Hunk[] => {
   for (const [at, own] of [...groups.entries()].sort((a, b) => a[0] - b[0])) {
     const toc = current[at];
     if (toc === undefined) continue;
-    const address = unitAddress(options.bookId, currentToc, toc);
-    const key = `${options.bookId} ${addressCode(address)}`;
+    const address =
+      options.current.addressAt(options.bookId, toc.from) ?? bookAddress(options.bookId);
+    const key = `${options.bookId} ${formatReference([address])}`;
     const extent = options.extentOf?.(key) ?? { up: options.steps, down: options.steps };
     const shownCurrent = stretchOf(current, at, at, extent);
     const shownBaseline = baselineRange(own, baseline, extent);

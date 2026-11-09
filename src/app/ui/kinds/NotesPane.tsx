@@ -1,4 +1,5 @@
-import { addressCode, type Address } from "@wycliffeassociates/sefer-text/location/address";
+import { formatReference } from "@wycliffeassociates/scripture-kitchen/web";
+import type { Address } from "@wycliffeassociates/sefer-text/location/address";
 import { Effect } from "effect";
 import NotebookText from "lucide-solid/icons/notebook-text";
 import { For, Show } from "solid-js";
@@ -33,7 +34,7 @@ function NoteItem(props: NoteItemProps) {
   return (
     <li
       data-testid="note"
-      data-address={addressCode(props.note.address)}
+      data-address={formatReference([props.note.address])}
       class="rounded-2xl bg-surface-primary p-4"
     >
       <Show when={props.note.quote}>
@@ -48,7 +49,8 @@ function NoteItem(props: NoteItemProps) {
       <Show
         when={
           props.note.openEnded === true ||
-          addressCode(props.note.address) !== addressCode(props.answeredPlace ?? props.note.address)
+          formatReference([props.note.address]) !==
+            formatReference([props.answeredPlace ?? props.note.address])
         }
       >
         <p class="text-smallest text-on-surface-tertiary">
@@ -78,7 +80,7 @@ export function NotesPane(props: NotesPaneProps) {
     },
     ({ handle, place }) =>
       handle.places === undefined ? Effect.succeed([]) : handle.places.at(place, context),
-    (a, b) => a.handle === b.handle && addressCode(a.place) === addressCode(b.place),
+    (a, b) => a.handle === b.handle && formatReference([a.place]) === formatReference([b.place]),
   );
 
   const answeredPlace = (): Address | undefined => held.answered()?.place;
@@ -89,7 +91,7 @@ export function NotesPane(props: NotesPaneProps) {
 
   const placeCode = (): string => {
     const place = answeredPlace();
-    return place === undefined ? "" : addressCode(place);
+    return place === undefined ? "" : formatReference([place]);
   };
 
   return (

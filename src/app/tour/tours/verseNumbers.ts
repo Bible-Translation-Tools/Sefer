@@ -1,13 +1,11 @@
+import { formatReference, showReference } from "@wycliffeassociates/scripture-kitchen/web";
 import { trustedBy, type BookId } from "@wycliffeassociates/sefer-text/book";
-import { addressCode, addressLabel } from "@wycliffeassociates/sefer-text/location/address";
 import { bookName } from "@wycliffeassociates/sefer-text/location/canon";
-import { addressAt } from "@wycliffeassociates/sefer-text/location/locate";
 import { Option, Result } from "effect";
 
 import { m } from "#app/paraglide/messages";
 import type { Finding } from "#core/findings/finding";
 import * as Fixes from "#core/fixes/fixes";
-import { tocViewOf } from "#core/galley";
 
 import { codeLabel } from "../../ui/panels/findingLabels";
 import { findingMessage } from "../../ui/rules/labelMessages";
@@ -38,12 +36,13 @@ const placeOf = (
   const metadata = Option.getOrUndefined(context.shell.project()?.metadata() ?? Option.none());
   const name = bookName(finding.bookId, metadata);
   const address =
-    held === undefined
-      ? undefined
-      : addressAt(finding.bookId, tocViewOf(held.analysis), finding.from);
+    held === undefined ? undefined : held.analysis.addressAt(finding.bookId, finding.from);
   return address === undefined
     ? { key: `${finding.bookId}@${String(finding.from)}`, label: name }
-    : { key: addressCode(address), label: addressLabel(address, name, m.tour_introduction()) };
+    : {
+        key: formatReference([address]),
+        label: showReference(address, name, m.tour_introduction()),
+      };
 };
 
 const onBook = (bookId: BookId): boolean =>

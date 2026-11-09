@@ -1,5 +1,4 @@
 import type { BookId } from "@wycliffeassociates/sefer-text/book";
-import type { TocView } from "@wycliffeassociates/sefer-text/location/locate";
 import type { SourceStamp } from "@wycliffeassociates/sefer-text/source";
 
 import {
@@ -145,7 +144,8 @@ export interface PublishedBook {
   readonly text: string;
   readonly name: string;
   readonly mask?: () => MaskMap | undefined;
-  readonly toc?: () => TocView;
+  /** The parse `text` came from, for naming the verse a finding sits in. */
+  readonly analysis?: () => Analysis;
 }
 
 const BEFORE_WINDOW = 32;
@@ -303,11 +303,11 @@ export const corpusReader = (
       let keys: SuppressionKeys | null | undefined;
       const suppression = (): SuppressionKeys | undefined => {
         if (keys !== undefined) return keys ?? undefined;
-        const toc = resolved.toc?.();
+        const analysis = resolved.analysis?.();
         const here =
-          toc === undefined
+          analysis === undefined
             ? undefined
-            : siteKeyOf(resolved.bookId, resolved.text, toc, finding.from, finding.to);
+            : siteKeyOf(resolved.bookId, resolved.text, analysis, finding.from, finding.to);
         keys =
           here === undefined
             ? null

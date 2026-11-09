@@ -41,53 +41,40 @@ export const versesAddress = (book: BookId, from: Point, to: Point = from): Addr
   to,
 });
 
+export interface Span {
+  readonly from: number;
+  readonly to: number;
+}
+
 /**
- * Point order: chapter, then verse, then segment. A whole verse sorts before
- * its segments, so `3 <= 3a`; that is what lets `3-3a` be a valid range and
- * `3a-3` not.
+ * Where an Address is in one text, galley's answer (`resolve`) in UTF-16:
+ * found, missing (with the enclosing place that IS there), or ambiguous when
+ * malformed text offers two answers. Never a silent nearest: an action that
+ * attaches or edits must not guess.
+ *
+ * `from..to` is the place's tile: a verse ends where the next verse's heading
+ * or paragraph marker begins, and `opening` is where its own begins, so
+ * `opening..to` is the verse with the heading that introduces it.
  */
-export const comparePoints = (a: Point, b: Point): number =>
-  a.chapter - b.chapter ||
-  a.verse - b.verse ||
-  (a.segment ?? "").localeCompare(b.segment ?? "", "en");
-
-const pointText = (point: Point): string => `${point.verse}${point.segment ?? ""}`;
-
-const coordinates = (address: Address, intro: string): string => {
-  switch (address.kind) {
-    case "book":
-      return "";
-    case "intro":
-      return intro;
-    case "chapters":
-      return address.from === address.to ? String(address.from) : `${address.from}-${address.to}`;
-    case "verses": {
-      const { from, to } = address;
-      const head = `${from.chapter}:${pointText(from)}`;
-      if (comparePoints(from, to) === 0) return head;
-      if (from.chapter === to.chapter) return `${head}-${pointText(to)}`;
-      return `${head}-${to.chapter}:${pointText(to)}`;
+export type Resolution =
+  | {
+      readonly kind: "found";
+      readonly from: number;
+      readonly to: number;
+      readonly opening: number;
+      /** What the span actually is: `LUK 1:1-2` when `LUK 1:2` landed in a bridge. */
+      readonly covers: Address;
+      /** A segment (`3a`) found as its whole verse, because the text does not divide it. */
+      readonly coarser: boolean;
     }
-  }
-};
-
-/**
- * U23003's basic reference: `LUK 1:1-2`, `MAT 2-4`, `LUK 0` for the
- * introduction. The machine spelling of an Address — for a link, a log line,
- * an interchange file — so Sefer invents no format of its own.
- */
-export const addressCode = (address: Address): string => {
-  const rest = coordinates(address, "0");
-  return rest === "" ? address.book : `${address.book} ${rest}`;
-};
-
-/**
- * What a person reads: `Luke 1:1-2`, `Lucas 1:1-2`. The caller supplies the
- * book's name (the project's own when it has one — `displayName` in the
- * application's location service) and the word for an introduction, because
- * both are the project's language and not this module's.
- */
-export const addressLabel = (address: Address, bookName: string, intro: string): string => {
-  const rest = coordinates(address, intro);
-  return rest === "" ? bookName : `${bookName} ${rest}`;
-};
+  | {
+      readonly kind: "missing";
+      readonly missing: "intro" | "chapter" | "verse";
+      /** The nearest enclosing place that is there: the chapter, for a verse. */
+      readonly within?: Span;
+    }
+  | {
+      /** Malformed text: two `\c 3`s, or two anchors for one verse. */
+      readonly kind: "ambiguous";
+      readonly spans: readonly Span[];
+    };

@@ -1,3 +1,4 @@
+import { showReference } from "@wycliffeassociates/scripture-kitchen/web";
 import {
   editorFeatures,
   editorPolicy,
@@ -15,7 +16,6 @@ import {
   type ReferenceMount,
 } from "@wycliffeassociates/sefer-editor";
 import { makeBook } from "@wycliffeassociates/sefer-text/book";
-import { addressLabel } from "@wycliffeassociates/sefer-text/location/address";
 import * as Result from "@wycliffeassociates/sefer-text/result";
 import { decode } from "@wycliffeassociates/sefer-text/source";
 
@@ -278,7 +278,7 @@ const caretMarks = (): readonly MarkedRange[] => {
 
 const placeOf = (): string => {
   const where = editor?.where();
-  return where === undefined ? "nowhere" : addressLabel(where, where.book, "Introduction");
+  return where === undefined ? "nowhere" : showReference(where, where.book, "Introduction");
 };
 
 let mirrorFrame: number | undefined;
