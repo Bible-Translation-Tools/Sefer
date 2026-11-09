@@ -38,6 +38,8 @@ const ONION = {
   "verse-out-of-order": m.finding_verse_out_of_order,
   "verse-gap": m.finding_verse_gap,
   "missing-verse-one": m.finding_missing_verse_one,
+  "chapter-ends-early": m.finding_chapter_ends_early,
+  "verse-beyond-scheme": m.finding_verse_beyond_scheme,
   "verse-before-first-chapter": m.finding_verse_before_first_chapter,
   "missing-chapter": m.finding_missing_chapter,
   "missing-id": m.finding_missing_id,

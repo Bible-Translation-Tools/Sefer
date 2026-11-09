@@ -105,6 +105,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  '@wycliffeassociates/scripture-kitchen': file:/tmp/claude-1012/-home-kellyw-projects-sefer/2cd64587-d2b7-44b3-9a37-7a1d0b0f4d27/scratchpad/kitchen/wycliffeassociates-scripture-kitchen-0.1.21.tgz
+
 importers:
 
   .:
@@ -164,8 +167,8 @@ importers:
         specifier: ^2.12.0
         version: 2.12.0
       '@wycliffeassociates/scripture-kitchen':
-        specifier: 0.1.20
-        version: 0.1.20
+        specifier: file:/tmp/claude-1012/-home-kellyw-projects-sefer/2cd64587-d2b7-44b3-9a37-7a1d0b0f4d27/scratchpad/kitchen/wycliffeassociates-scripture-kitchen-0.1.21.tgz
+        version: file:../../../../tmp/claude-1012/-home-kellyw-projects-sefer/2cd64587-d2b7-44b3-9a37-7a1d0b0f4d27/scratchpad/kitchen/wycliffeassociates-scripture-kitchen-0.1.21.tgz
       '@wycliffeassociates/sefer-editor':
         specifier: workspace:*
         version: link:packages/editor
@@ -268,7 +271,7 @@ importers:
         version: 2.1.14
       magic-string:
         specifier: ^1.4.1
-        version: 1.4.1
+        version: 1.4.3
       oxc-parser:
         specifier: ^0.151.0
         version: 0.151.0
@@ -311,6 +314,10 @@ importers:
         version: 0.9.12
 
   packages/editor:
+    dependencies:
+      '@wycliffeassociates/scripture-kitchen':
+        specifier: file:/tmp/claude-1012/-home-kellyw-projects-sefer/2cd64587-d2b7-44b3-9a37-7a1d0b0f4d27/scratchpad/kitchen/wycliffeassociates-scripture-kitchen-0.1.21.tgz
+        version: file:../../../../tmp/claude-1012/-home-kellyw-projects-sefer/2cd64587-d2b7-44b3-9a37-7a1d0b0f4d27/scratchpad/kitchen/wycliffeassociates-scripture-kitchen-0.1.21.tgz
     devDependencies:
       '@codemirror/commands':
         specifier: ^6.11.1
@@ -324,9 +331,6 @@ importers:
       '@codemirror/view':
         specifier: ^6.43.13
         version: 6.43.13
-      '@wycliffeassociates/scripture-kitchen':
-        specifier: 0.1.20
-        version: 0.1.20
       '@wycliffeassociates/sefer-text':
         specifier: workspace:*
         version: link:../text
@@ -335,10 +339,10 @@ importers:
         version: 5.0.1(@types/node@26.6.2)(@vitest/browser-playwright@5.0.1)(@vitest/ui@5.0.1)(jsdom@25.0.1(supports-color@8.1.1))(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/text:
-    devDependencies:
+    dependencies:
       '@wycliffeassociates/scripture-kitchen':
-        specifier: 0.1.20
-        version: 0.1.20
+        specifier: file:/tmp/claude-1012/-home-kellyw-projects-sefer/2cd64587-d2b7-44b3-9a37-7a1d0b0f4d27/scratchpad/kitchen/wycliffeassociates-scripture-kitchen-0.1.21.tgz
+        version: file:../../../../tmp/claude-1012/-home-kellyw-projects-sefer/2cd64587-d2b7-44b3-9a37-7a1d0b0f4d27/scratchpad/kitchen/wycliffeassociates-scripture-kitchen-0.1.21.tgz
 
   planning:
     dependencies:
@@ -2884,6 +2888,13 @@ packages:
     resolution: {integrity: sha512-jx1+rPhY/5Ympkktd656HBWEBLxP7dH06losBLjjf5vgCODXvi9KhtftWcMIwTFIDqBr7cRnQkdLnAG+IOlGvQ==}
     engines: {node: '>=14.0.0'}
     cpu: [wasm32]
+    bundledDependencies:
+      - '@napi-rs/wasm-runtime'
+      - '@emnapi/core'
+      - '@emnapi/runtime'
+      - '@tybys/wasm-util'
+      - '@emnapi/wasi-threads'
+      - tslib
 
   '@tailwindcss/oxide-win32-arm64-msvc@4.3.3':
     resolution: {integrity: sha512-3rc292Ca2ceK6Ulcc/bAVnTs/3nDtoPhyEKlgPv+yQJQi/JS/AMJlqzxvlDacL1nekbrcf6bTqp/jV4qgnPxNQ==}
@@ -3569,8 +3580,9 @@ packages:
     resolution: {integrity: sha512-K1DL05PngTMKY8mkzMNYpKNqZNPTrdJheuvTeWwwYlm4Yn9hLc8V3hw6EDsuEYw4cyEyiVeukLbLOEW+AhvqVw==}
     engines: {node: '>=18.20.0'}
 
-  '@wycliffeassociates/scripture-kitchen@0.1.20':
-    resolution: {integrity: sha512-qdq+vYba5eCbqAok8ceUhZ46H7l6KTkZB1zmibv6izWgKLccYdFcTpn3HsN4QjgBUgiuGAtnuaW8/rjVbwFabA==, tarball: https://nexus-registry.walink.org/repository/wa-npm/@wycliffeassociates/scripture-kitchen/-/scripture-kitchen-0.1.20.tgz}
+  '@wycliffeassociates/scripture-kitchen@file:../../../../tmp/claude-1012/-home-kellyw-projects-sefer/2cd64587-d2b7-44b3-9a37-7a1d0b0f4d27/scratchpad/kitchen/wycliffeassociates-scripture-kitchen-0.1.21.tgz':
+    resolution: {integrity: sha512-8HcUGoHZoswzzgXZ1ZzifrFa191pRpEMAd2FK+KSFCLMsp3Kim4NbFsEVNMF5oHBmuJ0DCAWmZS7HvDTtfG6og==, tarball: file:../../../../tmp/claude-1012/-home-kellyw-projects-sefer/2cd64587-d2b7-44b3-9a37-7a1d0b0f4d27/scratchpad/kitchen/wycliffeassociates-scripture-kitchen-0.1.21.tgz}
+    version: 0.1.21
 
   '@xmldom/xmldom@0.9.12':
     resolution: {integrity: sha512-5AXjrcMClTryPe9LgZrygpB1lj7s0S9E0+W+AHaVKAVyHanafK86iPSvG5xHVSp/jC+VH1UXu0TAEmY279xH7A==}
@@ -5369,9 +5381,6 @@ packages:
 
   magic-string@0.30.21:
     resolution: {integrity: sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==}
-
-  magic-string@1.4.1:
-    resolution: {integrity: sha512-8lyCu36ErXR0J9uaGKlKQoiLZKmtI63YGLE8G2o9jyRPdr4X47LusSOwgOJOzcVtp81fTAAjxR7BwKz682Jhow==}
 
   magic-string@1.4.3:
     resolution: {integrity: sha512-z12OxmaPGE0F4xlpGdjuAUckipLpQlTAuAmyGhNoD7ODpYUzvDfvtxUbjM/jwznyP178oju/KDdyi220wNJ0RQ==}
@@ -9760,7 +9769,7 @@ snapshots:
       '@vitest/mocker': 5.0.1(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
       '@vitest/ui': 5.0.1(vitest@5.0.1)
       '@vitest/utils': 5.0.1
-      magic-string: 1.4.1
+      magic-string: 1.4.3
       pngjs: 7.0.0
       sirv: 3.0.2
       tinyrainbow: 3.1.1
@@ -9777,7 +9786,7 @@ snapshots:
       '@jridgewell/trace-mapping': 0.3.31
       '@vitest/spy': 5.0.1
       estree-walker: 3.0.3
-      magic-string: 1.4.1
+      magic-string: 1.4.3
     optionalDependencies:
       vite: 8.3.0(@types/node@26.6.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)
 
@@ -10160,7 +10169,7 @@ snapshots:
     dependencies:
       '@wdio/logger': 9.29.1
 
-  '@wycliffeassociates/scripture-kitchen@0.1.20': {}
+  '@wycliffeassociates/scripture-kitchen@file:../../../../tmp/claude-1012/-home-kellyw-projects-sefer/2cd64587-d2b7-44b3-9a37-7a1d0b0f4d27/scratchpad/kitchen/wycliffeassociates-scripture-kitchen-0.1.21.tgz': {}
 
   '@xmldom/xmldom@0.9.12': {}
 
@@ -12150,10 +12159,6 @@ snapshots:
     optional: true
 
   magic-string@0.30.21:
-    dependencies:
-      '@jridgewell/sourcemap-codec': 1.6.0
-
-  magic-string@1.4.1:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.6.0
 
@@ -14156,7 +14161,7 @@ snapshots:
       chai: 6.2.2
       es-module-lexer: 2.3.2
       expect-type: 1.4.0
-      magic-string: 1.4.1
+      magic-string: 1.4.3
       obug: 2.1.4
       picomatch: 4.0.7
       std-env: 4.2.0
