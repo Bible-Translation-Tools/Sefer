@@ -162,9 +162,6 @@ const writeHistory = (fileSystem: FileSystem.FileSystem, root: string, replayed:
     yield* fileSystem.writeFileString(joinPath(git, "HEAD"), `ref: refs/heads/${DEFAULT_BRANCH}\n`);
   });
 
-/** Histories bttwriter has replayed: their handles are used up, so a second try reads them again. */
-const spent = new WeakSet<WriterHistory>();
-
 /**
  * The staged books that have saves to replay, each with a handle bttwriter
  * still holds; the rest are taken as they were rendered.
@@ -175,7 +172,7 @@ const withHistory = (books: readonly StagedBook[]) =>
     const histories: WriterHistory[] = [];
     for (const staged of books) {
       if (staged.history === undefined || staged.history.saves === 0) continue;
-      const handle = spent.has(staged.history)
+      const handle = staged.history.spent
         ? yield* Effect.mapError(
             readHistory(staged.root, staged.source),
             (error) => new AssembleError({ reason: "History", description: error.description }),
@@ -290,7 +287,6 @@ export const assemble = (options: {
         const bttwriter = yield* Effect.catch((yield* WriterEngine).load, (error) =>
           abandon(`the Writer history could not be replayed: ${error.reason}`),
         );
-        histories.forEach((history) => spent.add(history));
         const consolidated = yield* Effect.catch(
           Effect.try({
             try: () =>
@@ -447,7 +443,6 @@ export const addBooks = (options: {
             description: `the Writer history could not be replayed: ${error.reason}`,
           }),
       );
-      histories.forEach((history) => spent.add(history));
       replayed = yield* Effect.try({
         try: () => bttwriter.replay(histories, { now: secondsOf(new Date().toISOString()) }),
         catch: (cause) =>

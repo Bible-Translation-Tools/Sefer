@@ -10,13 +10,8 @@ import { lastSegment } from "../fileSystem/path";
 import { Git, type Author } from "../git/git";
 import { Observability } from "../observability";
 import { Remote } from "../remote/remote";
-import {
-  readWriterTree,
-  recognizeWriter,
-  writerBookToUsfm,
-  type WriterProject,
-} from "./writerBook";
-import { objectSource, WriterEngine, type WriterHistory } from "./writerEngine";
+import { readWriterFiles, recognizeWriter, type WriterProject } from "./writerBook";
+import { objectSource, stitchBook, WriterEngine, type WriterHistory } from "./writerEngine";
 
 export type CandidateStatus = "Primary" | "Active" | "Inactive";
 
@@ -92,8 +87,11 @@ const fallbackTitle = (project: WriterProject): string => bookName(project.book)
 const render = (project: WriterProject, root: string) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
-    const tree = yield* readWriterTree(fileSystem, root);
-    return writerBookToUsfm(tree, project.book, fallbackTitle(project));
+    const files = yield* readWriterFiles(fileSystem, root);
+    return yield* Effect.mapError(
+      stitchBook(files, project.book, fallbackTitle(project)),
+      (error) => new CandidateError({ reason: "History", description: error.reason }),
+    );
   });
 
 /** One Writer repository's history, read by bttwriter through the Git port. */

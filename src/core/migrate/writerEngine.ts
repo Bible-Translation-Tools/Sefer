@@ -47,6 +47,22 @@ export const writerEngine = (start: () => Promise<BttWriter>): WriterEngineServi
 };
 
 /**
+ * One Writer book's files as USFM with no history and no git: bttwriter's
+ * `stitch`, the template its replay renders each save with. `title` stands in
+ * when `front/title.txt` says nothing (bttwriter's default is canon's English
+ * name).
+ */
+export const stitchBook = (
+  files: ReadonlyMap<string, string>,
+  book: string,
+  title?: string,
+): Effect.Effect<string, EngineLoadError, WriterEngine> =>
+  Effect.gen(function* () {
+    const bttwriter = yield* (yield* WriterEngine).load;
+    return bttwriter.stitch(files, book, title === undefined ? {} : { title });
+  });
+
+/**
  * bttwriter's `ObjectSource` over the Git port: HEAD, the shallow list (read
  * off `.git/shallow`, as isomorphic-git and libgit2 both keep it) and objects
  * by id, one reader for the whole walk.

@@ -27,6 +27,7 @@ import {
   assembleProject,
   forgetPicked,
   openOne,
+  releaseOpened,
   pickLocal,
   remoteCandidates,
   urlCandidate,
@@ -367,6 +368,7 @@ export function MigrateScreen(props: {
   const [assembling, setAssembling] = createSignal(false, { name: "migrateAssembling" });
 
   onCleanup(forgetPicked);
+  onCleanup(() => untrack(opened).forEach(releaseOpened));
 
   const openedOf = (id: string): Opened => opened().get(id) ?? { state: "waiting" };
 

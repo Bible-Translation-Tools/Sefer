@@ -148,6 +148,11 @@ export const urlCandidate = async (services: Services, typed: string): Promise<B
 
 const CANDIDATE_TIMEOUT = "60 seconds";
 
+/** Hands back the wasm memory a staged book's history holds; a spent one has none left. */
+export const releaseOpened = (opened: Opened): void => {
+  if (opened.state === "ready") opened.staged.history?.free();
+};
+
 export const openOne = async (services: Services, candidate: BookCandidate): Promise<Opened> => {
   const operation = services.composition.observability.operation("migrate.open", {
     "migrate.book": candidate.book,
@@ -174,6 +179,7 @@ export const openOne = async (services: Services, candidate: BookCandidate): Pro
     const staged = opened.value;
     const refused = validate(staged.usfm);
     if (refused !== undefined) {
+      staged.history?.free();
       operation.end("refused", { "migrate.reason": refused });
       return { state: "refused", reason: refused };
     }
