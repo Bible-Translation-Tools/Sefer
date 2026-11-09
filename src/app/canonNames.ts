@@ -1,5 +1,7 @@
 import { localeFor, type NameTable } from "@wycliffeassociates/scripture-kitchen/canon";
 import spanish from "@wycliffeassociates/scripture-kitchen/names/es-419";
+import french from "@wycliffeassociates/scripture-kitchen/names/fr";
+import portuguese from "@wycliffeassociates/scripture-kitchen/names/pt-br";
 
 import type { Locale } from "./paraglide/runtime";
 
@@ -11,7 +13,11 @@ import type { Locale } from "./paraglide/runtime";
  * canon; a language with no table here (Persian has none in canon) reads
  * English.
  */
-const BUNDLED: ReadonlyMap<string, NameTable> = new Map([["es-419", spanish]]);
+const BUNDLED: ReadonlyMap<string, NameTable> = new Map([
+  ["es-419", spanish],
+  ["fr", french],
+  ["pt-br", portuguese],
+]);
 
 export const canonNames = (locale: Locale): readonly NameTable[] => {
   const code = localeFor(locale);
