@@ -48,6 +48,8 @@ const composingField = StateField.define<Composing | null>({
   update(held, tr) {
     for (const effect of tr.effects) if (effect.is(compose)) return effect.value;
     if (held === null) return null;
+    // A flip to USFM or to read-only changes neither the text nor the caret.
+    if (!inRefine(tr.state) || tr.state.readOnly) return null;
     if (tr.docChanged) return null;
     if (tr.selection && tr.newSelection.main.head !== held.at) return null;
     return held;

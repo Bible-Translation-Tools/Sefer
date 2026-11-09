@@ -28,6 +28,8 @@ function ProjectLayout() {
       }
       setPhase("opening");
       void shell.openProject(root).then(() => {
+        // The address moved on while this one opened; the newer open answers for it.
+        if (untrack(() => params().slug) !== slug) return;
         setPhase(untrack(() => shell.project()?.root) === root ? "ready" : "unknown");
       });
     },

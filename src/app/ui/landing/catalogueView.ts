@@ -218,7 +218,7 @@ const createSortedEntries = (
 export const createCatalogueRows = (
   entries: Accessor<readonly CatalogueEntry[] | undefined>,
   filters: Filters,
-  busy: Accessor<string>,
+  busy: Accessor<ReadonlySet<string>>,
   downloadReason: (entry: CatalogueEntry) => string,
 ) => {
   const { sorted, updatedOf } = createSortedEntries(entries, filters);
@@ -237,7 +237,7 @@ export const createCatalogueRows = (
         english: entry.anglicizedName === entry.naturalName ? "" : entry.anglicizedName,
         updated: updatedOf(entry),
         refusal: downloadReason(entry),
-        downloading: entry.id === running,
+        downloading: running.has(entry.id),
       }));
     },
     { name: "catalogueRows" },

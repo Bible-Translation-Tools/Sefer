@@ -159,11 +159,13 @@ export const createLifecycle = ({
 
   const openProject = (root: string): Promise<void> => {
     if (opening !== undefined && opening.root === root) return opening.done;
-    const done = openProjectOnce(root).finally(() => {
-      if (opening?.root === root) opening = undefined;
+    // One open at a time: another root waits for the one in flight, so its close finds what that one set.
+    const run = (): Promise<void> => openProjectOnce(root);
+    const mine = { root, done: (opening?.done ?? Promise.resolve()).then(run, run) };
+    opening = mine;
+    return mine.done.finally(() => {
+      if (opening === mine) opening = undefined;
     });
-    opening = { root, done };
-    return done;
   };
 
   const offerRecovery = (ready: Project, root: string): void => {

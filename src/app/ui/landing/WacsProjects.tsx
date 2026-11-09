@@ -542,7 +542,15 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
     void navigate({ to: "/project/$slug", params: { slug: shell.slugFor(root) } });
 
   const { entries, problem } = createCatalogueEntries(services, catalogue);
-  const [busy, setBusy] = createSignal("", { name: "catalogueBusy" });
+  const [busy, setBusy] = createSignal<ReadonlySet<string>>(new Set(), { name: "catalogueBusy" });
+  const markBusy = (id: string, on: boolean): void => {
+    setBusy((held) => {
+      const next = new Set(held);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
   const filters = createCatalogueFilters(entries);
 
   const { rows, rowIndex, virtualRows, codeColumn } = createCatalogueRows(
@@ -563,7 +571,7 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
   const download = (entry: CatalogueEntry, from: DOMRect): void => {
     // Untracked on purpose: a one-time read, not a dependency (Solid 2: STRICT_READ_UNTRACKED).
     const { downloads } = props;
-    downloadEntry(services, downloads, setBusy, entry, from, open);
+    downloadEntry(services, downloads, markBusy, entry, from, open);
   };
 
   return (
