@@ -19,6 +19,7 @@ import type { BookSummary } from "#core/analysis/projectAnalysis";
 import type { Finding } from "#core/findings/finding";
 import type { Inventory } from "#core/findings/inventory";
 import type { Rung } from "#core/findings/suppressions";
+import type { ProjectPhase } from "#core/project/lifecycle";
 import type { Project } from "#core/project/project";
 import type { Restorable } from "#core/recovery/recovery";
 
@@ -55,6 +56,8 @@ export interface Shell {
   readonly services: Services;
   readonly project: Accessor<Project | undefined>;
   readonly openProject: (root: string) => Promise<void>;
+  /** Which project the shell has, and how far an open has got; `src/core/project/lifecycle.ts`. */
+  readonly projectPhase: Accessor<ProjectPhase>;
   readonly recoveryOffer: Accessor<readonly Restorable[] | undefined>;
   readonly setRecoveryOffer: (offer: readonly Restorable[]) => void;
   readonly closeProject: () => Promise<void>;
@@ -304,7 +307,13 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
   });
   const { remember, aim } = reader;
 
-  const { recoveryOffer, setRecoveryOffer, closeProject, openProject } = createLifecycle({
+  const {
+    phase: projectPhase,
+    recoveryOffer,
+    setRecoveryOffer,
+    closeProject,
+    openProject,
+  } = createLifecycle({
     services,
     keys,
     stores,
@@ -336,6 +345,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     services,
     project,
     openProject,
+    projectPhase,
     recoveryOffer,
     setRecoveryOffer,
     closeProject,
