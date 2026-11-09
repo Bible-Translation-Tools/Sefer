@@ -18,7 +18,7 @@
  * source text has 105, and comparing it shows Jude's text in it.
  */
 
-import { CANON } from "@wycliffeassociates/sefer-text/location/canon";
+import { bookName } from "@wycliffeassociates/sefer-text/location/bookName";
 import { Result } from "effect";
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 
@@ -235,7 +235,7 @@ export function BookPane(props: {
   >(undefined, { name: "bookPaneSource" });
   const [usfm, setUsfm] = createSignal(false, { name: "bookPaneUsfm" });
 
-  const name = (): string => CANON.find((entry) => entry.id === props.book)?.name ?? props.book;
+  const name = (): string => bookName(props.book);
 
   createEffect(
     () =>

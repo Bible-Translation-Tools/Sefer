@@ -5,7 +5,7 @@ import {
   type NewBibleProject,
   type NewBook,
 } from "@wycliffeassociates/scripture-kitchen/bento";
-import { CANON } from "@wycliffeassociates/sefer-text/location/canon";
+import { bookName } from "@wycliffeassociates/sefer-text/location/bookName";
 import { Data, Effect, FileSystem, Option } from "effect";
 
 import { joinPath } from "../fileSystem/path";
@@ -109,9 +109,7 @@ const signatureOf = (author: Author, iso: string): Signature => ({
 });
 
 const titleOf = (staged: StagedBook): string =>
-  /^\\h\s+(.+)$/m.exec(staged.usfm)?.[1]?.trim() ??
-  CANON.find((entry) => entry.id === staged.project.book)?.name ??
-  staged.project.book;
+  /^\\h\s+(.+)$/m.exec(staged.usfm)?.[1]?.trim() ?? bookName(staged.project.book);
 
 const assemblyMessage = (form: AssembleForm, books: readonly StagedBook[]): string => {
   const authors = new Map<string, Author>();

@@ -1,4 +1,9 @@
-import { CANON, type Testament } from "@wycliffeassociates/sefer-text/location/canon";
+import { book as canonBook } from "@wycliffeassociates/scripture-kitchen/canon";
+import {
+  bookName,
+  testamentOf,
+  type Testament,
+} from "@wycliffeassociates/sefer-text/location/bookName";
 import { Data, Effect, FileSystem, Option } from "effect";
 
 import { lastSegment } from "../fileSystem/path";
@@ -58,13 +63,11 @@ class CandidateError extends Data.TaggedError("CandidateError")<{
 export const candidateLabel = (candidate: BookCandidate): string =>
   candidate.origin.kind === "remote" ? candidate.origin.owner : candidate.origin.name;
 
-export const testamentOfBook = (book: string): Testament =>
-  CANON.find((entry) => entry.id === book)?.testament ?? "nt";
+export const testamentOfBook = (book: string): Testament => testamentOf(book);
 
-const canonIndex = (book: string): number => {
-  const index = CANON.findIndex((entry) => entry.id === book);
-  return index === -1 ? CANON.length : index;
-};
+/** canon's place for a book; a book outside the canon's numbering sorts last. */
+const canonIndex = (book: string): number =>
+  canonBook(book)?.canonicalIndex ?? Number.MAX_SAFE_INTEGER;
 
 const isWriterItself = (name: string): boolean =>
   /^(ts-?desktop|translation ?studio|btt ?writer)$/i.test(name.trim());
@@ -84,8 +87,7 @@ const authorsFrom = (project: WriterProject, committed: readonly Author[]): read
   return out;
 };
 
-const fallbackTitle = (project: WriterProject): string =>
-  CANON.find((entry) => entry.id === project.book)?.name ?? project.book;
+const fallbackTitle = (project: WriterProject): string => bookName(project.book);
 
 const render = (project: WriterProject, root: string) =>
   Effect.gen(function* () {

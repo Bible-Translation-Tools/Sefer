@@ -1,5 +1,6 @@
 import { useNavigate } from "@tanstack/solid-router";
-import { CANON } from "@wycliffeassociates/sefer-text/location/canon";
+import { books } from "@wycliffeassociates/scripture-kitchen/canon";
+import { bookName } from "@wycliffeassociates/sefer-text/location/bookName";
 import { Option } from "effect";
 import FileArchive from "lucide-solid/icons/file-archive";
 import FolderOpen from "lucide-solid/icons/folder-open";
@@ -126,9 +127,7 @@ function TestamentSection(props: {
             )}
             onClick={() => props.onSelect(row.book)}
           >
-            <span class="me-auto truncate">
-              {CANON.find((book) => book.id === row.book)?.name ?? row.book}
-            </span>
+            <span class="me-auto truncate">{bookName(row.book)}</span>
             <Badge tone={props.markOf(row).tone} class="max-w-28 truncate">
               {props.markOf(row).label}
             </Badge>
@@ -520,7 +519,7 @@ export function MigrateScreen(props: {
     picked().length > 0 && needsChoice().length === 0 && stillOpening() === 0;
 
   const counted = (testament: "ot" | "nt"): string => {
-    const total = CANON.filter((book) => book.testament === testament).length;
+    const total = books("protestant66").filter((book) => book.division === testament).length;
     const have = picked().filter((candidate) => testamentOfBook(candidate.book) === testament);
     return m.migrate_have_of_total({ have: have.length, total });
   };

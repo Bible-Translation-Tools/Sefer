@@ -1,5 +1,5 @@
 import type { Book, BookId } from "@wycliffeassociates/sefer-text/book";
-import { bookName } from "@wycliffeassociates/sefer-text/location/canon";
+import { bookName } from "@wycliffeassociates/sefer-text/location/bookName";
 import type { SourceStamp } from "@wycliffeassociates/sefer-text/source";
 import { Context, Duration, Effect, Latch, Layer, Option, PubSub, Scope, Stream } from "effect";
 

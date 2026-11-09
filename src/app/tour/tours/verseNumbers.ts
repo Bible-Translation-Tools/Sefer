@@ -1,6 +1,6 @@
 import { formatReference, showReference } from "@wycliffeassociates/scripture-kitchen/web";
 import { trustedBy, type BookId } from "@wycliffeassociates/sefer-text/book";
-import { bookName } from "@wycliffeassociates/sefer-text/location/canon";
+import { bookName } from "@wycliffeassociates/sefer-text/location/bookName";
 import { Option, Result } from "effect";
 
 import { m } from "#app/paraglide/messages";

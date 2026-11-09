@@ -1,4 +1,8 @@
-import { book, books, name } from "@wycliffeassociates/scripture-kitchen/canon";
+/**
+ * What Sefer calls a book. The book table itself is canon's (the kitchen's
+ * `./canon`: order, codes, divisions, names); this is the policy over it.
+ */
+import { book, name } from "@wycliffeassociates/scripture-kitchen/canon";
 
 import { localized, type LocalizedText } from "../localized";
 
@@ -13,22 +17,6 @@ export interface BookNames {
 }
 
 export type Testament = "ot" | "nt";
-
-export interface CanonicalBook {
-  readonly id: string;
-  readonly name: string;
-  readonly testament: Testament;
-}
-
-/**
- * The 66 books in order, from canon's table (the kitchen's `./canon`). A
- * book's `name` is canon's short English name.
- */
-export const CANON: readonly CanonicalBook[] = books("protestant66").map((row) => ({
-  id: row.code,
-  name: name(row.code, "short")?.text ?? row.english,
-  testament: row.division === "ot" ? "ot" : "nt",
-}));
 
 /**
  * Which testament a book belongs to. An id the canon does not know is `nt`,
