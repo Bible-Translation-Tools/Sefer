@@ -4,7 +4,7 @@ title: "Save and sync states: which to show, and when"
 kind: plan
 status: discussing
 created: 2026-11-05
-updated: 2026-11-05
+updated: 2026-11-09
 sha: f0fd0dd3
 tags: [design, sync]
 ---
@@ -228,3 +228,66 @@ trail. If permission arrives later, the popover says so; it never switches by it
 <Question id="own-copy">Own copy: explicit, progressive or hidden? Does a translator need to know the difference, or only that the team still has to accept their changes?</Question>
 
 <Followup id="remove-tweak">Remove the chip's "Sync state" design tweak from `src/app/ui/cloud/SyncButton.tsx` once the states are settled.</Followup>
+
+## Decisions from Thomas (2026-11-09): uploading, versions and review
+
+Built on `design/sync-chip`: WACS lives inside the Online / Offline popover and is hidden while the
+person works offline; "Send my changes on save" now defaults to off, so sending is always the
+person's own act (Upload to WACS in the popover or the ☰ menu); a project only on this device
+uploads with one button under a suggested name, then shows its link, its owner and how to share it.
+The rarer states sit behind "More information".
+
+The rest is direction for paisano, not built:
+
+1. **Everything goes towards the one shared project.** Someone allowed to write sends straight to it.
+   Someone who is not gets one main button that uploads to their own copy and offers it to the team
+   in the same step ("Send to the team for review"); "Request access" is secondary. Making a separate
+   project is always a deliberate, secondary choice ("Upload as a separate project", `en_ulb-2`).
+2. **Recognise the same project by its history.** A project downloaded from WACS and later side-loaded
+   through a zip arrives unlinked (intake keeps history, drops remotes), and uploading it would make a
+   second project. Thomas expects this often. On import, and again before an upload creates anything,
+   match it to a project on WACS or on this device by shared history and offer to keep it linked.
+3. **Local versions are paisano's call.** While offline, Sefer should keep a version history that
+   assumes the work is fine, with no review and no naming asked of the person, so work from days or
+   weeks ago can be restored. Today only Save makes a version, and the backup journal is cleared at
+   each version, so it cannot restore an older state.
+
+   > I do like the idea that while they're offline and saving changes locally, we can do whatever
+   > Paisano thinks is best for versioning.
+
+4. **Review happens at upload, on purpose.** One flow: Upload → review → bring in what teammates sent →
+   upload. The review gives enough information for the person to decide whether to look closer or
+   accept all changes. Check for updates is the same flow without the upload.
+
+   > make that review intentional at upload (or at least provide some information about it so the
+   > user can decide if they want to deal with it, or just accept all changes)
+
+<Question id="local-versions">
+  Local versions: when does Sefer make one on its own (a day of work, closing the project, a number
+  of edits), and how are they described?
+</Question>
+
+<Question id="zip-export-history">
+  Does Sefer's own zip export carry the project's history? If not, a zip can never be recognised as
+  the same project. (The desktop export looks like it may write only the USFM files; unchecked.)
+</Question>
+
+<Question id="offer-wording">
+  "Offer my changes" reads oddly. Is "Send to the team for review" right, and does an offer keep
+  collecting later uploads until it is accepted?
+</Question>
+
+<Question id="request-access">
+  Request access: WACS has no access request of its own as far as we know. Open an issue on the
+  project, or show the owner with a ready-to-send message?
+</Question>
+
+<Question id="upload-review">
+  What does the review at upload show by default: a summary of your books and theirs with "Accept
+  all", opening Review only for a book both sides changed?
+</Question>
+
+<Followup id="same-project">
+  Match a side-loaded or re-uploaded project to its WACS project by shared history, at import and
+  before an upload creates a new project.
+</Followup>

@@ -1,0 +1,71 @@
+---
+id: b9cf5215-be40-4c96-9a5b-f365ec7df592
+title: "Bring people into a project so everyone's work lands in one place"
+kind: idea
+status: idea
+created: 2026-11-09
+updated: 2026-11-09
+sha: 4eab82cd
+tags: [design]
+---
+
+For paisano: Thomas has a Jira note to come back to this. Drafted 2026-11-09 from the save and
+sync states conversation (SEFER-92, SEFER-83). Nothing is built; today Sefer has no team,
+collaborator or invite code, and permissions can only be changed on the WACS website.
+
+The core problem:
+
+> A team working on one project should end up with one shared project, without anyone having
+> to understand repositories, permissions or forks.
+
+Today someone who downloads a project they may not write to has their work sent, silently, to
+their own copy on first send. A team can end up with several copies someone must combine by hand.
+
+## Stories
+
+> As the person responsible for a translation project, I want to easily bring my team members
+> into the project, so that everything they send goes straight into our shared project and I
+> don't have to find and combine work scattered across separate copies.
+
+> As a translator joining a project, I want to know that I've been added and that my work is
+> going to the team's project, so that I can work without worrying whether my changes actually
+> reached everyone else.
+
+## Acceptance criteria
+
+1. The owner can add a person to the project without needing to understand WACS repositories or
+   permission settings.
+2. The added person can then send directly to the shared project; no personal copy is created.
+3. The owner can see who is on the project and remove someone.
+4. Someone who may not send to the shared project is told before they start, or at the latest at
+   their first send, in plain words.
+5. When someone who already has their own copy is added later, Sefer offers to send that work to
+   the shared project.
+6. Only people who may manage the project see the option to add others.
+
+The smallest version worth shipping: 1, 2 and 4.
+
+Out of scope for now: an invite link (Gitea has no "anyone with this link" feature), inviting by
+email someone without a WACS account, creating organisations or teams.
+
+## Open questions
+
+<Question id="where">
+  Where is this solved: in Sefer, on WACS itself, or by setting projects up with the right team from
+  the start?
+</Question>
+
+<Question id="scope">
+  Collaborator on one repository, or a team in an organisation across all of the team's projects?
+</Question>
+
+<Question id="roles">
+  Roles (translator, checker who approves), or is "can send" enough at first?
+</Question>
+
+<Question id="entry">
+  If in Sefer, where is the entry point: the sync popover, Settings' Shared project card, or its own
+  Team item?
+</Question>
+
+<Question id="after-publish">Should Publish prompt "Add your team" straight away?</Question>
