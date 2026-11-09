@@ -166,6 +166,8 @@ export default defineConfig(({ mode }) => {
         // multibuffer route loads: a mid-session re-optimization reloads the
         // page, and a reload drops the open project.
         "@tanstack/virtual-core",
+        // Imported only when the import dialog is given a file.
+        "@wycliffeassociates/scripture-kitchen/docx",
       ],
     },
     test: {

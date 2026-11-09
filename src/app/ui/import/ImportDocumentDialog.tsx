@@ -1,4 +1,9 @@
-import type { Reading, Rendered, Settings, VerseMode } from "@sefer/document-import";
+import type {
+  DocumentReading,
+  Imported,
+  Settings,
+  VerseMode,
+} from "@wycliffeassociates/scripture-kitchen/docx";
 import { editorPolicy } from "@wycliffeassociates/sefer-editor";
 import type { Book } from "@wycliffeassociates/sefer-text/book";
 import { chaptersAddress } from "@wycliffeassociates/sefer-text/location/address";
@@ -30,13 +35,18 @@ import { BookChaptersRow, chaptersOf, type ChapterTile } from "../workspace/Book
 import { bookName } from "../workspace/books";
 import { metadataOf } from "../workspace/project";
 
-type DocumentImport = typeof import("@sefer/document-import");
-
 interface Loaded {
   readonly name: string;
-  readonly reading: Reading;
-  readonly lib: DocumentImport;
+  readonly reading: DocumentReading;
 }
+
+// The USFM for the book being imported into. A document split into several
+// books by its `USFM id` paragraphs gives the one with that code, else its first.
+const usfmOf = (out: Imported, code: string | undefined) =>
+  (
+    out.books.find((b) => code !== undefined && b.code?.toUpperCase() === code.toUpperCase()) ??
+    out.books[0]
+  )?.usfm ?? "";
 
 // One switch per kind of guess the document gave occasion for: on is the
 // importer's default, off its quieter alternative. The count is how many the
@@ -179,6 +189,8 @@ function ImportInto(props: { readonly onClose: () => void }) {
   // The project went away with the dialog open: close it, so it does not
   // come back unasked with the next project.
   onCleanup(() => props.onClose());
+  // The reading lives in the docx module's memory until freed.
+  onCleanup(() => loaded()?.reading.free());
 
   const books = createMemo(
     () => {
@@ -195,9 +207,11 @@ function ImportInto(props: { readonly onClose: () => void }) {
     () => {
       const doc = loaded();
       if (doc === undefined) return undefined;
-      const opening = doc.reading.paragraphs
+      const opening = usfmOf(doc.reading.render({}), undefined)
+        .split("\n")
+        .filter((line) => line.trim() !== "")
         .slice(0, 3)
-        .flatMap((p) => p.inlines.map((i) => (i.kind === "text" ? i.text : " ")))
+        .map((line) => line.replace(/\\\S+/g, " "))
         .join(" ");
       const found = books().filter(({ book, name }) =>
         [name, book.id].some((word) =>
@@ -270,11 +284,16 @@ function ImportInto(props: { readonly onClose: () => void }) {
   const choose = async (file: File) => {
     const ticket = ++latest;
     setProblem("");
+    const before = loaded();
     setLoaded(undefined);
+    before?.reading.free();
     try {
-      const lib = await import("@sefer/document-import");
-      const reading = await lib.readDocument(new Uint8Array(await file.arrayBuffer()));
-      if (ticket === latest) setLoaded({ name: file.name, reading, lib });
+      const { loadDocx } = await import("#platform/web/docx");
+      const docx = await loadDocx();
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      if (ticket !== latest) return;
+      const reading = docx.readDocument(bytes);
+      setLoaded({ name: file.name, reading });
     } catch (error) {
       if (ticket !== latest) return;
       setProblem(
@@ -297,18 +316,18 @@ function ImportInto(props: { readonly onClose: () => void }) {
   const found = createMemo(
     () => {
       const doc = loaded();
-      return doc === undefined ? undefined : doc.lib.render(doc.reading, base()).report;
+      return doc === undefined ? undefined : doc.reading.render(base()).report;
     },
     { name: "importFound" },
   );
 
   const rendered = createMemo(
-    (): Rendered | undefined => {
+    (): Imported | undefined => {
       const doc = loaded();
       if (doc === undefined) return undefined;
       const settings: Settings = { ...base() };
       for (const s of SWITCHES) if (off().has(s.key)) Object.assign(settings, { [s.key]: s.off });
-      return doc.lib.render(doc.reading, settings);
+      return doc.reading.render(settings);
     },
     { name: "importRendered" },
   );
@@ -323,9 +342,10 @@ function ImportInto(props: { readonly onClose: () => void }) {
       if (doc === undefined || out === undefined) return false;
       if (!keepFront()) return true;
       const after = (usfm: string) => usfm.slice(Math.max(usfm.search(/\\c\s/), 0));
-      const without = doc.lib.render(doc.reading, { ...base(), front: "drop" }).usfm;
+      const code = book()?.id;
+      const without = usfmOf(doc.reading.render({ ...base(), front: "drop" }), code);
       return (
-        after(without) !== after(doc.lib.render(doc.reading, { ...base(), front: "rem" }).usfm)
+        after(without) !== after(usfmOf(doc.reading.render({ ...base(), front: "rem" }), code))
       );
     },
     { name: "importFrontCounts" },
@@ -336,10 +356,16 @@ function ImportInto(props: { readonly onClose: () => void }) {
       const out = rendered();
       const chosen = target();
       if (out === undefined || !chosen.ok) return undefined;
-      return previewImport(services.galley, chosen.book, out.usfm, chosen.chapters, {
-        keepParagraphing: keep() && bookHasText(),
-        keepFrontMatter: keepFront(),
-      });
+      return previewImport(
+        services.galley,
+        chosen.book,
+        usfmOf(out, chosen.book.id),
+        chosen.chapters,
+        {
+          keepParagraphing: keep() && bookHasText(),
+          keepFrontMatter: keepFront(),
+        },
+      );
     },
     { name: "importPreview" },
   );
