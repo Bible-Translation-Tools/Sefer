@@ -57,7 +57,7 @@ const hex = (bytes: Uint8Array): string => {
   return out;
 };
 
-export const entriesOf = function* (
+const entriesOf = function* (
   tree: Uint8Array,
 ): Generator<{ readonly mode: string; readonly name: string; readonly id: string }> {
   let at = 0;

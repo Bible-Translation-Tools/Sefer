@@ -1,32 +1,52 @@
+import {
+  createBible,
+  edit,
+  read as readManifest,
+  type NewBibleProject,
+  type NewBook,
+} from "@wycliffeassociates/scripture-kitchen/bento";
 import { CANON } from "@wycliffeassociates/sefer-text/location/canon";
-import { Data, Effect, FileSystem, Option, Result } from "effect";
-import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
+import { Data, Effect, FileSystem, Option } from "effect";
 
 import { joinPath } from "../fileSystem/path";
 import { DEFAULT_BRANCH, Git, type Author, type GitError } from "../git/git";
 import { intakeRepository, type IntakeResult } from "../git/intake";
 import type { Repositories } from "../git/repository";
 import { Observability } from "../observability";
-import { decodeBurritoMetadata } from "../resources/burrito";
-import { fingerprint } from "../resources/checksum";
-import {
-  burritoText,
-  dedupeContributors,
-  dedupeSources,
-  resourceContainerText,
-  type NewProjectMetadata,
-} from "../resources/writeMetadata";
-import { candidateLabel, type StagedBook } from "./candidate";
+import type { RelatedResource } from "../resources/relationships";
+import { candidateLabel, readHistory, type StagedBook } from "./candidate";
 import { readUpstreams, upstreamsText, UPSTREAMS_FILE, type Upstream } from "./upstreams";
-import { usfmFileName } from "./writerBook";
-import { replayWriterHistories, type Replayed } from "./writerHistory";
+import { WriterEngine, type Replayed, type Signature, type WriterHistory } from "./writerEngine";
 
 class AssembleError extends Data.TaggedError("AssembleError")<{
   readonly reason: "Exists" | "Invalid" | "Io" | "History";
   readonly description: string;
 }> {}
 
-export type AssembleForm = Omit<NewProjectMetadata, "books" | "date">;
+/** What the migration form asks; bento's `createBible` takes it with Sefer's policy added. */
+export interface AssembleForm {
+  readonly title: string;
+  readonly language: {
+    readonly id: string;
+    readonly name: string;
+    readonly direction: "ltr" | "rtl";
+  };
+  readonly resource: string;
+  readonly contributors: readonly string[];
+  readonly sources: readonly RelatedResource[];
+  readonly checkingLevel: string;
+  readonly rights: string;
+}
+
+const dedupeSources = (sources: readonly RelatedResource[]): readonly RelatedResource[] => {
+  const seen = new Set<string>();
+  return sources.filter((ref) => {
+    const key = `${ref.language}/${ref.resource}/${ref.version ?? ""}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
 
 export const prefillForm = (books: readonly StagedBook[]): AssembleForm => {
   const first = books[0]?.project;
@@ -38,17 +58,55 @@ export const prefillForm = (books: readonly StagedBook[]): AssembleForm => {
       direction: first?.language.direction ?? "ltr",
     },
     resource: first?.resource ?? "reg",
-    contributors: dedupeContributors(
-      books.flatMap((book) => [
-        ...book.project.translators,
-        ...book.authors.map((author) => author.name),
-      ]),
-    ),
+    // bento's createBible drops a name twice over (`Mwila_Chanda`, `mwila chanda`).
+    contributors: books.flatMap((book) => [
+      ...book.project.translators,
+      ...book.authors.map((author) => author.name),
+    ]),
     sources: dedupeSources(books.flatMap((book) => book.project.sources)),
     checkingLevel: "1",
     rights: "CC-BY-SA-4.0",
   };
 };
+
+/** Sefer's policy for what a new project's manifests say beyond the form. */
+export interface Policy {
+  /** An ISO 8601 date-time: the manifests' creation date, and the closing commit's. */
+  readonly createdAt: string;
+  /** The `owner/repo` the project is expected to be pushed to. */
+  readonly repository: string;
+  /** Sefer's build, for the Burrito's `generator`. */
+  readonly version: string;
+}
+
+const projectOf = (form: AssembleForm, policy: Policy): Omit<NewBibleProject, "books"> => ({
+  title: form.title,
+  abbreviation: form.resource,
+  language: { tag: form.language.id, name: form.language.name, direction: form.language.direction },
+  sources: form.sources.map((ref) => ({
+    language: ref.language,
+    resource: ref.resource,
+    ...(ref.version === undefined ? {} : { version: ref.version }),
+  })),
+  contributors: [...form.contributors],
+  publisher: "Wycliffe Associates",
+  creator: "Bible translation community",
+  rights: form.rights,
+  checkingLevel: form.checkingLevel,
+  copyright: `Licensed under ${form.rights}.`,
+  generator: { name: "Sefer", version: policy.version },
+  createdAt: policy.createdAt,
+  repository: policy.repository,
+});
+
+const secondsOf = (iso: string): number => Math.floor(Date.parse(iso) / 1000);
+
+const signatureOf = (author: Author, iso: string): Signature => ({
+  name: author.name,
+  email: author.email,
+  at: secondsOf(iso),
+  offset: -new Date(iso).getTimezoneOffset(),
+});
 
 const titleOf = (staged: StagedBook): string =>
   /^\\h\s+(.+)$/m.exec(staged.usfm)?.[1]?.trim() ??
@@ -106,13 +164,100 @@ const writeHistory = (fileSystem: FileSystem.FileSystem, root: string, replayed:
     yield* fileSystem.writeFileString(joinPath(git, "HEAD"), `ref: refs/heads/${DEFAULT_BRANCH}\n`);
   });
 
+/** Histories bttwriter has replayed: their handles are used up, so a second try reads them again. */
+const spent = new WeakSet<WriterHistory>();
+
+/**
+ * The staged books that have saves to replay, each with a handle bttwriter
+ * still holds; the rest are taken as they were rendered.
+ */
+const withHistory = (books: readonly StagedBook[]) =>
+  Effect.gen(function* () {
+    const replaying: StagedBook[] = [];
+    const histories: WriterHistory[] = [];
+    for (const staged of books) {
+      if (staged.history === undefined || staged.history.saves === 0) continue;
+      const handle = spent.has(staged.history)
+        ? yield* Effect.mapError(
+            readHistory(staged.root, staged.source),
+            (error) => new AssembleError({ reason: "History", description: error.description }),
+          )
+        : staged.history;
+      replaying.push(staged);
+      histories.push(handle);
+    }
+    const loose = books.filter((staged) => !replaying.includes(staged));
+    return { replaying, histories, loose };
+  });
+
+const newBook = (staged: StagedBook): NewBook => ({
+  book: staged.project.book,
+  title: titleOf(staged),
+  bytes: encode(staged.usfm),
+});
+
+/** Each book's file, as the manifests bento wrote list it. */
+const pathsIn = (manifests: ReadonlyMap<string, Uint8Array>): ReadonlyMap<string, string> => {
+  const paths = new Map<string, string>();
+  for (const [name, bytes] of manifests)
+    for (const entry of readManifest(name, bytes).manifest?.books ?? [])
+      if (entry.path !== undefined && !paths.has(entry.book))
+        paths.set(entry.book, entry.path.replace(/^\.\//, ""));
+  return paths;
+};
+
+const failure = (reason: AssembleError["reason"]) => (cause: unknown) =>
+  new AssembleError({
+    reason,
+    description: cause instanceof Error ? cause.message : String(cause),
+  });
+
+const upstreamsOf = (books: readonly StagedBook[], date: string): Upstream[] =>
+  books.flatMap((staged) =>
+    staged.upstream === undefined
+      ? []
+      : [
+          {
+            books: [staged.project.book],
+            via: "git" as const,
+            url: staged.upstream.url,
+            commit: staged.upstream.commit,
+            takenAt: date,
+          },
+        ],
+  );
+
+const replayStats = (replayed: Replayed | undefined): Readonly<Record<string, number>> =>
+  replayed === undefined
+    ? { "migrate.commits": 0 }
+    : {
+        "migrate.commits": replayed.commits,
+        "migrate.unchanged": replayed.unchanged,
+        "migrate.estimated": replayed.estimated,
+        "migrate.objects": replayed.stats.objects,
+        "migrate.deltas": replayed.stats.deltas,
+        "migrate.pack_bytes": replayed.stats.packBytes,
+      };
+
+/**
+ * A new project from the staged books. With Writer histories, bttwriter's
+ * `consolidate` makes the whole line: every save as a commit, then a closing
+ * commit in Sefer's words holding the books and their manifests. Books with
+ * no history, and `.upstreams.json`, follow in one more commit; without any
+ * history, bento's `createBible` writes the manifests and that commit is the
+ * only one.
+ */
 export const assemble = (options: {
   readonly root: string;
   readonly form: AssembleForm;
   readonly books: readonly StagedBook[];
   readonly author: Author;
-  readonly date: string;
-}): Effect.Effect<IntakeResult, AssembleError, FileSystem.FileSystem | Git | Repositories> =>
+  readonly policy: Policy;
+}): Effect.Effect<
+  IntakeResult,
+  AssembleError,
+  FileSystem.FileSystem | Git | Repositories | WriterEngine
+> =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const io = (error: { readonly message: string }) =>
@@ -122,61 +267,68 @@ export const assemble = (options: {
         new AssembleError({ reason: "Exists", description: `${options.root} already exists` }),
       );
 
-    const books = options.books.map((staged) => ({
-      book: staged.project.book,
-      title: titleOf(staged),
-      path: usfmFileName(staged.project.book),
-      bytes: encode(staged.usfm),
-    }));
-    const form: NewProjectMetadata = { ...options.form, books, date: options.date };
-    const burrito = burritoText(form);
-    if (Result.isFailure(burrito))
-      return yield* Effect.fail(
-        new AssembleError({ reason: "Invalid", description: burrito.failure }),
-      );
-
-    const upstreams: Upstream[] = options.books.flatMap((staged) =>
-      staged.upstream === undefined
-        ? []
-        : [
-            {
-              books: [staged.project.book],
-              via: "git" as const,
-              url: staged.upstream.url,
-              commit: staged.upstream.commit,
-              takenAt: options.date,
-            },
-          ],
-    );
+    const project = projectOf(options.form, options.policy);
+    const date = options.policy.createdAt.slice(0, 10);
+    const upstreams = upstreamsOf(options.books, date);
+    const { replaying, histories, loose } = yield* withHistory(options.books);
 
     yield* Effect.mapError(fileSystem.makeDirectory(options.root, { recursive: true }), io);
 
     const build = Effect.gen(function* () {
       const observability = Option.getOrUndefined(yield* Effect.serviceOption(Observability));
-      const histories = options.books.flatMap((staged) =>
-        staged.history === undefined ? [] : [staged.history],
-      );
-      const replaying = observability?.span("migrate.history", undefined, {
+      const replayingSpan = observability?.span("migrate.history", undefined, {
         "migrate.books": histories.length,
-        "migrate.saves": histories.reduce((sum, history) => sum + history.saves.length, 0),
+        "migrate.saves": histories.reduce((sum, history) => sum + history.saves, 0),
       });
       const abandon = (description: string) => {
-        replaying?.({ "migrate.reason": description });
+        replayingSpan?.({ "migrate.reason": description });
         observability?.note("migrate.history", "failed", description);
         return Effect.fail(new AssembleError({ reason: "History", description }));
       };
-      const replayed = yield* Effect.catch(
-        Effect.tryPromise(() => replayWriterHistories(histories)),
-        (cause) =>
-          abandon(
-            `the Writer history could not be replayed: ${cause instanceof Error ? cause.message : String(cause)}`,
-          ),
-      );
-      if (replayed !== undefined)
-        yield* Effect.catch(writeHistory(fileSystem, options.root, replayed), (error) =>
+
+      let manifests: ReadonlyMap<string, Uint8Array>;
+      let replayed: Replayed | undefined;
+      if (histories.length > 0) {
+        const bttwriter = yield* Effect.catch((yield* WriterEngine).load, (error) =>
+          abandon(`the Writer history could not be replayed: ${error.reason}`),
+        );
+        histories.forEach((history) => spent.add(history));
+        const consolidated = yield* Effect.catch(
+          Effect.try({
+            try: () =>
+              bttwriter.consolidate(
+                histories,
+                { now: secondsOf(options.policy.createdAt) },
+                project,
+                {
+                  author: signatureOf(options.author, options.policy.createdAt),
+                  message: `${assemblyMessage(options.form, replaying)}\n`,
+                },
+              ),
+            catch: failure("History"),
+          }),
+          (error) => abandon(`the Writer history could not be replayed: ${error.description}`),
+        );
+        yield* Effect.catch(writeHistory(fileSystem, options.root, consolidated), (error) =>
           abandon(`the Writer history could not be written: ${error.message}`),
         );
+        replayed = consolidated;
+        manifests = consolidated.manifests;
+        if (loose.length > 0)
+          manifests = new Map([
+            ...manifests,
+            ...(yield* Effect.try({
+              try: () => edit(manifests, { addBooks: loose.map(newBook) }).files,
+              catch: failure("Invalid"),
+            })),
+          ]);
+      } else
+        manifests = yield* Effect.try({
+          try: () => createBible({ ...project, books: loose.map(newBook) }),
+          catch: failure("Invalid"),
+        });
 
+      const paths = pathsIn(manifests);
       const written: string[] = [];
       const write = (name: string, bytes: Uint8Array) =>
         Effect.map(
@@ -185,10 +337,19 @@ export const assemble = (options: {
             written.push(name);
           },
         );
-      for (const book of books) yield* write(book.path, book.bytes);
-      yield* write("metadata.json", encode(burrito.success));
-      yield* write("manifest.yaml", encode(resourceContainerText(form)));
-      if (upstreams.length > 0) yield* write(".upstreams.json", encode(upstreamsText(upstreams)));
+      for (const staged of options.books) {
+        const path = paths.get(staged.project.book);
+        if (path === undefined)
+          return yield* Effect.fail(
+            new AssembleError({
+              reason: "Invalid",
+              description: `the manifests do not list ${staged.project.book}`,
+            }),
+          );
+        yield* write(path, encode(staged.usfm));
+      }
+      for (const [name, bytes] of manifests) yield* write(name, bytes);
+      if (upstreams.length > 0) yield* write(UPSTREAMS_FILE, encode(upstreamsText(upstreams)));
 
       const result = yield* Effect.mapError(
         intakeRepository({
@@ -196,7 +357,12 @@ export const assemble = (options: {
           written,
           from: "Writer",
           author: options.author,
-          message: assemblyMessage(options.form, options.books),
+          message:
+            replayed === undefined
+              ? assemblyMessage(options.form, options.books)
+              : loose.length > 0
+                ? assemblyMessage({ ...options.form, title: "Books" }, loose)
+                : "Where each book came from in Writer",
         }),
         (error) =>
           new AssembleError({
@@ -206,17 +372,7 @@ export const assemble = (options: {
       );
       if (replayed !== undefined && !result.adopted)
         return yield* abandon("the replayed Writer history could not be opened");
-      replaying?.(
-        replayed === undefined
-          ? { "migrate.commits": 0 }
-          : {
-              "migrate.commits": replayed.commits,
-              "migrate.unchanged": replayed.unchanged,
-              "migrate.objects": replayed.stats.objects,
-              "migrate.deltas": replayed.stats.deltas,
-              "migrate.pack_bytes": replayed.stats.packBytes,
-            },
-      );
+      replayingSpan?.(replayStats(replayed));
       return result;
     });
     return yield* Effect.tapError(build, () =>
@@ -227,16 +383,28 @@ export const assemble = (options: {
 const readIfThere = (
   fileSystem: FileSystem.FileSystem,
   path: string,
-): Effect.Effect<string | undefined> =>
-  Effect.orElseSucceed(fileSystem.readFileString(path), () => undefined);
+): Effect.Effect<Uint8Array | undefined> =>
+  Effect.orElseSucceed(fileSystem.readFile(path), () => undefined);
 
+const MANIFESTS = ["metadata.json", "manifest.yaml"] as const;
+
+/**
+ * Books added to an existing project. Their Writer saves are replayed by
+ * bttwriter as a side line with no root in common, and the books arrive in a
+ * merge of that line, with the project's manifests edited by bento (only the
+ * new entries' lines change).
+ */
 export const addBooks = (options: {
   readonly root: string;
   readonly books: readonly StagedBook[];
   readonly held: readonly string[];
   readonly author: Author;
   readonly date: string;
-}): Effect.Effect<IntakeResult, AssembleError, FileSystem.FileSystem | Git | Repositories> =>
+}): Effect.Effect<
+  IntakeResult,
+  AssembleError,
+  FileSystem.FileSystem | Git | Repositories | WriterEngine
+> =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const io = (error: { readonly message: string }) =>
@@ -250,30 +418,58 @@ export const addBooks = (options: {
         }),
       );
 
+    const existing = new Map<string, Uint8Array>();
+    for (const name of MANIFESTS) {
+      const bytes = yield* readIfThere(fileSystem, joinPath(options.root, name));
+      if (bytes !== undefined) existing.set(name, bytes);
+    }
+    const edited = yield* Effect.try({
+      try: () => edit(existing, { addBooks: options.books.map(newBook) }),
+      catch: failure("Invalid"),
+    });
+    const listed = pathsIn(edited.files);
+
+    const observability = Option.getOrUndefined(yield* Effect.serviceOption(Observability));
+    for (const finding of edited.findings)
+      observability?.note("migrate.manifest", "declined", finding.message, {
+        "manifest.check": finding.check,
+      });
+    const { histories } = yield* withHistory(options.books);
+    const replayingSpan = observability?.span("migrate.history", undefined, {
+      "migrate.books": histories.length,
+      "migrate.side_branch": true,
+    });
+    let replayed: Replayed | undefined;
+    if (histories.length > 0) {
+      const bttwriter = yield* Effect.mapError(
+        (yield* WriterEngine).load,
+        (error) =>
+          new AssembleError({
+            reason: "History",
+            description: `the Writer history could not be replayed: ${error.reason}`,
+          }),
+      );
+      histories.forEach((history) => spent.add(history));
+      replayed = yield* Effect.try({
+        try: () => bttwriter.replay(histories, { now: secondsOf(new Date().toISOString()) }),
+        catch: (cause) =>
+          new AssembleError({
+            reason: "History",
+            description: `the Writer history could not be replayed: ${cause instanceof Error ? cause.message : String(cause)}`,
+          }),
+      });
+    }
+    const files = new Map(replayed?.books.map((entry) => [entry.book, entry.file] as const) ?? []);
+    const pathOf = (book: string): string => listed.get(book) ?? files.get(book) ?? `${book}.usfm`;
+
     for (const staged of options.books) {
-      const path = joinPath(options.root, usfmFileName(staged.project.book));
+      const path = joinPath(options.root, pathOf(staged.project.book));
       if (yield* Effect.orElseSucceed(fileSystem.exists(path), () => true))
         return yield* Effect.fail(
           new AssembleError({ reason: "Exists", description: `${path} already exists` }),
         );
     }
 
-    const observability = Option.getOrUndefined(yield* Effect.serviceOption(Observability));
-    const histories = options.books.flatMap((staged) =>
-      staged.history === undefined ? [] : [staged.history],
-    );
-    const replaying = observability?.span("migrate.history", undefined, {
-      "migrate.books": histories.length,
-      "migrate.side_branch": true,
-    });
-    const replayed = yield* Effect.mapError(
-      Effect.tryPromise(() => replayWriterHistories(histories)),
-      (cause) =>
-        new AssembleError({
-          reason: "History",
-          description: `the Writer history could not be replayed: ${cause instanceof Error ? cause.message : String(cause)}`,
-        }),
-    );
     if (replayed !== undefined)
       yield* Effect.mapError(
         writePack(fileSystem, options.root, replayed),
@@ -283,79 +479,31 @@ export const addBooks = (options: {
             description: `the Writer history could not be written: ${error.message}`,
           }),
       );
-    replaying?.(
-      replayed === undefined
-        ? { "migrate.commits": 0 }
-        : {
-            "migrate.commits": replayed.commits,
-            "migrate.unchanged": replayed.unchanged,
-            "migrate.objects": replayed.stats.objects,
-            "migrate.deltas": replayed.stats.deltas,
-            "migrate.pack_bytes": replayed.stats.packBytes,
-          },
-    );
+    replayingSpan?.(replayStats(replayed));
 
     const written: string[] = [];
-    const write = (name: string, text: string | Uint8Array) =>
+    const write = (name: string, bytes: Uint8Array) =>
       Effect.map(
-        Effect.mapError(
-          fileSystem.writeFile(
-            joinPath(options.root, name),
-            typeof text === "string" ? encode(text) : text,
-          ),
-          io,
-        ),
+        Effect.mapError(fileSystem.writeFile(joinPath(options.root, name), bytes), io),
         () => {
           written.push(name);
         },
       );
 
-    const books = options.books.map((staged) => ({
-      staged,
-      book: staged.project.book,
-      title: titleOf(staged),
-      path: usfmFileName(staged.project.book),
-      bytes: encode(staged.usfm),
-    }));
-    for (const book of books) yield* write(book.path, book.bytes);
+    for (const staged of options.books)
+      yield* write(pathOf(staged.project.book), encode(staged.usfm));
+    for (const [name, bytes] of edited.files) yield* write(name, bytes);
 
-    const burrito = yield* readIfThere(fileSystem, joinPath(options.root, "metadata.json"));
-    if (burrito !== undefined) {
-      const raw = yield* Effect.try({
-        try: (): Record<string, unknown> => record(JSON.parse(burrito)),
-        catch: () =>
-          new AssembleError({ reason: "Invalid", description: "metadata.json is not JSON" }),
-      });
-      const next = withBooks(raw, books);
-      if (Result.isFailure(decodeBurritoMetadata(next)))
-        return yield* Effect.fail(
-          new AssembleError({ reason: "Invalid", description: "metadata.json would not decode" }),
-        );
-      yield* write("metadata.json", `${JSON.stringify(next, null, 2)}\n`);
-    }
-
-    const manifest = yield* readIfThere(fileSystem, joinPath(options.root, "manifest.yaml"));
-    if (manifest !== undefined) yield* write("manifest.yaml", withProjects(manifest, books));
-
-    const fresh: Upstream[] = options.books.flatMap((staged) =>
-      staged.upstream === undefined
-        ? []
-        : [
-            {
-              books: [staged.project.book],
-              via: "git" as const,
-              url: staged.upstream.url,
-              commit: staged.upstream.commit,
-              takenAt: options.date,
-            },
-          ],
-    );
+    const fresh = upstreamsOf(options.books, options.date);
     if (fresh.length > 0) {
-      const text = yield* readIfThere(fileSystem, joinPath(options.root, UPSTREAMS_FILE));
-      const known = text === undefined ? [] : Option.getOrElse(readUpstreams(text), () => []);
+      const held = yield* readIfThere(fileSystem, joinPath(options.root, UPSTREAMS_FILE));
+      const known =
+        held === undefined
+          ? []
+          : Option.getOrElse(readUpstreams(new TextDecoder().decode(held)), () => []);
       const adding = new Set(fresh.flatMap((upstream) => upstream.books));
       const kept = known.filter((upstream) => !upstream.books.some((book) => adding.has(book)));
-      yield* write(UPSTREAMS_FILE, upstreamsText([...kept, ...fresh]));
+      yield* write(UPSTREAMS_FILE, encode(upstreamsText([...kept, ...fresh])));
     }
 
     const git = yield* Git;
@@ -389,62 +537,3 @@ export const addBooks = (options: {
     );
     return { repo, adopted: true, fallback: undefined, arrival };
   });
-
-type Added = {
-  readonly book: string;
-  readonly title: string;
-  readonly path: string;
-  readonly bytes: Uint8Array;
-};
-
-const record = (value: unknown): Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
-    ? Object.fromEntries(Object.entries(value))
-    : {};
-
-const withBooks = (
-  raw: Record<string, unknown>,
-  books: readonly Added[],
-): Record<string, unknown> => {
-  const ingredients = record(raw.ingredients);
-  const names = record(raw.localizedNames);
-  const type = record(raw.type);
-  const flavorType = record(type.flavorType);
-  const scope = record(flavorType.currentScope);
-  const languages = Array.isArray(raw.languages) ? raw.languages : [];
-  const tag = String(record(languages[0]).tag ?? "und");
-  for (const book of books) {
-    const print = fingerprint(book.bytes);
-    ingredients[book.path] = {
-      checksum: { md5: print.md5 },
-      mimeType: "text/x-usfm",
-      size: print.size,
-      scope: { [book.book]: [] },
-    };
-    scope[book.book] = [];
-    names[book.book] = { short: { [tag]: book.title } };
-  }
-  return {
-    ...raw,
-    ingredients,
-    localizedNames: names,
-    type: { ...type, flavorType: { ...flavorType, currentScope: scope } },
-  };
-};
-
-const withProjects = (text: string, books: readonly Added[]): string => {
-  const document = record(parseYaml(text));
-  const projects: unknown[] = Array.isArray(document.projects) ? [...document.projects] : [];
-  for (const book of books)
-    projects.push({
-      title: book.title,
-      identifier: book.book.toLowerCase(),
-      path: `./${book.path}`,
-      sort: CANON.findIndex((entry) => entry.id === book.book),
-      categories: [
-        CANON.find((entry) => entry.id === book.book)?.testament === "ot" ? "bible-ot" : "bible-nt",
-      ],
-      versification: "ufw",
-    });
-  return stringifyYaml({ ...document, projects });
-};

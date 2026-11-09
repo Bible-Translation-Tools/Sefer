@@ -1,32 +1,11 @@
-import { CANON } from "@wycliffeassociates/sefer-text/location/canon";
+import { read as readManifest } from "@wycliffeassociates/scripture-kitchen/bento";
 import * as TextResult from "@wycliffeassociates/sefer-text/result";
 import { decode } from "@wycliffeassociates/sefer-text/source";
-import { Effect, FileSystem, Result, Schema } from "effect";
+import { Effect, FileSystem } from "effect";
 
 import { joinPath, lastSegment } from "../fileSystem/path";
-import { fromWriterSourceTranslations, type RelatedResource } from "../resources/relationships";
-
-const Manifest = Schema.Struct({
-  target_language: Schema.Struct({
-    id: Schema.String,
-    name: Schema.optionalKey(Schema.String),
-    direction: Schema.optionalKey(Schema.String),
-  }),
-  project: Schema.Struct({ id: Schema.String, name: Schema.optionalKey(Schema.String) }),
-  resource: Schema.optionalKey(Schema.Struct({ id: Schema.optionalKey(Schema.String) })),
-  source_translations: Schema.optionalKey(
-    Schema.Array(
-      Schema.Struct({
-        language_id: Schema.String,
-        resource_id: Schema.String,
-        version: Schema.optionalKey(Schema.String),
-      }),
-    ),
-  ),
-  translators: Schema.optionalKey(Schema.Array(Schema.String)),
-});
-
-const decodeManifest = Schema.decodeUnknownResult(Manifest);
+import { unreadable } from "../resources/projectMetadata";
+import type { RelatedResource } from "../resources/relationships";
 
 export interface WriterProject {
   readonly root: string;
@@ -50,8 +29,6 @@ export interface WriterTree {
   }[];
 }
 
-const isKnownBook = (id: string): boolean => CANON.some((book) => book.id === id);
-
 const readText = (
   fileSystem: FileSystem.FileSystem,
   path: string,
@@ -64,44 +41,58 @@ const readText = (
     () => undefined,
   );
 
+/**
+ * The Writer book project at `root`, from its `manifest.json` as bento reads
+ * it: a book of canon's table, a language and a resource (the folder name's
+ * last part when the manifest names none, as Writer names its folders).
+ */
 export const recognizeWriter = (
   fileSystem: FileSystem.FileSystem,
   root: string,
 ): Effect.Effect<WriterProject | undefined> =>
   Effect.gen(function* () {
-    const text = yield* readText(fileSystem, joinPath(root, "manifest.json"));
-    if (text === undefined) return undefined;
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
+    const bytes = yield* Effect.orElseSucceed(
+      fileSystem.readFile(joinPath(root, "manifest.json")),
+      () => undefined,
+    );
+    if (bytes === undefined) return undefined;
+    const read = readManifest("manifest.json", bytes);
+    if (unreadable(read) || read.manifest === undefined || read.detail?.format !== "bttwriter")
       return undefined;
-    }
-    const decoded = decodeManifest(parsed);
-    if (Result.isFailure(decoded)) return undefined;
-    const manifest = decoded.success;
-    const book = manifest.project.id.trim().toUpperCase();
+    const { manifest } = read;
+    const written = read.detail.document;
+    const book = manifest.books[0]?.book;
+    const language = manifest.language.tag.trim();
     const resource =
-      manifest.resource?.id?.trim() || (lastSegment(root).split("_").at(-1) ?? "").trim();
-    if (!isKnownBook(book) || manifest.target_language.id.trim() === "" || resource === "")
-      return undefined;
+      manifest.kind.declared.identifier?.trim() ||
+      (lastSegment(root).split("_").at(-1) ?? "").trim();
+    if (book === undefined || language === "" || resource === "") return undefined;
     return {
       root,
       book,
       language: {
-        id: manifest.target_language.id.trim(),
-        name: manifest.target_language.name,
-        direction: manifest.target_language.direction === "rtl" ? "rtl" : "ltr",
+        id: language,
+        name: written.target_language?.name,
+        direction: manifest.language.direction,
       },
       resource: resource.toLowerCase(),
-      sources: fromWriterSourceTranslations(manifest.source_translations ?? []),
-      translators: manifest.translators ?? [],
+      sources: manifest.sources,
+      translators: written.translators ?? [],
     };
   });
 
 const numbered = (name: string): number | undefined =>
   /^\d{2,3}$/.test(name) && Number(name) > 0 ? Number(name) : undefined;
 
+/*
+ * The template below renders Writer files that are not a history bttwriter
+ * replays: a folder or zip copied without `.git`, and the upstream work
+ * `writerWork.ts` compares after a migration (the files at the migrated
+ * commit and at the upstream's head, on the project screen, where bttwriter
+ * is not loaded). A migrated book's history is rendered by bttwriter
+ * (`WriterHistory.usfm()`). The kitchen's wasm has no entry that stitches
+ * files without a history, so this copy stays until it has one.
+ */
 export const isWriterTextPath = (path: string): boolean =>
   path === "front/title.txt" || /^\d{2,3}\/(?:title|\d{2,3})\.txt$/i.test(path);
 
@@ -193,10 +184,4 @@ export const writerBookToUsfm = (tree: WriterTree, book: string, fallbackTitle: 
     });
   }
   return `${lines.join("\n")}\n`;
-};
-
-export const usfmFileName = (book: string): string => {
-  const index = CANON.findIndex((entry) => entry.id === book);
-  const number = index < 39 ? index + 1 : index + 2;
-  return `${String(number).padStart(2, "0")}-${book}.usfm`;
 };

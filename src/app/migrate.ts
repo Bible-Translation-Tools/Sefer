@@ -232,6 +232,18 @@ const freeFolder = (services: Services, name: string): Effect.Effect<string, nev
     }
   });
 
+/**
+ * Who the new project's manifests say will hold it online: the account its
+ * first cloned book came from, else (folders and zips only) its language.
+ * The Burrito records it as its primary id; putting the project online later
+ * may choose another.
+ */
+const repositoryOwner = (form: AssembleForm, books: readonly StagedBook[]): string => {
+  for (const staged of books)
+    if (staged.candidate.origin.kind === "remote") return staged.candidate.origin.owner;
+  return form.language.id;
+};
+
 export const assembleProject = (
   services: Services,
   folder: string,
@@ -251,7 +263,11 @@ export const assembleProject = (
             form,
             books,
             author: APP_AUTHOR,
-            date: new Date().toISOString().slice(0, 10),
+            policy: {
+              createdAt: new Date().toISOString(),
+              repository: `${repositoryOwner(form, books)}/${lastSegment(root)}`,
+              version: services.hostInfo.build(),
+            },
           });
           yield* rememberProject(services.projectsRoot, root, undefined);
           return { root, result };
