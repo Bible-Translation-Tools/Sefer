@@ -279,8 +279,12 @@ function ImportInto(props: { readonly onClose: () => void }) {
     return own === undefined ? ["chapter"] : ["chapter", own];
   };
 
-  // A second file chosen while the first is still being read wins.
+  // A second file chosen while the first is still being read wins, and closing the dialog
+  // outdates both, so a read still pending never makes a reading nobody will free.
   let latest = 0;
+  onCleanup(() => {
+    latest += 1;
+  });
   const choose = async (file: File) => {
     const ticket = ++latest;
     setProblem("");

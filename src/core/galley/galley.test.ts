@@ -38,6 +38,30 @@ describe("Galley", () => {
     expect(analysis.dish.utf16).toBe(true);
   });
 
+  it("answers places for a book analysis after its id moves on or is removed", async () => {
+    const verse = {
+      kind: "verses",
+      book: "PHM",
+      from: { chapter: 1, verse: 4 },
+      to: { chapter: 1, verse: 4 },
+    } as const;
+    const places = (held: ReturnType<GalleyService["analyzeBook"]>): unknown => [
+      held.resolve(verse).kind,
+      held.addressAt("PHM", 400)?.kind,
+      held.units("PHM").length > 0,
+    ];
+    const [replaced, removed] = await withGalley((galley) => {
+      const before = galley.analyzeBook("PHM", PHILEMON);
+      galley.analyzeBook("PHM", `${PHILEMON}\n`);
+      const first = places(before);
+      const gone = galley.analyzeBook("PHM", PHILEMON);
+      galley.remove("PHM");
+      return [first, places(gone)];
+    });
+    expect(replaced).toEqual(["found", "verses", true]);
+    expect(removed).toEqual(["found", "verses", true]);
+  });
+
   it("agrees with itself across two analyses of one text", async () => {
     const [first, second] = await withGalley(
       (galley) => [galley.analyzeText(PHILEMON), galley.analyzeText(PHILEMON)] as const,

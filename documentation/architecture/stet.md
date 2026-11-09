@@ -96,7 +96,7 @@ A Key terms card is edited where it stands (`edit: { kind: "direct" }`), as a sa
 
 The session ends on Save, Cancel, Escape, or a press anywhere in another card (which cancels). A press anywhere else leaves it open. This is the provisional shape; a buffer in front of the Book, with its own history, is the alternative still being weighed beside approvals as project state.
 
-Verse numbers on these cards are locked by the card policy every card shares (`lock-verse-numbers` in Regular), not by anything of Key terms' own. The gutter's arrows step through the TOC's units (`tocUnits`) and name the one they would add; they double once two have been added beyond where the card started (`excerpts.context`).
+Verse numbers on these cards are locked by the card policy every card shares (`lock-verse-numbers` in Regular), not by anything of Key terms' own. The gutter's arrows step through galley's places (`Analysis.units`) and name the one they would add; they double once two have been added beyond where the card started (`excerpts.context`).
 
 Which verses were edited, and which approved, is held in memory for the session (`StetView.tsx`). Where it lives for good is the approvals-and-suppressions decision.
 

@@ -365,8 +365,8 @@ const makeService = (
    * galley's place doors over one analysis. A book analysis asks its id's
    * doors with `expect` set to its own hash, so galley answers from what it
    * already holds (about 0.03 ms on Psalms) while the id still holds this
-   * text, and says "stale" once the book has moved on; then, and for every
-   * text that is not a project book, the text doors answer (1 to 3 ms).
+   * text, and refuses once the book has moved on or been removed; then, and
+   * for every text that is not a project book, the text doors answer (1 to 3 ms).
    */
   const places = (text: string, id: string | undefined, expect: bigint) => {
     const markers = id === undefined ? textMarkers(text) : {};
@@ -376,8 +376,9 @@ const makeService = (
       if (stale || id === undefined) return otherwise();
       try {
         return ask(id);
-      } catch (error) {
-        if (!String(error).includes("stale")) throw error;
+      } catch {
+        // Stale (the id holds a newer text) or gone (a project switch removed
+        // it): either way the id no longer answers for this text, and the text does.
         stale = true;
         return otherwise();
       }
