@@ -72,6 +72,9 @@ option is disabled on the other side's picker rather than silently ignored.
   each card's buttons follow the same order: "On disk → In the editor",
   "Take the file's", "Keep the editor's". The colours follow the columns, not
   the editor: the right column is "now", its words green, the left's red.
+  Against the shared project `currentFirst` is on too (Will, 2026-11-10): what comes from
+  outside reads as what this device has, then what is arriving, so the editor is on the left
+  and the shared project on the right (`editorFirst` in `createSides.ts`).
   Against a suggestion `currentFirst` is on (Will, 2026-11-06): a pull request
   reads as the shared project, then what the suggestion would make of it, so the
   editor is drawn on the LEFT, labelled "The shared project (latest)", in red,

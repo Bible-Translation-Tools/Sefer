@@ -479,10 +479,18 @@ const WacsBody = (props: {
                     <>
                       <Body>
                         <WithName text={m.wacs_connected_body({ user: user() })} name={user()} />{" "}
-                        {waiting() > 0 ? changesWaiting(waiting()) : m.wacs_all_uploaded()}
+                        {waiting() > 0
+                          ? changesWaiting(waiting())
+                          : incoming()
+                            ? ""
+                            : m.wacs_all_uploaded()}
                       </Body>
+                      {/* The thing to act on, so it is the loudest line here; how loud is Thomas's call. */}
                       <Show when={incoming()}>
-                        <p class="text-small text-on-surface-primary" data-sync-incoming>
+                        <p
+                          class="rounded-md bg-surface-warning px-3 py-2 text-body font-semibold text-on-surface-warning"
+                          data-sync-incoming
+                        >
                           {m.cloud_there_are_updates_to_receive()}
                         </p>
                       </Show>
