@@ -14,12 +14,14 @@ import { catalogueFor, type CatalogueEntry } from "../../catalogue";
 import { downloadRuns } from "../../downloadRuns";
 import { transportFor } from "../../endpoints";
 import { chooseWorkOffline } from "../../network";
+import { onboarding } from "../../onboarding";
 import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
 import { syncStatus } from "../../syncStatus";
 import { WriterTable } from "../migrate/WriterLanguages";
 import {
+  Coachmark,
   Button,
   Card,
   Input,
@@ -410,25 +412,34 @@ const CatalogueToolbar = (props: {
       value={props.repos}
       onChange={props.onRepos}
     />
-    <Input
-      type="search"
-      size="lg"
-      wrapperClass="w-full min-w-64 sm:w-auto sm:flex-1"
-      class="w-full"
-      icon={<SearchIcon size={20} aria-hidden="true" />}
-      aria-label={
-        props.repos === "writer"
-          ? m.common_search_writer_projects_by_language()
-          : m.landing_search_or_link()
-      }
-      placeholder={
-        props.repos === "writer"
-          ? m.writer_languages_placeholder()
-          : m.landing_search_english_or_axd()
-      }
-      value={props.filters.query()}
-      onInput={(event) => props.filters.setQuery(event.currentTarget.value)}
-    />
+    <Coachmark
+      show={onboarding.step("projects") === "search"}
+      title={m.onboarding_search_title()}
+      body={m.onboarding_search_body()}
+      side="bottom"
+      class="flex w-full min-w-64 sm:w-auto sm:flex-1"
+      testId="onboarding-search"
+    >
+      <Input
+        type="search"
+        size="lg"
+        wrapperClass="w-full"
+        class="w-full"
+        icon={<SearchIcon size={20} aria-hidden="true" />}
+        aria-label={
+          props.repos === "writer"
+            ? m.common_search_writer_projects_by_language()
+            : m.landing_search_or_link()
+        }
+        placeholder={
+          props.repos === "writer"
+            ? m.writer_languages_placeholder()
+            : m.landing_search_english_or_axd()
+        }
+        value={props.filters.query()}
+        onInput={(event) => props.filters.setQuery(event.currentTarget.value)}
+      />
+    </Coachmark>
   </div>
 );
 

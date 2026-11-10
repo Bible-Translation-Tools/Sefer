@@ -131,6 +131,8 @@ export interface ShellKeys {
   /** The person chose to work offline; Sefer reaches no server until they switch back. */
   /** `null` until the person chooses: the host decides (`services.ts`). */
   readonly workOffline: SettingKey<boolean | null>;
+  /** The person has opened a project once, so the first-run pointers are done. */
+  readonly onboarded: SettingKey<boolean>;
   readonly pairBlocks: SettingKey<boolean>;
   /** Typed verse numbers ("1", "v1", "verse 1") become verses: the editor's verse shortcuts. */
   readonly verseShortcuts: SettingKey<boolean>;
@@ -203,6 +205,7 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
     catalogueUrl: settings.register("network.catalogueUrl", Schema.String, ""),
     webTransport: settings.register("network.webTransport", Schema.String, ""),
     workOffline: settings.register("network.workOffline", Schema.NullOr(Schema.Boolean), null),
+    onboarded: settings.register("onboarding.done", Schema.Boolean, false),
     pairBlocks: settings.register("editor.pairBlocks", Schema.Boolean, false),
     verseShortcuts: settings.register("editor.verseShortcuts", Schema.Boolean, true),
     indentSpaces: settings.register("editor.indentSpaces", Schema.String, "4"),

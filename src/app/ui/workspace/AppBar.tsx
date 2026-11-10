@@ -18,12 +18,13 @@ import Undo2 from "lucide-solid/icons/undo-2";
 import { For, Show, createSignal } from "solid-js";
 
 import { findCommand, runCommand } from "../../commands";
+import { watchOnboarding } from "../../onboarding";
 import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
 import { SyncChip } from "../cloud/SyncButton";
 import { IconButton, Kbd, Menu, MenuItem, MenuSeparator, SegmentedControl } from "../primitives";
 import { AccountButton } from "./AccountButton";
-import { SaveStatus } from "./StatusChips";
+import { NetworkChip, SaveStatus } from "./StatusChips";
 
 function BarButton(props: {
   readonly label: string;
@@ -304,6 +305,7 @@ function ModeControl(props: {
 export function AppBar() {
   const navigate = useNavigate();
   const shell = useShell();
+  watchOnboarding(shell);
 
   const path = useRouterState({ select: (state) => state.location.pathname });
   const within = (): string => path().replace(/^\/project\/[^/]+/, "");
@@ -338,12 +340,22 @@ export function AppBar() {
     >
       <HomeButton />
 
-      <Show when={open()}>
-        <div class="flex shrink-0 items-center gap-2">
+      {/* Before a project is open, the pill only switches online and offline. */}
+      <div class="flex shrink-0 items-center gap-2">
+        <Show
+          when={open()}
+          fallback={
+            <NetworkChip
+              warning={undefined}
+              onOpenChange={() => undefined}
+              body={() => undefined}
+            />
+          }
+        >
           <SyncChip />
           <SaveStatus />
-        </div>
-      </Show>
+        </Show>
+      </div>
 
       <ModeControl mode={mode()} open={open()} onChange={goTo} />
 
@@ -356,8 +368,8 @@ export function AppBar() {
             disabled={!can("book.undo")}
             onClick={() => runCommand("book.undo")}
           />
-          <MainMenu />
         </Show>
+        <MainMenu />
         <AccountButton />
       </div>
     </nav>
