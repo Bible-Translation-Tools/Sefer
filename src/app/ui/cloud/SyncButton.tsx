@@ -294,7 +294,6 @@ const waitingWhat = (books: readonly string[] | undefined): string => {
   return m.wacs_changes_to({ books: m.wacs_count_books({ count: books.length }) });
 };
 
-/** Where the project lives on WACS, whose it is, and what the link is for. */
 /**
  * Where the project lives on WACS. The link is cut from its start, since every
  * link starts the same and differs at the end; Copy sits inside the box. The
@@ -556,6 +555,7 @@ const WacsBody = (props: {
     | "signed-out"
     | "new"
     | "review"
+    | "incoming"
     | "on-wacs" => {
     if (syncStatus.workOffline()) return "offline";
     const held = props.held;
@@ -566,7 +566,9 @@ const WacsBody = (props: {
     if (held.reading.origin === undefined) return "new";
     // Both sides moved: the upload waits until the person has reviewed what
     // came in from WACS, so the review is the next step, not a retry.
-    return held.reading.ahead.length > 0 && held.reading.behind.length > 0 ? "review" : "on-wacs";
+    if (held.reading.behind.length === 0) return "on-wacs";
+    // WACS moved and this device has nothing waiting: there is only something to look at.
+    return held.reading.ahead.length > 0 ? "review" : "incoming";
   };
   const origin = (): string | undefined => props.held?.reading.origin;
   const sentences = (): readonly string[] => {
@@ -590,6 +592,8 @@ const WacsBody = (props: {
         return [m.wacs_not_on_wacs(), m.wacs_name_suggested()];
       case "review":
         return [m.wacs_on_wacs(), m.wacs_review_needed({ what: waitingWhat(waitingBooks()) })];
+      case "incoming":
+        return [m.wacs_on_wacs()];
       case "on-wacs":
         return [
           m.wacs_on_wacs(),
@@ -600,7 +604,8 @@ const WacsBody = (props: {
         ];
     }
   };
-  const signedIn = (): boolean => mode() === "new" || mode() === "on-wacs" || mode() === "review";
+  const signedIn = (): boolean =>
+    mode() === "new" || mode() === "on-wacs" || mode() === "review" || mode() === "incoming";
 
   return (
     <div class="space-y-4" data-sync-popover={props.held?.state ?? "reading"}>
@@ -624,7 +629,13 @@ const WacsBody = (props: {
       </Show>
 
       <Show
-        when={(mode() === "signed-out" || mode() === "on-wacs" || mode() === "review") && origin()}
+        when={
+          (mode() === "signed-out" ||
+            mode() === "on-wacs" ||
+            mode() === "review" ||
+            mode() === "incoming") &&
+          origin()
+        }
       >
         {(at) => <ProjectLocation href={shareableLink(at())} noWrite={noWrite()} />}
       </Show>
@@ -694,6 +705,25 @@ const WacsBody = (props: {
             )}
           </Show>
         </form>
+      </Show>
+
+      <Show when={mode() === "incoming"}>
+        {/* The thing to act on, so it is the loudest line here; how loud is Thomas's call. */}
+        <p
+          class="rounded-md bg-surface-warning px-3 py-2 text-body font-semibold text-on-surface-warning"
+          data-sync-incoming
+        >
+          {m.cloud_there_are_updates_to_receive()}
+        </p>
+        <Button
+          variant="primary"
+          class="w-full justify-center"
+          icon={<GitCompare size={20} />}
+          onClick={() => run("see")}
+          data-testid="wacs-see"
+        >
+          {m.wacs_review_changes()}
+        </Button>
       </Show>
 
       <Show when={mode() === "review"}>

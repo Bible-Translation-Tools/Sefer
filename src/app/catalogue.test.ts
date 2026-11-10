@@ -1,6 +1,7 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { catalogueFailureAttrs, catalogueVerdict, listTranslationNotes } from "./catalogue";
+import { syncStatus } from "./syncStatus";
 
 const answer = (body: unknown) =>
   vi.stubGlobal(
@@ -17,6 +18,8 @@ const failureOf = async () => {
   throw new Error("expected the catalogue read to fail");
 };
 
+// The gate is closed until the stored choice is read at start; these reads are online.
+beforeEach(() => syncStatus.setWorkOffline(false));
 afterEach(() => vi.unstubAllGlobals());
 
 describe("the Language API's GraphQL errors", () => {

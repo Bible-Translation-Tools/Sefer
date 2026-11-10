@@ -104,17 +104,29 @@ const announceSend = (
   else toasts.info(notice);
 };
 
+type Running = "send" | "check" | "resolve";
+
+// One for the app, not one per control: the sync popover and the review line start the same send.
+const [running, setRunning] = createSignal<
+  { readonly root: string; readonly action: Running } | undefined
+>(undefined, { name: "quickSyncBusy" });
+
 export const createQuickSync = (shell: Shell, onSee?: () => void): QuickSync => {
   const navigate = useNavigate();
   const { services } = shell;
-  const [busy, setBusy] = createSignal<"" | "send" | "check" | "resolve">("", {
-    name: "quickSyncBusy",
-  });
+  const busy = (): "" | Running => {
+    const held = running();
+    return held !== undefined && held.root === shell.project()?.root ? held.action : "";
+  };
   const sync = (): Sync | undefined => syncWatch.sync(shell.project()?.root);
 
   const run = (action: QuickAction): void => {
     const project = shell.project();
     if (project === undefined || busy() !== "") return;
+    const setBusy = (next: "" | Running): void => {
+      if (next !== "") setRunning({ root: project.root, action: next });
+      else setRunning((held) => (held?.root === project.root ? undefined : held));
+    };
     switch (action) {
       case "see":
         if (onSee !== undefined) onSee();

@@ -8,6 +8,8 @@ import type { SourceChoice } from "../sources";
 
 export function SourcePicker(props: {
   readonly side: "left" | "right";
+  /** Drawn first, so it reads as From; the other reads as To. */
+  readonly from: boolean;
   readonly value: string;
   readonly other: string;
   readonly picked: CompareSource | undefined;
@@ -18,14 +20,14 @@ export function SourcePicker(props: {
   return (
     <div class="space-y-1">
       <span class="text-smallest font-medium text-on-surface-tertiary">
-        {props.side === "left" ? m.review_to() : m.review_from()}
+        {props.from ? m.review_from() : m.review_to()}
       </span>
       <div class="flex items-center gap-2">
         <Select
           size="sm"
           wrapperClass="min-w-0"
           data-review-side={props.side}
-          aria-label={props.side === "left" ? m.review_compare_to() : m.review_compare_from()}
+          aria-label={props.from ? m.review_compare_from() : m.review_compare_to()}
           value={props.value}
           onChange={(event) => props.onPick(props.side, event.currentTarget.value)}
         >

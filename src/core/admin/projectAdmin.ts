@@ -66,14 +66,20 @@ const ioFailure = (error: PlatformError.PlatformError): AdminError =>
     description: error.reason.description ?? error.message,
   });
 
+/**
+ * Left out of an export: Sefer's own folder, and of the repository only what is this device's
+ * (hooks, logs, locks). The history and the remotes go along, so a project handed over as a zip
+ * is the same project to the next device: same versions, same shared project.
+ */
 const isPrivatePath = (name: string): boolean =>
   name === ".sefer" ||
   name.startsWith(".sefer/") ||
   name.includes("/.sefer/") ||
   name.endsWith(".sefer-tmp") ||
-  name === ".git" ||
-  name.startsWith(".git/") ||
-  name.includes("/.git/");
+  name.includes("/.git/") ||
+  name.startsWith(".git/hooks/") ||
+  name.startsWith(".git/logs/") ||
+  (name.startsWith(".git/") && name.endsWith(".lock"));
 
 export const ingredientFor = (
   fileSystem: FileSystem.FileSystem,

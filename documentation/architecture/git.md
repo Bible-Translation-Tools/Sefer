@@ -169,7 +169,9 @@ Every project that arrives — a zip, a folder, a clone — leaves with a reposi
 `src/core/git/intake.ts` is the one path. An arriving `.git` keeps its history and loses everything
 else a `.git` can carry: other remotes and their refs, credentials in a URL or a helper, hooks,
 reflogs. That is an ALLOWLIST applied in place (`objects`, `refs/heads`, `refs/tags`, `HEAD`,
-`shallow`, `packed-refs`, and a rewritten `config`), so whatever a future git adds is removed too. A
+`shallow`, `packed-refs`, and a rewritten `config`), so whatever a future git adds is removed too. The
+rewritten config re-states two things from the arriving one, the `origin` and `copy` remotes, as
+http(s) addresses with no name or password (`keptRemotes`), so a handed-over project stays linked. A
 `.git` that cannot be adopted — a gitfile pointing elsewhere, a merge left half done, history that
 cannot be read — is replaced by a fresh repository, and the files are kept either way.
 

@@ -105,7 +105,7 @@ const beginTracking = (
 export const downloadEntry = (
   services: Services,
   downloads: DownloadSink,
-  setBusy: (id: string) => void,
+  setBusy: (id: string, on: boolean) => void,
   entry: CatalogueEntry,
   from: DOMRect,
   open: (root: string) => void,
@@ -113,7 +113,7 @@ export const downloadEntry = (
   const kind: ArrivalKind = entry.type === "gateway" ? "sourceText" : "project";
   const into = arrivalRoot(services, kind, entry.gitUrl);
   let arrivedAt = into;
-  setBusy(entry.id);
+  setBusy(entry.id, true);
   const toast = beginTracking(downloads, entry, kind, into, from);
   const watching = watchProgress(services, entry, toast, downloads);
   const operation = services.composition.observability.operation("import.remote", {
@@ -166,6 +166,6 @@ export const downloadEntry = (
     })
     .finally(() => {
       Effect.runFork(Fiber.interrupt(watching));
-      setBusy("");
+      setBusy(entry.id, false);
     });
 };

@@ -8,16 +8,12 @@ const [online, setOnline] = createSignal(currentlyOnline(), { name: "networkOnli
 const [lastFailure, setLastFailure] = createSignal<RemoteFailureReason | undefined>(undefined, {
   name: "lastTransferFailure",
 });
-const [checking, setChecking] = createSignal<ReadonlySet<string>>(new Set(), {
-  name: "syncChecking",
-});
-// The person's own "work offline". Today it stops sync only (check, send, the survey, History's
-// deepen); the catalogue, sign-in, cloning and the update check still reach the network.
-const [workOffline, setWorkOffline] = createSignal(false, {
+// The person's own "work offline": the gate in `network.ts` reads it, and nothing reaches the
+// network while it is on. On until the stored choice is read at start (`services.ts`).
+const [workOffline, setWorkOffline] = createSignal(true, {
   name: "workOffline",
   ownedWrite: true,
 });
-const [sendRefused, setSendRefused] = createSignal(false, { name: "sendRefused" });
 
 if (typeof window === "object") {
   window.addEventListener("online", () => {
@@ -36,12 +32,6 @@ export interface SyncStatus {
   readonly lastFailure: Accessor<RemoteFailureReason | undefined>;
   readonly noteFailure: (reason: RemoteFailureReason) => void;
   readonly noteSuccess: () => void;
-  readonly checking: (root: string | undefined) => boolean;
-  readonly setChecking: (root: string, running: boolean) => void;
-  readonly sendRefused: Accessor<boolean>;
-  readonly noteSend: (
-    outcome: { readonly sent: true } | { readonly refused: RemoteFailureReason },
-  ) => void;
 }
 
 export const syncStatus: SyncStatus = {
@@ -52,22 +42,4 @@ export const syncStatus: SyncStatus = {
   lastFailure,
   noteFailure: (reason) => setLastFailure(reason),
   noteSuccess: () => setLastFailure(undefined),
-  checking: (root) => root !== undefined && checking().has(root),
-  setChecking: (root, running) =>
-    setChecking((held) => {
-      const next = new Set(held);
-      if (running) next.add(root);
-      else next.delete(root);
-      return next;
-    }),
-  sendRefused,
-  noteSend: (outcome) => {
-    if ("sent" in outcome) {
-      setSendRefused(false);
-      setLastFailure(undefined);
-    } else {
-      setSendRefused(true);
-      setLastFailure(outcome.refused);
-    }
-  },
 };

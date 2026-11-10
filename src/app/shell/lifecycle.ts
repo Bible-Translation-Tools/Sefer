@@ -7,6 +7,7 @@ import { m } from "#app/paraglide/messages";
 import { ProjectAnalysis } from "#core/analysis/projectAnalysis";
 import { Repositories } from "#core/git/repository";
 import { Observability } from "#core/observability";
+import { stepProject, type ProjectEvent, type ProjectPhase } from "#core/project/lifecycle";
 import { openProject as openProjectEffect, type Project } from "#core/project/project";
 import type { Restorable } from "#core/recovery/recovery";
 import { pendingOnOpen } from "#core/recovery/reopen";
@@ -135,7 +136,18 @@ export const createLifecycle = ({
     { name: "recoveryOffer" },
   );
 
-  const closeProject = async (): Promise<void> => {
+  const [phase, setPhase] = createSignal<ProjectPhase>(
+    { kind: "closed" },
+    { name: "projectPhase" },
+  );
+  // The plain value is the truth and the signal draws it: Solid 2 batches writes.
+  let now: ProjectPhase = { kind: "closed" };
+  const send = (event: ProjectEvent): void => {
+    now = stepProject(now, event);
+    setPhase(now);
+  };
+
+  const tearDown = async (): Promise<void> => {
     const staticOpen = untrack(() => project());
     setRecoveryOffer(undefined);
     seatWatch.release();
@@ -155,15 +167,28 @@ export const createLifecycle = ({
     closing.end("passed");
   };
 
+  const closeProject = (): Promise<void> => {
+    send({ kind: "close" });
+    return tearDown();
+  };
+
   let opening: { readonly root: string; readonly done: Promise<void> } | undefined;
 
   const openProject = (root: string): Promise<void> => {
     if (opening !== undefined && opening.root === root) return opening.done;
-    const done = openProjectOnce(root).finally(() => {
-      if (opening?.root === root) opening = undefined;
+    send({ kind: "ask", root });
+    // One open at a time: another root waits for the one in flight, so its close finds what that one set.
+    const run = (): Promise<void> =>
+      openProjectOnce(root).catch((cause: unknown) => {
+        // A defect, not a refusal: without this the phase would say "opening" for good.
+        report(m.shell_could_not_open_root_reason({ root, reason: String(cause) }));
+        send({ kind: "refused", root, reason: "Refused" });
+      });
+    const mine = { root, done: (opening?.done ?? Promise.resolve()).then(run, run) };
+    opening = mine;
+    return mine.done.finally(() => {
+      if (opening === mine) opening = undefined;
     });
-    opening = { root, done };
-    return done;
   };
 
   const offerRecovery = (ready: Project, root: string): void => {
@@ -200,7 +225,7 @@ export const createLifecycle = ({
     );
 
   const openProjectOnce = async (root: string): Promise<void> => {
-    await closeProject();
+    await tearDown();
     const gesture = services.composition.observability.operation("project.open", {
       "project.root": root,
       "op.trigger": "shell",
@@ -215,6 +240,7 @@ export const createLifecycle = ({
     if (Result.isFailure(opened)) {
       gesture.end("failed", { "project.error": opened.failure.reason });
       report(m.shell_could_not_open_root_reason({ root, reason: opened.failure.reason }));
+      send({ kind: "refused", root, reason: opened.failure.reason });
       return;
     }
     const ready = opened.success;
@@ -234,6 +260,7 @@ export const createLifecycle = ({
       ),
     );
     setProject(ready);
+    send({ kind: "opened", root });
     setCursor(0);
     void services.run(services.admin.recordedName(root)).then((recorded) => {
       if (Option.isSome(recorded)) noteRenamed(root, recorded.value);
@@ -250,5 +277,5 @@ export const createLifecycle = ({
     report(m.shell_opened_name_count_books({ name: ready.root, count: ready.books.length }));
   };
 
-  return { recoveryOffer, setRecoveryOffer, closeProject, openProject };
+  return { phase, recoveryOffer, setRecoveryOffer, closeProject, openProject };
 };

@@ -27,6 +27,7 @@ import {
   sendingTo,
   workInOwnCopy,
 } from "./suggestions";
+import { syncPhase } from "./syncPhase";
 import { syncPreferences } from "./syncSettings";
 import { syncStatus } from "./syncStatus";
 import { syncWatch } from "./syncWatch";
@@ -55,14 +56,39 @@ const fetchFromShared = (root: string): Effect.Effect<CheckResult, unknown, Git 
     return "fetched";
   });
 
+/**
+ * Every sync entry point below sends its events to the project's one machine
+ * (`src/core/sync/lifecycle.ts`). A check starts only from idle: over a send or a settle it
+ * is declined, since each of those ends by reading the shared project anyway.
+ */
 export const checkForChanges = async (services: Services, project: Project): Promise<void> => {
   const operation = services.composition.observability.operation("sync.check");
   if (!syncStatus.interfaceUp()) {
     operation.end("declined", { "sync.check.result": "offline" });
     return;
   }
+  if (syncPhase.now(project.root).kind !== "idle") {
+    operation.end("declined", { "sync.check.result": "busy" });
+    return;
+  }
+  syncPhase.send(project.root, { kind: "check" });
   await checkShared(services, project, operation);
   await checkWriter(services, project);
+};
+
+/** A send that waits for the check in flight, and the sends in flight, one per project. */
+const waiting = new Map<
+  string,
+  { readonly outcome: Promise<SendOutcome>; readonly start: () => void }
+>();
+const sending = new Map<string, Promise<SendOutcome>>();
+
+/** The check or receive ended: if a send waited for it, the machine is in `routing` and it starts. */
+const startWaiting = (root: string): void => {
+  const next = waiting.get(root);
+  if (next === undefined || syncPhase.now(root).kind !== "routing") return;
+  waiting.delete(root);
+  next.start();
 };
 
 const checkShared = async (
@@ -71,7 +97,6 @@ const checkShared = async (
   operation: ReturnType<Services["composition"]["observability"]["operation"]>,
 ): Promise<void> => {
   const root = project.root;
-  syncStatus.setChecking(root, true);
   let result: CheckResult | undefined;
   let verdict: Verdict = "passed";
   let reason: string | undefined;
@@ -84,27 +109,35 @@ const checkShared = async (
     if (failure !== undefined) syncStatus.noteFailure(failure);
     verdict = remoteVerdict(failure);
     reason = failure ?? "unknown";
-  } finally {
-    syncStatus.setChecking(root, false);
   }
+  const receives =
+    result === "fetched" && syncPreferences(services.settings, root).skipReviewIncoming;
+  syncPhase.send(root, { kind: receives ? "fetched" : "checked" });
   operation.end(verdict, {
     "sync.check.result": result ?? "unreachable",
     ...(reason === undefined ? {} : { "sync.reason": reason }),
   });
-  await syncWatch.refresh(services, project).catch(() => undefined);
-  if (verdict === "passed") {
-    if ((await modeOf(services, project)) === "copy") await fetchCopy(services, project);
-    void collaboration.refresh(services, project);
+  try {
+    await syncWatch.refresh(services, project).catch(() => undefined);
+    if (verdict === "passed") {
+      if ((await modeOf(services, project)) === "copy") await fetchCopy(services, project);
+      void collaboration.refresh(services, project);
+    }
+    if (!receives) return;
+    const received = await services.run(Effect.result(receive({ project })));
+    syncPhase.send(root, { kind: "received" });
+    services.composition.observability.note(
+      "sync.receive",
+      received._tag === "Success" ? "rewrote" : "declined",
+      received._tag === "Success" ? undefined : received.failure.refusal,
+      { "sync.auto": true },
+    );
+    await syncWatch.refresh(services, project).catch(() => undefined);
+  } finally {
+    // However the tail ended, the machine leaves `receiving` and a waiting send starts.
+    syncPhase.send(root, { kind: "received" });
+    startWaiting(root);
   }
-  if (result !== "fetched" || !syncPreferences(services.settings, root).skipReviewIncoming) return;
-  const received = await services.run(Effect.result(receive({ project })));
-  services.composition.observability.note(
-    "sync.receive",
-    received._tag === "Success" ? "rewrote" : "declined",
-    received._tag === "Success" ? undefined : received.failure.refusal,
-    { "sync.auto": true },
-  );
-  await syncWatch.refresh(services, project).catch(() => undefined);
 };
 
 export type SendOutcome =
@@ -120,16 +153,70 @@ export type SendOutcome =
       readonly description?: string;
     };
 
-export const sendNow = async (
+/**
+ * Send this project's versions. During a check the send waits for it; while a send is already
+ * in flight this is that send; during a settle it is held, since the settle sends by itself.
+ */
+export const sendNow = (
   services: Services,
   project: Project,
   cause: "save" | "press" = "press",
   to?: string,
 ): Promise<SendOutcome> => {
-  const outcome = await attemptSend(services, project, cause, to);
-  if (outcome.kind === "refused" && outcome.reason === "Rejected")
-    await checkForChanges(services, project);
-  else await syncWatch.refresh(services, project).catch(() => undefined);
+  const root = project.root;
+  const run = (): Promise<SendOutcome> => {
+    const outcome = runSend(services, project, cause, to).finally(() => sending.delete(root));
+    sending.set(root, outcome);
+    return outcome;
+  };
+  const phase = syncPhase.now(root);
+  if (phase.kind === "idle") {
+    syncPhase.send(root, { kind: "send" });
+    return run();
+  }
+  if (phase.kind === "checking" || phase.kind === "receiving") {
+    const already = waiting.get(root);
+    if (already !== undefined) return already.outcome;
+    syncPhase.send(root, { kind: "send" });
+    const { promise, resolve, reject } = Promise.withResolvers<SendOutcome>();
+    waiting.set(root, { outcome: promise, start: () => void run().then(resolve, reject) });
+    return promise;
+  }
+  return sending.get(root) ?? Promise.resolve({ kind: "held" });
+};
+
+const runSend = async (
+  services: Services,
+  project: Project,
+  cause: "save" | "press",
+  to: string | undefined,
+): Promise<SendOutcome> => {
+  const root = project.root;
+  let outcome: SendOutcome;
+  try {
+    outcome = await attemptSend(services, project, cause, to);
+  } catch (thrown) {
+    syncPhase.send(root, { kind: "refused", reason: undefined });
+    throw thrown;
+  }
+  if (outcome.kind === "refused" && outcome.reason === "Rejected") {
+    syncPhase.send(root, { kind: "rejected" });
+    await checkShared(
+      services,
+      project,
+      services.composition.observability.operation("sync.check"),
+    );
+    await checkWriter(services, project);
+  } else {
+    if (outcome.kind === "sent") syncPhase.send(root, { kind: "sent" });
+    else if (outcome.kind === "refused")
+      syncPhase.send(root, {
+        kind: "refused",
+        reason: outcome.noWrite === true ? undefined : outcome.reason,
+      });
+    else syncPhase.send(root, { kind: "detached" });
+    await syncWatch.refresh(services, project).catch(() => undefined);
+  }
   if (outcome.kind === "refused" && outcome.toCopy === true)
     await collaboration.refresh(services, project);
   if (outcome.kind === "refused" && outcome.reason === "Unauthorized")
@@ -172,7 +259,7 @@ const attemptSend = async (
 ): Promise<SendOutcome> => {
   const root = project.root;
   if (!syncStatus.interfaceUp()) {
-    syncStatus.noteSend({ refused: "Network" });
+    syncStatus.noteFailure("Network");
     return { kind: "refused", reason: "Network" };
   }
   const operation = services.composition.observability.operation("sync.transfer", {
@@ -189,6 +276,7 @@ const attemptSend = async (
     }
     to = route.to;
     ownCopy = route.ownCopy;
+    syncPhase.send(root, { kind: "routed" });
     const target = to;
     const sent = await services.run(
       Effect.gen(function* () {
@@ -200,7 +288,7 @@ const attemptSend = async (
         return true;
       }),
     );
-    if (sent) syncStatus.noteSend({ sent: true });
+    if (sent) syncStatus.noteSuccess();
     if (sent && target === "copy") await fetchCopy(services, project);
     operation.end("passed", { "sync.sent": sent });
     if (!sent) return { kind: "detached" };
@@ -223,7 +311,7 @@ const attemptSend = async (
       to === "copy" && reason === "Rejected"
         ? await fetchCopy(services, project).then(() => copyStanding(services, project))
         : undefined;
-    syncStatus.noteSend({ refused: reason });
+    syncStatus.noteFailure(reason);
     operation.end(remoteVerdict(reason), {
       "sync.reason": reason,
       ...(to === undefined ? {} : { "sync.to": to }),
@@ -290,12 +378,33 @@ export const settleWithShared = async (
   settled: ReadonlySet<BookId>,
   overrides: { readonly theirs?: string; readonly sendTo?: string } = {},
 ): Promise<SettleOutcome> => {
+  const root = project.root;
+  // A settle follows whatever is running: it is the person's Save, so it is never dropped.
+  while (syncPhase.now(root).kind !== "idle") await syncPhase.whenIdle(root);
+  syncPhase.send(root, { kind: "settle" });
+  try {
+    return await settle(services, project, author, message, settled, overrides);
+  } finally {
+    // Idle if the settle threw; otherwise it already said `settled` before its own send.
+    syncPhase.send(root, { kind: "settled" });
+  }
+};
+
+const settle = async (
+  services: Services,
+  project: Project,
+  author: Author,
+  message: string,
+  settled: ReadonlySet<BookId>,
+  overrides: { readonly theirs?: string; readonly sendTo?: string },
+): Promise<SettleOutcome> => {
   const received = await services.run(
     Effect.result(receive({ project, settled, ...optionalTheirs(overrides.theirs) })),
   );
   if (received._tag === "Success") {
     const dirty = project.books.filter((book) => services.save.dirty(book));
     const recorded = await recordVersion(services, project, dirty, message, author);
+    syncPhase.send(project.root, { kind: "settled" });
     const sending = sendAfterRecording(services, project, recorded, overrides.sendTo);
     if (sending === undefined) void syncWatch.refresh(services, project).catch(() => undefined);
     return { kind: "received", recorded, sending };

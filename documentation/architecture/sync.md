@@ -338,6 +338,56 @@ when nothing changed. It never moves a file. With "Skip review of incoming chang
 follows, and the receive refuses whenever a book needs a person, so nothing arrives unreviewed that
 the policy would have shown. It runs as the `sync.check` operation. It is one instance of the upstream pattern every copy from a git remote follows ("Upstreams: one pattern for everything from a git remote", below).
 
+### The sync process is one machine
+
+Checking, receiving, sending and settling at a save are one process per project, and
+`src/core/sync/lifecycle.ts` is its machine: the phases (`idle`, `checking`, `receiving`,
+`routing`, `sending`, `settling`), the events, and the one function that steps between them.
+`syncActions.ts` is the only sender; `src/app/syncPhase.ts` holds each project's phase. The ten
+states above stay a classifier of where the project stands (`syncStateOf`); its `checking` and
+`sendRefused` inputs are read from this machine, per project, so no flag sits beside it.
+
+- **One path to a send.** A button, a shortcut, send on save and the Save dialog all call
+  `sendNow`, which first asks the network gate (below, "Work offline").
+- **A send during a check waits for it** and then runs; a second send in that time is the same
+  send. While a send is in flight, another is that send.
+- **A check starts only from idle.** Over a send or a settle it is declined: each ends by
+  reading the shared project anyway.
+- **A settle (a Save with incoming work) waits for whatever is running**, then runs; it is never
+  dropped.
+- **`routing` is where the send goes**: the shared project when this account may write to it,
+  otherwise the person's own copy. An explicit destination skips the question.
+- **`rejected`** is the shared project having work this device lacks: a check follows, and the
+  surface then offers the review.
+
+<!-- chart:sync-phase -->
+
+```mermaid
+stateDiagram-v2
+  [*] --> idle
+  idle --> checking : check
+  idle --> routing : send
+  idle --> settling : settle
+  checking --> checking : send
+  checking --> idle : checked
+  checking --> routing : checked
+  checking --> receiving : fetched
+  receiving --> receiving : send
+  receiving --> idle : received
+  receiving --> routing : received
+  routing --> sending : routed
+  routing --> idle : refused
+  routing --> checking : rejected
+  sending --> idle : sent, detached, refused
+  sending --> checking : rejected
+  settling --> idle : settled
+```
+
+<!-- /chart:sync-phase -->
+
+Where a pair of arrows leaves on the same event (`checked`, `received`), the second is taken
+when a send is waiting.
+
 ### Writer projects a project follows
 
 A project that came from BTT Writer (the Writer migration) records, per book, the Writer project
@@ -535,6 +585,24 @@ press is an ordinary attempt rather than a retry of something already given up o
 
 Offline is the least alarming state on the surface. The work is on disk, the clocks still show what
 is waiting, the button says "Check for changes", and nothing suggests anything was lost.
+
+### Work offline: the network gate
+
+"Work offline" (the Online / Offline switch in the app bar) is a kill switch, not a sync setting:
+while it is on, Sefer reaches no server. One gate answers for every caller,
+`src/core/network/gate.ts`: a caller names what it is doing (`check`, `send`, `clone`, `deepen`,
+`catalogue`, `account`, `update`, `telemetry`) and asks `may(action)`. The app's gate
+(`src/app/network.ts`) reads the switch and has no per-action exceptions. The gate sits at the
+ports, so nothing above them has to remember it: `gatedRemote` wraps the Remote port on both hosts
+(on desktop the Rust git commands are only ever reached through it), `gatedUpdater` wraps the
+Updater, and `gatedFetch` wraps the WACS API, the Language API, the downloads list and the
+telemetry exporter. A refused remote call fails as `Network`, so every surface words it as
+offline. The two wasm engines load from the app's own address and are not gated.
+
+The choice is remembered per device (`network.workOffline`). Until the person chooses, the desktop
+app starts offline and the Web app online; the switch is closed until the stored choice is read
+at start, so nothing leaves before then. On the projects screen the WACS list says searching is
+off and offers Go online, since the switch itself lives in a project's app bar.
 
 ## Where it is, now that there is no screen
 

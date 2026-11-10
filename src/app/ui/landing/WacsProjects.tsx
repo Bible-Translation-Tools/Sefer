@@ -12,9 +12,11 @@ import { through } from "#core/remote/transport";
 
 import { catalogueFor, type CatalogueEntry } from "../../catalogue";
 import { transportFor } from "../../endpoints";
+import { chooseWorkOffline } from "../../network";
 import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
+import { syncStatus } from "../../syncStatus";
 import { WriterTable } from "../migrate/WriterLanguages";
 import {
   Button,
@@ -446,6 +448,7 @@ const TableHead = (props: {
 
 const TableBody = (props: {
   readonly filters: Filters;
+  readonly onGoOnline: () => void;
   readonly entries: readonly CatalogueEntry[] | undefined;
   readonly virtualRows: readonly { key: string; item: CatalogueRow; estimate: number }[];
   readonly rowIndex: ReadonlyMap<string, number>;
@@ -466,9 +469,24 @@ const TableBody = (props: {
           <Show
             when={props.entries}
             fallback={
-              <p class="py-8 text-center text-body text-on-surface-tertiary">
-                {m.landing_loading_projects()}
-              </p>
+              <Show
+                when={syncStatus.workOffline()}
+                fallback={
+                  <p class="py-8 text-center text-body text-on-surface-tertiary">
+                    {m.landing_loading_projects()}
+                  </p>
+                }
+              >
+                <div
+                  data-testid="catalogue-offline"
+                  class="flex flex-col items-center gap-3 py-8 text-center text-body text-on-surface-tertiary"
+                >
+                  <p>{m.landing_searching_is_off_while_offline()}</p>
+                  <Button variant="secondary" onClick={props.onGoOnline}>
+                    {m.landing_go_online()}
+                  </Button>
+                </div>
+              </Show>
             }
           >
             <NoMatch
@@ -542,7 +560,15 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
     void navigate({ to: "/project/$slug", params: { slug: shell.slugFor(root) } });
 
   const { entries, problem } = createCatalogueEntries(services, catalogue);
-  const [busy, setBusy] = createSignal("", { name: "catalogueBusy" });
+  const [busy, setBusy] = createSignal<ReadonlySet<string>>(new Set(), { name: "catalogueBusy" });
+  const markBusy = (id: string, on: boolean): void => {
+    setBusy((held) => {
+      const next = new Set(held);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
   const filters = createCatalogueFilters(entries);
 
   const { rows, rowIndex, virtualRows, codeColumn } = createCatalogueRows(
@@ -563,7 +589,7 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
   const download = (entry: CatalogueEntry, from: DOMRect): void => {
     // Untracked on purpose: a one-time read, not a dependency (Solid 2: STRICT_READ_UNTRACKED).
     const { downloads } = props;
-    downloadEntry(services, downloads, setBusy, entry, from, open);
+    downloadEntry(services, downloads, markBusy, entry, from, open);
   };
 
   return (
@@ -607,6 +633,7 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
           <TableBody
             filters={filters}
             entries={entries()}
+            onGoOnline={() => chooseWorkOffline(services, false)}
             virtualRows={virtualRows()}
             rowIndex={rowIndex()}
             actions={{ onDownload: download, heldFor, onOpen: open }}

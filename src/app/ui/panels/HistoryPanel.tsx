@@ -284,7 +284,10 @@ const createShownChanges = (
   versions: Accessor<VersionMap>,
   setShown: (shown: readonly BookChanges[]) => void,
 ): void => {
+  let asked = 0;
   const recompute = async (): Promise<void> => {
+    asked += 1;
+    const mine = asked;
     const project = shell.project();
     const id = selected();
     if (project === undefined || id === "") {
@@ -296,7 +299,8 @@ const createShownChanges = (
       const changes = await changesOfVersion(shell, project, versions(), bookId, id);
       if (changes !== undefined) out.push(changes);
     }
-    setShown(out);
+    // A version chosen since has its own answer coming.
+    if (mine === asked) setShown(out);
   };
 
   createEffect(

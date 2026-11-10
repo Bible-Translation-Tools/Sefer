@@ -72,6 +72,9 @@ option is disabled on the other side's picker rather than silently ignored.
   each card's buttons follow the same order: "On disk → In the editor",
   "Take the file's", "Keep the editor's". The colours follow the columns, not
   the editor: the right column is "now", its words green, the left's red.
+  Against the shared project `currentFirst` is on too (Will, 2026-11-10): what comes from
+  outside reads as what this device has, then what is arriving, so the editor is on the left
+  and the shared project on the right (`editorFirst` in `createSides.ts`).
   Against a suggestion `currentFirst` is on (Will, 2026-11-06): a pull request
   reads as the shared project, then what the suggestion would make of it, so the
   editor is drawn on the LEFT, labelled "The shared project (latest)", in red,
@@ -252,7 +255,29 @@ how far the review is; **Save** — the header's one primary button, and its
 largest thing, with the way back a small borderless × beside it
 (`BackToEditor quiet`) — opens a dialog for its message, and the dialog stays
 open on its receipt: a line for this device and a line for the shared
-project ([sync](sync.md), "One reading for every surface"); the ⋯ menu holds Clear every decision (in an
+project ([sync](sync.md), "One reading for every surface"). That dialog is one machine,
+`src/core/save/recordPhase.ts`: `editing`, `recording`, and `recorded` with its receipt line and
+its send line. `createReceipt.ts` holds the phase and sends the events; a run in flight is neither
+doubled by a second press nor abandoned by closing the dialog, a record that throws ends on a
+receipt that says so, and a send that answers after its receipt was closed changes nothing. Its chart, drawn from the
+transition table by `pnpm docs:charts`:
+
+<!-- chart:record-phase -->
+
+```mermaid
+stateDiagram-v2
+  [*] --> editing
+  editing --> recording : start
+  recording --> editing : stopped
+  recording --> recorded : answered
+  recorded --> recording : start
+  recorded --> recorded : sending, sent
+  recorded --> editing : close
+```
+
+<!-- /chart:record-phase -->
+
+The ⋯ menu holds Clear every decision (in an
 editable review it takes every take back out of the text, one Undo step per
 book, as each book's own Clear does), History and what aligned the diff.
 Choosing another source starts over: no decisions, and the takes already

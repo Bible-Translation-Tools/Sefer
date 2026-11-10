@@ -1,6 +1,9 @@
 import { Result, Schema } from "effect";
 
+import { gatedFetch } from "#core/network/gate";
+
 import { env } from "./env";
+import { network } from "./network";
 
 /**
  * The desktop installers of this build's channel, for the web app's
@@ -36,7 +39,11 @@ export const downloadsConfigured = (): boolean => env.updaterHost !== null;
 export const latestDownloads = async (): Promise<DesktopDownloads> => {
   const host = env.updaterHost;
   if (host === null) throw new Error("no updater host configured for this build");
-  const response = await fetch(`${host}/downloads`, { headers: { accept: "application/json" } });
+  const response = await gatedFetch(
+    network,
+    "update",
+    fetch,
+  )(`${host}/downloads`, { headers: { accept: "application/json" } });
   if (!response.ok) throw new Error(`the updater answered ${response.status}`);
   const decoded = decode(await response.json());
   if (Result.isFailure(decoded)) throw new Error("the updater's reply was not a list of downloads");

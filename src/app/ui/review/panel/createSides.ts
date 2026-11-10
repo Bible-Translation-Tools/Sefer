@@ -106,6 +106,10 @@ function createChoices(inputs: SidesInputs, state: SideState) {
   // suggestion would change: the reader hides this device's own changes, so
   // what it shows on this side is the latest shared text.
   const editorAsShared = (): boolean => inputs.route.pull() !== undefined && leftId() === "project";
+  // What comes from outside reads as what this device has, then what is arriving: against a
+  // suggestion or the shared project the editor is drawn first, the incoming side second.
+  const editorFirst = (): boolean =>
+    leftId() === "project" && (inputs.route.pull() !== undefined || rightId() === "shared");
   const leftShort = (): string =>
     editorAsShared()
       ? m.review_the_shared_project_2()
@@ -137,6 +141,7 @@ function createChoices(inputs: SidesInputs, state: SideState) {
     choices,
     choiceOf,
     editorAsShared,
+    editorFirst,
     left,
     right,
     leftShort,

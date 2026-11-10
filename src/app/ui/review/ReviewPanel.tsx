@@ -148,7 +148,7 @@ function ReviewHeaderView(props: { readonly panel: PanelModel }) {
       sourcesOpen={props.panel.sourcesOpen()}
       onSourcesOpenChange={props.panel.setSourcesOpen}
       sourcesLabel={
-        props.panel.sides.editorAsShared()
+        props.panel.sides.editorFirst()
           ? `${props.panel.sides.leftLabel()} → ${props.panel.sides.rightLabel()}`
           : `${props.panel.sides.rightLabel()} → ${props.panel.sides.leftLabel()}`
       }
