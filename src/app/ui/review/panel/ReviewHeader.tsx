@@ -30,6 +30,7 @@ function SidePicker(props: { readonly sides: Sides; readonly side: "left" | "rig
   return (
     <SourcePicker
       side={props.side}
+      from={(props.side === "left") === props.sides.editorFirst()}
       value={props.side === "left" ? props.sides.leftId() : props.sides.rightId()}
       other={props.side === "left" ? props.sides.rightId() : props.sides.leftId()}
       picked={props.side === "left" ? props.sides.leftPicked() : props.sides.rightPicked()}
@@ -46,8 +47,9 @@ function SourcesPanel(props: { readonly sides: Sides }) {
   return (
     <div class="space-y-3">
       <div class="grid gap-3 sm:grid-cols-2">
-        <SidePicker sides={props.sides} side="right" />
-        <SidePicker sides={props.sides} side="left" />
+        {/* In the order the title and the columns read: the editor first when what is arriving comes second. */}
+        <SidePicker sides={props.sides} side={props.sides.editorFirst() ? "left" : "right"} />
+        <SidePicker sides={props.sides} side={props.sides.editorFirst() ? "right" : "left"} />
       </div>
       <Show when={props.sides.leftId() === props.sides.rightId()}>
         <p class="text-smallest text-on-surface-secondary">
