@@ -8,6 +8,7 @@ import { emptyPlan, sync, type Sync } from "#core/sync";
 import { rememberSync } from "./diagnostics";
 import { contentHostFor } from "./endpoints";
 import type { Services } from "./services";
+import { syncPhase } from "./syncPhase";
 import { chosenMode } from "./syncSettings";
 import { syncStatus } from "./syncStatus";
 import { readSync, type ReadSyncOptions, type SyncFacts } from "./ui/cloud/reading";
@@ -89,8 +90,8 @@ const optionsFor = (services: Services, project: Project): ReadSyncOptions => ({
   host: contentHostFor(services.settings),
   online: syncStatus.online(),
   lastFailure: syncStatus.lastFailure(),
-  checking: syncStatus.checking(project.root),
-  sendRefused: syncStatus.sendRefused(),
+  checking: syncPhase.of(project.root).kind === "checking",
+  sendRefused: syncPhase.of(project.root).refused !== undefined,
   fetchedAt: fetched().get(project.root),
   chosenMode: chosenMode(services.settings, project.root),
 });

@@ -11,12 +11,16 @@ import process from "node:process";
 
 import { projectTransitions } from "../../src/core/project/lifecycle.ts";
 import { recordTransitions } from "../../src/core/save/recordPhase.ts";
+import { syncTransitions } from "../../src/core/sync/lifecycle.ts";
 
 interface Machine {
   readonly id: string;
   readonly chapter: string;
   readonly initial: string;
-  readonly transitions: Readonly<Record<string, Readonly<Record<string, string>>>>;
+  /** A pair of targets is "plain, or when a send is waiting": both are drawn. */
+  readonly transitions: Readonly<
+    Record<string, Readonly<Record<string, string | readonly string[]>>>
+  >;
 }
 
 const machines: readonly Machine[] = [
@@ -32,14 +36,21 @@ const machines: readonly Machine[] = [
     initial: "editing",
     transitions: recordTransitions,
   },
+  {
+    id: "sync-phase",
+    chapter: "documentation/architecture/sync.md",
+    initial: "idle",
+    transitions: syncTransitions,
+  },
 ];
 
 const chartOf = (machine: Machine): string => {
   const lines = ["```mermaid", "stateDiagram-v2", `  [*] --> ${machine.initial}`];
   for (const [from, ways] of Object.entries(machine.transitions)) {
     const eventsTo = new Map<string, string[]>();
-    for (const [event, to] of Object.entries(ways))
-      eventsTo.set(to, [...(eventsTo.get(to) ?? []), event]);
+    for (const [event, way] of Object.entries(ways))
+      for (const to of typeof way === "string" ? [way] : way)
+        eventsTo.set(to, [...(eventsTo.get(to) ?? []), event]);
     for (const [to, events] of eventsTo) lines.push(`  ${from} --> ${to} : ${events.join(", ")}`);
   }
   lines.push("```");
