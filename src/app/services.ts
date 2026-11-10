@@ -63,6 +63,8 @@ import { startLogFiles, type LogFiles } from "./diagnostics";
 import { appIdFor, bootTransport, rememberBootEndpoints, resolveEndpoints } from "./endpoints";
 import { env } from "./env";
 import { legacyMarkersOf } from "./legacyMarkers";
+import { shellKeys } from "./settings";
+import { syncStatus } from "./syncStatus";
 
 const PROJECTS_ROOT = `${OPFS_ROOT}/projects`;
 
@@ -336,6 +338,8 @@ const resolveDomain = () =>
     const galley = yield* Galley;
     const hostInfo = yield* HostInfo;
     const settings = yield* Settings;
+    // Before anything can ask the network: a remembered "work offline" holds from the first screen.
+    syncStatus.setWorkOffline(settings.get(shellKeys(settings).workOffline));
     const credentials = yield* Credentials;
     const dialogs = yield* Dialogs;
     const updater = yield* Updater;

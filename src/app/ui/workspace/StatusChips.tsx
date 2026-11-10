@@ -76,7 +76,6 @@ export function NetworkChip(props: {
   const shell = useShell();
   const settings = shell.services.settings;
   const key = shellKeys(settings).workOffline;
-  syncStatus.setWorkOffline(settings.get(key));
   const [open, setOpen] = createSignal(false, { name: "networkOpen" });
 
   const connected = (): boolean => syncStatus.online();
