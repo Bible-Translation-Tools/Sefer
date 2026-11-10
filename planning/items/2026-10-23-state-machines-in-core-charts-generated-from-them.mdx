@@ -360,3 +360,43 @@ A new machine adds one row to the list in that tool.
 Also ruled: project creation and remote sync should both be machines with a chart in the docs.
 Neither is built. Sync waits on the order with the designer's PR 15, which changes
 `syncStatus.ts` and `src/core/sync`.
+
+## Ruled and built 2026-11-10: the network gate, the sync machine, the save chip, linked zips
+
+After the designer's PR 15 landed (the Online / Offline switch and the save chip), Will ruled:
+
+- **Work offline is a full kill switch.** Built: one named gate (`src/core/network/gate.ts`) in
+  front of the Remote, the Updater, the WACS API, the Language API, the downloads list and
+  telemetry. The desktop app starts offline until the person chooses; the projects screen says
+  searching is off and offers Go online.
+- **Sync is a machine, and every send takes one path.** Built: `src/core/sync/lifecycle.ts`,
+  one per project, with its chart in `sync.md`. "Send while a check is running: queue one send
+  and drop duplicates" (Will: "Fine").
+- **Where a send goes is an input the machine reads, set in project settings.** Already there:
+  the per-project collaboration mode (shared, or own copy) is what `routing` reads. Nothing new
+  was built.
+- **The save chip follows the save model.** Built: "Unsaved changes" or "Saved"; the backup shows
+  only when it fails. Will on the heartbeat: "we don't want to be thrashing and writing to disk".
+- **Zips and folders keep their git remote.** Built: the export zip carries history and
+  remotes; intake re-states `origin` and `copy` in the fresh config.
+- **Left as is until Thomas and the PO decide:** the local review step on Save.
+- **Left out:** automatic versions with no review ("Our save model is fine"), "Request access"
+  (needs email infrastructure), and matching an unlinked zip to a WACS project by probing
+  ("randomly probing WACS is gonna be problematic cause of forks").
+
+<Followup id="download-machine">
+  Downloading a project (clone, with its two-second cancel window and progress) as a machine with a
+  chart. Will: "I just mean downloading, not creation." Not started.
+</Followup>
+
+<Followup id="sync-machine-undriven">
+  The sync machine was driven only on a project with no shared copy (save, then Send now). Not
+  driven: a real send to WACS, a refused send, a send queued behind a check, a settle, and anything
+  on desktop, including desktop starting offline.
+</Followup>
+
+<Followup id="chip-on-projects">
+  The Online / Offline switch lives in a project's app bar, so on the projects screen the only way
+  online is the Go online button in the WACS list. Ask Thomas whether the switch belongs in the app
+  bar everywhere.
+</Followup>
