@@ -1,9 +1,12 @@
+/**
+ * What a download's card shows. Whether it is waiting, under way or failed is not here: that
+ * is the download's phase (`downloadRuns.of(id)`, `src/core/remote/download.ts`).
+ */
 export interface PendingDownload {
   readonly id: string;
   readonly root: string;
   readonly language: string;
   readonly code: string;
-  readonly state: "downloading" | "failed";
   readonly status: string;
   readonly percent: number | undefined;
 }

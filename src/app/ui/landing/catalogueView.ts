@@ -9,6 +9,7 @@ import {
   type CatalogueEntry,
 } from "../../catalogue";
 import { describe } from "../../describe";
+import { downloadRuns } from "../../downloadRuns";
 import type { Services } from "../../services";
 import { syncStatus } from "../../syncStatus";
 import { type SortDirection } from "../primitives";
@@ -231,7 +232,6 @@ const createSortedEntries = (
 export const createCatalogueRows = (
   entries: Accessor<readonly CatalogueEntry[] | undefined>,
   filters: Filters,
-  busy: Accessor<ReadonlySet<string>>,
   downloadReason: (entry: CatalogueEntry) => string,
 ) => {
   const { sorted, updatedOf } = createSortedEntries(entries, filters);
@@ -243,14 +243,13 @@ export const createCatalogueRows = (
 
   const rows = createMemo(
     (): readonly CatalogueRow[] => {
-      const running = busy();
       return sorted().map((entry) => ({
         entry,
         name: entry.naturalName,
         english: entry.anglicizedName === entry.naturalName ? "" : entry.anglicizedName,
         updated: updatedOf(entry),
         refusal: downloadReason(entry),
-        downloading: running.has(entry.id),
+        downloading: downloadRuns.busy(entry.id),
       }));
     },
     { name: "catalogueRows" },

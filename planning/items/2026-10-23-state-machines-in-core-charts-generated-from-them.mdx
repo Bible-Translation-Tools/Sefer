@@ -384,10 +384,13 @@ After the designer's PR 15 landed (the Online / Offline switch and the save chip
   (needs email infrastructure), and matching an unlinked zip to a WACS project by probing
   ("randomly probing WACS is gonna be problematic cause of forks").
 
-<Followup id="download-machine">
-  Downloading a project (clone, with its two-second cancel window and progress) as a machine with a
-  chart. Will: "I just mean downloading, not creation." Not started.
-</Followup>
+**The download machine is built (2026-11-10).** `src/core/remote/download.ts`: `idle`,
+`pending` (the two-second cancel window), `fetching`, `done`, `failed`; chart in `landing.md`.
+The WACS list's project downloads now have the window too, with Cancel on the card, and the
+reference panel's own timers are gone. Not folded in: a clone by pasted link (the import hub)
+and the Writer migration keep their own progress.
+
+<Followup id="download-machine-undriven">Driven on the Web: cancel inside the window (nothing fetched) and a project download that ran past it and arrived. Not driven: a failed download and its Dismiss, the reference panel's row, and desktop.</Followup>
 
 <Followup id="sync-machine-undriven">
   The sync machine was driven only on a project with no shared copy (save, then Send now). Not

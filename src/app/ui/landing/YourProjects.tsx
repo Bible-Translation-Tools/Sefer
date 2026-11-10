@@ -6,11 +6,12 @@ import FolderOpen from "lucide-solid/icons/folder-open";
 import MoreVertical from "lucide-solid/icons/more-vertical";
 import PencilLine from "lucide-solid/icons/pencil-line";
 import Trash2 from "lucide-solid/icons/trash-2";
-import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
+import { For, Match, Show, Switch, createEffect, createMemo, createSignal } from "solid-js";
 
 import { m } from "#app/paraglide/messages";
 import { touchProject } from "#core/project/projectIndex";
 
+import { downloadRuns } from "../../downloadRuns";
 import { exportProjectZip, renameProject } from "../../projectCommands";
 import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
@@ -269,17 +270,19 @@ const DownloadLine = (props: { readonly download: PendingDownload }) => (
   <div class="flex items-baseline gap-2 text-smallest">
     <span
       class={
-        props.download.state === "failed"
+        downloadRuns.of(props.download.id).kind === "failed"
           ? "min-w-0 flex-1 truncate text-on-surface-error"
           : "min-w-0 flex-1 truncate text-on-surface-secondary"
       }
       title={props.download.status}
     >
-      {props.download.state === "failed"
+      {downloadRuns.of(props.download.id).kind === "failed"
         ? m.landing_download_failed()
-        : m.landing_downloading_status({ status: props.download.status })}
+        : downloadRuns.of(props.download.id).kind === "pending"
+          ? m.common_starting()
+          : m.landing_downloading_status({ status: props.download.status })}
     </span>
-    <Show when={props.download.state === "downloading" && props.download.percent !== undefined}>
+    <Show when={downloadRuns.busy(props.download.id) && props.download.percent !== undefined}>
       <span class="shrink-0 tabular-nums font-medium text-on-surface-primary">
         {m.landing_percent({ percent: props.download.percent ?? 0 })}
       </span>
@@ -323,7 +326,7 @@ const DownloadCard = (props: {
   >
     <Card
       class="flex flex-col gap-1"
-      aria-busy={props.download.state === "downloading" ? "true" : "false"}
+      aria-busy={downloadRuns.busy(props.download.id) ? "true" : "false"}
     >
       <h3 class="truncate text-h4 font-semibold text-on-surface-primary">
         {props.download.language}
@@ -333,16 +336,37 @@ const DownloadCard = (props: {
       </code>
       <div class="mt-auto flex flex-col gap-1.5 pt-4">
         <DownloadLine download={props.download} />
-        <Show
-          when={props.download.state === "downloading"}
+        {/* Inside the window nothing has been asked of the network, so Cancel costs nothing;
+            once it is under way there is only the bar. */}
+        <Switch
           fallback={
-            <Button size="sm" onClick={() => props.onDismiss(props.download.id)}>
+            <Button
+              size="sm"
+              onClick={() => {
+                downloadRuns.dismiss(props.download.id);
+                props.onDismiss(props.download.id);
+              }}
+            >
               {m.common_dismiss()}
             </Button>
           }
         >
-          <DownloadBar download={props.download} />
-        </Show>
+          <Match when={downloadRuns.of(props.download.id).kind === "pending"}>
+            <Button
+              size="sm"
+              data-testid="download-cancel"
+              onClick={() => {
+                downloadRuns.cancel(props.download.id);
+                props.onDismiss(props.download.id);
+              }}
+            >
+              {m.common_cancel()}
+            </Button>
+          </Match>
+          <Match when={downloadRuns.of(props.download.id).kind === "fetching"}>
+            <DownloadBar download={props.download} />
+          </Match>
+        </Switch>
       </div>
     </Card>
   </li>

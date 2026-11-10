@@ -61,6 +61,7 @@ import {
 import { announceSourceTexts, libraryRevision, sourceTextCopy } from "../../arrival";
 import { listSourceTexts, listTranslationNotes, type ListedText } from "../../catalogue";
 import { describe, remoteReasonOf } from "../../describe";
+import { downloadRuns } from "../../downloadRuns";
 import { downloadHelp, helpDownloads, removeHelp } from "../../kinds/download";
 import { KIND_ROLES, roleFor } from "../../kinds/table";
 import { uiLocale } from "../../locale";
@@ -372,7 +373,8 @@ export function ReferenceColumn() {
   };
 
   /** From the split dropdown's language list (`keep`), a download stays there rather than going on show. */
-  const fetchBible = (text: ListedText, keep = false): void => {
+  /** Resolves to whether the text arrived; a failure is said to the person here. */
+  const fetchBible = (text: ListedText, keep = false): Promise<boolean> => {
     const name = text.languageName || text.language;
     const operation = services.composition.observability.operation("import.remote", {
       "import.source": "reference",
@@ -384,30 +386,34 @@ export function ReferenceColumn() {
       setBusy(true);
       setFetching(name);
     }
-    void services
-      .run(
-        Effect.provideService(
-          sourceTextCopy(services, text.url, text.repository),
-          Observability,
-          operation,
-        ),
-      )
-      // oxlint-disable-next-line solid/reactivity
-      .then((resource) => {
-        operation.end("passed", { "import.phase": "complete" });
-        if (!keep) show(resource);
-      })
-      .catch((cause: unknown) => {
-        operation.end(remoteVerdict(remoteReasonOf(cause)));
-        shell.report(m.workspace_could_not_add_name_reason({ name, reason: describe(cause) }));
-      })
-      .finally(() => {
-        if (keep) pull(text.repository, false);
-        else {
-          setBusy(false);
-          setFetching("");
-        }
-      });
+    return (
+      services
+        .run(
+          Effect.provideService(
+            sourceTextCopy(services, text.url, text.repository),
+            Observability,
+            operation,
+          ),
+        )
+        // oxlint-disable-next-line solid/reactivity
+        .then((resource) => {
+          operation.end("passed", { "import.phase": "complete" });
+          if (!keep) show(resource);
+          return true;
+        })
+        .catch((cause: unknown) => {
+          operation.end(remoteVerdict(remoteReasonOf(cause)));
+          shell.report(m.workspace_could_not_add_name_reason({ name, reason: describe(cause) }));
+          return false;
+        })
+        .finally(() => {
+          if (keep) pull(text.repository, false);
+          else {
+            setBusy(false);
+            setFetching("");
+          }
+        })
+    );
   };
 
   const heldHelps = (): readonly Resource[] => copies().filter((resource) => !isBible(resource));
@@ -444,19 +450,24 @@ export function ReferenceColumn() {
     );
   };
 
-  const fetchHelp = (help: ListedText): void => {
+  const fetchHelp = (help: ListedText): Promise<boolean> => {
     setBusy(true);
     setFetching(
       m.workspace_translation_notes_language({ language: help.languageName || help.language }),
     );
-    void downloadHelp(services, help)
-      // oxlint-disable-next-line solid/reactivity
-      .then((resource) => show(resource))
-      .catch(() => undefined)
-      .finally(() => {
-        setBusy(false);
-        setFetching("");
-      });
+    return (
+      downloadHelp(services, help)
+        // oxlint-disable-next-line solid/reactivity
+        .then((resource) => {
+          show(resource);
+          return true;
+        })
+        .catch(() => false)
+        .finally(() => {
+          setBusy(false);
+          setFetching("");
+        })
+    );
   };
 
   const download = (): void => {
@@ -506,7 +517,7 @@ export function ReferenceColumn() {
         readonly kind: "download";
         readonly key: string;
         readonly name: string;
-        readonly download: () => void;
+        readonly download: () => Promise<boolean>;
         readonly pulling: () => boolean;
       };
   const byName = (a: Offer, b: Offer): number => a.name.localeCompare(b.name);
@@ -643,7 +654,7 @@ export function ReferenceColumn() {
         </For>
         <For each={biblesHere()}>
           {(text) => (
-            <MenuItem class={ROW} onSelect={() => fetchBible(text)}>
+            <MenuItem class={ROW} onSelect={() => void fetchBible(text)}>
               <span class="min-w-0 flex-1 truncate">{text.title}</span>
               <Download aria-hidden="true" class="size-5 shrink-0" />
             </MenuItem>
@@ -651,7 +662,7 @@ export function ReferenceColumn() {
         </For>
         <For each={notesHere()}>
           {(help) => (
-            <MenuItem class={ROW} onSelect={() => fetchHelp(help)}>
+            <MenuItem class={ROW} onSelect={() => void fetchHelp(help)}>
               <span class="min-w-0 flex-1 truncate">{m.reference_shelf_notes()}</span>
               <Show
                 when={helpDownloads().has(help.repository)}
@@ -694,44 +705,23 @@ export function ReferenceColumn() {
    * and the right half picks the text within it.
    */
   /**
-   * A grace period before a download starts: two seconds in which the row
-   * reads "Starting…" and pressing it again calls it off. Nothing has been
-   * fetched yet, so there is nothing to undo — a mis-tap costs nothing. Once
-   * the clone has begun it runs to the end: the git hosts cannot stop one
-   * part-way yet, and a half-stopped clone leaves a folder that blocks the
-   * next try.
+   * A download from this list is the same machine as any other
+   * (`src/core/remote/download.ts`): for two seconds the row reads
+   * "Starting…" and pressing it again calls it off, since nothing has been
+   * fetched yet. Once the clone has begun it runs to the end.
    */
-  const DOWNLOAD_GRACE_MS = 2000;
-  const [starting, setStarting] = createSignal<ReadonlySet<string>>(new Set(), {
-    name: "referenceStarting",
-  });
-  const graceTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  const settle = (key: string): void => {
-    graceTimers.delete(key);
-    setStarting((held) => {
-      const next = new Set(held);
-      next.delete(key);
-      return next;
+  const asked = new Set<string>();
+  const startSoon = (key: string, download: () => Promise<boolean>): void => {
+    asked.add(key);
+    downloadRuns.ask(key, async () => {
+      if (!(await download())) throw new Error("the download did not arrive");
     });
   };
-  const startSoon = (key: string, download: () => void): void => {
-    setStarting((held) => new Set(held).add(key));
-    graceTimers.set(
-      key,
-      setTimeout(() => {
-        settle(key);
-        download();
-      }, DOWNLOAD_GRACE_MS),
-    );
-  };
-  const callOff = (key: string): void => {
-    clearTimeout(graceTimers.get(key));
-    settle(key);
-  };
-  // Leaving the screen inside the grace period calls the download off too.
+  // Leaving the screen inside the window calls the download off too.
   onCleanup(() => {
-    for (const timer of graceTimers.values()) clearTimeout(timer);
+    for (const key of asked) downloadRuns.cancel(key);
   });
+  const starting = (key: string): boolean => downloadRuns.of(key).kind === "pending";
 
   const GatewayPicker = () => (
     // The panel's whole width. The language takes what is left over; the text,
@@ -789,14 +779,14 @@ export function ReferenceColumn() {
                       <button
                         type="button"
                         aria-label={
-                          starting().has(offer.key)
+                          starting(offer.key)
                             ? m.reference_download_cancel({ name: offer.name })
                             : m.reference_download_named({ name: offer.name })
                         }
                         disabled={offer.pulling()}
                         class="flex min-h-12 w-full cursor-pointer items-center gap-3 px-4 text-start text-small text-on-surface-primary transition-colors hover:bg-surface-secondary disabled:cursor-default disabled:hover:bg-transparent"
                         onClick={() => {
-                          if (starting().has(offer.key)) callOff(offer.key);
+                          if (starting(offer.key)) downloadRuns.cancel(offer.key);
                           else startSoon(offer.key, () => offer.download());
                         }}
                       >
@@ -807,7 +797,7 @@ export function ReferenceColumn() {
                           when={offer.pulling()}
                           fallback={
                             <Show
-                              when={starting().has(offer.key)}
+                              when={starting(offer.key)}
                               fallback={
                                 <span class="flex shrink-0 items-center gap-1.5 font-medium text-brand">
                                   <Download aria-hidden="true" class="size-5" />

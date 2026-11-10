@@ -10,6 +10,7 @@ import path from "node:path";
 import process from "node:process";
 
 import { projectTransitions } from "../../src/core/project/lifecycle.ts";
+import { downloadTransitions } from "../../src/core/remote/download.ts";
 import { recordTransitions } from "../../src/core/save/recordPhase.ts";
 import { syncTransitions } from "../../src/core/sync/lifecycle.ts";
 
@@ -35,6 +36,12 @@ const machines: readonly Machine[] = [
     chapter: "documentation/architecture/review.md",
     initial: "editing",
     transitions: recordTransitions,
+  },
+  {
+    id: "download-phase",
+    chapter: "documentation/architecture/landing.md",
+    initial: "idle",
+    transitions: downloadTransitions,
   },
   {
     id: "sync-phase",

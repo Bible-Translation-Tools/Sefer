@@ -13,6 +13,7 @@ import {
 } from "../../arrival";
 import { type CatalogueEntry } from "../../catalogue";
 import { describe, describeTransfer, reasonOf, remoteReasonOf } from "../../describe";
+import { DOWNLOAD_WINDOW_MS, downloadRuns } from "../../downloadRuns";
 import type { Services } from "../../services";
 import { toasts } from "../primitives";
 import type { PendingDownload } from "./downloads";
@@ -93,7 +94,6 @@ const beginTracking = (
         root: into,
         language: entry.naturalName,
         code: entry.code,
-        state: "downloading",
         status: m.common_starting(),
         percent: undefined,
       },
@@ -102,27 +102,49 @@ const beginTracking = (
   return toast;
 };
 
+/**
+ * Download a catalogue row. The download is one machine (`src/core/remote/download.ts`),
+ * keyed by the row: a project waits out the cancel window with its card already in the list,
+ * where Cancel is; a source text has no card to hold a Cancel, so it starts at once.
+ */
 export const downloadEntry = (
   services: Services,
   downloads: DownloadSink,
-  setBusy: (id: string, on: boolean) => void,
   entry: CatalogueEntry,
   from: DOMRect,
   open: (root: string) => void,
 ): void => {
+  if (downloadRuns.busy(entry.id)) return;
   const kind: ArrivalKind = entry.type === "gateway" ? "sourceText" : "project";
   const into = arrivalRoot(services, kind, entry.gitUrl);
+  if (kind === "project") beginTracking(downloads, entry, kind, into, from);
+  downloadRuns.ask(
+    entry.id,
+    () => fetchEntry(services, downloads, entry, kind, into, from, open),
+    kind === "project" ? DOWNLOAD_WINDOW_MS : 0,
+  );
+};
+
+const fetchEntry = async (
+  services: Services,
+  downloads: DownloadSink,
+  entry: CatalogueEntry,
+  kind: ArrivalKind,
+  into: string,
+  from: DOMRect,
+  open: (root: string) => void,
+): Promise<void> => {
   let arrivedAt = into;
-  setBusy(entry.id, true);
-  const toast = beginTracking(downloads, entry, kind, into, from);
+  const toast =
+    kind === "sourceText" ? beginTracking(downloads, entry, kind, into, from) : undefined;
   const watching = watchProgress(services, entry, toast, downloads);
   const operation = services.composition.observability.operation("import.remote", {
     "import.source": "catalogue",
     "import.host": services.hostInfo.kind(),
     "catalogue.type": entry.type,
   });
-  void services
-    .run(
+  try {
+    const outcome = await services.run(
       Effect.provideService(
         Effect.gen(function* () {
           if (kind === "sourceText") {
@@ -138,34 +160,31 @@ export const downloadEntry = (
         Observability,
         operation,
       ),
-    )
-    .then((outcome) => {
-      operation.end("passed", { "import.phase": "complete", "import.outcome": outcome });
-      announceDownloaded(outcome, entry, toast, downloads, () => {
-        void announceSourceTexts(services, arrivedAt);
+    );
+    operation.end("passed", { "import.phase": "complete", "import.outcome": outcome });
+    announceDownloaded(outcome, entry, toast, downloads, () => {
+      void announceSourceTexts(services, arrivedAt);
+    });
+  } catch (cause) {
+    operation.end(remoteVerdict(remoteReasonOf(cause)), {
+      "import.reason": reasonOf(cause) ?? "Unknown",
+    });
+    if (toast !== undefined) toasts.dismiss(toast);
+    else downloads.update(entry.id, { status: describe(cause) });
+    if (cause instanceof AlreadyHeld)
+      toasts.info({
+        title: m.landing_already_on_this_device(),
+        message: cause.description,
+        action: { label: m.landing_open(), onPress: () => open(cause.root) },
       });
-    })
-    .catch((cause: unknown) => {
-      operation.end(remoteVerdict(remoteReasonOf(cause)), {
-        "import.reason": reasonOf(cause) ?? "Unknown",
-      });
-      if (toast !== undefined) toasts.dismiss(toast);
-      else downloads.update(entry.id, { state: "failed", status: describe(cause) });
-      if (cause instanceof AlreadyHeld) {
-        toasts.info({
-          title: m.landing_already_on_this_device(),
-          message: cause.description,
-          action: { label: m.landing_open(), onPress: () => open(cause.root) },
-        });
-        return;
-      }
+    else
       toasts.error({
         title: m.landing_could_not_download_name({ name: entry.repo }),
         message: describe(cause),
       });
-    })
-    .finally(() => {
-      Effect.runFork(Fiber.interrupt(watching));
-      setBusy(entry.id, false);
-    });
+    // The machine's `failed`: the card and the row read it.
+    throw cause;
+  } finally {
+    Effect.runFork(Fiber.interrupt(watching));
+  }
 };

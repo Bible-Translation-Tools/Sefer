@@ -73,6 +73,26 @@ The two paths differ in the FIRST step only:
 
 Intake also does the two things a picker leaves to its caller: it strips the one folder every entry shares (so a zipped `small-nt/…` classifies exactly as the folder `small-nt` does, with `metadata.json` at the root where the classifier looks), and it drops `__MACOSX`, `.DS_Store` and friends. It is reached through a **dynamic import** — from the import hub, and from Review's zip and folder sources (`src/app/ui/review/sources.ts`) — so the zip decoder is fetched by the people who import something and never sits in the first load — and the desktop bundle never carries it at all.
 
+**A download is one machine.** `src/core/remote/download.ts` holds its phases (`idle`, `pending`, `fetching`, `done`, `failed`) and `src/app/downloadRuns.ts` holds each download's phase by key, outside any screen, so a download asked for on one screen is the same download on another. A clone cannot be stopped part-way (the bytes come back regardless, and a half-written folder blocks the next try), so the only cancel is before it starts: `pending` is a two-second window (`DOWNLOAD_WINDOW_MS`) in which nothing has been asked of the network. A project from the WACS list shows its card at once with **Cancel**; the reference panel's language row reads "Starting…" and a second press calls it off. A source text downloaded from the WACS list has only a toast, with nowhere to put Cancel, so it skips the window. How far along a download is (bytes, a percentage) is not a phase: the card keeps that beside it.
+
+<!-- chart:download-phase -->
+
+```mermaid
+stateDiagram-v2
+  [*] --> idle
+  idle --> pending : ask
+  pending --> idle : cancel
+  pending --> fetching : elapsed
+  fetching --> done : arrived
+  fetching --> failed : failed
+  done --> pending : ask
+  done --> idle : dismiss
+  failed --> pending : ask
+  failed --> idle : dismiss
+```
+
+<!-- /chart:download-phase -->
+
 Every import then ends in one more step, `intakeRepository` (`src/core/git/intake.ts`, run by the import hub for a zip, a folder and a clone alike): the project leaves with a repository and an ARRIVAL COMMIT of the files the import wrote. An arriving `.git` is adopted through an allowlist or replaced, and `.sefer/` is excluded from commits ([git](git.md), Intake). The arriving config is never kept, but its `origin` and `copy` remotes are re-stated in the fresh one (`keptRemotes`: http(s) only, any name or password in the address removed), so a zip or folder of a project on WACS arrives linked to it. Credentials are held per host, so an address pointing elsewhere gets none.
 
 The progress dialog counts files while the write runs, because an import of sixty-six books is long enough that a spinner is not an answer.
