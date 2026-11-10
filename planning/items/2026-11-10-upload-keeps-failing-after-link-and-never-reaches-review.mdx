@@ -1,0 +1,49 @@
+---
+id: 7b1c4e2a-9f3d-4c61-8a5e-2d0f6b9e1a74
+title: "Upload keeps failing after Link, and never reaches review"
+kind: question
+status: open
+created: 2026-11-10
+updated: 2026-11-10
+sha: 8bfb9174
+tags: [sync]
+---
+
+For paisano, from Thomas (2026-11-10), SEFER-92 and SEFER-83. Thomas isn't sure what the right behaviour is here, so these are questions, not a fix.
+
+> I seem to keep running into errors when I try uploading. Even if I link my project
+> elsewhere, it keeps repeating the error and asking me to relink or rename.
+> The upload to WACS should trigger the review phase… nothing seems to happen when I do hit
+> upload, so it might make sense to include another phase for when the user uploads but
+> hasn't reviewed changes yet.
+
+## What the code does today
+
+- **Link** (`link()` in `src/app/ui/cloud/SyncButton.tsx`) looks up the project with that name
+  on the person's account (`Gitea.getRepo`) and calls `Remote.attach`. It does **not fetch**.
+  Right after linking, `reading.remoteKnown` is false, so Sefer doesn't know what's on WACS yet.
+- **Upload** (`sendNow`) then pushes straight away. If the WACS project has versions this device
+  doesn't have, the push is refused. That happens with a project from a zip, or with an
+  unrelated project that shares the name. The refusal shows as a red line, not as review.
+- `syncStatus.sendRefused` is a **single global flag**, not one per project. Once an upload is
+  refused, "Upload failed" can stay on any project until a later send succeeds.
+- Not reproduced: the name-taken message ("relink or rename") coming back _after_ Link
+  succeeded. That message comes only from `publish()`, the form shown while the project has no
+  origin. Either the link wasn't kept, or the popover was still reading a stale or stand-in
+  state. Worth checking with `__sefer.observability.errors()` in a signed-in session. The
+  "Sync state" design tweak also overrides the real reading whenever it isn't on "live".
+
+## Questions
+
+1. Should Link fetch straight away and route to review if the two histories don't join? Or
+   should Link refuse when this copy's first version isn't in the WACS project's history
+   (that is, it's a different project with the same name)?
+2. Should Upload always fetch first? Then, if WACS has moved:
+   - Thomas's suggestion is a new state, **"Uploaded, waiting for review"**, or rather "not
+     uploaded until reviewed". Upload opens the review of what came in from WACS, and the
+     upload goes ahead only after the person accepts it.
+   - Today a refused push just says so. Nobody is taken to `/review`.
+3. Should `sendRefused` be kept per project root?
+4. Could Sefer know before the person presses anything? When the popover opens, check
+   `getRepo` for the suggested name and offer Link up front, and read `permissions.push` to
+   choose between Upload and Submit changes.

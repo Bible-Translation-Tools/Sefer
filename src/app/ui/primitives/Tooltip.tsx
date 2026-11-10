@@ -27,7 +27,7 @@ export function Tooltip(props: TooltipProps) {
       </CorvuTooltip.Trigger>
       {/* Above a Popover (z-60), so a tooltip inside one is not drawn behind it. */}
       <CorvuTooltip.Portal>
-        <CorvuTooltip.Content class="z-70 rounded-md bg-on-surface-primary px-2 py-1 text-smallest text-surface-primary shadow-medium">
+        <CorvuTooltip.Content class="z-70 max-w-xs rounded-md bg-on-surface-primary px-2 py-1 text-smallest text-surface-primary shadow-medium">
           {props.label}
         </CorvuTooltip.Content>
       </CorvuTooltip.Portal>
