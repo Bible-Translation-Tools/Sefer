@@ -31,6 +31,39 @@ const CONFIG =
 
 const EXCLUDE = ".sefer/";
 
+/** The remotes Sefer itself names: the shared project and the person's own copy. */
+const KEPT_REMOTES = new Set(["origin", "copy"]);
+
+/**
+ * The incoming config's remotes, re-stated by us: only `origin` and `copy`, only an http(s)
+ * address, and never a name or password inside it. Nothing else of a foreign config is kept,
+ * since a config can name programs to run. A project handed over as a folder or a zip then
+ * still sends to the shared project it came from.
+ */
+const keptRemotes = (config: string): string => {
+  const out: string[] = [];
+  let name: string | undefined;
+  for (const line of config.split("\n")) {
+    const section = /^\s*\[(.*)\]\s*$/u.exec(line);
+    if (section !== null) {
+      name = /^remote "([^"]+)"$/u.exec(section[1] ?? "")?.[1];
+      continue;
+    }
+    const url = /^\s*url\s*=\s*(\S+)\s*$/u.exec(line)?.[1];
+    if (name === undefined || url === undefined || !KEPT_REMOTES.has(name)) continue;
+    if (!URL.canParse(url)) continue;
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") continue;
+    parsed.username = "";
+    parsed.password = "";
+    out.push(
+      `[remote "${name}"]\n\turl = ${parsed.href}\n\tfetch = +refs/heads/*:refs/remotes/${name}/*\n`,
+    );
+    name = undefined;
+  }
+  return out.join("");
+};
+
 const withoutRemoteRefs = (text: string): string => {
   const out: string[] = [];
   let dropping = false;
@@ -68,7 +101,11 @@ const adopt = (
         packed,
         withoutRemoteRefs(yield* fileSystem.readFileString(packed)),
       );
-    yield* fileSystem.writeFileString(joinPath(gitDir, "config"), CONFIG);
+    const config = joinPath(gitDir, "config");
+    const remotes = (yield* fileSystem.exists(config))
+      ? keptRemotes(yield* fileSystem.readFileString(config))
+      : "";
+    yield* fileSystem.writeFileString(config, `${CONFIG}${remotes}`);
     return Option.none();
   });
 
