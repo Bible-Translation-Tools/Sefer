@@ -6,7 +6,7 @@ import FolderOpen from "lucide-solid/icons/folder-open";
 import MoreVertical from "lucide-solid/icons/more-vertical";
 import PencilLine from "lucide-solid/icons/pencil-line";
 import Trash2 from "lucide-solid/icons/trash-2";
-import { For, Match, Show, Switch, createEffect, createMemo, createSignal } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 
 import { m } from "#app/paraglide/messages";
 import { touchProject } from "#core/project/projectIndex";
@@ -250,7 +250,12 @@ const createStrip = (
 ) => {
   const pending = (): readonly PendingDownload[] => {
     const listed = new Set((rows() ?? []).map((row) => row.root));
-    return props.downloads.filter((download) => !listed.has(download.root));
+    // A card is a download waiting, under way or failed. One that was cancelled, dismissed
+    // or has arrived is not drawn again, even when its project is later deleted.
+    return props.downloads.filter((download) => {
+      const kind = downloadRuns.of(download.id).kind;
+      return !listed.has(download.root) && kind !== "idle" && kind !== "done";
+    });
   };
 
   const flown = new Set<string>();
@@ -336,9 +341,10 @@ const DownloadCard = (props: {
       </code>
       <div class="mt-auto flex flex-col gap-1.5 pt-4">
         <DownloadLine download={props.download} />
-        {/* Inside the window nothing has been asked of the network, so Cancel costs nothing;
-            once it is under way there is only the bar. */}
-        <Switch
+        {/* Waiting or under way there is only the bar (Cancel is on the row that was pressed);
+            a failure stays until it is read. */}
+        <Show
+          when={downloadRuns.busy(props.download.id)}
           fallback={
             <Button
               size="sm"
@@ -351,22 +357,8 @@ const DownloadCard = (props: {
             </Button>
           }
         >
-          <Match when={downloadRuns.of(props.download.id).kind === "pending"}>
-            <Button
-              size="sm"
-              data-testid="download-cancel"
-              onClick={() => {
-                downloadRuns.cancel(props.download.id);
-                props.onDismiss(props.download.id);
-              }}
-            >
-              {m.common_cancel()}
-            </Button>
-          </Match>
-          <Match when={downloadRuns.of(props.download.id).kind === "fetching"}>
-            <DownloadBar download={props.download} />
-          </Match>
-        </Switch>
+          <DownloadBar download={props.download} />
+        </Show>
       </div>
     </Card>
   </li>

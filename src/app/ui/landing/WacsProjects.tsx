@@ -11,6 +11,7 @@ import { sourceKey } from "#core/project/shareLink";
 import { through } from "#core/remote/transport";
 
 import { catalogueFor, type CatalogueEntry } from "../../catalogue";
+import { downloadRuns } from "../../downloadRuns";
 import { transportFor } from "../../endpoints";
 import { chooseWorkOffline } from "../../network";
 import { m } from "../../paraglide/messages";
@@ -312,22 +313,39 @@ const DownloadButton = (props: {
         </Tooltip>
       }
     >
-      <Button
-        variant="link"
-        size="flush"
-        loading={props.item.downloading}
-        icon={<Download size={16} aria-hidden="true" />}
-        onClick={(event) =>
-          props.onDownload(
-            props.item.entry,
-            (
-              event.currentTarget.closest("[role=row]") ?? event.currentTarget
-            ).getBoundingClientRect(),
-          )
+      {/* Inside the window nothing has been asked of the network, and Cancel is where the
+          person's pointer already is: the button they just pressed. */}
+      <Show
+        when={downloadRuns.of(props.item.entry.id).kind === "pending"}
+        fallback={
+          <Button
+            variant="link"
+            size="flush"
+            loading={props.item.downloading}
+            icon={<Download size={16} aria-hidden="true" />}
+            onClick={(event) =>
+              props.onDownload(
+                props.item.entry,
+                (
+                  event.currentTarget.closest("[role=row]") ?? event.currentTarget
+                ).getBoundingClientRect(),
+              )
+            }
+          >
+            {m.common_download()}
+          </Button>
         }
       >
-        {m.common_download()}
-      </Button>
+        <Button
+          variant="link"
+          size="flush"
+          data-testid="download-cancel"
+          icon={<X size={16} aria-hidden="true" />}
+          onClick={() => downloadRuns.cancel(props.item.entry.id)}
+        >
+          {m.common_cancel()}
+        </Button>
+      </Show>
     </Show>
   </>
 );
