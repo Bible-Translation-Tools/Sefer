@@ -18,7 +18,7 @@ import { describe } from "../../describe";
 import { m } from "../../paraglide/messages";
 import { useShell, type Shell } from "../../ProjectContext";
 import { suggestMyChanges } from "../../suggestions";
-import { sendNow } from "../../syncActions";
+import { checkForChanges, sendNow } from "../../syncActions";
 import { syncStatus } from "../../syncStatus";
 import { syncWatch } from "../../syncWatch";
 import { Button, Input, Tooltip, toasts } from "../primitives";
@@ -497,7 +497,8 @@ const WacsBody = (props: {
         }
         setProblem("");
         setTaken(false);
-        await syncWatch.refresh(shell.services, project).catch(() => undefined);
+        // Fetch at once, so the popover knows what WACS holds before anything is uploaded.
+        await checkForChanges(shell.services, project);
         await collaboration.refresh(shell.services, project);
         toasts.success({ title: m.wacs_linked({ name: chosen }) });
       })
@@ -513,6 +514,9 @@ const WacsBody = (props: {
     void sendNow(shell.services, project)
       .then((outcome) => {
         if (outcome.kind === "sent") toasts.success({ title: sendOutcomeCopy(outcome).title });
+        // WACS holds work this device lacks: the review is the next step, so go there. The
+        // upload goes by itself once the review is saved (`settle` in `syncActions.ts`).
+        else if (outcome.kind === "refused" && outcome.reason === "Rejected") run("see");
         else setProblem(sendOutcomeCopy(outcome).title);
       })
       .catch((cause: unknown) => setProblem(briefly(cause)))

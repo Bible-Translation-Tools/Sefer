@@ -398,6 +398,9 @@ const settle = async (
   settled: ReadonlySet<BookId>,
   overrides: { readonly theirs?: string; readonly sendTo?: string },
 ): Promise<SettleOutcome> => {
+  // An upload was refused because the shared project had moved, and this review is what it
+  // was waiting for: it goes once the review is saved, whatever send-on-save says.
+  const uploadWaits = syncPhase.now(project.root).refused === "Rejected";
   const received = await services.run(
     Effect.result(receive({ project, settled, ...optionalTheirs(overrides.theirs) })),
   );
@@ -405,7 +408,12 @@ const settle = async (
     const dirty = project.books.filter((book) => services.save.dirty(book));
     const recorded = await recordVersion(services, project, dirty, message, author);
     syncPhase.send(project.root, { kind: "settled" });
-    const sending = sendAfterRecording(services, project, recorded, overrides.sendTo);
+    const sending = sendAfterRecording(
+      services,
+      project,
+      recorded,
+      overrides.sendTo ?? (uploadWaits ? await destination(services, project) : undefined),
+    );
     if (sending === undefined) void syncWatch.refresh(services, project).catch(() => undefined);
     return { kind: "received", recorded, sending };
   }
