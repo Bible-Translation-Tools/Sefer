@@ -819,14 +819,18 @@ export function SyncChip() {
     const stand = PREVIEWS[preview()];
     return stand === undefined ? sync.quick.sync() : syncOf({ ...emptyReading, ...stand });
   };
-  // What the pill says in amber until the person opens the popover: a refused
-  // upload they have not seen yet, WACS out of reach, or a sign-in WACS refused.
+  // What the pill says in amber until the person opens the popover: updates on WACS, a
+  // refused upload they have not seen yet, WACS out of reach, or a sign-in WACS refused.
   const warning = (): string | undefined => {
     const shown = held();
     const root = shell.project()?.root ?? "";
     if (shown === undefined || shown.reading.origin === undefined) return undefined;
-    if (shown.reading.ahead.length > 0 && shown.reading.behind.length > 0)
-      return m.network_review_needed();
+    // WACS holds versions this device lacks: a review if something waits here too, and
+    // otherwise still something to look at, which the popover says in amber.
+    if (shown.reading.behind.length > 0)
+      return shown.reading.ahead.length > 0
+        ? m.network_review_needed()
+        : m.cloud_updates_to_receive();
     if (shown.reading.sendRefused && !failureSeen().has(root)) return m.network_upload_failed();
     if (shown.state === "unauthorized") return m.network_sign_in_needed();
     if (shown.state === "offline" && !syncStatus.workOffline() && syncStatus.interfaceUp())
