@@ -22,6 +22,7 @@ import { copyPlaceLink } from "./shareLinks";
 import type { ShellEvent } from "./shellEvent";
 import { sendAfterSave, sendNow } from "./syncActions";
 import { syncPreferences } from "./syncSettings";
+import { syncWatch } from "./syncWatch";
 import { sendOutcomeCopy } from "./ui/cloud/copy";
 import { bookName } from "./ui/workspace/books";
 
@@ -576,7 +577,8 @@ const syncCommands = (bridge: ShellBridge, h: Helpers) => {
     registerCommand({
       id: "remote.push",
       title: m.common_send_my_changes,
-      when: hasProject,
+      // An upload without a WACS sign-in always fails, so it is not offered.
+      when: () => hasProject() && syncWatch.sync(bridge.project()?.root)?.reading.signedIn === true,
       run: () => {
         sendMine(bridge);
       },

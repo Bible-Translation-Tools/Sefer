@@ -1,7 +1,8 @@
 import type { JSX } from "@solidjs/web";
+import CircleAlert from "lucide-solid/icons/circle-alert";
 import Wifi from "lucide-solid/icons/wifi";
 import WifiOff from "lucide-solid/icons/wifi-off";
-import { For, Show, createSignal } from "solid-js";
+import { For, createSignal } from "solid-js";
 
 import { chooseWorkOffline } from "../../network";
 import { m } from "../../paraglide/messages";
@@ -68,7 +69,8 @@ type Connection = "online" | "offline";
  * stands with WACS and what to do next (`body`, from the sync chip).
  */
 export function NetworkChip(props: {
-  readonly attention: "none" | "tint" | "alert";
+  /** A short problem the person has not looked at yet ("Upload failed"); the pill adds an alert icon and tells screen readers. */
+  readonly warning: string | undefined;
   readonly onOpenChange: (open: boolean) => void;
   /** What sits under the switch: the WACS state online, what waits offline. */
   readonly body: (close: () => void) => JSX.Element;
@@ -77,6 +79,7 @@ export function NetworkChip(props: {
   const [open, setOpen] = createSignal(false, { name: "networkOpen" });
 
   const connected = (): boolean => syncStatus.online();
+  const warned = (): boolean => props.warning !== undefined && !syncStatus.workOffline();
   const choose = (next: Connection): void => {
     chooseWorkOffline(shell.services, next === "offline");
   };
@@ -108,18 +111,13 @@ export function NetworkChip(props: {
           data-testid="app-bar-network"
           data-online={connected() ? "true" : "false"}
         >
+          {/* The pill only ever says Online or Offline; something waiting on
+              the person adds an alert icon, and says what it is to a screen reader. */}
           <span class="whitespace-nowrap">
             {connected() ? m.network_online() : m.network_offline()}
           </span>
-          <Show when={props.attention !== "none" && !syncStatus.workOffline()}>
-            <span
-              aria-hidden="true"
-              class={cx(
-                "absolute -end-0.5 -top-0.5 size-2.5 rounded-full",
-                props.attention === "alert" ? "bg-on-surface-warning" : "bg-brand",
-              )}
-            />
-          </Show>
+          {warned() ? <CircleAlert size={20} aria-hidden="true" data-attention /> : undefined}
+          {warned() ? <span class="sr-only">{props.warning}</span> : undefined}
         </Button>
       }
     >

@@ -358,7 +358,14 @@ states above stay a classifier of where the project stands (`syncStateOf`); its 
 - **`routing` is where the send goes**: the shared project when this account may write to it,
   otherwise the person's own copy. An explicit destination skips the question.
 - **`rejected`** is the shared project having work this device lacks: a check follows, and the
-  surface then offers the review.
+  popover's Upload then opens the review of what came in ("Review and upload"). The push is
+  tried first and WACS is the one that says no; asking first would cost a round trip on every
+  upload and could still be out of date by the time the push ran.
+- **The refused upload goes once that review is saved.** While the phase's `refused` is
+  `Rejected`, a settle that receives the incoming work sends afterwards whatever send on save
+  says: the person pressed Upload, and the review was the only thing in its way.
+- **Linking a project to one already on WACS fetches at once** (a check), so the popover knows
+  what WACS holds before anything is uploaded.
 
 <!-- chart:sync-phase -->
 
