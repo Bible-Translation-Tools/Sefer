@@ -1,5 +1,4 @@
 import LogOut from "lucide-solid/icons/log-out";
-import SquareArrowOutUpRight from "lucide-solid/icons/square-arrow-out-up-right";
 import UserIcon from "lucide-solid/icons/user";
 import UserCog from "lucide-solid/icons/user-cog";
 import { Show } from "solid-js";
@@ -67,23 +66,33 @@ export function AccountButton() {
       label={m.account_button()}
       side="bottom"
       align="end"
-      class="w-96 p-6"
+      class="w-96 rounded-[12px]! p-3!"
       open={account.panelOpen()}
       onOpenChange={account.setPanelOpen}
       initialFocus="input"
       keepOpenForPasswordManagers
       trigger={
-        <IconButton
-          label={label()}
-          data-testid="app-bar-account"
-          aria-pressed={account.panelOpen() ? "true" : "false"}
-          tooltipSide="bottom"
-          icon={
-            <Show when={account.session()} fallback={<UserIcon size={20} />}>
-              <Avatar account={account} class="size-8 text-small" />
-            </Show>
+        <Show
+          when={account.session()}
+          fallback={
+            <Button
+              variant="tertiary"
+              icon={<UserIcon size={20} />}
+              data-testid="app-bar-account"
+              aria-pressed={account.panelOpen() ? "true" : "false"}
+            >
+              <span class="whitespace-nowrap max-md:sr-only">{m.account_sign_in_button()}</span>
+            </Button>
           }
-        />
+        >
+          <IconButton
+            label={label()}
+            data-testid="app-bar-account"
+            aria-pressed={account.panelOpen() ? "true" : "false"}
+            tooltipSide="bottom"
+            icon={<Avatar account={account} class="size-8 text-small" />}
+          />
+        </Show>
       }
     >
       <div data-account-panel>
@@ -109,7 +118,7 @@ export function AccountButton() {
                         {account.profile()?.fullName || held().username}
                       </p>
                       <p class="truncate text-small text-on-surface-tertiary">
-                        {account.profile()?.email || base().replace(/^https?:\/\//u, "")}
+                        {account.profile()?.email || `@${held().username}`}
                       </p>
                     </div>
                   </div>
@@ -118,10 +127,10 @@ export function AccountButton() {
                       {account.problem()}
                     </p>
                   </Show>
-                  <div class="space-y-2">
+                  <div class="flex items-center gap-2">
                     <Button
                       variant="secondary"
-                      class="w-full justify-center"
+                      class="flex-1 justify-center"
                       icon={<LogOut size={20} />}
                       onClick={account.signOut}
                       disabled={account.busy()}
@@ -130,8 +139,8 @@ export function AccountButton() {
                       {m.common_sign_out()}
                     </Button>
                     <ButtonLink
-                      variant="secondary"
-                      class="w-full justify-center"
+                      variant="link"
+                      class="flex-1 justify-center"
                       icon={<UserCog size={20} />}
                       href={wacsPage(base(), "/user/settings")}
                       target="_blank"
@@ -139,8 +148,7 @@ export function AccountButton() {
                       onClick={outside}
                       data-testid="account-settings"
                     >
-                      {m.account_settings()}
-                      <SquareArrowOutUpRight size={16} aria-hidden="true" />
+                      {m.account_view()}
                     </ButtonLink>
                   </div>
                 </div>

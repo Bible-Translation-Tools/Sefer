@@ -1,8 +1,6 @@
 import type { ChangeKind, Commit } from "../git/git";
-import { FRONT_MATTER, type BookFacts } from "./facts";
+import type { BookFacts } from "./facts";
 import { DEFAULT_OVERLAP, judge, type BookVerdict, type Overlap } from "./policy";
-
-export { FRONT_MATTER };
 
 export interface IncomingBook {
   readonly bookId: string;

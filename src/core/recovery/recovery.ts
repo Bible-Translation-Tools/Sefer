@@ -7,7 +7,18 @@ import {
 } from "@wycliffeassociates/sefer-text/book";
 import * as TextResult from "@wycliffeassociates/sefer-text/result";
 import type { Change, SourceStamp } from "@wycliffeassociates/sefer-text/source";
-import { Context, Data, Effect, FileSystem, Layer, Option, Result, Scope } from "effect";
+import {
+  Context,
+  Data,
+  Effect,
+  FileSystem,
+  Layer,
+  Option,
+  PubSub,
+  Result,
+  Scope,
+  Stream,
+} from "effect";
 
 import { writeFileStringAtomic } from "../fileSystem/atomic";
 import { joinPath, normalisePath } from "../fileSystem/path";
@@ -65,7 +76,19 @@ export interface RecoveryService {
     hash?: bigint,
   ) => Effect.Effect<void, RecoveryError>;
   readonly setPolicy: (policy: DebouncePolicy) => Effect.Effect<void>;
+  /**
+   * Where the backup stands, each time that changes: `pending` once an edit is
+   * recorded and waiting to be written, `written` when every waiting book has
+   * reached disk, `failed` when a write did not (the books stay waiting and go
+   * again with the next write).
+   */
+  readonly backups: () => Stream.Stream<BackupState>;
 }
+
+export type BackupState =
+  | { readonly kind: "pending" }
+  | { readonly kind: "written" }
+  | { readonly kind: "failed"; readonly books: number; readonly reason: string };
 
 export class Recovery extends Context.Service<Recovery, RecoveryService>()("Recovery") {}
 
@@ -187,6 +210,10 @@ const make = (
     >();
     const unwritten = new Set<string>();
     const owned = new Set<string>();
+    const states = yield* PubSub.sliding<BackupState>({ capacity: 16 });
+    const announce = (state: BackupState): void => {
+      PubSub.publishUnsafe(states, state);
+    };
 
     const fileFor = (id: string): string => joinPath(root, `${id}${JOURNAL_SUFFIX}`);
 
@@ -241,6 +268,7 @@ const make = (
       );
       const into = writing ?? observability;
       let failed = 0;
+      let lastReason = "";
       let entries = 0;
       let cleared = 0;
       for (const id of ids) {
@@ -261,6 +289,7 @@ const make = (
           const moved = yield* Effect.result(moveAside(id));
           if (Result.isFailure(moved)) {
             failed += 1;
+            lastReason = moved.failure.description;
             into?.note("journal.write", "failed", moved.failure.reason, { "journal.write": id });
             unwritten.add(id);
             continue;
@@ -272,6 +301,7 @@ const make = (
         );
         if (Result.isFailure(written)) {
           failed += 1;
+          lastReason = written.failure.description;
           into?.note("journal.write", "failed", written.failure.reason, {
             "journal.write": id,
           });
@@ -291,6 +321,8 @@ const make = (
         "journal.entries": entries,
         "journal.cleared": cleared,
       });
+      if (failed > 0) announce({ kind: "failed", books: failed, reason: lastReason });
+      else announce(unwritten.size > 0 ? { kind: "pending" } : { kind: "written" });
     });
 
     let policy: DebouncePolicy = options.policy ?? DEFAULT_JOURNAL_POLICY;
@@ -335,6 +367,7 @@ const make = (
       });
       unwritten.add(id);
       causedBy = options.cause?.() ?? causedBy;
+      announce({ kind: "pending" });
       arm();
     };
 
@@ -380,6 +413,7 @@ const make = (
     };
 
     return {
+      backups: () => Stream.fromPubSub(states),
       mount: (project, diskHash) => {
         const note = (bookId: BookId, book: Book): void => {
           books.set(bookId, {

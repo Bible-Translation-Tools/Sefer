@@ -1,0 +1,293 @@
+---
+id: f26024e8-56d1-4991-b476-44c4bafbadda
+title: "Save and sync states: which to show, and when"
+kind: plan
+status: discussing
+created: 2026-11-05
+updated: 2026-11-09
+sha: f0fd0dd3
+tags: [design, sync]
+---
+
+SEFER-92 (REQ-22) and SEFER-83 (REQ-12). The app bar's sync chip (branch `design/sync-chip`)
+names every state the code knows. From the conversation with paisano:
+
+> some states may not need to always be explicitly stated. For example, Sefer tracks whether
+> you're on a shared repo, but thats only relevant when you want to push content to WACS and
+> you're out of date... so it makes sense to expose that information only when its relevant.
+
+Each state below says what is happening, when it happens, and what the chip does today. Answer
+each with one of:
+
+- **Explicit** — always visible on the chip.
+- **Progressive** — appears only when it changes what the person should do (the popover, a
+  badge, a colour, or a message at the moment they act).
+- **Hidden** — Sefer handles it; the person never needs to know.
+
+The states are as the code has them today (`src/core/sync/state.ts`,
+`documentation/architecture/review.md` §4, `documentation/architecture/sync.md`).
+
+## Part 1: the work on this device
+
+These are about the person's own text, before WACS is involved at all.
+
+### Edited
+
+**What:** the person has typed something since the last backup, within the last half second.
+
+**When:** constantly, while typing.
+
+**Today:** nothing shows. The Save item in the book's ⋮ menu is enabled.
+
+<Question id="edited">Edited: explicit, progressive or hidden?</Question>
+
+### Backed up on this device
+
+**What:** Sefer writes the working state to a backup journal outside the project. It survives
+closing the app or a crash, and is restored on the next open. It is not the project file and
+not a version, so it cannot be sent.
+
+**When:** automatically, about half a second after typing pauses. Almost always true.
+
+**Today:** nothing shows. You asked for "some subtle indication when the app is autosaving".
+
+<Question id="backed-up">Backed up: explicit, progressive or hidden? And if shown, what subtle signal (a brief dot, the icon pulsing, "Saved on this device" fading in)?</Question>
+
+### Unsaved changes (not yet a version)
+
+**What:** the text differs from the last version. The work is safe (backed up) but has not
+been saved as a version, so it cannot go to WACS.
+
+**When:** from the first edit after a Save until the next Save. Most of a working session.
+
+**Today:** the chip's popover counts "Books with edits not saved yet". The book screen stopped
+showing this in October.
+
+<Question id="unsaved">Unsaved changes: explicit, progressive or hidden? Should anything nudge people to Save at the end of a session?</Question>
+
+### Saved (a version)
+
+**What:** Save writes the project file and records a version in one step. Review comes first
+unless "Skip review of my changes" is on. This is what can be sent to WACS.
+
+**When:** whenever the person presses Save (⋮ menu, or Ctrl/Cmd+S).
+
+**Today:** a "Saved" message after pressing; the chip's waiting count goes up by one if the
+project is on WACS.
+
+<Question id="saved">Saved: explicit, progressive or hidden? Is a message at the moment of saving enough?</Question>
+
+### Saved on disk, but no version
+
+**What:** the file was written but recording the version failed. Rare: the text is in the
+file, but nothing can be sent until a version is recorded.
+
+**When:** only if the version step fails after the write succeeded.
+
+**Today:** an error message at the time; nothing lasting.
+
+<Question id="on-disk-not-recorded">On disk, not recorded: explicit, progressive or hidden?</Question>
+
+## Part 2: this project and WACS
+
+These compare this device's versions with WACS. Sefer checks on open, after a save, and when
+the popover opens. Only one is true at a time; the order below is the order the code checks.
+
+### Conflicted
+
+**What:** the project folder is in the middle of a git merge. Sefer never starts one; only
+someone using another git tool on the same folder can leave it like this.
+
+**When:** almost never; only on desktop, after outside tools touched the folder.
+
+**Today:** the chip turns amber and the popover offers "Finish the transfer".
+
+<Question id="conflicted">Conflicted: explicit, progressive or hidden?</Question>
+
+### Checking
+
+**What:** Sefer is asking WACS what changed. Sending and receiving wait for it.
+
+**When:** for a second or two on open, after a save, and when the popover opens.
+
+**Today:** the chip says "Checking…".
+
+<Question id="checking">Checking: explicit, progressive or hidden? (A spinning icon with the old label kept is one option.)</Question>
+
+### Offline
+
+**What:** no network, or the last send or receive failed on the network. Work carries on;
+everything is saved here and waits.
+
+**When:** whenever the device is offline, which for many translators is most of the time.
+
+**Today:** the chip says "Offline". The popover says the work is safe on this device.
+
+<Question id="offline">Offline: explicit, progressive or hidden? Should it keep "uploaded 3 days ago" beside it?</Question>
+
+### Signed out
+
+**What:** there is no WACS sign-in on this device, or WACS refused it (expired or changed
+password). Nothing can be sent or received.
+
+**When:** before the first sign-in, after Sign out, or when the session is rejected.
+
+**Today:** the chip says "Uploaded yesterday" in amber, with Sign in in the popover. Reads oddly.
+
+<Question id="signed-out">Signed out: explicit, progressive or hidden? Only when there is something to send?</Question>
+
+### Not on WACS at all
+
+**What:** the project was made or imported on this device and has never been linked to a
+project on WACS.
+
+**When:** from creating or importing a project until it is published or linked.
+
+**Today:** the chip says "Not uploaded"; the popover offers sign in, then choose or publish a
+shared project.
+
+<Question id="detached">Not on WACS: explicit, progressive or hidden? Paisano's view is progressive: only when they want to send.</Question>
+
+### Linked, but never sent
+
+**What:** linked to a project on WACS, but this device's work has never been sent there.
+
+**When:** briefly, between linking and the first send.
+
+**Today:** the chip says "Not uploaded"; the popover offers Publish.
+
+<Question id="unpublished">Linked, never sent: explicit, progressive or hidden? Can it just be "Not on WACS" to the person?</Question>
+
+### Up to date
+
+**What:** this device and WACS have the same versions. (Edits not saved as a version can still
+exist; see Part 1.)
+
+**When:** right after sending or receiving, until someone saves or sends again.
+
+**Today:** the chip says "Uploaded \<when\>".
+
+<Question id="clean">Up to date: explicit, progressive or hidden?</Question>
+
+### Saves waiting to send (ahead)
+
+**What:** this device has versions WACS does not.
+
+**When:** after any Save, until the next send. The normal state while working online without
+"send on save".
+
+**Today:** "Uploaded \<when\>" plus a count badge. Not amber, however long it waits.
+
+<Question id="ahead">Saves waiting: explicit, progressive or hidden? After how many days should it turn amber?</Question>
+
+### Updates on WACS (behind)
+
+**What:** a teammate sent versions this device does not have.
+
+**When:** after someone else sends, noticed at the next check.
+
+**Today:** the chip turns amber; the popover names who and which books, with Receive.
+
+<Question id="behind">Updates on WACS: explicit, progressive or hidden? Take over the chip, or just a badge?</Question>
+
+### Both changed (diverged)
+
+**What:** both sides have versions the other lacks. Sefer combines them automatically when
+different books were touched; when the same book was, it goes to Review.
+
+**When:** when two people save while out of contact and both send.
+
+**Today:** the chip turns amber; the popover offers Combine, or Compare when a book clashes.
+
+<Question id="diverged">Both changed: explicit, progressive or hidden? Is it only worth saying when a book clashes?</Question>
+
+## Part 3: who the work goes to
+
+Separate from the states above; set per project on this device.
+
+### Working together in the shared project
+
+**What:** sending goes straight into the team's project on WACS.
+
+**When:** the default when the account may write to it.
+
+**Today:** not shown anywhere except the popover's project details.
+
+<Question id="together">Working together: explicit, progressive or hidden?</Question>
+
+### Working in my own copy
+
+**What:** sending goes to the person's own copy on WACS, and "Offer my changes" proposes them
+to the team. Someone with permission reviews and accepts them.
+
+**When:** when a send is refused for lack of permission, or when the person chooses a paper
+trail. If permission arrives later, the popover says so; it never switches by itself.
+
+**Today:** the popover says "Sent to your copy" and offers "Offer these changes".
+
+<Question id="own-copy">Own copy: explicit, progressive or hidden? Does a translator need to know the difference, or only that the team still has to accept their changes?</Question>
+
+<Followup id="remove-tweak">Remove the chip's "Sync state" design tweak from `src/app/ui/cloud/SyncButton.tsx` once the states are settled.</Followup>
+
+## Decisions from Thomas (2026-11-09): uploading, versions and review
+
+Built on `design/sync-chip`: WACS lives inside the Online / Offline popover and is hidden while the
+person works offline; "Send my changes on save" now defaults to off, so sending is always the
+person's own act (Upload to WACS in the popover or the ☰ menu); a project only on this device
+uploads with one button under a suggested name, then shows its link, its owner and how to share it.
+The rarer states sit behind "More information".
+
+The rest is direction for paisano, not built:
+
+1. **Everything goes towards the one shared project.** Someone allowed to write sends straight to it.
+   Someone who is not gets one main button that uploads to their own copy and offers it to the team
+   in the same step ("Send to the team for review"); "Request access" is secondary. Making a separate
+   project is always a deliberate, secondary choice ("Upload as a separate project", `en_ulb-2`).
+2. **Recognise the same project by its history.** A project downloaded from WACS and later side-loaded
+   through a zip arrives unlinked (intake keeps history, drops remotes), and uploading it would make a
+   second project. Thomas expects this often. On import, and again before an upload creates anything,
+   match it to a project on WACS or on this device by shared history and offer to keep it linked.
+3. **Local versions are paisano's call.** While offline, Sefer should keep a version history that
+   assumes the work is fine, with no review and no naming asked of the person, so work from days or
+   weeks ago can be restored. Today only Save makes a version, and the backup journal is cleared at
+   each version, so it cannot restore an older state.
+
+   > I do like the idea that while they're offline and saving changes locally, we can do whatever
+   > Paisano thinks is best for versioning.
+
+4. **Review happens at upload, on purpose.** One flow: Upload → review → bring in what teammates sent →
+   upload. The review gives enough information for the person to decide whether to look closer or
+   accept all changes. Check for updates is the same flow without the upload.
+
+   > make that review intentional at upload (or at least provide some information about it so the
+   > user can decide if they want to deal with it, or just accept all changes)
+
+<Question id="local-versions">
+  Local versions: when does Sefer make one on its own (a day of work, closing the project, a number
+  of edits), and how are they described?
+</Question>
+
+<Question id="zip-export-history">
+  Does Sefer's own zip export carry the project's history? If not, a zip can never be recognised as
+  the same project. (The desktop export looks like it may write only the USFM files; unchecked.)
+</Question>
+
+<Question id="offer-wording">
+  "Offer my changes" reads oddly. Is "Send to the team for review" right, and does an offer keep
+  collecting later uploads until it is accepted?
+</Question>
+
+<Question id="request-access">
+  Request access: WACS has no access request of its own as far as we know. Open an issue on the
+  project, or show the owner with a ready-to-send message?
+</Question>
+
+<Question id="upload-review">
+  What does the review at upload show by default: a summary of your books and theirs with "Accept
+  all", opening Review only for a book both sides changed?
+</Question>
+
+<Followup id="same-project">
+  Match a side-loaded or re-uploaded project to its WACS project by shared history, at import and
+  before an upload creates a new project.
+</Followup>

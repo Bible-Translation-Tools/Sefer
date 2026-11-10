@@ -1,62 +1,35 @@
 import type { JSX } from "@solidjs/web";
-import Cloud from "lucide-solid/icons/cloud";
-import CloudAlert from "lucide-solid/icons/cloud-alert";
-import CloudCheck from "lucide-solid/icons/cloud-check";
 import CloudDownload from "lucide-solid/icons/cloud-download";
-import CloudOff from "lucide-solid/icons/cloud-off";
 import CloudUpload from "lucide-solid/icons/cloud-upload";
 import Copy from "lucide-solid/icons/copy";
-import LogIn from "lucide-solid/icons/log-in";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
-import { Show, createEffect, createSignal, untrack } from "solid-js";
+import UserIcon from "lucide-solid/icons/user";
+import { Show, createEffect, createSignal, onCleanup, untrack } from "solid-js";
 
-import type { Sync } from "#core/sync";
+import { emptyReading, sync as syncOf, type Sync, type SyncReading } from "#core/sync";
 
 import { collaboration } from "../../collaboration";
+import { describe } from "../../describe";
 import { m } from "../../paraglide/messages";
-import type { Shell } from "../../ProjectContext";
+import { useShell, type Shell } from "../../ProjectContext";
+import { suggestMyChanges } from "../../suggestions";
+import { sendNow } from "../../syncActions";
 import { syncStatus } from "../../syncStatus";
 import { syncWatch } from "../../syncWatch";
 import { writerWatch } from "../../writerWatch";
-import { ago } from "../panels/format";
-import { Button, IconButton, Input, Popover, cx, toasts } from "../primitives";
+import { Button, Input, toasts } from "../primitives";
+import { NetworkChip } from "../workspace/StatusChips";
 import { createAccount, type Account } from "./account";
 import { CollabSection } from "./CollabSection";
 import { stateCopy, type StateCopy } from "./copy";
-import { PlanBooks } from "./IncomingPlanCard";
-import { SyncClocks } from "./ProjectCard";
-import { PublishSection } from "./PublishSection";
+import { putOnline, suggestedName } from "./PublishSection";
 import {
   attentionOf,
   createQuickSync,
-  quickActionOf,
-  quickLabel,
   shareableLink,
   type QuickAction,
   type QuickSync,
 } from "./quick";
-import { WriterSection } from "./WriterSection";
-
-const glyphOf = (sync: Sync | undefined) => {
-  if (sync?.reading.origin === undefined) return <Cloud size={20} />;
-  switch (sync.state) {
-    case "attached-clean":
-      return <CloudCheck size={20} />;
-    case "ahead":
-    case "unpublished":
-      return <CloudUpload size={20} />;
-    case "behind":
-      return <CloudDownload size={20} />;
-    case "diverged":
-    case "conflicted":
-    case "unauthorized":
-      return <CloudAlert size={20} />;
-    case "offline":
-      return <CloudOff size={20} />;
-    default:
-      return <Cloud size={20} />;
-  }
-};
 
 const copyOf = (held: Sync | undefined, inCopy: boolean): StateCopy | undefined =>
   held === undefined
@@ -131,231 +104,461 @@ const createSyncPopover = (shell: Shell, quick: QuickSync, account: Account) => 
   };
 };
 
-const StateHeading = (props: { readonly copy: StateCopy | undefined }) => (
-  <div>
-    <h3 class="flex items-center gap-2 text-body font-semibold text-on-surface-primary">
-      <Show when={props.copy?.tone === "warning" || props.copy?.tone === "error"}>
-        <span
-          aria-hidden="true"
-          class={cx(
-            "size-2 shrink-0 rounded-full",
-            props.copy?.tone === "error" ? "bg-on-surface-error" : "bg-on-surface-warning",
-          )}
-        />
-      </Show>
-      {props.copy?.headline}
-    </h3>
-    <p class="mt-1 text-small text-on-surface-tertiary">{props.copy?.detail}</p>
-  </div>
-);
-
-const QuickRow = (props: {
-  readonly held: Sync;
-  readonly quick: QuickSync;
-  readonly fetchedAt: number | undefined;
-  readonly onRun: (action: QuickAction) => void;
-}) => (
-  <div class="flex flex-wrap items-center gap-2">
-    <Show when={quickActionOf(props.held) !== "sign-in" && quickActionOf(props.held) !== "open"}>
-      <Button
-        size="sm"
-        variant="primary"
-        data-sync-quick={quickActionOf(props.held)}
-        loading={props.quick.busy() !== ""}
-        onClick={() => props.onRun(quickActionOf(props.held))}
-      >
-        {quickLabel(quickActionOf(props.held))}
-      </Button>
-    </Show>
-    <Show when={quickActionOf(props.held) !== "check" && props.held.reading.origin !== undefined}>
-      <Show when={props.fetchedAt}>
-        {(at) => (
-          <span class="ms-auto text-smallest text-on-surface-tertiary">
-            {m.cloud_checked_when({ when: ago(at()) })}
-          </span>
-        )}
-      </Show>
-      <IconButton
-        size="sm"
-        class={props.fetchedAt === undefined ? "ms-auto" : undefined}
-        label={
-          props.fetchedAt === undefined
-            ? m.cloud_check_for_changes()
-            : m.cloud_check_for_changes_last_checked({
-                when: ago(props.fetchedAt ?? 0),
-              })
-        }
-        disabled={props.quick.busy() !== ""}
-        icon={<RefreshCw class={cx(props.quick.busy() === "check" && "animate-spin")} />}
-        onClick={() => props.onRun("check")}
-      />
-    </Show>
-  </div>
-);
-
-const ShareLink = (props: { readonly href: string; readonly onCopy: () => void }) => (
-  <details class="border-t border-surface-border pt-3" data-sync-details>
-    <summary class="cursor-pointer text-smallest font-medium text-on-surface-tertiary">
-      {m.cloud_project_details()}
-    </summary>
-    <label class="mt-3 block pb-1 text-smallest text-on-surface-tertiary" for="sync-share-link">
-      {m.cloud_shared_project_link_send_it()}
-    </label>
-    <div class="flex items-center gap-2">
-      <Input
-        id="sync-share-link"
-        size="sm"
-        wrapperClass="min-w-0 flex-1"
-        readonly
-        value={props.href}
-        onFocus={(event) => event.currentTarget.select()}
-      />
-      <Button size="sm" variant="secondary" icon={<Copy />} onClick={props.onCopy}>
-        {m.cloud_copy()}
-      </Button>
-    </div>
-  </details>
-);
-
-const SyncDetails = (props: {
-  readonly held: Sync;
-  readonly pop: ReturnType<typeof createSyncPopover>;
-  readonly quick: QuickSync;
-  readonly account: Account;
-}) => (
-  <div class="space-y-4" data-sync-popover={props.held.state}>
-    <StateHeading copy={props.pop.copy()} />
-
-    <Show when={props.held.reading.origin !== undefined}>
-      <SyncClocks
-        sync={props.held}
-        plan={props.pop.plan()}
-        class="border-t border-surface-border pt-3"
-      />
-    </Show>
-
-    <Show when={(props.pop.plan()?.books.length ?? 0) > 0 ? props.pop.plan() : undefined}>
-      {(arriving) => (
-        <div class="space-y-2 border-t border-surface-border pt-3">
-          <p class="text-smallest font-medium text-on-surface-tertiary">
-            {m.cloud_incoming_changes()}
-          </p>
-          <PlanBooks plan={arriving()} />
-        </div>
-      )}
-    </Show>
-
-    <QuickRow
-      held={props.held}
-      quick={props.quick}
-      fetchedAt={props.pop.fetchedAt()}
-      onRun={props.pop.run}
-    />
-
-    <CollabSection onLeave={() => props.pop.setOpen(false)} />
-
-    <WriterSection onLeave={() => props.pop.setOpen(false)} />
-
-    <Show when={props.held.reading.origin === undefined}>
-      <PublishSection
-        signedIn={props.account.session() !== undefined}
-        onLeave={() => props.pop.setOpen(false)}
-      />
-    </Show>
-
-    <Show when={props.pop.link()}>
-      {(href) => <ShareLink href={href()} onCopy={props.pop.copyLink} />}
-    </Show>
-  </div>
-);
-
-const AccountRow = (props: {
-  readonly account: Account;
-  readonly host: string;
-  readonly onSignIn: () => void;
-}) => (
-  <div class="mt-4 border-t border-surface-border pt-3" data-sync-account>
-    <Show
-      when={props.account.session()}
-      fallback={
-        <Button
-          variant="primary"
-          class="w-full justify-center"
-          icon={<LogIn size={20} />}
-          onClick={props.onSignIn}
-          data-testid="sync-sign-in"
-        >
-          {m.common_sign_in_to_wacs()}
-        </Button>
-      }
-    >
-      {(held) => (
-        <div class="flex items-center gap-2">
-          <p class="min-w-0 flex-1 text-small break-words text-on-surface-secondary">
-            <span class="font-medium text-on-surface-primary">{held().username}</span>
-            <span class="text-on-surface-tertiary">
-              {" · "}
-              {props.host.replace(/^https?:\/\//u, "")}
-            </span>
-          </p>
-          <Button
-            size="sm"
-            variant="tertiary"
-            onClick={props.account.signOut}
-            disabled={props.account.busy()}
-          >
-            {m.common_sign_out()}
-          </Button>
-        </div>
-      )}
-    </Show>
-  </div>
-);
-
 /** The sync state, its popover's state and the account: one per place that shows sync. */
-export const createSync = (shell: Shell) => {
+const createSync = (shell: Shell) => {
   const quick = createQuickSync(shell);
   const account = createAccount(shell);
   const pop = createSyncPopover(shell, quick, account);
   return { quick, account, pop };
 };
 
-export type SyncHandle = ReturnType<typeof createSync>;
+type SyncHandle = ReturnType<typeof createSync>;
 
-/** The state's glyph, for a row that opens the popover. */
-export const syncGlyph = (sync: SyncHandle): JSX.Element => glyphOf(sync.quick.sync());
+const DAY = 86_400_000;
+const commit = (id: string, at: number) => ({
+  id,
+  message: "",
+  author: { name: "teammate", email: "" },
+  at,
+});
+const ORIGIN = "https://content.bibletranslationtools.org/team/project";
+
+/** Stand-in readings for the chip's design tweak; "live" is the real one. */
+const PREVIEWS: Readonly<Record<string, Partial<SyncReading>>> = {
+  "not uploaded": { signedIn: true },
+  "uploaded today": {
+    signedIn: true,
+    origin: ORIGIN,
+    remoteKnown: true,
+    remoteHead: commit("a", Date.now() - 2 * 3_600_000),
+  },
+  "3 saves waiting": {
+    signedIn: true,
+    origin: ORIGIN,
+    remoteKnown: true,
+    remoteHead: commit("a", Date.now() - 3 * DAY),
+    ahead: [commit("b", Date.now()), commit("c", Date.now()), commit("d", Date.now())],
+  },
+  "updates on WACS": {
+    signedIn: true,
+    origin: ORIGIN,
+    remoteKnown: true,
+    remoteHead: commit("e", Date.now() - DAY),
+    behind: [commit("e", Date.now() - DAY)],
+  },
+  diverged: {
+    signedIn: true,
+    origin: ORIGIN,
+    remoteKnown: true,
+    remoteHead: commit("e", Date.now() - 9 * DAY),
+    ahead: [commit("b", Date.now())],
+    behind: [commit("e", Date.now() - 9 * DAY)],
+  },
+  "WACS unreachable": { signedIn: true, origin: ORIGIN, remoteKnown: true, online: false },
+  "upload refused": {
+    signedIn: true,
+    origin: ORIGIN,
+    remoteKnown: true,
+    remoteHead: commit("a", Date.now() - 3 * DAY),
+    ahead: [commit("b", Date.now())],
+    sendRefused: true,
+  },
+  "no permission": {
+    signedIn: true,
+    origin: "https://content.bibletranslationtools.org/other_teaboogey/en_ulb",
+    remoteKnown: true,
+    remoteHead: commit("a", Date.now() - 3 * DAY),
+    ahead: [commit("b", Date.now()), commit("c", Date.now())],
+  },
+  "signed out": { origin: ORIGIN, remoteKnown: true, remoteHead: commit("a", Date.now() - DAY) },
+};
 
 /**
- * The sync popover, opened from somewhere else (the app bar's More menu):
- * anchored to an invisible point, so it drops from where its opener sits.
+ * Design scaffolding: a "Sync state" tweak on the chip, so each state can be
+ * seen without a WACS account. The design surface loads lazily and installs
+ * its handle after the app bar has mounted, so wait for it.
  */
-export function SyncPopover(props: { readonly sync: SyncHandle }) {
-  // The handle is made once by the caller and never swapped.
-  const { quick, account, pop } = untrack(() => props.sync);
+function useStateTweak(choose: (state: string) => void): void {
+  let release: (() => void) | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let tries = 0;
+  const attempt = (): void => {
+    // SAFETY: under `__SEFER_DESIGN__` the design surface installs this handle
+    // (`src/dev/designSurface.ts`) with `register` of this shape; `unknown` in
+    // the global's type only because platform may not import a dev tool.
+    const design = globalThis.__sefer?.design as
+      | {
+          readonly register?: (registration: {
+            readonly namespace: string;
+            readonly tweaks: readonly {
+              readonly key: string;
+              readonly label: string;
+              readonly kind: "choice";
+              readonly options: readonly string[];
+            }[];
+            readonly onChange: (values: Readonly<Record<string, string>>) => void;
+          }) => () => void;
+        }
+      | undefined;
+    if (design?.register === undefined) {
+      tries += 1;
+      if (tries < 100) timer = setTimeout(attempt, 50);
+      return;
+    }
+    release = design.register({
+      namespace: "syncChip",
+      tweaks: [
+        {
+          key: "state",
+          label: "Sync state",
+          kind: "choice",
+          options: ["live", ...Object.keys(PREVIEWS)],
+        },
+      ],
+      onChange: (values) => choose(values["syncChip.state"] ?? "live"),
+    });
+  };
+  attempt();
+  onCleanup(() => {
+    if (timer !== undefined) clearTimeout(timer);
+    release?.();
+  });
+}
+
+/** Who a shared project belongs to: the first part of its path on WACS. */
+const ownerOf = (link: string): string | undefined => {
+  try {
+    return new URL(link).pathname.split("/").find((part) => part !== "");
+  } catch {
+    return undefined;
+  }
+};
+
+/** A message with `{user}` in it, the name drawn bold. */
+const WithName = (props: { readonly text: string; readonly name: string }) => {
+  const at = (): number => props.text.indexOf(props.name);
   return (
-    <Popover
-      label={m.common_sync()}
-      side="bottom"
-      align="end"
-      class="w-[min(480px,92vw)]"
-      open={pop.open()}
-      onOpenChange={pop.openChanged}
-      trigger={<span class="block size-px" aria-hidden="true" />}
-    >
+    <Show when={at() >= 0} fallback={props.text}>
+      {props.text.slice(0, at())}
+      <strong class="font-semibold text-on-surface-primary">{props.name}</strong>
+      {props.text.slice(at() + props.name.length)}
+    </Show>
+  );
+};
+
+const Body = (props: { readonly children: JSX.Element }) => (
+  <p class="text-body text-on-surface-primary">{props.children}</p>
+);
+
+/** While something runs, the buttons give way to a bar saying what. */
+const Working = (props: { readonly label: string }) => (
+  <div class="space-y-2" role="status" data-sync-working>
+    <p class="text-small text-on-surface-secondary">{props.label}</p>
+    <div class="h-2 overflow-hidden rounded-full bg-surface-secondary">
+      <div class="h-full w-1/3 animate-pulse rounded-full bg-brand" />
+    </div>
+  </div>
+);
+
+const changesWaiting = (count: number): string =>
+  count === 1 ? m.wacs_one_change_waiting() : m.wacs_changes_waiting({ count });
+
+/** Where the project lives on WACS, whose it is, and what the link is for. */
+const ProjectLocation = (props: { readonly href: string; readonly noWrite: boolean }) => (
+  <div class="space-y-2" data-sync-link>
+    <label class="block text-small font-semibold text-on-surface-primary" for="wacs-link">
+      {m.wacs_project_location()}
+    </label>
+    <div class="flex items-center gap-2">
+      <Input
+        id="wacs-link"
+        wrapperClass="min-w-0 flex-1"
+        readonly
+        value={props.href}
+        onFocus={(event) => event.currentTarget.select()}
+      />
+      <Button
+        variant="secondary"
+        icon={<Copy size={20} />}
+        onClick={() => copyToClipboard(props.href)}
+      >
+        {m.cloud_copy()}
+      </Button>
+    </div>
+    <p class="text-small text-on-surface-tertiary">
+      {ownerOf(props.href) === undefined
+        ? ""
+        : `${m.wacs_owned_by({ owner: ownerOf(props.href) ?? "" })} `}
+      {props.noWrite ? m.wacs_no_permission() : m.wacs_share_download()}
+    </p>
+  </div>
+);
+
+/**
+ * Under the connection switch: where the work stands with WACS and the next
+ * thing to do (SEFER-92, SEFER-83; Thomas's cards, 2026-11-09). Offline, only
+ * what is waiting to go up. Online: signed out → Sign in; WACS out of reach →
+ * Try again; not on WACS yet → a name and Upload; on WACS → how many changes
+ * are waiting, where it lives and whose it is, Upload (Submit changes without
+ * permission, which offers them to the owner) and Check for updates. Running
+ * work shows a bar; a refused upload says so and offers Retry.
+ */
+const WacsBody = (props: {
+  readonly sync: SyncHandle;
+  readonly held: Sync | undefined;
+  readonly noWrite: boolean | undefined;
+  readonly onLeave: () => void;
+}) => {
+  const shell = useShell();
+  const { quick, account } = untrack(() => props.sync);
+  const facts = () => collaboration.facts(shell.project()?.root);
+  const noWrite = (): boolean =>
+    props.noWrite ?? (facts()?.canWrite === false || facts()?.mode === "copy");
+  const waiting = (): number => props.held?.reading.ahead.length ?? 0;
+  const user = (): string => account.session()?.username ?? m.wacs_you();
+
+  const opened = untrack(() => shell.project());
+  const [name, setName] = createSignal(opened === undefined ? "" : suggestedName(opened), {
+    name: "wacsName",
+  });
+  const [working, setWorking] = createSignal<"" | "publish" | "submit">("", {
+    name: "wacsWorking",
+  });
+
+  const publish = (event: SubmitEvent): void => {
+    event.preventDefault();
+    const project = shell.project();
+    const chosen = name().trim();
+    if (project === undefined || chosen === "" || working() !== "") return;
+    setWorking("publish");
+    void putOnline(shell.services, project, chosen)
+      .then(() => toasts.success({ title: m.cloud_published_as_name({ name: chosen }) }))
+      .catch((cause: unknown) =>
+        toasts.error({ title: m.cloud_could_not_publish(), message: describe(cause) }),
+      )
+      .finally(() => setWorking(""));
+  };
+
+  // Without permission, an upload goes to the person's own copy and is then
+  // offered to the owner in the same step, unless an offer is already waiting.
+  const submit = (): void => {
+    const project = shell.project();
+    if (project === undefined || working() !== "") return;
+    setWorking("submit");
+    void sendNow(shell.services, project)
+      .then(async () => {
+        await collaboration.refresh(shell.services, project);
+        const now = collaboration.facts(project.root);
+        if (now?.offerable === true && now.mine?.kind !== "waiting")
+          await suggestMyChanges(shell.services, project);
+        await collaboration.refresh(shell.services, project);
+        toasts.success({ title: m.wacs_submitted() });
+      })
+      .catch((cause: unknown) =>
+        toasts.error({ title: m.wacs_upload_failed_title(), message: describe(cause) }),
+      )
+      .finally(() => setWorking(""));
+  };
+
+  const run = (action: QuickAction): void => {
+    if (action === "see" || action === "sign-in") props.onLeave();
+    quick.run(action);
+  };
+
+  const busyLabel = (): string | undefined => {
+    if (working() === "publish" || quick.busy() === "send") return m.wacs_uploading();
+    if (working() === "submit") return m.wacs_submitting();
+    if (quick.busy() === "check") return m.wacs_checking();
+    return undefined;
+  };
+
+  return (
+    <div class="space-y-4" data-sync-popover={props.held?.state ?? "reading"}>
       <Show
-        when={quick.sync()}
+        when={!syncStatus.workOffline()}
         fallback={
-          <p class="text-small text-on-surface-secondary">{m.cloud_reading_this_project()}</p>
+          <>
+            <Body>{m.wacs_offline_body()}</Body>
+            <Show when={waiting() > 0}>
+              <p class="text-small text-on-surface-secondary">
+                {waiting() === 1
+                  ? m.wacs_one_ready_when_online()
+                  : m.wacs_ready_when_online({ count: waiting() })}
+              </p>
+            </Show>
+          </>
         }
       >
-        {(held) => <SyncDetails held={held()} pop={pop} quick={quick} account={account} />}
+        <Show when={props.held} fallback={<Body>{m.cloud_reading_this_project()}</Body>}>
+          {(held) => (
+            <Show
+              when={held().state !== "offline"}
+              fallback={
+                <>
+                  <Body>{m.wacs_unreachable()}</Body>
+                  <Button
+                    variant="primary"
+                    class="w-full justify-center"
+                    icon={<RefreshCw size={20} />}
+                    onClick={() => run("check")}
+                    data-testid="wacs-try-again"
+                  >
+                    {m.wacs_try_again()}
+                  </Button>
+                </>
+              }
+            >
+              <Show
+                when={held().reading.signedIn && held().state !== "unauthorized"}
+                fallback={
+                  <>
+                    <Body>{m.wacs_signed_out_body()}</Body>
+                    <Button
+                      variant="primary"
+                      class="w-full justify-center"
+                      icon={<UserIcon size={20} />}
+                      onClick={() => run("sign-in")}
+                      data-testid="sync-sign-in"
+                    >
+                      {m.common_sign_in_to_wacs()}
+                    </Button>
+                  </>
+                }
+              >
+                <Show
+                  when={held().reading.origin}
+                  fallback={
+                    <form class="space-y-4" onSubmit={publish} data-sync-publish>
+                      <Body>
+                        <WithName text={m.wacs_not_uploaded_body({ user: user() })} name={user()} />
+                      </Body>
+                      <div class="space-y-2">
+                        <label
+                          class="block text-small font-semibold text-on-surface-primary"
+                          for="wacs-name"
+                        >
+                          {m.wacs_project_location()}
+                        </label>
+                        <Input
+                          id="wacs-name"
+                          wrapperClass="w-full"
+                          value={name()}
+                          onInput={(event) => setName(event.currentTarget.value)}
+                        />
+                        <p class="text-small text-on-surface-tertiary">{m.wacs_name_hint()}</p>
+                      </div>
+                      <Show
+                        when={busyLabel()}
+                        fallback={
+                          <Button
+                            type="submit"
+                            variant="primary"
+                            class="w-full justify-center"
+                            icon={<CloudUpload size={20} />}
+                            disabled={name().trim() === ""}
+                            data-testid="wacs-put-online"
+                          >
+                            {m.menu_upload_to_wacs()}
+                          </Button>
+                        }
+                      >
+                        {(label) => <Working label={label()} />}
+                      </Show>
+                    </form>
+                  }
+                >
+                  {(origin) => (
+                    <>
+                      <Body>
+                        <WithName text={m.wacs_connected_body({ user: user() })} name={user()} />{" "}
+                        {waiting() > 0 ? changesWaiting(waiting()) : m.wacs_all_uploaded()}
+                      </Body>
+                      <Show when={held().reading.sendRefused}>
+                        <p class="text-small text-on-surface-error" data-sync-failed>
+                          {m.wacs_upload_failed_body()}
+                        </p>
+                      </Show>
+                      <Show when={facts()?.mine?.kind === "waiting"}>
+                        <p class="text-small text-on-surface-secondary">{m.wacs_waiting_owner()}</p>
+                      </Show>
+                      <ProjectLocation href={shareableLink(origin())} noWrite={noWrite()} />
+                      <CollabSection onLeave={props.onLeave} />
+                      <Show
+                        when={busyLabel()}
+                        fallback={
+                          <div class="space-y-2">
+                            <Button
+                              variant={waiting() > 0 ? "primary" : "secondary"}
+                              class="w-full justify-center"
+                              icon={<CloudUpload size={20} />}
+                              disabled={waiting() === 0}
+                              onClick={() => (noWrite() ? submit() : run("send"))}
+                              data-testid="wacs-upload"
+                            >
+                              {held().reading.sendRefused
+                                ? m.wacs_retry_upload()
+                                : noWrite()
+                                  ? m.wacs_submit_changes()
+                                  : m.menu_upload_to_wacs()}
+                            </Button>
+                            <Button
+                              variant={waiting() > 0 ? "secondary" : "primary"}
+                              class="w-full justify-center"
+                              icon={<CloudDownload size={20} />}
+                              onClick={() => run("check")}
+                              data-testid="wacs-check"
+                            >
+                              {m.menu_check_for_updates()}
+                            </Button>
+                          </div>
+                        }
+                      >
+                        {(label) => <Working label={label()} />}
+                      </Show>
+                    </>
+                  )}
+                </Show>
+              </Show>
+            </Show>
+          )}
+        </Show>
       </Show>
+    </div>
+  );
+};
 
-      <Show when={account.host}>
-        {(host) => (
-          <AccountRow account={account} host={host()} onSignIn={() => pop.run("sign-in")} />
-        )}
-      </Show>
-    </Popover>
+/** Stand-ins for the design tweak that also need the person to have no permission. */
+const NO_WRITE_PREVIEWS = new Set(["no permission"]);
+
+/**
+ * The app bar's connection chip (SEFER-92, SEFER-83): Online or Offline, which
+ * the person can switch. Its popover says where the work stands with WACS and
+ * what to do next. A dot on the chip says something waits on the person.
+ */
+export function SyncChip() {
+  const sync = createSync(useShell());
+  const [preview, setPreview] = createSignal("live", { name: "syncChipPreview", ownedWrite: true });
+  if (__SEFER_DESIGN__) useStateTweak(setPreview);
+  const held = (): Sync | undefined => {
+    const stand = PREVIEWS[preview()];
+    return stand === undefined ? sync.quick.sync() : syncOf({ ...emptyReading, ...stand });
+  };
+  const tone = (): "none" | "tint" | "alert" =>
+    preview() === "live" ? sync.pop.attention() : attentionOf(held());
+  return (
+    <NetworkChip
+      attention={tone()}
+      onOpenChange={(open) => {
+        if (open) sync.pop.openChanged(true);
+      }}
+      body={(close) => (
+        <WacsBody
+          sync={sync}
+          held={held()}
+          noWrite={NO_WRITE_PREVIEWS.has(preview()) ? true : undefined}
+          onLeave={close}
+        />
+      )}
+    />
   );
 }

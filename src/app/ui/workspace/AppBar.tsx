@@ -1,22 +1,29 @@
 import type { JSX } from "@solidjs/web";
 import { useNavigate, useRouterState } from "@tanstack/solid-router";
 import Bell from "lucide-solid/icons/bell";
-import Ellipsis from "lucide-solid/icons/ellipsis";
+import CloudDownload from "lucide-solid/icons/cloud-download";
+import CloudUpload from "lucide-solid/icons/cloud-upload";
 import FileText from "lucide-solid/icons/file-text";
 import GitCompare from "lucide-solid/icons/git-compare";
 import HistoryIcon from "lucide-solid/icons/history";
 import ListChecks from "lucide-solid/icons/list-checks";
+import MenuIcon from "lucide-solid/icons/menu";
+import Redo2 from "lucide-solid/icons/redo-2";
 import Rows3 from "lucide-solid/icons/rows-3";
+import Save from "lucide-solid/icons/save";
 import SettingsIcon from "lucide-solid/icons/settings";
+import Share2 from "lucide-solid/icons/share-2";
 import TypeIcon from "lucide-solid/icons/type";
-import { Show, createSignal, For } from "solid-js";
+import Undo2 from "lucide-solid/icons/undo-2";
+import { For, Show, createSignal } from "solid-js";
 
+import { findCommand, runCommand } from "../../commands";
 import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
-import { SyncPopover, createSync, syncGlyph } from "../cloud/SyncButton";
-import { IconButton, Menu, MenuItem, MenuSeparator, SegmentedControl } from "../primitives";
+import { SyncChip } from "../cloud/SyncButton";
+import { IconButton, Kbd, Menu, MenuItem, MenuSeparator, SegmentedControl } from "../primitives";
 import { AccountButton } from "./AccountButton";
-import { ProjectTools } from "./Toolbar";
+import { SaveStatus } from "./StatusChips";
 
 function BarButton(props: {
   readonly label: string;
@@ -44,87 +51,174 @@ function BarButton(props: {
 /** Refine is the book as it reads; Form Mode is the same book one verse per line. */
 type Mode = "refine" | "form" | "terms";
 
-type ProjectScreen =
-  | "/project/$slug/findings"
-  | "/project/$slug/history"
-  | "/project/$slug/inventory"
-  | "/project/$slug/review";
+/**
+ * Keys the editor handles itself rather than through a registered command
+ * (`packages/editor/src/surfaces/satellite.ts`), so the menu can still show them.
+ */
+const EDITOR_KEYS: Readonly<Record<string, string>> = {
+  "book.undo": "Mod-z",
+  "book.redo": "Mod-Shift-z",
+};
 
-function MoreMenu() {
+const ORDER = ["Ctrl", "Alt", "Shift", "Mod"];
+
+/**
+ * A command's shortcut as the person's keyboard says it, one key per box:
+ * ⇧ ⌘ Z on a Mac (Apple's order, Shift before Command), Ctrl Shift Z elsewhere.
+ */
+const shortcut = (id: string): readonly string[] => {
+  const keys = findCommand(id)?.keys ?? EDITOR_KEYS[id];
+  if (keys === undefined) return [];
+  const mac = typeof navigator === "object" && /Mac|iPhone|iPad/u.test(navigator.platform);
+  const parts = keys.split("-");
+  const key = parts.pop() ?? "";
+  const modifiers = mac ? [...parts].sort((x, y) => ORDER.indexOf(x) - ORDER.indexOf(y)) : parts;
+  return [
+    ...modifiers.map((part) => {
+      if (part === "Mod") return mac ? "⌘" : "Ctrl";
+      if (part === "Shift") return mac ? "⇧" : "Shift";
+      if (part === "Alt") return mac ? "⌥" : "Alt";
+      return part;
+    }),
+    key.toUpperCase(),
+  ];
+};
+
+/** The ☰ menu's rows: 24px at the sides, 12px between icon and words. */
+const MENU_ROW = "gap-3! px-6!";
+
+const can = (id: string): boolean => findCommand(id)?.available() === true;
+
+function CommandItem(props: {
+  readonly id: string;
+  readonly label: string;
+  readonly icon: JSX.Element;
+  readonly testId: string;
+  readonly children?: JSX.Element;
+}) {
+  return (
+    <MenuItem
+      class={MENU_ROW}
+      data-testid={props.testId}
+      disabled={!can(props.id)}
+      icon={props.icon}
+      onSelect={() => runCommand(props.id)}
+    >
+      <span class="flex-1">{props.label}</span>
+      {props.children}
+      <Show when={shortcut(props.id).length > 0}>
+        <span class="ms-auto flex shrink-0 items-center gap-1" aria-hidden="true">
+          <For each={shortcut(props.id)}>
+            {(key) => (
+              <Kbd class="h-6 min-w-6 justify-center rounded-md border-transparent px-1.5 font-sans font-semibold">
+                {key}
+              </Kbd>
+            )}
+          </For>
+        </span>
+      </Show>
+    </MenuItem>
+  );
+}
+
+/**
+ * The app bar's one menu (☰): what used to sit on the bar as separate buttons
+ * — Redo, History, sending and receiving, Save, Share, Findings, Settings —
+ * in the designer's order. Undo stays on the bar as well.
+ */
+function MainMenu() {
   const navigate = useNavigate();
   const shell = useShell();
-  const [open, setOpen] = createSignal(false, { name: "appBarMoreOpen" });
+  const [open, setOpen] = createSignal(false, { name: "appBarMenuOpen" });
   const attention = () => shell.findingCounts().errors + shell.findingCounts().warnings;
-  // Sync lives here, first in the menu: the row names its state, and opens
-  // the same popover the cloud button did, dropped from this button.
-  const sync = createSync(shell);
-
-  const items: ReadonlyArray<{ label: string; to: ProjectScreen; icon: JSX.Element }> = [
-    { label: m.common_findings(), to: "/project/$slug/findings", icon: <Bell size={16} /> },
-    { label: m.common_history(), to: "/project/$slug/history", icon: <HistoryIcon size={16} /> },
-    {
-      label: m.common_character_inventory(),
-      to: "/project/$slug/inventory",
-      icon: <TypeIcon size={16} />,
-    },
-    { label: m.common_compare(), to: "/project/$slug/review", icon: <GitCompare size={16} /> },
-  ];
+  const go = (to: "/project/$slug/inventory" | "/project/$slug/review"): void =>
+    void navigate({ to, params: { slug: shell.slug() }, search: {} });
 
   return (
-    <span class="relative inline-flex">
-      <Menu
-        label={m.common_more()}
-        side="bottom"
-        align="end"
-        open={open()}
-        onOpenChange={setOpen}
-        class="w-52"
-        trigger={
-          <BarButton
-            label={m.common_more()}
-            testId="app-bar-more"
-            pressed={open() ? "true" : "false"}
-            icon={<Ellipsis size={20} />}
-          />
-        }
+    <Menu
+      label={m.menu_main()}
+      side="bottom"
+      align="end"
+      open={open()}
+      onOpenChange={setOpen}
+      class="w-72 rounded-[12px]! py-3!"
+      trigger={
+        <BarButton
+          label={m.menu_main()}
+          testId="app-bar-menu"
+          pressed={open() ? "true" : "false"}
+          icon={<MenuIcon size={20} />}
+        />
+      }
+    >
+      <CommandItem id="book.undo" testId="menu-undo" label={m.common_undo()} icon={<Undo2 />} />
+      <CommandItem id="book.redo" testId="menu-redo" label={m.common_redo()} icon={<Redo2 />} />
+      <CommandItem
+        id="git.history"
+        testId="menu-history"
+        label={m.common_history()}
+        icon={<HistoryIcon />}
+      />
+      <MenuSeparator />
+      <CommandItem
+        id="remote.push"
+        testId="menu-upload"
+        label={m.menu_upload_to_wacs()}
+        icon={<CloudUpload />}
+      />
+      <CommandItem
+        id="remote.pull"
+        testId="menu-check"
+        label={m.menu_check_for_updates()}
+        icon={<CloudDownload />}
+      />
+      <MenuSeparator />
+      <CommandItem
+        id="book.save"
+        testId="menu-save"
+        label={m.menu_save_changes()}
+        icon={<Save />}
+      />
+      <CommandItem
+        id="project.copyLink"
+        testId="menu-share"
+        label={m.menu_share_project()}
+        icon={<Share2 />}
+      />
+      <MenuSeparator />
+      <MenuItem
+        class={MENU_ROW}
+        data-testid="menu-compare"
+        disabled={shell.project() === undefined}
+        icon={<GitCompare />}
+        onSelect={() => go("/project/$slug/review")}
       >
-        <Show when={shell.project() !== undefined}>
-          <MenuItem
-            data-testid="app-bar-sync"
-            icon={syncGlyph(sync)}
-            class={sync.pop.attention() !== "none" ? "text-on-surface-warning" : undefined}
-            onSelect={() => setTimeout(() => sync.pop.openChanged(true))}
-          >
-            {m.common_sync()}
-          </MenuItem>
-          <MenuSeparator />
+        {m.common_compare()}
+      </MenuItem>
+      <MenuItem
+        class={MENU_ROW}
+        data-testid="menu-inventory"
+        disabled={shell.project() === undefined}
+        icon={<TypeIcon />}
+        onSelect={() => go("/project/$slug/inventory")}
+      >
+        {m.common_character_inventory()}
+      </MenuItem>
+      <MenuSeparator />
+      <CommandItem id="findings.open" testId="menu-alerts" label={m.menu_alerts()} icon={<Bell />}>
+        <Show when={attention() > 0}>
+          <span class="min-w-6 rounded-full bg-surface-error px-1.5 text-center text-smallest leading-5 font-semibold text-on-surface-error">
+            {attention() > 999 ? "999+" : attention()}
+          </span>
         </Show>
-        <For each={items}>
-          {(item) => (
-            <MenuItem
-              data-testid={`app-bar-more-${item.to.split("/").pop()}`}
-              disabled={shell.project() === undefined}
-              icon={item.icon}
-              onSelect={() =>
-                void navigate({ to: item.to, params: { slug: shell.slug() }, search: {} })
-              }
-            >
-              <span class="flex-1">{item.label}</span>
-              {item.to === "/project/$slug/findings" && attention() > 0 ? (
-                <span class="min-w-4 rounded-full bg-on-surface-error px-1 text-center text-smallest leading-4 font-semibold text-surface-error">
-                  {attention() > 99 ? "99+" : attention()}
-                </span>
-              ) : null}
-            </MenuItem>
-          )}
-        </For>
-      </Menu>
-      <span class="absolute end-0 bottom-0">
-        <Show when={shell.project() !== undefined}>
-          <SyncPopover sync={sync} />
-        </Show>
-      </span>
-    </span>
+      </CommandItem>
+      <CommandItem
+        id="project.settings"
+        testId="menu-settings"
+        label={m.common_settings()}
+        icon={<SettingsIcon />}
+      />
+    </Menu>
   );
 }
 
@@ -244,24 +338,26 @@ export function AppBar() {
     >
       <HomeButton />
 
+      <Show when={open()}>
+        <div class="flex shrink-0 items-center gap-2">
+          <SyncChip />
+          <SaveStatus />
+        </div>
+      </Show>
+
       <ModeControl mode={mode()} open={open()} onChange={goTo} />
 
       <div class="flex shrink-0 items-center gap-2">
-        <ProjectTools />
-        <MoreMenu />
-
-        <BarButton
-          label={m.common_settings()}
-          testId="app-bar-settings"
-          pressed={at("/settings")}
-          icon={<SettingsIcon size={20} />}
-          disabled={!open()}
-          title={open() ? undefined : m.workspace_open_a_project_to_see()}
-          onClick={() =>
-            void navigate({ to: "/project/$slug/settings", params: { slug: shell.slug() } })
-          }
-        />
-
+        <Show when={open()}>
+          <BarButton
+            label={m.common_undo()}
+            testId="toolbar-undo"
+            icon={<Undo2 size={20} />}
+            disabled={!can("book.undo")}
+            onClick={() => runCommand("book.undo")}
+          />
+          <MainMenu />
+        </Show>
         <AccountButton />
       </div>
     </nav>

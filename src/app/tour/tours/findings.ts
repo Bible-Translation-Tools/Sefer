@@ -30,9 +30,9 @@ export const findingsTour: Tour = {
     {
       go: toEditor,
       spotlight: {
-        anchor: "[data-testid=app-bar-more]",
+        anchor: "[data-testid=app-bar-menu]",
         title: "Findings",
-        body: "Sefer checks the text as you work. Findings, in this menu, shows how many need attention in this project.",
+        body: "Sefer checks the text as you work. Alerts, in this menu, shows how many need attention in this project.",
       },
       advance: "user",
     },
@@ -71,9 +71,9 @@ export const findingsTour: Tour = {
     },
     {
       go: (context) => context.run("findings.next"),
-      ready: () => onBookScreen() && document.querySelector("[data-testid=app-bar-more]") !== null,
+      ready: () => onBookScreen() && document.querySelector("[data-testid=app-bar-menu]") !== null,
       spotlight: {
-        anchor: "[data-testid=app-bar-more]",
+        anchor: "[data-testid=app-bar-menu]",
         title: "Next finding, from the editor",
         body: "Sefer has just taken you to the next finding. Alt+F8 does that from anywhere in the editor, and Alt+Shift+F8 goes back one.",
       },

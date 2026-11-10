@@ -1,11 +1,4 @@
-import type {
-  CombineRefusal,
-  CombineState,
-  IncomingPlan,
-  ReceiveRefusal,
-  SyncState,
-} from "#core/sync";
-import { FRONT_MATTER } from "#core/sync";
+import type { CombineRefusal, CombineState, ReceiveRefusal, SyncState } from "#core/sync";
 
 import { m } from "../../paraglide/messages";
 import type { SendOutcome } from "../../syncActions";
@@ -141,47 +134,6 @@ export const stateCopy = (state: SyncState, context: StateContext = {}): StateCo
     default:
       return troubleCopy(state, context);
   }
-};
-
-const chapterLabel = (chapter: number): string =>
-  chapter === FRONT_MATTER
-    ? m.cloud_the_front_matter()
-    : m.cloud_chapter_number({ number: chapter });
-
-export const chapterList = (chapters: readonly number[]): string => {
-  const labels = chapters.map(chapterLabel);
-  if (labels.length <= 1) return labels[0] ?? "";
-  const last = labels[labels.length - 1] ?? "";
-  return m.cloud_first_and_last({ first: labels.slice(0, -1).join(", "), last });
-};
-
-export const planSummary = (plan: IncomingPlan): string => {
-  if (plan.books.length === 0) return m.cloud_nothing_in_your_books_changes();
-  const books = m.common_count_books({ count: plan.books.length });
-  if (plan.verseCount === 0) return m.cloud_there_are_changes_in_books({ books });
-  const verses = m.common_count_verses({ count: plan.verseCount });
-  return m.cloud_there_are_changes_to_verses({ verses, books });
-};
-
-export const incomingWords = (plan: IncomingPlan): string | undefined => {
-  if (plan.books.length === 0) return undefined;
-  const books = m.common_count_books({ count: plan.books.length });
-  if (plan.verseCount === 0) return m.cloud_books_to_receive({ books });
-  const verses = m.common_count_verses({ count: plan.verseCount });
-  return m.cloud_verses_in_books_to_receive({ verses, books });
-};
-
-export const outgoingWords = (): string => m.cloud_saved_changes_not_sent_yet();
-
-export const planOverlap = (
-  plan: IncomingPlan,
-): { readonly text: string; readonly mine: boolean } | undefined => {
-  if (plan.verseCount === 0) return undefined;
-  if (plan.verseOverlap === 0) return { text: m.cloud_you_have_not_changed_any(), mine: false };
-  return {
-    text: m.cloud_you_also_changed_count_of_those({ count: plan.verseOverlap }),
-    mine: true,
-  };
 };
 
 export const receiveRefusal = (refusal: ReceiveRefusal, books: readonly string[] = []): string => {

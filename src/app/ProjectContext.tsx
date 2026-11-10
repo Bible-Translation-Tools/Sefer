@@ -45,7 +45,7 @@ import type {
 } from "./shell/types";
 import { createUpdateCheck } from "./shell/updateCheck";
 import type { ShellEvent } from "./shellEvent";
-import { makeShellStores, type SaveState } from "./shellStores";
+import { makeShellStores, type BackupStatus, type SaveState } from "./shellStores";
 import { makeSuppressionStore } from "./suppressions";
 
 export type { SaveState } from "./shellStores";
@@ -68,6 +68,8 @@ export interface Shell {
   readonly unsaved: (book: Book) => boolean;
 
   readonly saveState: (book: Book) => SaveState;
+  /** Where the backup of this session's edits stands (the app bar's save status). */
+  readonly backup: Accessor<BackupStatus>;
   readonly noteWritten: (bookIds: readonly BookId[], recorded: boolean) => void;
 
   readonly mode: Accessor<ProjectionName>;
@@ -254,6 +256,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     noteWritten,
     unsaved,
     saveState,
+    backup,
     stampOf,
     findings,
     findingsPending,
@@ -353,6 +356,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     focus: reader.focus,
     unsaved,
     saveState,
+    backup,
     changed,
     noteWritten,
     mode,

@@ -1,0 +1,45 @@
+---
+id: 3d53e8f8-24ae-4e18-8edd-2c90c7f442cd
+title: "Warn before device storage runs out"
+kind: followup
+status: parked
+created: 2026-11-09
+updated: 2026-11-09
+sha: 4eab82cd
+tags: [sync]
+---
+
+For paisano, from Thomas (2026-11-09): not urgent, keep in mind for later.
+
+> Nothing to worry about for now but good to keep in mind for later.
+
+The app bar's save status now says "Changes not backed up" when the backup journal fails to
+write (`RecoveryService.backups()` in `src/core/recovery/recovery.ts`, read by
+`src/app/ui/workspace/StatusChips.tsx`). By then it is already too late. Thomas would like a
+warning about device storage before it gets that far.
+
+What usually makes a write fail:
+
+- **Web:** the browser's storage quota for the site (OPFS), private or incognito windows (small
+  quota, or none), site data blocked or cleared, or the browser evicting storage that was never
+  marked persistent.
+- **Desktop:** a full disk, or no permission to write to the app data folder (on Windows, sometimes
+  antivirus or sync software locking the file).
+
+Sefer uses neither `navigator.storage.estimate()` nor `navigator.storage.persist()` today.
+
+<Followup id="estimate">
+  Warn when space runs low: on the Web from `navigator.storage.estimate()` (usage against quota); on
+  desktop, free disk space from the Tauri side. Decide the threshold and where the warning shows
+  (the save status popover is one candidate).
+</Followup>
+
+<Followup id="persist">
+  On the Web, ask for persistent storage (`navigator.storage.persist()`) so the browser does not
+  evict projects and backups under pressure.
+</Followup>
+
+<Followup id="retry">
+  A failed backup is retried only on the next edit. Consider retrying on a timer as well, and add a
+  test that forces a write failure (the recovery module has no tests yet).
+</Followup>

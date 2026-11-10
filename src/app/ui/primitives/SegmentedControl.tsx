@@ -41,9 +41,11 @@ const toneClass = (chosen: boolean, tone: SegmentedControlProps<string>["tone"])
     return chosen
       ? "bg-brand-light text-brand"
       : "text-on-surface-secondary hover:not-disabled:bg-surface-secondary hover:not-disabled:text-on-surface-primary";
+  // The chosen segment is a primary button; the others sit on the track with
+  // no fill of their own until hovered.
   return chosen
-    ? "bg-surface-primary text-brand shadow-small"
-    : "text-on-surface-secondary hover:not-disabled:bg-surface-tertiary hover:not-disabled:text-on-surface-primary";
+    ? "button-primary shadow-small"
+    : "bg-transparent text-on-surface-primary hover:not-disabled:bg-surface-tertiary";
 };
 
 export function SegmentedControl<T extends string>(props: SegmentedControlProps<T>) {
@@ -70,7 +72,7 @@ export function SegmentedControl<T extends string>(props: SegmentedControlProps<
           : "h-12 min-w-0 gap-0.75 rounded-2xl p-0.75",
         props.tone === "light"
           ? "border border-surface-border bg-surface-primary"
-          : "border border-surface-border bg-surface-secondary",
+          : "bg-surface-secondary",
         props.class,
       )}
       onKeyDown={(event) => {
