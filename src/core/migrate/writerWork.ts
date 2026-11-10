@@ -9,13 +9,8 @@ import { Git } from "../git/git";
 import { Remote } from "../remote/remote";
 import { normaliseRepoUrl } from "../resources/relationships";
 import { readUpstreams, UPSTREAMS_FILE, upstreamsText, type Upstream } from "./upstreams";
-import {
-  isWriterTextPath,
-  readWriterTree,
-  recognizeWriter,
-  treeFromFiles,
-  writerBookToUsfm,
-} from "./writerBook";
+import { isWriterTextPath, readWriterFiles, recognizeWriter } from "./writerBook";
+import { stitchBook, WriterEngine } from "./writerEngine";
 
 export const projectUpstreams = (
   fileSystem: FileSystem.FileSystem,
@@ -75,7 +70,11 @@ const text = (bytes: Uint8Array): string | undefined => {
 export const fetchWork = (
   probed: Probed & { readonly head: string },
   stagingRoot: string,
-): Effect.Effect<WriterWork | undefined, unknown, FileSystem.FileSystem | Git | Remote> =>
+): Effect.Effect<
+  WriterWork | undefined,
+  unknown,
+  FileSystem.FileSystem | Git | Remote | WriterEngine
+> =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const git = yield* Git;
@@ -93,13 +92,12 @@ export const fetchWork = (
     if (Option.isSome(changed) && !changed.value.some((entry) => isWriterTextPath(entry.path)))
       return undefined;
 
-    const theirsTree = yield* readWriterTree(fileSystem, root);
-    const theirs = writerBookToUsfm(theirsTree, book, book);
+    const now = yield* readWriterFiles(fileSystem, root);
+    const theirs = yield* stitchBook(now, book);
 
     let base: string | undefined;
     if (Option.isSome(changed)) {
       const files = new Map<string, string>();
-      const now = yield* readWriterFiles(fileSystem, root);
       for (const [path, value] of now) files.set(path, value);
       for (const entry of changed.value) {
         if (!isWriterTextPath(entry.path)) continue;
@@ -108,7 +106,7 @@ export const fetchWork = (
         if (decoded === undefined) files.delete(entry.path);
         else files.set(entry.path, decoded);
       }
-      base = writerBookToUsfm(treeFromFiles(files), book, book);
+      base = yield* stitchBook(files, book);
     }
 
     const log = yield* Effect.orElseSucceed(git.log(repo), () => []);
@@ -122,24 +120,6 @@ export const fetchWork = (
       base,
       theirs,
     };
-  });
-
-const readWriterFiles = (
-  fileSystem: FileSystem.FileSystem,
-  root: string,
-): Effect.Effect<ReadonlyMap<string, string>> =>
-  Effect.gen(function* () {
-    const out = new Map<string, string>();
-    const entries = yield* Effect.orElseSucceed(
-      fileSystem.readDirectory(root, { recursive: true }),
-      (): readonly string[] => [],
-    );
-    for (const path of entries.filter(isWriterTextPath)) {
-      const bytes = yield* Effect.option(fileSystem.readFile(`${root}/${path}`));
-      const decoded = Option.isSome(bytes) ? text(bytes.value) : undefined;
-      if (decoded !== undefined) out.set(path, decoded);
-    }
-    return out;
   });
 
 const placeOf = (addr: Addr | undefined): string | undefined =>

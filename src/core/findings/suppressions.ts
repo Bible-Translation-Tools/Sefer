@@ -1,11 +1,7 @@
+import { formatReference } from "@wycliffeassociates/scripture-kitchen/web";
 import type { BookId } from "@wycliffeassociates/sefer-text/book";
-import { addressCode } from "@wycliffeassociates/sefer-text/location/address";
-import {
-  tocUnits,
-  unitAddress,
-  unitIndexAt,
-  type TocView,
-} from "@wycliffeassociates/sefer-text/location/locate";
+import type { Analysis } from "@wycliffeassociates/sefer-text/engine/analysis";
+import { unitIndexAt } from "@wycliffeassociates/sefer-text/engine/places";
 import { Result, Schema } from "effect";
 
 import { ordinalOf, siteIdentityOf } from "../galley";
@@ -96,12 +92,17 @@ interface Verse {
   readonly text: string;
 }
 
-const verseAt = (bookId: BookId, text: string, toc: TocView, at: number): Verse | undefined => {
-  const units = tocUnits(toc);
+const verseAt = (
+  bookId: BookId,
+  text: string,
+  analysis: Analysis,
+  at: number,
+): Verse | undefined => {
+  const units = analysis.units(bookId);
   const unit = units[unitIndexAt(units, at)];
   if (unit === undefined) return undefined;
   return {
-    ref: addressCode(unitAddress(bookId, toc, unit)),
+    ref: formatReference(unit.address),
     from: unit.from,
     text: text.slice(unit.from, unit.to),
   };
@@ -110,11 +111,11 @@ const verseAt = (bookId: BookId, text: string, toc: TocView, at: number): Verse 
 export const siteKeyOf = (
   bookId: BookId,
   text: string,
-  toc: TocView,
+  analysis: Analysis,
   from: number,
   to: number,
 ): string | undefined => {
-  const verse = verseAt(bookId, text, toc, from);
+  const verse = verseAt(bookId, text, analysis, from);
   if (verse === undefined || to > verse.from + verse.text.length) return undefined;
   const siteText = text.slice(from, to);
   return siteIdentityOf({
@@ -144,11 +145,11 @@ const siteFields = (
 export const versesOf = (
   bookId: BookId,
   text: string,
-  toc: TocView,
+  analysis: Analysis,
 ): ReadonlyMap<string, readonly string[]> => {
   const out = new Map<string, string[]>();
-  for (const unit of tocUnits(toc)) {
-    const ref = addressCode(unitAddress(bookId, toc, unit));
+  for (const unit of analysis.units(bookId)) {
+    const ref = formatReference(unit.address);
     const held = out.get(ref);
     const verse = text.slice(unit.from, unit.to);
     if (held === undefined) out.set(ref, [verse]);

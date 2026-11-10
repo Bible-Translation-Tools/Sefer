@@ -148,6 +148,11 @@ export const urlCandidate = async (services: Services, typed: string): Promise<B
 
 const CANDIDATE_TIMEOUT = "60 seconds";
 
+/** Hands back the wasm memory a staged book's history holds; a spent one has none left. */
+export const releaseOpened = (opened: Opened): void => {
+  if (opened.state === "ready") opened.staged.history?.free();
+};
+
 export const openOne = async (services: Services, candidate: BookCandidate): Promise<Opened> => {
   const operation = services.composition.observability.operation("migrate.open", {
     "migrate.book": candidate.book,
@@ -174,6 +179,7 @@ export const openOne = async (services: Services, candidate: BookCandidate): Pro
     const staged = opened.value;
     const refused = validate(staged.usfm);
     if (refused !== undefined) {
+      staged.history?.free();
       operation.end("refused", { "migrate.reason": refused });
       return { state: "refused", reason: refused };
     }
@@ -232,6 +238,18 @@ const freeFolder = (services: Services, name: string): Effect.Effect<string, nev
     }
   });
 
+/**
+ * Who the new project's manifests say will hold it online: the account its
+ * first cloned book came from, else (folders and zips only) its language.
+ * The Burrito records it as its primary id; putting the project online later
+ * may choose another.
+ */
+const repositoryOwner = (form: AssembleForm, books: readonly StagedBook[]): string => {
+  for (const staged of books)
+    if (staged.candidate.origin.kind === "remote") return staged.candidate.origin.owner;
+  return form.language.id;
+};
+
 export const assembleProject = (
   services: Services,
   folder: string,
@@ -251,7 +269,11 @@ export const assembleProject = (
             form,
             books,
             author: APP_AUTHOR,
-            date: new Date().toISOString().slice(0, 10),
+            policy: {
+              createdAt: new Date().toISOString(),
+              repository: `${repositoryOwner(form, books)}/${lastSegment(root)}`,
+              version: services.hostInfo.build(),
+            },
           });
           yield* rememberProject(services.projectsRoot, root, undefined);
           return { root, result };

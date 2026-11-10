@@ -1,5 +1,5 @@
 import type { BookId } from "@wycliffeassociates/sefer-text/book";
-import { testamentOf } from "@wycliffeassociates/sefer-text/location/canon";
+import { testamentOf } from "@wycliffeassociates/sefer-text/location/bookName";
 import { Show } from "solid-js";
 
 import { m } from "#app/paraglide/messages";

@@ -21,13 +21,12 @@ import {
   type SaveReceiptLike,
   sharedFrom,
   type Status,
+  type GitObject,
+  type ObjectReader,
   type Version,
-  type WalkedChange,
-  type WalkedCommit,
 } from "#core/git/git";
 import {
   bookHistoryFrom,
-  entriesOf,
   entryIn,
   isIndexedBook,
   reachableFrom,
@@ -176,118 +175,37 @@ const makeWebGit = (
       return entries.map(commitOf);
     });
 
-  const walk = (repo: Repo): Effect.Effect<readonly WalkedCommit[], GitError> =>
-    attempt("Io", async () => {
-      const cache = {};
-      const dir = repo.root;
-      let head: string;
-      try {
-        head = await git.resolveRef({ fs, dir, ref: "HEAD" });
-      } catch {
-        return [];
-      }
-      type Entry = { readonly mode: string; readonly id: string };
-      const trees = new Map<string, ReadonlyMap<string, Entry>>();
-      const entries = async (oid: string | undefined): Promise<ReadonlyMap<string, Entry>> => {
-        if (oid === undefined) return new Map();
-        const held = trees.get(oid);
-        if (held !== undefined) return held;
-        const { object } = await git.readObject({ fs, dir, oid, format: "content", cache });
-        const found = new Map<string, Entry>();
-        if (object instanceof Uint8Array)
-          for (const entry of entriesOf(object)) found.set(entry.name, entry);
-        trees.set(oid, found);
-        return found;
-      };
-      const isTree = (entry: Entry | undefined): boolean =>
-        entry !== undefined && (entry.mode === "40000" || entry.mode === "040000");
-      const isFile = (entry: Entry | undefined): boolean =>
-        entry !== undefined && !isTree(entry) && entry.mode !== "160000";
-      const compare = async (
-        before: string | undefined,
-        after: string | undefined,
-        prefix: string,
-        out: WalkedChange[],
-      ): Promise<void> => {
-        const [entriesBefore, entriesAfter] = await Promise.all([entries(before), entries(after)]);
-        for (const name of new Set([...entriesBefore.keys(), ...entriesAfter.keys()])) {
-          const entryBefore = entriesBefore.get(name);
-          const entryAfter = entriesAfter.get(name);
-          if (entryBefore?.id === entryAfter?.id && entryBefore?.mode === entryAfter?.mode)
-            continue;
-          const path = `${prefix}${name}`;
-          if (isTree(entryBefore) || isTree(entryAfter))
-            await compare(
-              isTree(entryBefore) ? entryBefore?.id : undefined,
-              isTree(entryAfter) ? entryAfter?.id : undefined,
-              `${path}/`,
-              out,
-            );
-          if (isFile(entryAfter)) out.push({ path, blob: entryAfter?.id ?? null });
-          else if (isFile(entryBefore)) out.push({ path, blob: null });
-        }
-      };
-      type Read = Awaited<ReturnType<typeof git.readCommit>>["commit"];
-      const commits = new Map<string, Read>();
-      const commitAt = async (oid: string): Promise<Read> => {
-        const held = commits.get(oid);
-        if (held !== undefined) return held;
-        const { commit } = await git.readCommit({ fs, dir, oid, cache });
-        commits.set(oid, commit);
-        return commit;
-      };
-      const shallow = new Set(
-        await fs
-          .readFile(`${dir}/.git/shallow`, "utf8")
-          .then((text) =>
-            String(text)
-              .split("\n")
-              .filter((line) => line.trim() !== ""),
-          )
-          .catch((): string[] => []),
-      );
-      const line: WalkedCommit[] = [];
-      for (let oid: string | undefined = head; oid !== undefined;) {
-        const commit = await commitAt(oid);
-        const parents: readonly string[] = shallow.has(oid) ? [] : commit.parent;
-        const parent: string | undefined = parents[0];
-        const parentTree = parent === undefined ? undefined : (await commitAt(parent)).tree;
-        const changes: WalkedChange[] = [];
-        await compare(parentTree, commit.tree, "", changes);
-        const signed = (who: typeof commit.author) => ({
-          name: who.name,
-          email: who.email,
-          at: who.timestamp,
-          offset: who.timezoneOffset === 0 ? 0 : -who.timezoneOffset,
-        });
-        line.push({
-          id: oid,
-          parents,
-          message: commit.message,
-          author: signed(commit.author),
-          committer: signed(commit.committer),
-          changes,
-        });
-        oid = parent;
-      }
-      return line.reverse();
-    });
-
-  const blobs = (
-    repo: Repo,
-    ids: readonly string[],
-  ): Effect.Effect<ReadonlyMap<string, Uint8Array>, GitError> =>
-    attempt("Io", async () => {
-      const cache = {};
-      const out = new Map<string, Uint8Array>();
-      for (const oid of new Set(ids))
-        out.set(oid, (await git.readBlob({ fs, dir: repo.root, oid, cache })).blob);
-      return out;
-    });
+  const objectReader = (repo: Repo): ObjectReader => {
+    const cache = {};
+    return (ids) =>
+      attempt("Io", async () => {
+        const out = new Map<string, GitObject>();
+        await Promise.all(
+          [...new Set(ids)].map(async (oid) => {
+            try {
+              const { type, object } = await git.readObject({
+                fs,
+                dir: repo.root,
+                oid,
+                format: "content",
+                cache,
+              });
+              if (
+                (type === "commit" || type === "tree" || type === "blob") &&
+                object instanceof Uint8Array
+              )
+                out.set(oid, { type, bytes: object });
+            } catch {
+              // Missing: the walk names what it could not find.
+            }
+          }),
+        );
+        return out;
+      });
+  };
 
   const service: Omit<GitService, "timeline"> = {
-    walk,
-    blobs,
+    objectReader,
     open: (root) =>
       Effect.gen(function* () {
         const present = yield* Effect.orElseSucceed(

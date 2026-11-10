@@ -26,6 +26,7 @@ import type { BookCensus as BookToc } from "@wycliffeassociates/scripture-kitche
 import { Galley as GalleyHandle, initSync } from "@wycliffeassociates/scripture-kitchen/web";
 import * as wasmModule from "@wycliffeassociates/scripture-kitchen/web";
 import type { Analysis, DiagnosticView } from "@wycliffeassociates/sefer-text/engine/analysis";
+import { placesOf } from "@wycliffeassociates/sefer-text/engine/places";
 import { Context, Data, Effect, Layer, Option, Result } from "effect";
 
 import { Observability, type ObservabilityService } from "../observability";
@@ -360,6 +361,48 @@ const makeService = (
     return { customMarkers: judged };
   };
 
+  /**
+   * galley's place doors over one analysis. A book analysis asks its id's
+   * doors with `expect` set to its own hash, so galley answers from what it
+   * already holds (about 0.03 ms on Psalms) while the id still holds this
+   * text, and refuses once the book has moved on or been removed; then, and
+   * for every text that is not a project book, the text doors answer (1 to 3 ms).
+   */
+  const places = (text: string, id: string | undefined, expect: bigint) => {
+    const markers = id === undefined ? textMarkers(text) : {};
+    const ofText = { utf16: true, ...markers } as const;
+    let stale = id === undefined;
+    const byId = <T>(ask: (id: string) => T, otherwise: () => T): T => {
+      if (stale || id === undefined) return otherwise();
+      try {
+        return ask(id);
+      } catch {
+        // Stale (the id holds a newer text) or gone (a project switch removed
+        // it): either way the id no longer answers for this text, and the text does.
+        stale = true;
+        return otherwise();
+      }
+    };
+    const own = { utf16: true, expect } as const;
+    return placesOf(text.length, {
+      resolve: (address) =>
+        byId(
+          (book) => handle.resolve(book, address, own),
+          () => handle.resolveOf(text, address, ofText),
+        ),
+      addressAt: (offset) =>
+        byId(
+          (book) => handle.addressAt(book, offset, own),
+          () => handle.addressAtOf(text, offset, ofText),
+        ),
+      places: () =>
+        byId(
+          (book) => handle.places(book, own),
+          () => handle.placesOf(text, ofText),
+        ),
+    });
+  };
+
   const parseAnalysis = (
     text: string,
     why: string,
@@ -394,6 +437,7 @@ const makeService = (
       engineMs,
       usfmVersion: declaredVersion(dish),
       attrs: (from, to) => attrList(wasmModule.attrs(text, from, to, { utf16: true })),
+      ...places(text, id, dish.sourceHash),
     };
   };
 

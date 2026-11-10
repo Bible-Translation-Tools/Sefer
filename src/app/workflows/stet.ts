@@ -1,5 +1,4 @@
 import type { BookId } from "@wycliffeassociates/sefer-text/book";
-import { resolve } from "@wycliffeassociates/sefer-text/location/locate";
 import { Effect, Option } from "effect";
 
 import { Galley, tocViewOf, type Analysis } from "#core/galley";
@@ -73,10 +72,9 @@ export const sourceReadings = (
   });
 
 const verseReading = (analysis: Analysis, occurrence: TermOccurrence): string | undefined => {
-  const toc = tocViewOf(analysis);
-  const found = resolve(toc, occurrence.address);
+  const found = analysis.resolve(occurrence.address);
   if (found.kind !== "found") return undefined;
-  const anchor = toc.verses.find((verse) => verse.at === found.from);
+  const anchor = tocViewOf(analysis).verses.find((verse) => verse.at === found.from);
   return anchor === undefined ? undefined : analysis.text.slice(anchor.labelEnd, found.to).trim();
 };
 

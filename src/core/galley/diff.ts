@@ -258,8 +258,11 @@ const readUnit = (
   };
 };
 
-const decodeSkeleton = (json: string, baselineText: string, currentText: string): DiffSkeleton => {
-  const parsed: unknown = JSON.parse(json);
+const decodeSkeleton = (
+  parsed: unknown,
+  baselineText: string,
+  currentText: string,
+): DiffSkeleton => {
   if (!isRecord(parsed))
     return { units: [], unchangedCount: 0, baselineLen: 0, currentLen: 0, engine: true };
   const units: DecisionUnit[] = [];
@@ -277,10 +280,10 @@ const decodeSkeleton = (json: string, baselineText: string, currentText: string)
   };
 };
 
-const encodeDecisions = (decisions: DecisionMap): string => {
+const encodeDecisions = (decisions: DecisionMap): Record<string, MergeSide> => {
   const out: Record<string, MergeSide> = {};
   for (const [id, side] of decisions) out[id] = side;
-  return JSON.stringify(out);
+  return out;
 };
 
 interface WasmSplices {
@@ -290,17 +293,17 @@ interface WasmSplices {
 }
 
 interface DiffCapableModule {
-  readonly diff?: (baseline: string, current: string, opts: DiffOptions) => string;
+  readonly diff?: (baseline: string, current: string, opts: DiffOptions) => unknown;
   readonly mergeSplices?: (
     baseline: string,
     current: string,
-    decisions: string,
+    decisions: Record<string, MergeSide>,
     fallback: string,
   ) => WasmSplices;
   readonly merge?: (
     baseline: string,
     current: string,
-    decisions: string,
+    decisions: Record<string, MergeSide>,
     fallback: string,
   ) => string;
 }

@@ -147,7 +147,11 @@ function ReviewHeaderView(props: { readonly panel: PanelModel }) {
       form={props.panel.form}
       sourcesOpen={props.panel.sourcesOpen()}
       onSourcesOpenChange={props.panel.setSourcesOpen}
-      sourcesLabel={`${props.panel.sides.rightLabel()} → ${props.panel.sides.leftLabel()}`}
+      sourcesLabel={
+        props.panel.sides.editorAsShared()
+          ? `${props.panel.sides.leftLabel()} → ${props.panel.sides.rightLabel()}`
+          : `${props.panel.sides.rightLabel()} → ${props.panel.sides.leftLabel()}`
+      }
       busy={props.panel.busy()}
       note={props.panel.note()}
       lastBackup={props.panel.lastBackup()}

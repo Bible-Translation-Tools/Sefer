@@ -41,6 +41,8 @@ const SENTENCES = {
     m.usfm_verse_out_of_order({ anchor: v.anchor, second: v.second, aux: v.aux }),
   "verse-gap": (v) => m.usfm_verse_gap({ anchor: v.anchor, aux: v.aux }),
   "missing-verse-one": (v) => m.usfm_missing_verse_one({ anchor: v.anchor, aux: v.aux }),
+  "chapter-ends-early": (v) => m.usfm_chapter_ends_early({ anchor: v.anchor, aux: v.aux }),
+  "verse-beyond-scheme": (v) => m.usfm_verse_beyond_scheme({ anchor: v.anchor, aux: v.aux }),
   "verse-before-first-chapter": (v) => m.usfm_verse_before_first_chapter({ anchor: v.anchor }),
   "missing-chapter": () => m.usfm_missing_chapter(),
   "missing-id": () => m.usfm_missing_id(),

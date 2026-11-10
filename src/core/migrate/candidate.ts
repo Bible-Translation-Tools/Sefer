@@ -1,17 +1,17 @@
-import { CANON, type Testament } from "@wycliffeassociates/sefer-text/location/canon";
+import { book as canonBook } from "@wycliffeassociates/scripture-kitchen/canon";
+import {
+  bookName,
+  testamentOf,
+  type Testament,
+} from "@wycliffeassociates/sefer-text/location/bookName";
 import { Data, Effect, FileSystem, Option } from "effect";
 
 import { lastSegment } from "../fileSystem/path";
 import { Git, type Author } from "../git/git";
 import { Observability } from "../observability";
 import { Remote } from "../remote/remote";
-import {
-  readWriterTree,
-  recognizeWriter,
-  writerBookToUsfm,
-  type WriterProject,
-} from "./writerBook";
-import { readWriterHistory, type WriterHistory } from "./writerHistory";
+import { readWriterFiles, recognizeWriter, type WriterProject } from "./writerBook";
+import { objectSource, stitchBook, WriterEngine, type WriterHistory } from "./writerEngine";
 
 export type CandidateStatus = "Primary" | "Active" | "Inactive";
 
@@ -36,10 +36,18 @@ export interface BookCandidate {
 export interface StagedBook {
   readonly candidate: BookCandidate;
   readonly project: WriterProject;
+  /** The book at its last save (bttwriter's), or the folder's files when it has no history. */
   readonly usfm: string;
   readonly authors: readonly Author[];
   readonly upstream?: { readonly url: string; readonly commit: string };
+  /**
+   * The saves, held in bttwriter until the assembly replays them (which uses
+   * the handle up: `assemble` reads it again from `root` for a second try).
+   */
   readonly history?: WriterHistory;
+  /** Where the history was read: the repository, and the name its trailers cite. */
+  readonly root: string;
+  readonly source: string;
 }
 
 class CandidateError extends Data.TaggedError("CandidateError")<{
@@ -50,13 +58,11 @@ class CandidateError extends Data.TaggedError("CandidateError")<{
 export const candidateLabel = (candidate: BookCandidate): string =>
   candidate.origin.kind === "remote" ? candidate.origin.owner : candidate.origin.name;
 
-export const testamentOfBook = (book: string): Testament =>
-  CANON.find((entry) => entry.id === book)?.testament ?? "nt";
+export const testamentOfBook = (book: string): Testament => testamentOf(book);
 
-const canonIndex = (book: string): number => {
-  const index = CANON.findIndex((entry) => entry.id === book);
-  return index === -1 ? CANON.length : index;
-};
+/** canon's place for a book; a book outside the canon's numbering sorts last. */
+const canonIndex = (book: string): number =>
+  canonBook(book)?.canonicalIndex ?? Number.MAX_SAFE_INTEGER;
 
 const isWriterItself = (name: string): boolean =>
   /^(ts-?desktop|translation ?studio|btt ?writer)$/i.test(name.trim());
@@ -76,14 +82,41 @@ const authorsFrom = (project: WriterProject, committed: readonly Author[]): read
   return out;
 };
 
-const fallbackTitle = (project: WriterProject): string =>
-  CANON.find((entry) => entry.id === project.book)?.name ?? project.book;
+const fallbackTitle = (project: WriterProject): string => bookName(project.book);
 
 const render = (project: WriterProject, root: string) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
-    const tree = yield* readWriterTree(fileSystem, root);
-    return writerBookToUsfm(tree, project.book, fallbackTitle(project));
+    const files = yield* readWriterFiles(fileSystem, root);
+    return yield* Effect.mapError(
+      stitchBook(files, project.book, fallbackTitle(project)),
+      (error) => new CandidateError({ reason: "History", description: error.reason }),
+    );
+  });
+
+/** One Writer repository's history, read by bttwriter through the Git port. */
+export const readHistory = (
+  root: string,
+  source: string,
+): Effect.Effect<WriterHistory, CandidateError, FileSystem.FileSystem | Git | WriterEngine> =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const git = yield* Git;
+    const failed = (description: string) =>
+      new CandidateError({
+        reason: "History",
+        description: `its history could not be read: ${description}`,
+      });
+    const bttwriter = yield* Effect.mapError((yield* WriterEngine).load, (error) =>
+      failed(error.reason),
+    );
+    const repo = yield* Effect.mapError(git.open(root), (error) =>
+      failed(error.description ?? error.reason),
+    );
+    return yield* Effect.tryPromise({
+      try: () => bttwriter.readHistory(objectSource(git, fileSystem, repo), { source }),
+      catch: (cause) => failed(cause instanceof Error ? cause.message : String(cause)),
+    });
   });
 
 export const openCandidate = (
@@ -92,7 +125,7 @@ export const openCandidate = (
 ): Effect.Effect<
   StagedBook,
   CandidateError,
-  FileSystem.FileSystem | Git | Remote | Observability
+  FileSystem.FileSystem | Git | Remote | Observability | WriterEngine
 > =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
@@ -164,41 +197,32 @@ export const openCandidate = (
       "migrate.upstream": upstream !== undefined,
     });
 
+    const source =
+      candidate.origin.kind === "remote"
+        ? `${candidate.origin.owner}/${candidate.origin.repo}`
+        : lastSegment(root);
     let history: WriterHistory | undefined;
     if (repo._tag === "Some") {
       const read = observability.span("migrate.history.read");
-      history = yield* Effect.tapError(
-        Effect.mapError(
-          readWriterHistory(
-            repo.value,
-            project.book,
-            fallbackTitle(project),
-            candidate.origin.kind === "remote"
-              ? `${candidate.origin.owner}/${candidate.origin.repo}`
-              : lastSegment(root),
-          ),
-          (error) =>
-            new CandidateError({
-              reason: "History",
-              description: `its history could not be read: ${error.description ?? error.reason}`,
-            }),
-        ),
-        (error) =>
-          Effect.sync(() => {
-            read({ "migrate.reason": error.description });
-            observability.note("migrate.history.read", "failed", error.description);
-          }),
+      history = yield* Effect.tapError(readHistory(root, source), (error) =>
+        Effect.sync(() => {
+          read({ "migrate.reason": error.description });
+          observability.note("migrate.history.read", "failed", error.description);
+        }),
       );
-      read({ "migrate.saves": history.saves.length });
+      read({ "migrate.saves": history.saves });
     }
     const rendered = observability.span("migrate.render");
-    const usfm = yield* render(project, root);
-    rendered({ "migrate.bytes": usfm.length });
+    const usfm =
+      history !== undefined && history.saves > 0 ? history.usfm() : yield* render(project, root);
+    rendered({ "migrate.bytes": usfm.length, "migrate.from_history": history !== undefined });
     return {
       candidate,
       project,
       usfm,
       authors: authorsFrom(project, committed),
+      root,
+      source,
       ...(upstream === undefined ? {} : { upstream }),
       ...(history === undefined ? {} : { history }),
     };

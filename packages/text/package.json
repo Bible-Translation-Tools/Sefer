@@ -24,9 +24,9 @@
     "prepack": "pnpm run build"
   },
   "devDependencies": {
-    "@wycliffeassociates/scripture-kitchen": "0.1.20"
+    "@wycliffeassociates/scripture-kitchen": "0.1.23"
   },
   "peerDependencies": {
-    "@wycliffeassociates/scripture-kitchen": "^0.1.20"
+    "@wycliffeassociates/scripture-kitchen": "^0.1.23"
   }
 }

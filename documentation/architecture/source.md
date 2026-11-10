@@ -17,7 +17,7 @@ What is new is that `decode` no longer _forgets_ what it normalised. It records 
 
 A byte order mark and a mixed-newline file used to be refusals. They are read now, because refusing them meant a project Sefer could list and not open.
 
-Core computes no content hash of a book's text (`src/core/resources/checksum.ts` computes ingredient checksums for a Burrito's metadata, which is a different question, and Save's hasher is the engine's, injected by composition). Content identity is Galley's job: the engine hashes the source (xxh3-64) on every analyze and hands it back in the analysis header, so the Galley adapter attaches that hash to every derived product. Within one Book's lifetime the stamp's revision is the identity; across lifetimes and between products the engine's hash is.
+Core computes no content hash of a book's text (bento's `fingerprint` computes ingredient checksums for a Burrito's metadata, which is a different question, and Save's hasher is the engine's, injected by composition). Content identity is Galley's job: the engine hashes the source (xxh3-64) on every analyze and hands it back in the analysis header, so the Galley adapter attaches that hash to every derived product. Within one Book's lifetime the stamp's revision is the identity; across lifetimes and between products the engine's hash is.
 
 ## What `applyChange` admits
 

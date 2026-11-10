@@ -1,8 +1,6 @@
 import type { Address } from "@wycliffeassociates/sefer-text/location/address";
-import { resolve } from "@wycliffeassociates/sefer-text/location/locate";
 
 import type { BookText, Occurrence } from "../excerpts/excerpts";
-import { tocViewOf } from "../galley";
 
 export const expectedPattern = (typed: string): RegExp | undefined => {
   const text = typed.trim();
@@ -32,13 +30,12 @@ export const expectIn = (
   addresses: readonly Address[],
   pattern: RegExp,
 ): Expectation => {
-  const toc = tocViewOf(book.analysis);
   const seen = new Set<number>();
   const has: Occurrence[] = [];
   const missing: Occurrence[] = [];
   for (const address of addresses) {
     if (address.kind !== "verses" || address.book !== book.bookId) continue;
-    const found = resolve(toc, address);
+    const found = book.analysis.resolve(address);
     if (found.kind !== "found" || seen.has(found.from)) continue;
     seen.add(found.from);
     const match = pattern.exec(book.text.slice(found.from, found.to));

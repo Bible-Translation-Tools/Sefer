@@ -8,6 +8,8 @@ import {
   TokenKind,
 } from "@wycliffeassociates/scripture-kitchen/reader";
 
+import type { Places } from "./places";
+
 export {
   Category,
   CloseReason,
@@ -61,6 +63,12 @@ export interface Analysis {
    * Lazy: the parse carries no attributes, and a list is broken on demand.
    */
   readonly attrs: (from: number, to: number) => AttrList;
+  /** galley's `resolve` over this text, bound by the host that built this analysis (`placesOf`). */
+  readonly resolve: Places["resolve"];
+  /** galley's `addressAt` over this text, bound likewise. */
+  readonly addressAt: Places["addressAt"];
+  /** galley's `places` over this text, as stepping units, bound likewise. */
+  readonly units: Places["units"];
 }
 
 /**

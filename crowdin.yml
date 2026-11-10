@@ -2,6 +2,10 @@
 # project and the credentials itself. English is written here, in code review; Crowdin only
 # translates it. Both catalogs are ICU MessageFormat JSON; see documentation/architecture/i18n.md.
 preserve_hierarchy: true
+# Crowdin's two-letter code for Brazilian Portuguese is "pt"; Sefer's locale tag is pt-BR.
+languages_mapping:
+  two_letters_code:
+    pt-BR: pt-BR
 commit_message: "Translations from Crowdin: %language%"
 # A string nobody has translated yet is left out, not filled with English: Paraglide and the Sous
 # words fall back to English by themselves, and English in es.json would come back to Crowdin as if

@@ -72,7 +72,7 @@ The layer is provided in `src/app/workflows/stet.ts` (`withCatalog`), not in `sr
 
 It lives in `src/core/excerpts/excerpts.ts` because it is a fact about the project's text, not about the guide, and it does no arithmetic of its own: where a verse is, is Location's answer.
 
-- **`refOccurrences(book, addresses)`** is the whole mapping, and the feed: for each verse Address of this book it asks `resolve` (`packages/text/src/location/locate.ts`) over the book's TOC (`tocViewOf`), and answers with one **zero-width** occurrence where each found span starts — a verse anchor — deduplicated and in document order. A bridge answers for every verse it spans, so a reference to `JUD 1:2` is found inside a `\v 1-2` the project happens to have — dropping it would be the one case where the reader most wants to see how the target differs — and the card reads "Jude 1:1-2". A verse list's holes are honoured: `JUD 1:2` is missing from `\v 1,3`.
+- **`refOccurrences(book, addresses)`** is the whole mapping, and the feed: for each verse Address of this book it asks galley's `resolve` (`book.analysis.resolve`), and answers with one **zero-width** occurrence where each found span starts — a verse anchor — deduplicated and in document order. A bridge answers for every verse it spans, so a reference to `JUD 1:2` is found inside a `\v 1-2` the project happens to have — dropping it would be the one case where the reader most wants to see how the target differs — and the card reads "Jude 1:1-2". A verse list's holes are honoured: `JUD 1:2` is missing from `\v 1,3`.
 
 Zero width is the honest span. A search hit knows which characters matched; a reference does not — the guide's offsets index into the guide's own reading, and this project may put the term elsewhere in the verse, or render it with another word entirely, which is the very thing the reviewer is here to judge. So the **target card carries no highlight** and the **source card carries the guide's**. The excerpt's `focus` still dims the verses either side, so the reference is still visually located.
 
@@ -96,7 +96,7 @@ A Key terms card is edited where it stands (`edit: { kind: "direct" }`), as a sa
 
 The session ends on Save, Cancel, Escape, or a press anywhere in another card (which cancels). A press anywhere else leaves it open. This is the provisional shape; a buffer in front of the Book, with its own history, is the alternative still being weighed beside approvals as project state.
 
-Verse numbers on these cards are locked by the card policy every card shares (`lock-verse-numbers` in Regular), not by anything of Key terms' own. The gutter's arrows step through the TOC's units (`tocUnits`) and name the one they would add; they double once two have been added beyond where the card started (`excerpts.context`).
+Verse numbers on these cards are locked by the card policy every card shares (`lock-verse-numbers` in Regular), not by anything of Key terms' own. The gutter's arrows step through galley's places (`Analysis.units`) and name the one they would add; they double once two have been added beyond where the card started (`excerpts.context`).
 
 Which verses were edited, and which approved, is held in memory for the session (`StetView.tsx`). Where it lives for good is the approvals-and-suppressions decision.
 

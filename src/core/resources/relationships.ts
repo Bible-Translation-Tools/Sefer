@@ -1,8 +1,8 @@
-export const SOURCE_AUTHORITY = {
-  key: "wycliffeassociates",
-  id: "https://www.wycliffeassociates.org",
-  name: { en: "Wycliffe Associates" },
-} as const;
+/**
+ * Related texts and where to find them: which version, which catalog. Reading
+ * them out of a manifest is bento's (`Manifest.sources`); resolving them is
+ * Sefer's policy.
+ */
 
 export interface RelatedResource {
   readonly relation: "source";
@@ -10,68 +10,6 @@ export interface RelatedResource {
   readonly resource: string;
   readonly version?: string;
 }
-
-export interface BurritoRelationship {
-  readonly relationType: string;
-  readonly id: string;
-  readonly revision?: string | undefined;
-}
-
-export interface ResourceContainerSource {
-  readonly identifier: string;
-  readonly language?: string | undefined;
-  readonly version?: string | undefined;
-}
-
-export interface WriterSourceTranslation {
-  readonly language_id: string;
-  readonly resource_id: string;
-  readonly version?: string | undefined;
-}
-
-const related = (
-  language: string,
-  resource: string,
-  version: string | undefined,
-): RelatedResource | undefined => {
-  const lang = language.trim().toLowerCase();
-  const resourceName = resource.trim().toLowerCase();
-  if (lang === "" || resourceName === "") return undefined;
-  const listed = version?.trim();
-  return {
-    relation: "source",
-    language: lang,
-    resource: resourceName,
-    ...(listed === undefined || listed === "" ? {} : { version: listed }),
-  };
-};
-
-const present = <A>(value: A | undefined): value is A => value !== undefined;
-
-export const fromBurritoRelationships = (
-  relationships: readonly BurritoRelationship[],
-): readonly RelatedResource[] =>
-  relationships
-    .filter((entry) => entry.relationType === "source")
-    .map((entry) => {
-      const match = /^[^:]+::([^/\s]+)\/([^/\s]+)$/.exec(entry.id);
-      return match === null ? undefined : related(match[1] ?? "", match[2] ?? "", entry.revision);
-    })
-    .filter(present);
-
-export const fromResourceContainerSource = (
-  sources: readonly ResourceContainerSource[],
-): readonly RelatedResource[] =>
-  sources
-    .map((entry) => related(entry.language ?? "", entry.identifier, entry.version))
-    .filter(present);
-
-export const fromWriterSourceTranslations = (
-  translations: readonly WriterSourceTranslation[],
-): readonly RelatedResource[] =>
-  translations
-    .map((entry) => related(entry.language_id, entry.resource_id, entry.version))
-    .filter(present);
 
 const bare = (version: string): string => version.replace(/^v/i, "").toLowerCase();
 
@@ -153,18 +91,3 @@ export const resolveRelatedTexts = (
           : `listed ${ref.version}; this copy is ${held}`,
     };
   });
-
-export const toBurritoRelationships = (
-  refs: readonly RelatedResource[],
-): readonly {
-  readonly relationType: "source";
-  readonly flavor: "textTranslation";
-  readonly id: string;
-  readonly revision?: string;
-}[] =>
-  refs.map((ref) => ({
-    relationType: "source",
-    flavor: "textTranslation",
-    id: `${SOURCE_AUTHORITY.key}::${ref.language}/${ref.resource}`,
-    ...(ref.version === undefined ? {} : { revision: ref.version }),
-  }));

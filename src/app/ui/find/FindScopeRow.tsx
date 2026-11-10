@@ -1,4 +1,4 @@
-import { bookName } from "@wycliffeassociates/sefer-text/location/canon";
+import { bookName } from "@wycliffeassociates/sefer-text/location/bookName";
 import ChevronDownIcon from "lucide-solid/icons/chevron-down";
 import ChevronUpIcon from "lucide-solid/icons/chevron-up";
 import { Show } from "solid-js";

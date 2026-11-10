@@ -1,5 +1,5 @@
 import type { JSX } from "@solidjs/web";
-import { fold } from "@wycliffeassociates/sefer-text/location/names";
+import { fold } from "@wycliffeassociates/scripture-kitchen/canon";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronUp from "lucide-solid/icons/chevron-up";
 import ListTree from "lucide-solid/icons/list-tree";

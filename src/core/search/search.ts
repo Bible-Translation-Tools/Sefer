@@ -7,9 +7,7 @@ import {
   type Receipt,
 } from "@wycliffeassociates/sefer-text/book";
 import { describesExactly, type Analysis } from "@wycliffeassociates/sefer-text/engine/analysis";
-import { tocViewOf } from "@wycliffeassociates/sefer-text/engine/location";
 import type { Address } from "@wycliffeassociates/sefer-text/location/address";
-import { addressAt } from "@wycliffeassociates/sefer-text/location/locate";
 import * as TextResult from "@wycliffeassociates/sefer-text/result";
 import type { Change, SourceStamp } from "@wycliffeassociates/sefer-text/source";
 import { Data, Result } from "effect";
@@ -110,8 +108,7 @@ const addressesOf = (
 ): AddressOf => {
   const analysis = analysisOf?.(id);
   if (analysis === undefined || !describesExactly(analysis, text)) return NO_ADDRESS;
-  const toc = tocViewOf(analysis);
-  return (offset) => addressAt(book, toc, offset);
+  return (offset) => analysis.addressAt(book, offset);
 };
 
 const lazily = (make: () => AddressOf): AddressOf => {

@@ -4,7 +4,7 @@ title: "Import from Word or LibreOffice"
 kind: plan
 status: in-progress
 created: 2026-10-29
-updated: 2026-10-30
+updated: 2026-11-09
 sha: ba71ba91
 tags: [import]
 ---
@@ -107,6 +107,12 @@ My estimate is 800 to 1,200 lines on the Sefer side. The package is about 1,800.
 <Followup id="poetry-mid-verse">With "Try to keep this book's paragraphing" on, Psalm 1's breaks inside a verse (`\q2`) still come out joined (the Changes view shows it); the engine overlay keeps breaks at verse boundaries here, not inside one. Ask the galley maintainer, or accept.</Followup>
 
 <Question id="chunks">The overlay carries paragraph and poetry markers only (the engine's default set, "no titles"), so a book's `\s5` chunk markers inside the replaced chapters are lost: importing all of Titus over the ULB keeps its 9 `\p` but drops 22 `\s5`. The blank line the ULB puts before each `\s5` goes with it; Will saw it in the Changes view (2026-10-30), at the end of chapter 3, "Maybe a line break at the end." Should "Try to keep this book's paragraphing" carry `\s5` too (`markers` can name it), or is losing chunk markers on a whole-chapter replace right?</Question>
+
+## The reader moved to the kitchen (2026-11-09)
+
+`packages/document-import` is deleted. The dialog reads through the kitchen's `docx` module (`@wycliffeassociates/scripture-kitchen/docx`, `readDocument(bytes).render(settings)`), which ported its rules and also reads the kitchen's own `USFM …` styles exactly; the port is the kitchen's plan `2026-11-05-docx-round-trip-usfm-in-word-and-libreoffice-throu`. The dialog's settings, switches and report are unchanged. Its three fixtures are in the kitchen's `docx/fixtures`, with document-import's USFM as the golden. Where this plan says `@sefer/document-import` or `fflate` below, read the kitchen module.
+
+<Followup id="faithful-check">document-import's generated-document check (`faithful.verify.ts`: thousands of random drafts, every letter out in order, verse numbers only rising) went with the package and has no kitchen equivalent yet. It generated document-import's TypeScript reading model, so it could not be pointed at the wasm; the kitchen needs it as a Rust property test over its own reading.</Followup>
 
 ## Questions
 

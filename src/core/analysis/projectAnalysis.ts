@@ -1,6 +1,5 @@
 import type { Book, BookId } from "@wycliffeassociates/sefer-text/book";
-import { tocViewOf } from "@wycliffeassociates/sefer-text/engine/location";
-import { bookName } from "@wycliffeassociates/sefer-text/location/canon";
+import { bookName } from "@wycliffeassociates/sefer-text/location/bookName";
 import type { SourceStamp } from "@wycliffeassociates/sefer-text/source";
 import { Context, Duration, Effect, Latch, Layer, Option, PubSub, Scope, Stream } from "effect";
 
@@ -318,7 +317,7 @@ const make = (
         text: analysis.text,
         name: bookName(id, metadata),
         mask: () => galley.mask(id),
-        toc: () => tocViewOf(analysis),
+        analysis: () => analysis,
       };
     };
 
@@ -363,9 +362,7 @@ const make = (
     const suppressed = (): readonly Finding[] => corpus()?.suppressed() ?? [];
     const versesIn = (bookId: BookId): ReadonlyMap<string, readonly string[]> | undefined => {
       const analysis = entries.get(bookId)?.analysis;
-      return analysis === undefined
-        ? undefined
-        : versesOf(bookId, analysis.text, tocViewOf(analysis));
+      return analysis === undefined ? undefined : versesOf(bookId, analysis.text, analysis);
     };
 
     const characters = (): Inventory => {

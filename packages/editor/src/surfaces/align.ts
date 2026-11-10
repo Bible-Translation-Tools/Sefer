@@ -1,8 +1,7 @@
 import { EditorView } from "@codemirror/view";
 import type { BookId } from "@wycliffeassociates/sefer-text/book";
-import { tocViewOf } from "@wycliffeassociates/sefer-text/engine/location";
+import type { Analysis } from "@wycliffeassociates/sefer-text/engine/analysis";
 import type { Address } from "@wycliffeassociates/sefer-text/location/address";
-import { addressAt, resolve, type TocView } from "@wycliffeassociates/sefer-text/location/locate";
 
 import { structureAt } from "../core/model/docStructure";
 import { markMoved, viewOf, type EditorHandle } from "../handle";
@@ -14,10 +13,10 @@ interface Anchor {
   readonly below: number;
 }
 
-const tocOf = (view: EditorView): TocView | undefined => {
+const analysisOf = (view: EditorView): Analysis | undefined => {
   const analysis = structureAt(view.state).analysis;
   if (analysis === null || analysis.text.length !== view.state.doc.length) return undefined;
-  return tocViewOf(analysis);
+  return analysis;
 };
 
 const pixelsBelowTop = (view: EditorView, offset: number): number => {
@@ -59,21 +58,21 @@ export const revealEditorInBand = (editor: EditorHandle, at: number): boolean =>
   revealInBand(viewOf(editor), at);
 
 const anchorAt = (view: EditorView, book: BookId): Anchor | undefined => {
-  const toc = tocOf(view);
-  if (toc === undefined) return undefined;
+  const analysis = analysisOf(view);
+  if (analysis === undefined) return undefined;
   const box = view.scrollDOM.getBoundingClientRect();
   const middle = box.top + box.height / 2;
   const top =
     view.posAtCoords({ x: box.left + box.width / 2, y: middle }, false) ??
     view.lineBlockAtHeight(middle - view.documentTop).from;
-  let address = addressAt(book, toc, top);
+  let address = analysis.addressAt(book, top);
   if (address === undefined) return undefined;
   if (address.kind !== "verses") {
     const bottom = box.bottom - view.documentTop;
     for (let at = top; at < view.state.doc.length;) {
       const block = view.lineBlockAt(at);
       if (block.top > bottom) break;
-      const here = addressAt(book, toc, block.from);
+      const here = analysis.addressAt(book, block.from);
       if (here?.kind === "verses") {
         address = here;
         break;
@@ -81,7 +80,7 @@ const anchorAt = (view: EditorView, book: BookId): Anchor | undefined => {
       at = block.to + 1;
     }
   }
-  const found = resolve(toc, address);
+  const found = analysis.resolve(address);
   const start = found.kind === "found" ? found.from : top;
   return { address, below: pixelsBelowTop(view, start) };
 };
@@ -92,15 +91,15 @@ const alignTo = (
   anchor: Anchor,
   mode: AlignMode = "reveal",
 ): boolean => {
-  const toc = tocOf(view);
-  if (toc === undefined) return false;
+  const analysis = analysisOf(view);
+  if (analysis === undefined) return false;
   const address = anchor.address.kind === "book" ? anchor.address : { ...anchor.address, book };
-  const found = resolve(toc, address);
+  const found = analysis.resolve(address);
   let at: number | undefined;
   if (found.kind === "found") at = found.from;
   else if (found.kind === "ambiguous") at = found.spans[0]?.from;
   else if (address.kind === "verses") {
-    const chapter = resolve(toc, {
+    const chapter = analysis.resolve({
       kind: "chapters",
       book,
       from: address.from.chapter,

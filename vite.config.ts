@@ -166,6 +166,8 @@ export default defineConfig(({ mode }) => {
         // multibuffer route loads: a mid-session re-optimization reloads the
         // page, and a reload drops the open project.
         "@tanstack/virtual-core",
+        // Imported only when the import dialog is given a file.
+        "@wycliffeassociates/scripture-kitchen/docx",
       ],
     },
     test: {
@@ -177,6 +179,7 @@ export default defineConfig(({ mode }) => {
             environment: "node",
             include: ["src/**/*.test.ts", "packages/*/src/**/*.test.ts", "tools/**/*.test.ts"],
             exclude: [...configDefaults.exclude, "**/*.browser.test.*"],
+            setupFiles: ["src/platform/node/bento.setup.ts"],
           },
         },
         {

@@ -1,17 +1,7 @@
+import { formatReference } from "@wycliffeassociates/scripture-kitchen/web";
 import type { BookId } from "@wycliffeassociates/sefer-text/book";
-import {
-  addressCode,
-  bookAddress,
-  type Address,
-} from "@wycliffeassociates/sefer-text/location/address";
-import {
-  resolve,
-  tocUnits,
-  unitAddress,
-  unitIndexAt,
-  type TocUnit,
-  type TocView,
-} from "@wycliffeassociates/sefer-text/location/locate";
+import { unitIndexAt, type Unit } from "@wycliffeassociates/sefer-text/engine/places";
+import { bookAddress, type Address } from "@wycliffeassociates/sefer-text/location/address";
 
 import {
   CLASS,
@@ -21,7 +11,6 @@ import {
   classWordOf,
   coarse,
   has,
-  tocViewOf,
   type Analysis,
 } from "../galley";
 
@@ -220,23 +209,23 @@ export interface Extent {
 const DEFAULT_EXTENT: Extent = { up: 1, down: 1 };
 
 interface Units {
-  readonly toc: TocView;
-  readonly all: readonly TocUnit[];
+  readonly analysis: Analysis;
+  readonly all: readonly Unit[];
 }
 
-const unitsOf = (analysis: Analysis): Units => {
-  const toc = tocViewOf(analysis);
-  return { toc, all: tocUnits(toc) };
-};
+const unitsOf = (analysis: Analysis, book: BookId): Units => ({
+  analysis,
+  all: analysis.units(book),
+});
 
 const window = (units: Units, own: number, extent: Extent): { low: number; high: number } => {
   const { all } = units;
   if (extent.chapter === true) {
-    const row = all[own]?.row;
+    const row = all[own]?.chapter;
     let low = own;
     let high = own;
-    while (low > 0 && all[low - 1]?.row === row) low -= 1;
-    while (high < all.length - 1 && all[high + 1]?.row === row) high += 1;
+    while (low > 0 && all[low - 1]?.chapter === row) low -= 1;
+    while (high < all.length - 1 && all[high + 1]?.chapter === row) high += 1;
     return { low, high };
   }
   return {
@@ -290,7 +279,7 @@ class LazyExcerpt implements Excerpt {
     extent: Extent,
   ) {
     this.bookId = book.bookId;
-    this.sid = addressCode(address);
+    this.sid = formatReference(address);
     this.address = address;
     const from = units.all[low]?.from ?? own.from;
     this.span = {
@@ -339,7 +328,7 @@ class LazyExcerpt implements Excerpt {
   get shown(): { readonly first: Address; readonly last: Address } {
     const name = (index: number): Address => {
       const unit = this.units.all[index];
-      return unit === undefined ? this.address : unitAddress(this.bookId, this.units.toc, unit);
+      return unit === undefined ? this.address : unit.address;
     };
     return { first: name(this.low), last: name(this.high) };
   }
@@ -382,7 +371,7 @@ const buildExcerpt = (
 ): Excerpt | undefined => {
   const unit = units.all[own];
   if (unit === undefined) return undefined;
-  const address = unitAddress(book.bookId, units.toc, unit);
+  const address = unit.address;
   return new LazyExcerpt(book, units, range.low, range.high, unit, held, address, extent);
 };
 
@@ -392,7 +381,7 @@ const excerptsOf = (
   extent: Extent,
 ): readonly Excerpt[] => {
   if (hits.length === 0) return [];
-  const units = unitsOf(book.analysis);
+  const units = unitsOf(book.analysis, book.bookId);
 
   const grouped = new Map<number, Occurrence[]>();
   const order: number[] = [];
@@ -414,13 +403,13 @@ const excerptsOf = (
 };
 
 export const extend = (book: BookText, excerpt: Excerpt, extent: Extent): Excerpt => {
-  const units = unitsOf(book.analysis);
+  const units = unitsOf(book.analysis, book.bookId);
   const own = unitIndexAt(units.all, excerpt.own.from);
   return buildExcerpt(book, units, own, excerpt.hits, extent) ?? excerpt;
 };
 
 const endOf = (units: Units, address: Address, side: "first" | "last"): number | undefined => {
-  const found = resolve(units.toc, address);
+  const found = units.analysis.resolve(address);
   if (found.kind !== "found") return undefined;
   const at = side === "last" && address.kind === "verses" ? found.to - 1 : found.from;
   const index = unitIndexAt(units.all, at);
@@ -433,7 +422,7 @@ export const pairedExcerpt = (
   hits: readonly Occurrence[],
   collapsed: boolean,
 ): Excerpt | undefined => {
-  const units = unitsOf(book.analysis);
+  const units = unitsOf(book.analysis, book.bookId);
   const first = hits[0];
   const own =
     first === undefined
@@ -489,11 +478,10 @@ export const refOccurrences = (
   book: BookText,
   addresses: readonly Address[],
 ): readonly Occurrence[] => {
-  const toc = tocViewOf(book.analysis);
   const found = new Set<number>();
   for (const address of addresses) {
     if (address.kind !== "verses" || address.book !== book.bookId) continue;
-    const resolved = resolve(toc, address);
+    const resolved = book.analysis.resolve(address);
     if (resolved.kind === "found") found.add(resolved.from);
   }
   return [...found]
