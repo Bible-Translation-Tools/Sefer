@@ -1,8 +1,8 @@
 ---
 id: 7b1c4e2a-9f3d-4c61-8a5e-2d0f6b9e1a74
 title: "Upload keeps failing after Link, and never reaches review"
-kind: question
-status: open
+kind: note
+status: discussing
 created: 2026-11-10
 updated: 2026-11-10
 sha: 8bfb9174
@@ -47,3 +47,15 @@ For paisano, from Thomas (2026-11-10), SEFER-92 and SEFER-83. Thomas isn't sure 
 4. Could Sefer know before the person presses anything? When the popover opens, check
    `getRepo` for the suggested name and offer Link up front, and read `permissions.push` to
    choose between Upload and Submit changes.
+
+## Answered the same day (2026-11-10)
+
+- **1, Link:** it now fetches at once (a check), so the popover knows what WACS holds before
+  anything is uploaded. Refusing a different project that shares the name is not built.
+- **2, Upload:** the push is still tried first; when WACS refuses because it has newer work,
+  Upload opens the review of what came in, and the upload goes by itself once that review is
+  saved. Will: push-then-refused or check-first end in the same place.
+- **3, `sendRefused`:** per project now. It lives in each project's sync phase
+  (`src/core/sync/lifecycle.ts`).
+- **4, knowing before a press:** not built.
+- The name-taken message coming back after Link is still not reproduced.
