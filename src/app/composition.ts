@@ -2,6 +2,7 @@ import { Effect, Exit, FileSystem, Layer, ManagedRuntime, Option, Result, Tracer
 
 import { boot, type BootError, type BootInfo } from "#core/boot";
 import { makeLogQueue, type LogQueue } from "#core/diagnostics/logFiles";
+import { gatedFetch } from "#core/network/gate";
 import {
   makeAssembler,
   Observability,
@@ -22,6 +23,7 @@ import {
 
 import { reportClientErrors } from "./clientErrors";
 import { env } from "./env";
+import { network } from "./network";
 
 const buildIdentity = (): string | undefined =>
   typeof __SEFER_BUILD__ === "string" ? __SEFER_BUILD__ : undefined;
@@ -46,7 +48,7 @@ const guardedFetch = (): typeof globalThis.fetch => {
   return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     if (stopped) throw new Error("telemetry export is stopped: the collector did not answer");
     try {
-      return await globalThis.fetch(input, init);
+      return await gatedFetch(network, "telemetry", globalThis.fetch)(input, init);
     } catch (cause) {
       stopped = true;
       // oxlint-disable-next-line no-console

@@ -2,9 +2,11 @@ import { Result, Schema } from "effect";
 
 import type { SettingsService } from "#core/host/settings";
 import type { BookCandidate, CandidateStatus } from "#core/migrate/candidate";
+import { gatedFetch } from "#core/network/gate";
 import type { Attrs, Verdict } from "#core/observability";
 
 import { catalogueUrlFor } from "./endpoints";
+import { network } from "./network";
 
 export type ProjectType = "translation" | "gateway";
 
@@ -277,7 +279,11 @@ const graphql = async (
   query: string,
   variables?: Readonly<Record<string, unknown>>,
 ): Promise<unknown> => {
-  const response = await fetch(origin, {
+  const response = await gatedFetch(
+    network,
+    "catalogue",
+    fetch,
+  )(origin, {
     method: "POST",
     headers: { accept: "application/json", "content-type": "application/json" },
     body: JSON.stringify({ query, variables: variables ?? {} }),

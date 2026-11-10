@@ -3,9 +3,9 @@ import Wifi from "lucide-solid/icons/wifi";
 import WifiOff from "lucide-solid/icons/wifi-off";
 import { For, Show, createSignal } from "solid-js";
 
+import { chooseWorkOffline } from "../../network";
 import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
-import { shellKeys } from "../../settings";
 import { syncStatus } from "../../syncStatus";
 import { Button, Popover, SegmentedControl, Tooltip, cx } from "../primitives";
 
@@ -74,15 +74,11 @@ export function NetworkChip(props: {
   readonly body: (close: () => void) => JSX.Element;
 }) {
   const shell = useShell();
-  const settings = shell.services.settings;
-  const key = shellKeys(settings).workOffline;
   const [open, setOpen] = createSignal(false, { name: "networkOpen" });
 
   const connected = (): boolean => syncStatus.online();
   const choose = (next: Connection): void => {
-    const offline = next === "offline";
-    syncStatus.setWorkOffline(offline);
-    void shell.services.run(settings.set(key, offline));
+    chooseWorkOffline(shell.services, next === "offline");
   };
   return (
     <Popover

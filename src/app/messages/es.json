@@ -816,6 +816,8 @@
   "landing_open": "Abrir",
   "landing_gateway_languages": "Idiomas puente",
   "landing_search_english_or_axd": "Busca 'english' o 'axd'…",
+  "landing_go_online": "Conectarse",
+  "landing_searching_is_off_while_offline": "La búsqueda de proyectos en WACS está desactivada mientras trabajas sin conexión.",
   "landing_loading_projects": "Cargando proyectos…",
   "landing_sample_data_this_row_names": "Datos de ejemplo: esta fila no indica ningún repositorio que descargar.",
   "landing_this_browser_has_no_way": "Este navegador no tiene forma de llegar al servidor donde está este proyecto.",

@@ -536,6 +536,24 @@ press is an ordinary attempt rather than a retry of something already given up o
 Offline is the least alarming state on the surface. The work is on disk, the clocks still show what
 is waiting, the button says "Check for changes", and nothing suggests anything was lost.
 
+### Work offline: the network gate
+
+"Work offline" (the Online / Offline switch in the app bar) is a kill switch, not a sync setting:
+while it is on, Sefer reaches no server. One gate answers for every caller,
+`src/core/network/gate.ts`: a caller names what it is doing (`check`, `send`, `clone`, `deepen`,
+`catalogue`, `account`, `update`, `telemetry`) and asks `may(action)`. The app's gate
+(`src/app/network.ts`) reads the switch and has no per-action exceptions. The gate sits at the
+ports, so nothing above them has to remember it: `gatedRemote` wraps the Remote port on both hosts
+(on desktop the Rust git commands are only ever reached through it), `gatedUpdater` wraps the
+Updater, and `gatedFetch` wraps the WACS API, the Language API, the downloads list and the
+telemetry exporter. A refused remote call fails as `Network`, so every surface words it as
+offline. The two wasm engines load from the app's own address and are not gated.
+
+The choice is remembered per device (`network.workOffline`). Until the person chooses, the desktop
+app starts offline and the Web app online; the switch is closed until the stored choice is read
+at start, so nothing leaves before then. On the projects screen the WACS list says searching is
+off and offers Go online, since the switch itself lives in a project's app bar.
+
 ## Where it is, now that there is no screen
 
 `/project/$slug/cloud` was deleted on 2026-10-06. Doing sync is the app bar's cloud popover;

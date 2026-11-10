@@ -30,6 +30,7 @@ import { HostInfo, type HostInfoService, type HostPaths } from "#core/host/hostI
 import { Settings, SettingsLive, type SettingsService } from "#core/host/settings";
 import { NoUpdaterLive, Updater, type UpdaterService } from "#core/host/updater";
 import { WriterEngine } from "#core/migrate/writerEngine";
+import { gatedFetch, gatedRemote, gatedUpdater } from "#core/network/gate";
 import { Observability } from "#core/observability";
 import { METADATA_FILE } from "#core/project/discovery";
 import type { Seat } from "#core/project/project";
@@ -63,6 +64,7 @@ import { startLogFiles, type LogFiles } from "./diagnostics";
 import { appIdFor, bootTransport, rememberBootEndpoints, resolveEndpoints } from "./endpoints";
 import { env } from "./env";
 import { legacyMarkersOf } from "./legacyMarkers";
+import { network } from "./network";
 import { shellKeys } from "./settings";
 import { syncStatus } from "./syncStatus";
 
@@ -195,8 +197,11 @@ const webFetch =
     });
 
 const accountLayer = (build: string, tauri: TauriHost | undefined) => {
-  const accountFetch =
-    tauri === undefined ? webFetch(appIdFor(build)) : globalThis.fetch.bind(globalThis);
+  const accountFetch = gatedFetch(
+    network,
+    "account",
+    tauri === undefined ? webFetch(appIdFor(build)) : globalThis.fetch.bind(globalThis),
+  );
   return Layer.provideMerge(
     Layer.provideMerge(
       SuggestionsLive({ fetch: accountFetch }),
@@ -281,6 +286,13 @@ const domainLayer = (
   return Layer.provideMerge(modules, Layer.merge(host, fileSystem));
 };
 
+/** A host's Remote with its network calls behind the gate. */
+const gated = <E, R>(hostRemote: Layer.Layer<Remote, E, R>) =>
+  Layer.effect(
+    Remote,
+    Effect.map(Remote, (inner) => gatedRemote(network, inner)),
+  ).pipe(Layer.provide(hostRemote));
+
 const laned = <EG, RG, ER, RR>(
   hostGit: Layer.Layer<Git, EG, RG>,
   hostRemote: Layer.Layer<Remote, ER, RR>,
@@ -297,7 +309,7 @@ const laned = <EG, RG, ER, RR>(
     Effect.map(Effect.all([Remote, Repositories, FileSystem.FileSystem]), ([inner, lanes, files]) =>
       indexingRemotes(serialiseRemote(inner, lanes), files),
     ),
-  ).pipe(Layer.provide(Layer.merge(hostRemote, repositories)));
+  ).pipe(Layer.provide(Layer.merge(gated(hostRemote), repositories)));
   return Layer.mergeAll(git, remote, repositories);
 };
 
@@ -310,11 +322,13 @@ const inMemoryTransferFor =
     Layer.provideMerge(
       Layer.merge(
         Layer.fresh(WebGitLive),
-        WebRemoteLive({
-          contentHost: resolveEndpoints(settings).contentHost,
-          transport: bootTransport(),
-          appId: appIdFor(build),
-        }),
+        gated(
+          WebRemoteLive({
+            contentHost: resolveEndpoints(settings).contentHost,
+            transport: bootTransport(),
+            appId: appIdFor(build),
+          }),
+        ),
       ),
       held === undefined ? MemoryFileSystemLive() : Layer.succeed(FileSystem.FileSystem, held),
     );
@@ -339,10 +353,13 @@ const resolveDomain = () =>
     const hostInfo = yield* HostInfo;
     const settings = yield* Settings;
     // Before anything can ask the network: a remembered "work offline" holds from the first screen.
-    syncStatus.setWorkOffline(settings.get(shellKeys(settings).workOffline));
+    // Never chosen: the desktop app starts offline, the Web app online.
+    syncStatus.setWorkOffline(
+      settings.get(shellKeys(settings).workOffline) ?? hostInfo.kind() === "tauri",
+    );
     const credentials = yield* Credentials;
     const dialogs = yield* Dialogs;
-    const updater = yield* Updater;
+    const updater = gatedUpdater(network, yield* Updater);
     const save = yield* SaveCoordinator;
     const recovery = yield* Recovery;
     const projectAnalysis = yield* ProjectAnalysis;

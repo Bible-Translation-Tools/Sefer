@@ -11,9 +11,9 @@ const [lastFailure, setLastFailure] = createSignal<RemoteFailureReason | undefin
 const [checking, setChecking] = createSignal<ReadonlySet<string>>(new Set(), {
   name: "syncChecking",
 });
-// The person's own "work offline". Today it stops sync only (check, send, the survey, History's
-// deepen); the catalogue, sign-in, cloning and the update check still reach the network.
-const [workOffline, setWorkOffline] = createSignal(false, {
+// The person's own "work offline": the gate in `network.ts` reads it, and nothing reaches the
+// network while it is on. On until the stored choice is read at start (`services.ts`).
+const [workOffline, setWorkOffline] = createSignal(true, {
   name: "workOffline",
   ownedWrite: true,
 });

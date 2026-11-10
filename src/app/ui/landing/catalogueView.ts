@@ -1,4 +1,4 @@
-import { createMemo, createSignal, type Accessor } from "solid-js";
+import { createEffect, createMemo, createSignal, type Accessor } from "solid-js";
 
 import { m } from "#app/paraglide/messages";
 
@@ -10,6 +10,7 @@ import {
 } from "../../catalogue";
 import { describe } from "../../describe";
 import type { Services } from "../../services";
+import { syncStatus } from "../../syncStatus";
 import { type SortDirection } from "../primitives";
 
 export type Column = "code" | "language" | "region" | "date";
@@ -85,24 +86,36 @@ export const createCatalogueEntries = (
   });
   const [problem, setProblem] = createSignal("", { name: "catalogueProblem" });
 
-  const browsing = services.composition.observability.operation("catalogue.browse", {
-    "catalogue.source": catalogue.source,
-  });
-  void catalogue
-    .entries()
-    .then(({ rows: all, enriched }) => {
-      browsing.end("passed", {
-        "catalogue.entries": all.length,
-        "catalogue.gateways": all.filter((entry) => entry.type === "gateway").length,
-        "catalogue.enriched": enriched,
+  // Asked again each time the person goes online; while they work offline nothing is asked.
+  let asked = 0;
+  createEffect(
+    () => syncStatus.workOffline(),
+    (offline) => {
+      const mine = ++asked;
+      setProblem("");
+      setEntries(undefined);
+      if (offline) return;
+      const browsing = services.composition.observability.operation("catalogue.browse", {
+        "catalogue.source": catalogue.source,
       });
-      setEntries(all);
-    })
-    .catch((cause: unknown) => {
-      browsing.end(catalogueVerdict(cause), catalogueFailureAttrs(cause));
-      setEntries([]);
-      setProblem(describe(cause));
-    });
+      void catalogue
+        .entries()
+        .then(({ rows: all, enriched }) => {
+          browsing.end("passed", {
+            "catalogue.entries": all.length,
+            "catalogue.gateways": all.filter((entry) => entry.type === "gateway").length,
+            "catalogue.enriched": enriched,
+          });
+          if (mine === asked) setEntries(all);
+        })
+        .catch((cause: unknown) => {
+          browsing.end(catalogueVerdict(cause), catalogueFailureAttrs(cause));
+          if (mine !== asked) return;
+          setEntries([]);
+          setProblem(describe(cause));
+        });
+    },
+  );
   return { entries, problem };
 };
 
