@@ -10,23 +10,22 @@ import { syncStatus } from "../../syncStatus";
 import { Button, Popover, SegmentedControl, Tooltip, cx } from "../primitives";
 
 /**
- * The app bar's save status: "All changes saved", "Saving changes…" while the
- * backup is being written, then "Saved" once it has been. A tooltip says what
- * that means. It reports the backup as the backup itself reports it.
+ * The app bar's save status, in the save model's own terms: "Unsaved changes"
+ * while any book differs from its last version, "Saved" when none does. The
+ * backup journal is not a save and is not announced as one; it shows only
+ * when it could not be written.
  */
 export function SaveStatus() {
   const shell = useShell();
+  const unsaved = (): boolean =>
+    shell.project()?.books.some((book) => shell.unsaved(book)) === true;
   const label = (): string => {
-    const state = shell.backup();
-    if (state.kind === "saving") return m.status_saving();
-    if (state.kind === "failed") return m.status_not_saved();
-    return m.status_saved();
+    if (shell.backup().kind === "failed") return m.status_not_saved();
+    return unsaved() ? m.status_unsaved() : m.status_saved();
   };
   const explained = (): string => {
-    const state = shell.backup();
-    if (state.kind === "saving") return m.status_saving_tooltip();
-    if (state.kind === "failed") return m.status_backup_failed_body();
-    return m.status_saved_tooltip();
+    if (shell.backup().kind === "failed") return m.status_backup_failed_body();
+    return unsaved() ? m.status_unsaved_tooltip() : m.status_saved_tooltip();
   };
 
   // Every label sits in the same grid cell, the others invisible, so the
@@ -38,6 +37,7 @@ export function SaveStatus() {
         aria-live="polite"
         data-testid="app-bar-save-status"
         data-backup={shell.backup().kind}
+        data-unsaved={unsaved()}
         class={cx(
           "grid shrink-0 rounded-md px-1 text-small whitespace-nowrap",
           shell.backup().kind === "failed"
@@ -45,7 +45,7 @@ export function SaveStatus() {
             : "text-on-surface-secondary",
         )}
       >
-        <For each={[m.status_saving(), m.status_saved(), m.status_not_saved()]}>
+        <For each={[m.status_unsaved(), m.status_saved(), m.status_not_saved()]}>
           {(text) => (
             <span
               class={cx("[grid-area:1/1]", text !== label() && "invisible")}
