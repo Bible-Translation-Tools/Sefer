@@ -11,6 +11,12 @@ const [lastFailure, setLastFailure] = createSignal<RemoteFailureReason | undefin
 const [checking, setChecking] = createSignal<ReadonlySet<string>>(new Set(), {
   name: "syncChecking",
 });
+// The person's own "work offline". Today it stops sync only (check, send, the survey, History's
+// deepen); the catalogue, sign-in, cloning and the update check still reach the network.
+const [workOffline, setWorkOffline] = createSignal(false, {
+  name: "workOffline",
+  ownedWrite: true,
+});
 const [sendRefused, setSendRefused] = createSignal(false, { name: "sendRefused" });
 
 if (typeof window === "object") {
@@ -24,6 +30,9 @@ if (typeof window === "object") {
 export interface SyncStatus {
   readonly online: Accessor<boolean>;
   readonly interfaceUp: Accessor<boolean>;
+  /** Whether the person chose to work offline (the app bar's Online / Offline switch). */
+  readonly workOffline: Accessor<boolean>;
+  readonly setWorkOffline: (offline: boolean) => void;
   readonly lastFailure: Accessor<RemoteFailureReason | undefined>;
   readonly noteFailure: (reason: RemoteFailureReason) => void;
   readonly noteSuccess: () => void;
@@ -36,8 +45,10 @@ export interface SyncStatus {
 }
 
 export const syncStatus: SyncStatus = {
-  online: () => online() && lastFailure() !== "Network",
-  interfaceUp: online,
+  online: () => online() && !workOffline() && lastFailure() !== "Network",
+  interfaceUp: () => online() && !workOffline(),
+  workOffline,
+  setWorkOffline: (offline) => setWorkOffline(offline),
   lastFailure,
   noteFailure: (reason) => setLastFailure(reason),
   noteSuccess: () => setLastFailure(undefined),

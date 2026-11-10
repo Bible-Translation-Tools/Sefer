@@ -4,7 +4,7 @@ import type { DiffSkeleton } from "../galley/diff";
 import type { GalleyService } from "../galley/galley";
 import { deriveDeltaScope } from "../history/delta";
 
-export const FRONT_MATTER = 0;
+const FRONT_MATTER = 0;
 
 export type Diff = (before: string, after: string) => DiffSkeleton | undefined;
 

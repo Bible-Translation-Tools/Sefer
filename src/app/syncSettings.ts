@@ -11,7 +11,8 @@ export interface SyncPreferences {
 
 const SYNC_DEFAULTS: SyncPreferences = {
   checkOnOpen: true,
-  sendOnSave: true,
+  // Off: sending is something the person does on purpose (Thomas, 2026-11-09).
+  sendOnSave: false,
   skipReviewMine: false,
   skipReviewIncoming: false,
 };

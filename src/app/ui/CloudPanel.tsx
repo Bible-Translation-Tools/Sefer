@@ -6,6 +6,7 @@ import { useShell } from "../ProjectContext";
 import { syncWatch } from "../syncWatch";
 import { CollabModeCard, createAccount, SharedProjectCard, SyncSettingsCard } from "./cloud";
 import { WriterFollowCard } from "./cloud/WriterFollowCard";
+import { WriterSection } from "./cloud/WriterSection";
 import { PanelHeader } from "./primitives";
 
 export function CloudPanel(props: { readonly root?: string | undefined }) {
@@ -22,6 +23,7 @@ export function CloudPanel(props: { readonly root?: string | undefined }) {
             </Show>
             <SyncSettingsCard root={root()} />
             <WriterFollowCard root={root()} />
+            <WriterSection onLeave={() => undefined} />
           </>
         )}
       </Show>

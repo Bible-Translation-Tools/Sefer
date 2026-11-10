@@ -175,6 +175,14 @@ const decodeRepoArray = Schema.decodeUnknownResult(RepoArray);
 const decodeRepoSearch = Schema.decodeUnknownResult(RepoSearch);
 const decodeCurrentUser = Schema.decodeUnknownResult(CurrentUser);
 
+const UserEmails = Schema.Array(
+  Schema.Struct({
+    email: Schema.String,
+    primary: Schema.optionalKey(Schema.Boolean),
+  }),
+);
+const decodeUserEmails = Schema.decodeUnknownResult(UserEmails);
+
 type RepoRecordValue = typeof RepoRecord.Type;
 
 const failed = (reason: GiteaFailureReason, description: string): GiteaError =>
@@ -369,6 +377,23 @@ const makeGitea = (options: {
       return decoded.success;
     });
 
+  /**
+   * The person's primary address, from `/user/emails`: `/user` leaves it out,
+   * or gives a no-reply stand-in, when the account keeps its email private.
+   */
+  const primaryEmail = (
+    host: string,
+    headers: Readonly<Record<string, string>>,
+  ): Effect.Effect<string, GiteaError> =>
+    Effect.gen(function* () {
+      const response = yield* request(url(host, "/api/v1/user/emails"), { headers });
+      if (!response.ok) return "";
+      const decoded = decodeUserEmails(yield* json(response));
+      if (decoded._tag === "Failure") return "";
+      const list = decoded.success;
+      return (list.find((entry) => entry.primary === true) ?? list[0])?.email ?? "";
+    });
+
   const currentUserId = (session: Session): Effect.Effect<string, GiteaError> =>
     Effect.map(currentUser(session.host, tokenHeaders(session)), (user) => String(user.id));
 
@@ -478,11 +503,17 @@ const makeGitea = (options: {
     profile: (host) =>
       Effect.gen(function* () {
         const session = yield* authorised(host);
-        const user = yield* currentUser(session.host, tokenHeaders(session));
+        const headers = tokenHeaders(session);
+        const user = yield* currentUser(session.host, headers);
+        const given = user.email ?? "";
+        const email =
+          given === "" || given.includes("@noreply.")
+            ? yield* Effect.orElseSucceed(primaryEmail(session.host, headers), () => given)
+            : given;
         return {
           username: user.login ?? session.username,
           fullName: user.full_name ?? "",
-          email: user.email ?? "",
+          email: email === "" ? given : email,
           avatarUrl: user.avatar_url ?? "",
         };
       }),

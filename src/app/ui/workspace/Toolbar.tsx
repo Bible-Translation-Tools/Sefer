@@ -1,9 +1,7 @@
 import type { JSX } from "@solidjs/web";
 import { useNavigate } from "@tanstack/solid-router";
 import MoreVertical from "lucide-solid/icons/more-vertical";
-import Redo2 from "lucide-solid/icons/redo-2";
 import SearchIcon from "lucide-solid/icons/search";
-import Undo2 from "lucide-solid/icons/undo-2";
 import { Show, createEffect, createSignal } from "solid-js";
 
 import { m } from "#app/paraglide/messages";
@@ -172,34 +170,6 @@ function KebabMenu(props: {
         }}
       />
     </Popover>
-  );
-}
-
-/**
- * The project's tools, in the app bar beside Settings: Undo and Redo for the
- * book in front. Only while a project is open. (Findings is in the More menu.)
- */
-export function ProjectTools() {
-  const shell = useShell();
-  return (
-    <Show when={shell.project() !== undefined}>
-      <div class="flex shrink-0 items-center gap-2" data-testid="toolbar">
-        <IconButton
-          data-testid="toolbar-undo"
-          label={m.common_undo()}
-          icon={<Undo2 />}
-          disabled={!can("book.undo")}
-          onClick={() => runCommand("book.undo")}
-        />
-        <IconButton
-          data-testid="toolbar-redo"
-          label={m.common_redo()}
-          icon={<Redo2 />}
-          disabled={!can("book.redo")}
-          onClick={() => runCommand("book.redo")}
-        />
-      </div>
-    </Show>
   );
 }
 

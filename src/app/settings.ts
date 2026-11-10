@@ -128,6 +128,8 @@ export interface ShellKeys {
   readonly catalogueUrl: SettingKey<string>;
   /** The Web transport's `host=proxy` pairs, same rule. */
   readonly webTransport: SettingKey<string>;
+  /** The person chose to work offline; Sefer reaches no server until they switch back. */
+  readonly workOffline: SettingKey<boolean>;
   readonly pairBlocks: SettingKey<boolean>;
   /** Typed verse numbers ("1", "v1", "verse 1") become verses: the editor's verse shortcuts. */
   readonly verseShortcuts: SettingKey<boolean>;
@@ -199,6 +201,7 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
     contentHost: settings.register("network.contentHost", Schema.String, ""),
     catalogueUrl: settings.register("network.catalogueUrl", Schema.String, ""),
     webTransport: settings.register("network.webTransport", Schema.String, ""),
+    workOffline: settings.register("network.workOffline", Schema.Boolean, false),
     pairBlocks: settings.register("editor.pairBlocks", Schema.Boolean, false),
     verseShortcuts: settings.register("editor.verseShortcuts", Schema.Boolean, true),
     indentSpaces: settings.register("editor.indentSpaces", Schema.String, "4"),
