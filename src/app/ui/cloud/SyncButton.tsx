@@ -263,6 +263,9 @@ const Working = (props: { readonly label: string }) => (
 const changesWaiting = (count: number): string =>
   count === 1 ? m.wacs_one_change_waiting() : m.wacs_changes_waiting({ count });
 
+const pathOf = (href: string): string =>
+  URL.canParse(href) ? new URL(href).pathname.replace(/^\//u, "") : href;
+
 /** Where the project lives on WACS, whose it is, and what the link is for. */
 const ProjectLocation = (props: { readonly href: string; readonly noWrite: boolean }) => (
   <div class="space-y-2" data-sync-link>
@@ -274,7 +277,9 @@ const ProjectLocation = (props: { readonly href: string; readonly noWrite: boole
         id="wacs-link"
         wrapperClass="min-w-0 flex-1"
         readonly
-        value={props.href}
+        // The owner and name, which is the part that tells projects apart; Copy gives the whole link.
+        value={pathOf(props.href)}
+        title={props.href}
         onFocus={(event) => event.currentTarget.select()}
       />
       <Button
@@ -359,6 +364,9 @@ const WacsBody = (props: {
       )
       .finally(() => setWorking(""));
   };
+
+  // The shared project holds versions this device lacks: the next thing to do is look at them.
+  const incoming = (): boolean => (props.held?.reading.behind.length ?? 0) > 0;
 
   const run = (action: QuickAction): void => {
     if (action === "see" || action === "sign-in") props.onLeave();
@@ -473,6 +481,11 @@ const WacsBody = (props: {
                         <WithName text={m.wacs_connected_body({ user: user() })} name={user()} />{" "}
                         {waiting() > 0 ? changesWaiting(waiting()) : m.wacs_all_uploaded()}
                       </Body>
+                      <Show when={incoming()}>
+                        <p class="text-small text-on-surface-primary" data-sync-incoming>
+                          {m.cloud_there_are_updates_to_receive()}
+                        </p>
+                      </Show>
                       <Show when={held().reading.sendRefused}>
                         <p class="text-small text-on-surface-error" data-sync-failed>
                           {m.wacs_upload_failed_body()}
@@ -487,8 +500,18 @@ const WacsBody = (props: {
                         when={busyLabel()}
                         fallback={
                           <div class="space-y-2">
+                            <Show when={incoming()}>
+                              <Button
+                                variant="primary"
+                                class="w-full justify-center"
+                                onClick={() => run("see")}
+                                data-testid="wacs-see"
+                              >
+                                {m.cloud_see_the_changes()}
+                              </Button>
+                            </Show>
                             <Button
-                              variant={waiting() > 0 ? "primary" : "secondary"}
+                              variant={waiting() > 0 && !incoming() ? "primary" : "secondary"}
                               class="w-full justify-center"
                               icon={<CloudUpload size={20} />}
                               disabled={waiting() === 0}
@@ -502,7 +525,7 @@ const WacsBody = (props: {
                                   : m.menu_upload_to_wacs()}
                             </Button>
                             <Button
-                              variant={waiting() > 0 ? "secondary" : "primary"}
+                              variant={waiting() > 0 || incoming() ? "secondary" : "primary"}
                               class="w-full justify-center"
                               icon={<CloudDownload size={20} />}
                               onClick={() => run("check")}
