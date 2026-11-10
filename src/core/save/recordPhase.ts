@@ -29,7 +29,7 @@ export type RecordEvent<Line> =
 type Kind = RecordPhase<unknown>["kind"];
 type Transitions = Record<Kind, Partial<Record<RecordEvent<unknown>["kind"], Kind>>>;
 
-const recordTransitions = {
+export const recordTransitions = {
   editing: { start: "recording" },
   // No way out by `close` or by a second `start`: a run in flight is neither abandoned nor doubled.
   recording: { stopped: "editing", answered: "recorded" },

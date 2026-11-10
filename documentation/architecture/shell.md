@@ -21,7 +21,25 @@ Wiring facts that carry meaning, not taste:
 
 The open `Project`, the focused book, the mode (with `lineByLine`, the device setting `editor.lineByLine` that picks Line by line over Reading; [editor](editor.md#line-by-line)), the clipped chapter and the findings cursor live in one Solid context above the router. `ProjectContext.tsx` assembles it from parts in `src/app/shell/`: preferences and layout (`preferences.ts`), slugs (`slugs.ts`), the update check, the reader's place (`reader.ts`), the project lifecycle — open, close, the recovery offer, seat edits (`lifecycle.ts`) — and findings navigation (`findingsNav.ts`). TanStack owns navigation, not lifetimes: a route match is destroyed on every navigation, and a Project owns Book lifetimes.
 
-**Which project is open is one machine.** `src/core/project/lifecycle.ts` holds the phases (`closed`, `opening`, `open`, `failed`), the events (`ask`, `opened`, `refused`, `close`) and the one function that steps between them; `lifecycle.ts` in the shell sends the events and `shell.projectPhase()` is the reading. An answer about a project that is no longer the one being opened changes nothing, and opens run one at a time. The project route (`src/routes/_app/project/$slug.tsx`) keeps no phase of its own: it reads the shell's, and a failed open is a screen that says why, with Try again and Back to projects.
+**Which project is open is one machine.** `src/core/project/lifecycle.ts` holds the phases (`closed`, `opening`, `open`, `failed`), the events (`ask`, `opened`, `refused`, `close`) and the one function that steps between them; `lifecycle.ts` in the shell sends the events and `shell.projectPhase()` is the reading. An answer about a project that is no longer the one being opened changes nothing, and opens run one at a time. The project route (`src/routes/_app/project/$slug.tsx`) keeps no phase of its own: it reads the shell's, and a failed open is a screen that says why, with Try again and Back to projects. The chart below is drawn from the transition table by `pnpm docs:charts`.
+
+<!-- chart:project-phase -->
+
+```mermaid
+stateDiagram-v2
+  [*] --> closed
+  closed --> opening : ask
+  opening --> opening : ask
+  opening --> open : opened
+  opening --> failed : refused
+  opening --> closed : close
+  open --> opening : ask
+  open --> closed : close
+  failed --> opening : ask
+  failed --> closed : close
+```
+
+<!-- /chart:project-phase -->
 
 `shell.unsaved(book)` reads that book's row of the save-state store: `unsaved` when Save holds a
 baseline for it and `SaveCoordinator.dirty(book)` says the text differs. The row is computed when an

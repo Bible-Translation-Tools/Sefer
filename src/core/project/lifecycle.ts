@@ -24,7 +24,7 @@ type Transitions = Record<
   Partial<Record<ProjectEvent["kind"], ProjectPhase["kind"]>>
 >;
 
-const projectTransitions = {
+export const projectTransitions = {
   closed: { ask: "opening" },
   opening: { ask: "opening", opened: "open", refused: "failed", close: "closed" },
   open: { ask: "opening", close: "closed" },

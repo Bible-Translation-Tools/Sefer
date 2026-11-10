@@ -345,3 +345,18 @@ that says so (the button spun for good), and Save pressed twice records once.
   variable and the signal only draws it. The action helper will need the same.
 
 <Followup id="charts-due">Two machines exist now, so the chart generator is no longer ahead of need: `tools/docs/charts.ts` reading the two transition tables into `shell.md` and `review.md`, with `--check`. The tables are not exported yet because nothing reads them.</Followup>
+
+## Ruled 2026-11-10: no library for now, and the charts are drawn
+
+Will: "I'm fine if we don't take the dep for now, but that it's an explicit / named / modeled
+state machine is the goal." So `library-still-first` is answered: not yet. The goal is the
+machine, named and modelled in `src/core`, with its chart in the docs.
+
+`charts-due` is done. `pnpm docs:charts` (`tools/docs/charts.ts`) draws each machine's chart
+from its transition table into its chapter, between `<!-- chart:<id> -->` markers, and
+`pnpm check` runs it with `--check`. The two built machines are in `shell.md` and `review.md`.
+A new machine adds one row to the list in that tool.
+
+Also ruled: project creation and remote sync should both be machines with a chart in the docs.
+Neither is built. Sync waits on the order with the designer's PR 15, which changes
+`syncStatus.ts` and `src/core/sync`.
