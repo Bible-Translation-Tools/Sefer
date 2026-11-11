@@ -17,7 +17,7 @@ import { isVisual, trusted } from "../kernel";
 import type { DocStructure } from "../model/docStructure";
 import { lineIndexAt } from "../model/docStructure";
 import { assignmentAt } from "../model/registry";
-import { heldRunBehaviour, holdRun } from "./heldRun";
+import { dropHeldRun, heldRunBehaviour, holdRun } from "./heldRun";
 
 /**
  * USFM typed straight into Refine. A backslash starts a marker being typed: it
@@ -273,13 +273,14 @@ export const typedMarkerCommands: Readonly<Record<string, Command>> = {
   },
   "typedMarker.shorten": (view) => {
     const held = view.state.field(composingField, false) ?? null;
-    if (held === null) return false;
+    if (held === null) return dropHeldRun(view);
     const text = held.text.slice(0, -1);
     view.dispatch({
       effects: compose.of(text === "" ? null : { ...held, text, wrong: false }),
     });
     return true;
   },
+  "typedMarker.dropHeld": dropHeldRun,
   "typedMarker.cancel": (view) => {
     if ((view.state.field(composingField, false) ?? null) === null) return false;
     view.dispatch({ effects: compose.of(null) });

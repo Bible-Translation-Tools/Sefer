@@ -5,7 +5,13 @@ import {
   StateEffect,
   StateField,
 } from "@codemirror/state";
-import { Decoration, type DecorationSet, EditorView, WidgetType } from "@codemirror/view";
+import {
+  type Command,
+  Decoration,
+  type DecorationSet,
+  EditorView,
+  WidgetType,
+} from "@codemirror/view";
 import { MARKER_ATTRIBUTES } from "@wycliffeassociates/sefer-text/engine/analysis";
 
 import { isVisual, trusted } from "../kernel";
@@ -162,6 +168,26 @@ export function runExitAt(structure: DocStructure, pos: number): number | null {
       exit = exit === null ? word.to : Math.min(exit, word.to);
   return exit;
 }
+
+/**
+ * Backspace or Delete in the held pair takes the pair out, and nothing else:
+ * the style asked for is not wanted after all. Left to the ordinary Backspace,
+ * which steps over hidden markup, the key took the visible character before
+ * the pair (a space, or a verse number's digit) and left the pair.
+ */
+export const dropHeldRun: Command = (view) => {
+  const held = view.state.field(heldRunField, false) ?? null;
+  const sel = view.state.selection.main;
+  if (held === null || !sel.empty || sel.head !== held.at) return false;
+  view.dispatch({
+    changes: { from: held.from, to: held.to },
+    selection: { anchor: held.from },
+    effects: holdRun.of(null),
+    annotations: trusted.of("typed-usfm"),
+    userEvent: "delete.backward",
+  });
+  return true;
+};
 
 const RUN_TINT = Decoration.mark({ class: "usfm-run-caret" });
 

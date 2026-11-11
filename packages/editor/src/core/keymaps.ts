@@ -163,7 +163,7 @@ export const KEY_BUNDLES: readonly KeyBundle[] = [
   {
     id: "typedMarkers",
     summary:
-      "A typed backslash starts a marker shown in place; Space or Enter writes it, Backspace shortens it, Escape drops it (inputRules/typedMarker.ts).",
+      "A typed backslash starts a marker shown in place; Space or Enter writes it, Backspace shortens it, Escape drops it; Backspace or Delete in the empty pair it wrote takes the pair out (inputRules/typedMarker.ts, heldRun.ts).",
     modes: ["reading"],
     commands: typedMarkerCommands,
     bindings: [
@@ -171,6 +171,7 @@ export const KEY_BUNDLES: readonly KeyBundle[] = [
       { key: "Enter", command: "typedMarker.accept" },
       { key: "Backspace", command: "typedMarker.shorten" },
       { key: "Escape", command: "typedMarker.cancel" },
+      { key: "Delete", command: "typedMarker.dropHeld" },
     ],
     behaviour: typedMarkerBehaviour,
     precedence: "highest",
