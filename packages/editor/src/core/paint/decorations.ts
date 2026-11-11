@@ -6,7 +6,7 @@ import {
   EditorView,
   WidgetType,
 } from "@codemirror/view";
-import { MARKERS } from "@wycliffeassociates/sefer-text/engine/analysis";
+import { MARKER_ATTRIBUTES, MARKERS } from "@wycliffeassociates/sefer-text/engine/analysis";
 import {
   FLAG,
   NOTE_PART,
@@ -152,6 +152,14 @@ class OptBreakWidget extends WidgetType {
     return false;
   }
 }
+
+/**
+ * A run a press opens the attribute popover on (`attributeActivation`): one that
+ * carries attributes, or whose marker takes them. Only these are underlined; a
+ * \wj or \nd is formatting, and is drawn as its style and nothing more.
+ */
+const attributed = (wd: WordRange): boolean =>
+  wd.attrTo > wd.attrFrom || MARKER_ATTRIBUTES[wd.marker] !== undefined;
 
 class PipWidget extends WidgetType {
   readonly name: string;
@@ -359,6 +367,55 @@ export function noteApparatusText(doc: string, note: NoteRange, part: number): s
   return out.replace(/\s+/g, " ").trim();
 }
 
+/** A stretch of a note's body in one style: the marker that opened it (`fq`, `fk`), or "" for plain. */
+export interface NoteRun {
+  readonly text: string;
+  readonly marker: string;
+}
+
+const NOTE_MARKUP = /^\\(\+?)([a-z][a-z0-9-]*)(\*?)/;
+
+/**
+ * A note's body as runs, each in the style of the marker it stands under, so
+ * the apparatus shows a \fq quotation in italics and a \fk keyword in bold as
+ * the stylesheet does. A note's own markers (\ft, \fq) run until the next
+ * one, and a closer (\fq*) goes back to plain; a nested run (\+wj … \+wj*)
+ * holds only until its closer. Whitespace is folded as `noteApparatusText`
+ * folds it.
+ */
+export function noteBodyRuns(doc: string, note: NoteRange): NoteRun[] {
+  const runs: NoteRun[] = [];
+  let open: string[] = [];
+  for (const p of note.parts) {
+    if (p.kind === NOTE_PART.MARKUP) {
+      const m = NOTE_MARKUP.exec(doc.slice(p.from, p.to));
+      if (m === null) continue;
+      const [, nested, name, closer] = m;
+      if (closer === "*") open = nested === "+" ? open.slice(0, -1) : [];
+      else open = nested === "+" ? [...open, name] : [name];
+      continue;
+    }
+    if (p.kind !== NOTE_PART.BODY) continue;
+    const text = doc.slice(p.from, p.to).replace(/\s+/g, " ");
+    const marker = open.at(-1) ?? "";
+    const last = runs.at(-1);
+    if (last !== undefined && last.marker === marker)
+      runs[runs.length - 1] = { text: last.text + text, marker };
+    else runs.push({ text, marker });
+  }
+  if (runs.length > 0) {
+    runs[0] = { ...runs[0], text: runs[0].text.trimStart() };
+    runs[runs.length - 1] = {
+      ...runs[runs.length - 1],
+      text: runs[runs.length - 1].text.trimEnd(),
+    };
+  }
+  return runs.filter((run) => run.text !== "");
+}
+
+const runsKey = (runs: readonly NoteRun[]): string =>
+  runs.map((run) => `${run.marker}\u0000${run.text}`).join("\u0001");
+
 const EMPTY_NOTE_BODY = "Add note text";
 
 /**
@@ -373,23 +430,46 @@ const EMPTY_NOTE_BODY = "Add note text";
  * target. It is a class and not a `::after`, because the click handler asks
  * `closest(".usfm-note-body")` and pseudo-elements have no node to close over.
  */
-export const paintNoteBody = (el: HTMLElement, text: string): void => {
-  const empty = text === "";
+export const paintNoteBody = (el: HTMLElement, runs: readonly NoteRun[]): void => {
+  const empty = runs.length === 0;
   el.className = empty ? "usfm-note-body usfm-note-empty" : "usfm-note-body";
-  const want = empty ? EMPTY_NOTE_BODY : text;
-  if (el.textContent !== want) el.textContent = want;
+  const key = empty ? "" : runsKey(runs);
+  if (el.dataset["runs"] === key && el.childNodes.length > 0) return;
+  el.dataset["runs"] = key;
+  if (empty) {
+    el.textContent = EMPTY_NOTE_BODY;
+    return;
+  }
+  el.replaceChildren(
+    ...runs.map((run) => {
+      if (run.marker === "") return document.createTextNode(run.text);
+      const span = document.createElement("span");
+      span.className = `usfm-c-${run.marker}`;
+      span.textContent = run.text;
+      return span;
+    }),
+  );
 };
 
+interface NoteRow {
+  readonly mark: string;
+  readonly ref: string;
+  readonly body: readonly NoteRun[];
+  readonly from: number;
+}
+
 class NotesWidget extends WidgetType {
-  readonly notes: { mark: string; ref: string; body: string; from: number }[];
-  constructor(notes: { mark: string; ref: string; body: string; from: number }[]) {
+  readonly notes: NoteRow[];
+  constructor(notes: NoteRow[]) {
     super();
     this.notes = notes;
   }
   eq(other: NotesWidget) {
     return (
       other.notes.length === this.notes.length &&
-      other.notes.every((n, i) => n.mark === this.notes[i].mark && n.body === this.notes[i].body)
+      other.notes.every(
+        (n, i) => n.mark === this.notes[i].mark && runsKey(n.body) === runsKey(this.notes[i].body),
+      )
     );
   }
   toDOM(view: EditorView) {
@@ -770,7 +850,7 @@ export function buildRegular(
           deco: resolvedWord.figure
             ? FIGURE_CAPTION
             : Decoration.mark({
-                class: `usfm-word usfm-c-${(MARKERS[wd.marker]?.name ?? "").replace(/^\+/, "")}`,
+                class: `usfm-word usfm-c-${(MARKERS[wd.marker]?.name ?? "").replace(/^\+/, "")}${attributed(wd) ? " usfm-attrd" : ""}`,
                 attributes: { "data-w": String(resolvedWord.from) },
               }),
         });
@@ -892,7 +972,7 @@ export function buildRegular(
           ap.notes.map((n) => ({
             mark: n.mark,
             ref: noteApparatusText(doc, n, NOTE_PART.ORIGIN),
-            body: noteApparatusText(doc, n, NOTE_PART.BODY),
+            body: noteBodyRuns(doc, n),
             from: n.from,
           })),
         ),
