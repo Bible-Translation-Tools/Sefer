@@ -1,7 +1,6 @@
 import {
   type Analysis,
   type NodeView,
-  type NotePart,
   type Tree,
   CloseReason,
   MARKERS,
@@ -17,6 +16,7 @@ import {
   isMarkerKind,
 } from "@wycliffeassociates/sefer-text/engine/analysis";
 
+import type { NoteSpan } from "./fold";
 import {
   type NodeShape,
   type Row,
@@ -355,22 +355,28 @@ export function noteExtentEnd(cst: CstScan, facts: NodeFacts): number {
   return facts.to;
 }
 
+/**
+ * A note's spans in order, each tagged with its `NOTE_PART` and the marker it
+ * stands under: the innermost character node the parse put it in (`fq`, `fk`,
+ * `wj` for a nested `\+wj`), or "" for text directly in the note.
+ */
 export function notePartsOf(
   note: NodeView,
   extentEnd: number,
   shapeAt: (i: number) => TokenShape,
-): NotePart[] {
-  const out: NotePart[] = [];
-  let run: { kind: number; from: number; to: number } | null = null;
+): NoteSpan[] {
+  const out: NoteSpan[] = [];
+  let run: { kind: number; from: number; to: number; marker: string } | null = null;
   const flush = () => {
     if (run) out.push(run);
     run = null;
   };
-  const walk = (node: NodeView, isNote: boolean) => {
+  const walk = (node: NodeView, isNote: boolean, marker: string) => {
     for (let i = 0, n = node.childCount(); i < n; i++) {
       const child = node.child(i);
       if (child.isNode) {
-        walk(child, false);
+        const opened = child.marker();
+        walk(child, false, (opened === null ? "" : MARKERS[opened.idx]?.name) || marker);
         continue;
       }
       const span = child.span();
@@ -378,18 +384,19 @@ export function notePartsOf(
       if (span.from >= extentEnd) continue;
       const part = notePartOf(shapeAt(child.id));
       if (part === NOTE_PART.ORIGIN || part === NOTE_PART.BODY) {
-        if (run && run.kind === part && run.to === span.from) run.to = span.to;
+        if (run && run.kind === part && run.marker === marker && run.to === span.from)
+          run.to = span.to;
         else {
           flush();
-          run = { kind: part, from: span.from, to: span.to };
+          run = { kind: part, from: span.from, to: span.to, marker };
         }
         continue;
       }
       flush();
-      if (span.to > span.from) out.push({ kind: part, from: span.from, to: span.to });
+      if (span.to > span.from) out.push({ kind: part, from: span.from, to: span.to, marker });
     }
   };
-  walk(note, true);
+  walk(note, true, "");
   flush();
   return out;
 }

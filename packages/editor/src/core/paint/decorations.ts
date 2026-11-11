@@ -373,35 +373,21 @@ export interface NoteRun {
   readonly marker: string;
 }
 
-const NOTE_MARKUP = /^\\(\+?)([a-z][a-z0-9-]*)(\*?)/;
-
 /**
- * A note's body as runs, each in the style of the marker it stands under, so
- * the apparatus shows a \fq quotation in italics and a \fk keyword in bold as
- * the stylesheet does. A note's own markers (\ft, \fq) run until the next
- * one, and a closer (\fq*) goes back to plain; a nested run (\+wj … \+wj*)
- * holds only until its closer. Whitespace is folded as `noteApparatusText`
+ * A note's body as runs, each in the style of the marker the parse put it
+ * under, so the apparatus shows a \fq quotation in italics and a \fk keyword
+ * in bold as the stylesheet does. Whitespace is folded as `noteApparatusText`
  * folds it.
  */
 export function noteBodyRuns(doc: string, note: NoteRange): NoteRun[] {
   const runs: NoteRun[] = [];
-  let open: string[] = [];
   for (const p of note.parts) {
-    if (p.kind === NOTE_PART.MARKUP) {
-      const m = NOTE_MARKUP.exec(doc.slice(p.from, p.to));
-      if (m === null) continue;
-      const [, nested, name, closer] = m;
-      if (closer === "*") open = nested === "+" ? open.slice(0, -1) : [];
-      else open = nested === "+" ? [...open, name] : [name];
-      continue;
-    }
     if (p.kind !== NOTE_PART.BODY) continue;
     const text = doc.slice(p.from, p.to).replace(/\s+/g, " ");
-    const marker = open.at(-1) ?? "";
     const last = runs.at(-1);
-    if (last !== undefined && last.marker === marker)
-      runs[runs.length - 1] = { text: last.text + text, marker };
-    else runs.push({ text, marker });
+    if (last !== undefined && last.marker === p.marker)
+      runs[runs.length - 1] = { text: last.text + text, marker: p.marker };
+    else runs.push({ text, marker: p.marker });
   }
   if (runs.length > 0) {
     runs[0] = { ...runs[0], text: runs[0].text.trimStart() };

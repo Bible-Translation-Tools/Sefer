@@ -1,7 +1,7 @@
-import type { NodeView, NotePart } from "@wycliffeassociates/sefer-text/engine/analysis";
+import type { NodeView } from "@wycliffeassociates/sefer-text/engine/analysis";
 
 import { notePartsOf } from "./cst";
-import type { NoteRange } from "./fold";
+import type { NoteRange, NoteSpan } from "./fold";
 import type { TokenShape } from "./mapping";
 
 export class Note implements NoteRange {
@@ -10,7 +10,7 @@ export class Note implements NoteRange {
   readonly kind: string;
   readonly #node: NodeView;
   readonly #shapeAt: (i: number) => TokenShape;
-  #parts: NotePart[] | null = null;
+  #parts: NoteSpan[] | null = null;
 
   constructor(
     node: NodeView,
@@ -26,7 +26,7 @@ export class Note implements NoteRange {
     this.#shapeAt = shapeAt;
   }
 
-  get parts(): NotePart[] {
+  get parts(): NoteSpan[] {
     this.#parts ??= notePartsOf(this.#node, this.to, this.#shapeAt);
     return this.#parts;
   }
