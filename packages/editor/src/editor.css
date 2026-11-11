@@ -1187,6 +1187,23 @@
 .cm-mode-regular .usfm-c-pro {
   font-size: 0.83em;
 }
+/* The run the caret is typing in (`runTint`, inputRules/heldRun.ts): at a
+   styled word's end the caret has two places that look alike, inside the
+   closer and after it, and this says which. An empty pair a typed marker just
+   wrote is a slot after the caret, where its words will go. */
+.cm-mode-regular .usfm-run-caret {
+  background: var(--editor-focus-bg);
+  border-radius: 2px;
+}
+.cm-mode-regular .usfm-run-empty {
+  display: inline-block;
+  width: 0.6em;
+  height: 1em;
+  vertical-align: -0.1em;
+  background: var(--editor-pair-bg);
+  box-shadow: inset 0 -2px 0 var(--editor-pair-edge);
+  border-radius: 2px;
+}
 .cm-mode-regular .usfm-c-wj {
   color: var(--editor-wj);
 }

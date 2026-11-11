@@ -6,6 +6,7 @@ import {
 } from "@codemirror/state";
 import { type Command, Direction, EditorView } from "@codemirror/view";
 
+import { leaveRun, runExitAt } from "./inputRules/heldRun";
 import { note, noteTr } from "./instrument/trace";
 import {
   type GetStructure,
@@ -126,6 +127,19 @@ export function moveCaret(
   return (view) => {
     const sel = view.state.selection.main;
     if (!sel.empty) return false;
+    // → at the end of a style run's words leaves the run first: the same place
+    // on screen, past its closer, so what is typed next is not styled.
+    const exit =
+      visualRight && step === byChar ? runExitAt(structureAt(view.state), sel.head) : null;
+    if (exit !== null) {
+      note(view.state, {
+        rule: "moveCaret",
+        verdict: "moved",
+        detail: `→ ${sel.head} → ${exit} (out of the run, past its closer)`,
+      });
+      view.dispatch({ selection: EditorSelection.cursor(exit), effects: leaveRun.of(exit) });
+      return true;
+    }
     const to = moveTheCaretOneStopInDocumentOrder(
       view,
       structureAt(view.state),
