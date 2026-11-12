@@ -11,6 +11,7 @@ import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 import { m } from "#app/paraglide/messages";
 import { touchProject } from "#core/project/projectIndex";
 
+import { describe } from "../../describe";
 import { downloadRuns } from "../../downloadRuns";
 import { onboarding } from "../../onboarding";
 import { exportProjectZip, renameProject } from "../../projectCommands";
@@ -224,11 +225,17 @@ const createProjectActions = (
       // The open project is closed first: Home would otherwise still go back
       // to it, and its files are let go before they are deleted.
       const closing = shell.project()?.root === row.root ? shell.closeProject() : Promise.resolve();
-      void closing.then(() =>
-        removeProject(services, keys, row, () => {
+      void closing.then(
+        () =>
+          removeProject(services, keys, row, () => {
+            setBusy(false);
+            setDeleting(undefined);
+          }),
+        (cause: unknown) => {
           setBusy(false);
           setDeleting(undefined);
-        }),
+          toasts.error({ title: m.landing_could_not_delete(), message: describe(cause) });
+        },
       );
     },
   };
