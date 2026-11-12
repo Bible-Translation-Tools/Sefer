@@ -18,7 +18,6 @@ import Undo2 from "lucide-solid/icons/undo-2";
 import { For, Show, createSignal } from "solid-js";
 
 import { findCommand, runCommand } from "../../commands";
-import { watchOnboarding } from "../../onboarding";
 import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
 import { SyncChip } from "../cloud/SyncButton";
@@ -305,7 +304,6 @@ function ModeControl(props: {
 export function AppBar() {
   const navigate = useNavigate();
   const shell = useShell();
-  watchOnboarding(shell);
 
   const path = useRouterState({ select: (state) => state.location.pathname });
   const within = (): string => path().replace(/^\/project\/[^/]+/, "");
