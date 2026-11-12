@@ -50,7 +50,10 @@ export function ProjectsLanding() {
           </div>
         </Resizable.Panel>
         <Resizable.Handle label={m.landing_resize_columns()} class="max-lg:hidden" />
-        <Resizable.Panel class="flex flex-col lg:ps-3 max-lg:[flex-basis:auto]! max-lg:flex-1">
+        {/* The panel clips; 12px of room above and to the end (taken back by
+            the padding, so nothing moves) lets the first-run glow on the
+            search box show whole. */}
+        <Resizable.Panel class="-me-3 -mt-3 flex flex-col pe-3 pt-3 lg:ps-3 max-lg:[flex-basis:auto]! max-lg:flex-1">
           <WacsProjects
             downloads={{
               start: (download, from) => {

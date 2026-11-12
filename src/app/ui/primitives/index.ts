@@ -32,6 +32,7 @@ export { ToggleGroup } from "./ToggleGroup";
 export { Toaster } from "./Toaster";
 export { VirtualList, type VirtualSection } from "./VirtualList";
 export { Tooltip } from "./Tooltip";
+export { Coachmark } from "./Coachmark";
 export * as toasts from "./toasts";
 export { BookScope, scopeBooks, type BookScopeKind } from "./BookScope";
 export { createHeld } from "./held";

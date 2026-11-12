@@ -11,11 +11,14 @@ import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 import { m } from "#app/paraglide/messages";
 import { touchProject } from "#core/project/projectIndex";
 
+import { describe } from "../../describe";
 import { downloadRuns } from "../../downloadRuns";
+import { onboarding } from "../../onboarding";
 import { exportProjectZip, renameProject } from "../../projectCommands";
 import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
 import {
+  Coachmark,
   Badge,
   Button,
   Card,
@@ -219,10 +222,21 @@ const createProjectActions = (
       if (staticRow === undefined || busy()) return;
       const row = staticRow;
       setBusy(true);
-      removeProject(services, keys, row, () => {
-        setBusy(false);
-        setDeleting(undefined);
-      });
+      // The open project is closed first: Home would otherwise still go back
+      // to it, and its files are let go before they are deleted.
+      const closing = shell.project()?.root === row.root ? shell.closeProject() : Promise.resolve();
+      void closing.then(
+        () =>
+          removeProject(services, keys, row, () => {
+            setBusy(false);
+            setDeleting(undefined);
+          }),
+        (cause: unknown) => {
+          setBusy(false);
+          setDeleting(undefined);
+          toasts.error({ title: m.landing_could_not_delete(), message: describe(cause) });
+        },
+      );
     },
   };
 };
@@ -404,6 +418,8 @@ const ProjectMenu = (props: {
 const ProjectCard = (props: {
   readonly row: ProjectSummary;
   readonly folder: string;
+  /** First run: the Open button the person should press next. */
+  readonly pointed?: boolean;
   readonly onOpen: () => void;
   readonly onRename: () => void;
   readonly onExport: () => void;
@@ -430,10 +446,18 @@ const ProjectCard = (props: {
       </code>
 
       <div class="mt-auto flex items-center gap-2 pt-4">
-        <Button variant="accent" class="flex-1 justify-between" onClick={props.onOpen}>
-          {m.landing_open_project_2()}
-          <ArrowRight aria-hidden="true" />
-        </Button>
+        <Coachmark
+          show={props.pointed === true}
+          title={m.onboarding_open_title()}
+          body={m.onboarding_open_body()}
+          class="flex flex-1"
+          testId="onboarding-open"
+        >
+          <Button variant="accent" class="flex-1 justify-between" onClick={props.onOpen}>
+            {m.landing_open_project_2()}
+            <ArrowRight aria-hidden="true" />
+          </Button>
+        </Coachmark>
         <ProjectMenu
           row={props.row}
           onOpen={props.onOpen}
@@ -463,6 +487,7 @@ const ProjectStrip = (props: {
       {(row) => (
         <ProjectCard
           row={row}
+          pointed={onboarding.step("projects") === "open" && row === props.sorted[0]}
           folder={props.folderLabel(row)}
           onOpen={() => props.actions.open(row)}
           onRename={() => props.actions.startRename(row)}
@@ -564,6 +589,13 @@ export function YourProjects(props: {
   const list = createStrip(props, rows);
   const { pending } = list;
   const sorted = (): readonly ProjectSummary[] => sortProjects(rows() ?? [], props.downloads);
+  // First run tells "search for a project" from "open the one you have" by this count.
+  createEffect(
+    () => sorted().length,
+    (count) => {
+      onboarding.setLoaded(count);
+    },
+  );
 
   return (
     <Show

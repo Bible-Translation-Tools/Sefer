@@ -72,3 +72,37 @@
     font-family: var(--font-mono);
   }
 }
+
+/* First-run pointers (Coachmark): the control being pointed at breathes a
+   brand glow, hugging its own corners; still for reduced motion. */
+@keyframes coach-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-brand) 55%, transparent);
+  }
+  50% {
+    /* Kept within ~10px: a pointed-at control can sit by a panel's clipped
+       edge (the WACS search). */
+    box-shadow:
+      0 0 0 3px color-mix(in srgb, var(--color-brand) 35%, transparent),
+      0 0 8px 2px color-mix(in srgb, var(--color-brand) 40%, transparent);
+  }
+}
+/* An Input's wrapper is square; its field carries the rounded corners. */
+[data-coach-glow] > :not(:has(> input)),
+[data-coach-glow] > * > input {
+  animation: coach-glow 1.8s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-coach-glow] > :not(:has(> input)),
+  [data-coach-glow] > * > input {
+    animation: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand) 45%, transparent);
+  }
+}
+@keyframes coach-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}

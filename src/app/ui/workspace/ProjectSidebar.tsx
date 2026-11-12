@@ -7,9 +7,10 @@ import Plus from "lucide-solid/icons/plus";
 import SearchIcon from "lucide-solid/icons/search";
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 
+import { onboarding } from "../../onboarding";
 import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
-import { Badge, Button, Input } from "../primitives";
+import { Badge, Button, Coachmark, Input } from "../primitives";
 import { BookChaptersRow, chaptersOf, type ChapterTile } from "./BookChapters";
 import { bookName, testamentOf, type Testament } from "./books";
 import { projectLanguage, projectName } from "./project";
@@ -312,22 +313,30 @@ export function ProjectControl() {
       <Show
         when={shell.project()}
         fallback={
-          <button
-            type="button"
-            data-testid="sidebar-project"
-            class="flex w-full cursor-pointer items-center gap-3 rounded-2xl border border-brand bg-brand-light p-4 text-start text-brand transition-colors hover:bg-button-primary-surface hover:text-button-primary-on-surface"
-            onClick={() => void navigate({ to: "/projects" })}
+          <Coachmark
+            show={onboarding.step("workspace") === "find"}
+            title={m.onboarding_find_title()}
+            body={m.onboarding_find_body()}
+            class="flex w-full"
+            testId="onboarding-find"
           >
-            <span class="flex min-w-0 flex-1 flex-col gap-1 leading-normal">
-              <span class="block truncate text-h4 leading-normal font-bold">
-                {m.workspace_find_a_project()}
+            <button
+              type="button"
+              data-testid="sidebar-project"
+              class="flex w-full cursor-pointer items-center gap-3 rounded-2xl border border-brand bg-brand-light p-4 text-start text-brand transition-colors hover:bg-button-primary-surface hover:text-button-primary-on-surface"
+              onClick={() => void navigate({ to: "/projects" })}
+            >
+              <span class="flex min-w-0 flex-1 flex-col gap-1 leading-normal">
+                <span class="block truncate text-h4 leading-normal font-bold">
+                  {m.workspace_find_a_project()}
+                </span>
+                <span class="block truncate text-body leading-normal">
+                  {m.common_projects_available_on_wacs()}
+                </span>
               </span>
-              <span class="block truncate text-body leading-normal">
-                {m.common_projects_available_on_wacs()}
-              </span>
-            </span>
-            <ArrowRight size={20} aria-hidden="true" class="shrink-0" />
-          </button>
+              <ArrowRight size={20} aria-hidden="true" class="shrink-0" />
+            </button>
+          </Coachmark>
         }
       >
         <button

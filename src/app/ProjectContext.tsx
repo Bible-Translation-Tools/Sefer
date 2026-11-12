@@ -29,6 +29,7 @@ import { registerShellCommands, type ShellBridge } from "./commands";
 import { useComposition } from "./CompositionContext";
 import { createResourceHandles, type ResourceHandles } from "./kinds/handles";
 import { createLocation, type Location } from "./location";
+import { watchOnboarding } from "./onboarding";
 import { registerProjectCommands } from "./projectCommands";
 import { composeServices, fixtureRequested, type Services } from "./services";
 import { shellKeys, type LastLocation } from "./settings";
@@ -486,6 +487,8 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
       ask: (root) => void navigate({ to: "/projects", search: { rename: root } }),
     }),
   );
+  // First run follows the shell's project and project list, so it is wired here, once.
+  watchOnboarding(shell);
   return shell;
 };
 
