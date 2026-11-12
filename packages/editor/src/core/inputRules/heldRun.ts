@@ -35,7 +35,7 @@ export interface HeldRun {
 
 export const holdRun = StateEffect.define<HeldRun | null>();
 
-export const heldRunField = StateField.define<HeldRun | null>({
+const heldRunField = StateField.define<HeldRun | null>({
   create: () => null,
   update(held, tr) {
     for (const effect of tr.effects) if (effect.is(holdRun)) return effect.value;
@@ -150,7 +150,7 @@ const typeIntoHeld = EditorView.inputHandler.of((view, from, to, text) => {
  * A run that is a style (`\nd`, `\wj`, `\bd`): not a figure, and not a run that
  * carries attributes (an aligned `\w`), which is a word rather than a style.
  */
-export const isStyleRun = (word: WordRange): boolean =>
+const isStyleRun = (word: WordRange): boolean =>
   !word.figure && word.attrTo <= word.attrFrom && MARKER_ATTRIBUTES[word.marker] === undefined;
 
 /**
