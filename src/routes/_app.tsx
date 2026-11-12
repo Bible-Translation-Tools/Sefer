@@ -9,6 +9,7 @@ import { TourOutlet } from "#app/tour/TourOutlet";
 import { CommandPalette } from "#app/ui/CommandPalette";
 import { ImportDocumentDialog } from "#app/ui/import/ImportDocumentDialog";
 import { PageDoor, Resizable, Toaster, cx } from "#app/ui/primitives";
+import { BookNamesDialog } from "#app/ui/rules/BookNames";
 import { AppBar } from "#app/ui/workspace/AppBar";
 import { BackToEditor } from "#app/ui/workspace/BackToEditor";
 import { VersionTabs } from "#app/ui/workspace/ChangesHistorySidebar";
@@ -159,6 +160,13 @@ function Chrome() {
             open={ready().importOpen()}
             onClose={() => ready().setImportOpen(false)}
           />
+        )}
+      </Show>
+      <Show when={shell()}>
+        {(ready) => (
+          <Show when={ready().bookNamesOpen()}>
+            <BookNamesDialog open onOpenChange={ready().setBookNamesOpen} />
+          </Show>
         )}
       </Show>
       <Show when={shell()}>

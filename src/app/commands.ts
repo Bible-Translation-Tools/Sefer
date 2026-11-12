@@ -10,6 +10,7 @@ import { applyFormat, applyOverlay, formatBook, overlayBook } from "#core/fixes/
 import { makeMultiBook } from "#core/multibook/multibook";
 import { Observability, type ObservabilityService } from "#core/observability";
 import type { Project } from "#core/project/project";
+import { headerChanges, headerOf, isHeaderEdit } from "#core/rules/bookNames";
 import { chapterLabelsOf, standardize } from "#core/rules/chapterLabels";
 
 import { personAuthor } from "./author";
@@ -61,6 +62,7 @@ export interface ShellBridge {
   readonly openProject: (root: string) => Promise<void>;
   readonly setPaletteOpen: (open: boolean) => void;
   readonly setImportOpen: (open: boolean) => void;
+  readonly setBookNamesOpen: (open: boolean) => void;
   readonly sidebarOpen: () => boolean;
   readonly setSidebarOpen: (open: boolean) => void;
   readonly aim: (bookId: string, from: number, to?: number) => void;
@@ -915,6 +917,50 @@ const chapterLabelCommands = (bridge: ShellBridge, h: Helpers) => [
   }),
 ];
 
+/**
+ * Book names (ui/rules/BookNames.tsx): open the dialog, and its one action,
+ * each chosen book's header lines changed as asked (`headerChanges`,
+ * core/rules/bookNames.ts), computed from the book's held parse at the press
+ * and refused for a book whose parse is older than its text. One cross-book
+ * edit, so one Undo. The project list follows on Record a version.
+ */
+const bookNameCommands = (bridge: ShellBridge, h: Helpers) => [
+  registerCommand({
+    id: "bookNames.open",
+    title: m.command_book_names,
+    when: h.hasProject,
+    run: () => bridge.setBookNamesOpen(true),
+  }),
+  registerCommand({
+    id: "bookNames.save",
+    title: m.command_save_book_names,
+    when: h.hasProject,
+    run: (argument) => {
+      if (!(argument instanceof Map)) return;
+      const analyses = bridge.services.projectAnalysis;
+      let stale = false;
+      const operation = h.multibook.runAcrossBooks("bookNames", (book) => {
+        const edit: unknown = argument.get(book.id);
+        if (!isHeaderEdit(edit)) return null;
+        const held = analyses.analysis(book.id);
+        if (Option.isNone(held) || !analyses.fresh(book.id, book.source().stamp)) {
+          stale = true;
+          return null;
+        }
+        const analysis = held.value.analysis;
+        const changes = headerChanges(headerOf(analysis), analysis.text, edit);
+        return changes.length === 0 ? null : changes;
+      });
+      if (operation === null) {
+        bridge.report(stale ? m.book_names_stale() : m.book_names_nothing());
+        return;
+      }
+      bridge.changed({ kind: "book.apply", books: operation.books });
+      bridge.report(m.book_names_done({ count: operation.books.length }));
+    },
+  }),
+];
+
 const overlayCommands = (bridge: ShellBridge, h: Helpers) => {
   const { hasBook, hasProject } = h;
   return [
@@ -962,6 +1008,7 @@ export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
     ...formatCommands(bridge, h),
     ...overlayCommands(bridge, h),
     ...chapterLabelCommands(bridge, h),
+    ...bookNameCommands(bridge, h),
   ];
 
   return () => {

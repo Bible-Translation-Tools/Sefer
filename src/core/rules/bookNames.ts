@@ -184,6 +184,15 @@ export interface HeaderEdit {
   readonly add: ReadonlyMap<AddableKey, string>;
 }
 
+/** Whether a value handed across a command boundary is a `HeaderEdit`. */
+export const isHeaderEdit = (value: unknown): value is HeaderEdit =>
+  typeof value === "object" &&
+  value !== null &&
+  "set" in value &&
+  value.set instanceof Map &&
+  "add" in value &&
+  value.add instanceof Map;
+
 /** One line's words cleaned for a header line: no line breaks, no backslashes. */
 const clean = (value: string): string => value.replace(/[\\\r\n]+/g, " ").trim();
 

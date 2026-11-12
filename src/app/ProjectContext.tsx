@@ -134,6 +134,8 @@ export interface Shell {
   readonly setPaletteOpen: (open: boolean) => void;
   readonly importOpen: Accessor<boolean>;
   readonly setImportOpen: (open: boolean) => void;
+  readonly bookNamesOpen: Accessor<boolean>;
+  readonly setBookNamesOpen: (open: boolean) => void;
 
   readonly findingCounts: Accessor<{ readonly errors: number; readonly warnings: number }>;
 
@@ -232,6 +234,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
 
   const [paletteOpen, setPaletteOpen] = createSignal(false, { name: "paletteOpen" });
   const [importOpen, setImportOpen] = createSignal(false, { name: "importOpen" });
+  const [bookNamesOpen, setBookNamesOpen] = createSignal(false, { name: "bookNamesOpen" });
   const [cursor, setCursor] = createSignal(0, { name: "findingCursor" });
   const [reveal, setReveal] = createSignal<Reveal | undefined>(undefined, { name: "reveal" });
 
@@ -401,6 +404,10 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     setImportOpen: (open) => {
       setImportOpen(open);
     },
+    bookNamesOpen,
+    setBookNamesOpen: (open) => {
+      setBookNamesOpen(open);
+    },
     findingCounts,
     summaryOf,
     bookCensus,
@@ -447,6 +454,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     openProject,
     setPaletteOpen: shell.setPaletteOpen,
     setImportOpen: shell.setImportOpen,
+    setBookNamesOpen: shell.setBookNamesOpen,
     sidebarOpen: shell.sidebarOpen,
     setSidebarOpen: shell.setSidebarOpen,
     aim,

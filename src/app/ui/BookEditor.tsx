@@ -81,6 +81,14 @@ function labelAnswers(shell: Shell, finding: Finding, openLabels: () => void): C
   ];
 }
 
+/** A book-names mark's answers: the dialog, or fine here. */
+function nameAnswers(shell: Shell, finding: Finding): CorpusAction[] {
+  return [
+    { name: m.book_names_review(), run: () => shell.setBookNamesOpen(true) },
+    { name: m.common_fine_here(), run: () => fineHere(shell, finding) },
+  ];
+}
+
 function watchCorpus(
   shell: Shell,
   editor: BookEditorMount,
@@ -115,6 +123,13 @@ function watchCorpus(
           ...finding,
           message: findingMessage(finding),
           actions: labelAnswers(shell, finding, openLabels),
+        });
+    for (const finding of shell.services.projectAnalysis.bookNamesIn(book.id))
+      if (!stale(finding, book))
+        list.push({
+          ...finding,
+          message: findingMessage(finding),
+          actions: nameAnswers(shell, finding),
         });
     editor.setHostDiagnostics(list);
     annotateRepaint({
