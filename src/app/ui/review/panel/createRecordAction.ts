@@ -323,7 +323,8 @@ async function record(inputs: RecordActionInputs): Promise<void> {
   const project = shell.project();
   const review = unsaved();
   if (project === undefined || inputs.receipt.inFlight()) return;
-  if (review.length === 0 && !againstShared() && !againstWriter()) return;
+  if (review.length === 0 && !inputs.form.namesQueued() && !againstShared() && !againstWriter())
+    return;
   const typedMessage = message().trim();
   const staticNote = typedMessage;
   const settledNames = reviewBooks().map((book) => bookName(book.bookId, metadataOf(project)));

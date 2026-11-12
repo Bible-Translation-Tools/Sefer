@@ -1,7 +1,9 @@
 import {
   edit,
   fingerprint,
+  open as openManifests,
   read as readManifestBytes,
+  type BookNames,
   type BurritoMetadata,
   type ManifestFinding,
 } from "@wycliffeassociates/scripture-kitchen/bento";
@@ -19,11 +21,14 @@ import { zipSync } from "fflate";
 
 import { writeFileAtomic, writeFileStringAtomic } from "../fileSystem/atomic";
 import { joinPath, lastSegment, parentPath } from "../fileSystem/path";
-import { METADATA_FILE, readManifest } from "../project/discovery";
+import { METADATA_FILE, RC_MANIFEST_FILE, readManifest } from "../project/discovery";
 import { PROJECT_STATE_FILE, updateProjectState } from "../project/projectState";
 import { fromManifest, unreadable, type ProjectMetadata } from "../resources/projectMetadata";
 
 const SEFER_PROJECT_FILE = PROJECT_STATE_FILE;
+
+/** The manifests bento edits: a Scripture Burrito's and a Resource Container's. */
+export const MANIFEST_FILES = [METADATA_FILE, RC_MANIFEST_FILE] as const;
 
 export type ExportFormat = "burrito" | "usfm-zip";
 
@@ -48,6 +53,19 @@ export interface ProjectAdminService {
     root: string,
     names?: readonly string[],
   ) => Effect.Effect<readonly string[], AdminError>;
+  /**
+   * Give listed books these names in the project's manifests (a Burrito's
+   * `metadata.json`, an RC's `manifest.yaml`, whichever are there), through
+   * bento's handle. Answers the paths it wrote, to be recorded with the books,
+   * and bento's findings (a book a manifest doesn't list, say).
+   */
+  readonly renameBooks: (
+    root: string,
+    names: readonly BookNames[],
+  ) => Effect.Effect<
+    { readonly written: readonly string[]; readonly findings: readonly ManifestFinding[] },
+    AdminError
+  >;
   readonly archive: (root: string) => Effect.Effect<Uint8Array, AdminError>;
   readonly export: (
     root: string,
@@ -294,6 +312,32 @@ const makeProjectAdmin = (fileSystem: FileSystem.FileSystem): ProjectAdminServic
         if (next === undefined) return [];
         yield* Effect.mapError(writeFileAtomic(fileSystem, metadataPath(root), next), ioFailure);
         return changed;
+      }),
+
+    renameBooks: (root, names) =>
+      Effect.gen(function* () {
+        if (names.length === 0) return { written: [], findings: [] };
+        const existing = new Map<string, Uint8Array>();
+        for (const name of MANIFEST_FILES) {
+          const bytes = yield* Effect.result(fileSystem.readFile(joinPath(root, name)));
+          if (Result.isSuccess(bytes)) existing.set(name, bytes.success);
+        }
+        if (existing.size === 0) return { written: [], findings: [] };
+        const finished = yield* Effect.try({
+          try: () => {
+            const manifests = openManifests(existing);
+            for (const each of names) manifests.renameBook(each);
+            return manifests.finish();
+          },
+          catch: (error) => new AdminError({ reason: "Invalid", description: String(error) }),
+        });
+        const written: string[] = [];
+        for (const [name, bytes] of finished.files) {
+          const path = joinPath(root, name);
+          yield* Effect.mapError(writeFileAtomic(fileSystem, path, bytes), ioFailure);
+          written.push(path);
+        }
+        return { written, findings: finished.findings };
       }),
 
     archive,

@@ -10,7 +10,6 @@ import { findCommand, runCommand } from "../../commands";
 import { useShell } from "../../ProjectContext";
 import { IconButton, Input, Popover, Switch } from "../primitives";
 import { bookName } from "./books";
-import { metadataOf } from "./project";
 
 const can = (id: string): boolean => findCommand(id)?.available() === true;
 
@@ -218,7 +217,7 @@ export function BookTitle() {
   const title = (): string => {
     const book = shell.focused();
     if (book === undefined) return "";
-    const named = bookName(book.id, metadataOf(shell.project()));
+    const named = bookName(book.id, shell.metadata());
     const chapters = book.structure().chapters;
     const clipped = shell.chapter();
     const root = shell.project()?.root;

@@ -2,6 +2,7 @@ import type { ChapterRow, EditorBook, ProjectionName } from "@wycliffeassociates
 import type { Book, BookId } from "@wycliffeassociates/sefer-text/book";
 import type { Address } from "@wycliffeassociates/sefer-text/location/address";
 import type { SourceStamp } from "@wycliffeassociates/sefer-text/source";
+import { Option } from "effect";
 import {
   createContext,
   createMemo,
@@ -22,6 +23,7 @@ import type { Rung } from "#core/findings/suppressions";
 import type { ProjectPhase } from "#core/project/lifecycle";
 import type { Project } from "#core/project/project";
 import type { Restorable } from "#core/recovery/recovery";
+import type { ProjectMetadata } from "#core/resources/projectMetadata";
 
 import { registerShellCommands, type ShellBridge } from "./commands";
 import { useComposition } from "./CompositionContext";
@@ -56,6 +58,8 @@ export type { Navigate, RecentProject, Reveal, RevealAt } from "./shell/types";
 export interface Shell {
   readonly services: Services;
   readonly project: Accessor<Project | undefined>;
+  /** The open project's manifest metadata, followed as it is read again. */
+  readonly metadata: Accessor<ProjectMetadata | undefined>;
   readonly openProject: (root: string) => Promise<void>;
   /** Which project the shell has, and how far an open has got; `src/core/project/lifecycle.ts`. */
   readonly projectPhase: Accessor<ProjectPhase>;
@@ -135,6 +139,8 @@ export interface Shell {
   readonly setPaletteOpen: (open: boolean) => void;
   readonly importOpen: Accessor<boolean>;
   readonly setImportOpen: (open: boolean) => void;
+  readonly bookNamesOpen: Accessor<boolean>;
+  readonly setBookNamesOpen: (open: boolean) => void;
 
   readonly findingCounts: Accessor<{ readonly errors: number; readonly warnings: number }>;
 
@@ -224,15 +230,27 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
   const location = createLocation(project);
 
   let live: Project | undefined;
+  // The manifest can be read again while a project is open (book names on Record, a sync):
+  // `metadata()` follows it, so the sidebar and every name read through it update.
+  const [metadataRead, setMetadataRead] = createSignal(0, { name: "metadataRead" });
+  let unwatchMetadata: (() => void) | undefined;
   const liveProject: LiveProject = {
     get: () => live,
     set: (next) => {
       live = next;
+      unwatchMetadata?.();
+      unwatchMetadata = next?.metadataChanged(() => setMetadataRead((read) => read + 1));
     },
+  };
+  const metadata = (): ProjectMetadata | undefined => {
+    metadataRead();
+    const open = project();
+    return open === undefined ? undefined : Option.getOrUndefined(open.metadata());
   };
 
   const [paletteOpen, setPaletteOpen] = createSignal(false, { name: "paletteOpen" });
   const [importOpen, setImportOpen] = createSignal(false, { name: "importOpen" });
+  const [bookNamesOpen, setBookNamesOpen] = createSignal(false, { name: "bookNamesOpen" });
   const [cursor, setCursor] = createSignal(0, { name: "findingCursor" });
   const [reveal, setReveal] = createSignal<Reveal | undefined>(undefined, { name: "reveal" });
 
@@ -348,6 +366,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
   const shell: Shell = {
     services,
     project,
+    metadata,
     openProject,
     projectPhase,
     recoveryOffer,
@@ -402,6 +421,10 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     setImportOpen: (open) => {
       setImportOpen(open);
     },
+    bookNamesOpen,
+    setBookNamesOpen: (open) => {
+      setBookNamesOpen(open);
+    },
     findingCounts,
     summaryOf,
     bookCensus,
@@ -448,6 +471,7 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     openProject,
     setPaletteOpen: shell.setPaletteOpen,
     setImportOpen: shell.setImportOpen,
+    setBookNamesOpen: shell.setBookNamesOpen,
     sidebarOpen: shell.sidebarOpen,
     setSidebarOpen: shell.setSidebarOpen,
     aim,

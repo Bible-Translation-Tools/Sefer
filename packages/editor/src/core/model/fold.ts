@@ -26,11 +26,20 @@ export interface DocLine {
   readonly standalones: { from: number; to: number }[];
 }
 
+/**
+ * A span of a note, with the marker it stands under: the innermost character
+ * marker inside the note (`fq`, `fk`, a nested `+wj`) as the parse nested it,
+ * or "" for the note's own text.
+ */
+export interface NoteSpan extends NotePart {
+  readonly marker: string;
+}
+
 export interface NoteRange {
   readonly from: number;
   readonly to: number;
   readonly kind: string;
-  readonly parts: NotePart[];
+  readonly parts: NoteSpan[];
 }
 
 export interface WordRange {

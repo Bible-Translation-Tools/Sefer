@@ -35,6 +35,9 @@ left out.
 - [Translation Notes](./translation-notes.md): choosing and downloading notes in
   the reference column, notes following the caret. Needs the network.
 - [Find](./find.md): searching the project, and searching the notes beside it.
+- [Book names](./book-names.md): every book's names in one dialog, edits, missing
+  rows, and the names findings. The fixture is enough except for the manifest
+  comparison.
 - [Import from Word or LibreOffice](./import-document.md): a `.docx` or `.odt`
   into the open book, previewed, one Undo. The fixture is enough with a
   generated document.

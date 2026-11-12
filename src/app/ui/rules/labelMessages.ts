@@ -31,6 +31,22 @@ export const findingMessage = (finding: Finding): string => {
         words: Number(values.words ?? 0),
         books: Number(values.books ?? 0),
       });
+    case "bookName.manifest":
+      return values.listed === ""
+        ? m.book_names_mark_manifest_none({ short: values.short ?? "" })
+        : m.book_names_mark_manifest({ listed: values.listed ?? "", short: values.short ?? "" });
+    case "bookName.missing":
+      return m.book_names_mark_missing();
+    case "bookNames.differ": {
+      const differ = Number(values.manifest ?? 0);
+      const missing = Number(values.missing ?? 0);
+      return [
+        differ > 0 ? m.book_names_summary_manifest({ count: differ }) : "",
+        missing > 0 ? m.book_names_summary_missing({ count: missing }) : "",
+      ]
+        .filter((part) => part !== "")
+        .join("; ");
+    }
     default:
       return finding.message;
   }

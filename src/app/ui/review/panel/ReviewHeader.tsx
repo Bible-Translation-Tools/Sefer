@@ -112,7 +112,11 @@ function HeaderActions(props: { readonly header: ReviewHeaderProps }) {
           variant="primary"
           icon={<Save />}
           data-review-record
-          disabled={props.header.form.unsaved().length === 0 && !props.header.sides.againstShared()}
+          disabled={
+            props.header.form.unsaved().length === 0 &&
+            !props.header.form.namesQueued() &&
+            !props.header.sides.againstShared()
+          }
           title={
             props.header.lastBackup === undefined
               ? m.review_write_and_keep_a_version()

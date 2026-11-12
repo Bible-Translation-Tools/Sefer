@@ -70,6 +70,12 @@ export interface Project {
   readonly failed: readonly FailedBook[];
   book(id: BookId): Book | undefined;
   metadata(): Option.Option<ProjectMetadata>;
+  /**
+   * Read the manifest again: after Sefer wrote it (book names on Record) or a
+   * sync brought a new one. Tells `metadataChanged` listeners.
+   */
+  refreshMetadata(): Effect.Effect<void>;
+  metadataChanged(fn: () => void): () => void;
   instantiate(id: BookId): Effect.Effect<Book, ProjectError>;
   release(id: BookId): Effect.Effect<void, ProjectError>;
   changed(fn: ProjectListener): () => void;
@@ -109,7 +115,8 @@ interface ProjectParts {
 }
 
 const makeProject = (parts: ProjectParts): Project => {
-  const { root, fileSystem, metadata, order, entries, failed, seat, observability } = parts;
+  const { root, fileSystem, order, entries, failed, seat, observability } = parts;
+  let metadata = parts.metadata;
 
   const id: ProjectId = Option.match(metadata, {
     onNone: () => root,
@@ -122,6 +129,7 @@ const makeProject = (parts: ProjectParts): Project => {
   for (const [bookId, entry] of entries) byPath.set(normalisePath(entry.plain.path), bookId);
 
   const listeners = new Set<ProjectListener>();
+  const metadataListeners = new Set<() => void>();
   let closed = false;
 
   const editListeners = new Set<EditListener>();
@@ -175,6 +183,17 @@ const makeProject = (parts: ProjectParts): Project => {
       return entry === undefined ? undefined : current(entry);
     },
     metadata: () => metadata,
+
+    refreshMetadata: () =>
+      Effect.map(readProjectMetadata(fileSystem, root), (read) => {
+        metadata = read.metadata;
+        for (const fn of metadataListeners) fn();
+      }),
+
+    metadataChanged: (fn) => {
+      metadataListeners.add(fn);
+      return () => metadataListeners.delete(fn);
+    },
 
     instantiate: (bookId) =>
       Effect.suspend(() => {

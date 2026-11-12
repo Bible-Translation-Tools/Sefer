@@ -1,6 +1,7 @@
 import type { JSX } from "@solidjs/web";
 import { useNavigate, useRouterState } from "@tanstack/solid-router";
 import Bell from "lucide-solid/icons/bell";
+import BookType from "lucide-solid/icons/book-type";
 import CloudDownload from "lucide-solid/icons/cloud-download";
 import CloudUpload from "lucide-solid/icons/cloud-upload";
 import FileText from "lucide-solid/icons/file-text";
@@ -204,6 +205,12 @@ function MainMenu() {
       >
         {m.common_character_inventory()}
       </MenuItem>
+      <CommandItem
+        id="bookNames.open"
+        testId="menu-book-names"
+        label={m.book_names_open()}
+        icon={<BookType />}
+      />
       <MenuSeparator />
       <CommandItem id="findings.open" testId="menu-alerts" label={m.menu_alerts()} icon={<Bell />}>
         <Show when={attention() > 0}>

@@ -15,6 +15,7 @@ import { docText, structureAt, structureField } from "../core/model/docStructure
 import {
   buildNoteApparatus,
   noteApparatusText,
+  noteBodyRuns,
   paintNoteBody,
   setNoteToggler,
   type NoteGesture,
@@ -207,7 +208,7 @@ class NoteSurfaces {
     };
     set("usfm-note-ref", noteApparatusText(doc, note, NOTE_PART.ORIGIN));
     const body = row.querySelector<HTMLElement>(".usfm-note-body");
-    if (body !== null) paintNoteBody(body, noteApparatusText(doc, note, NOTE_PART.BODY));
+    if (body !== null) paintNoteBody(body, noteBodyRuns(doc, note));
   }
 }
 

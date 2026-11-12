@@ -1,6 +1,7 @@
 import { type EditorState, findClusterBreak } from "@codemirror/state";
 
 import { inDesignatorDelimiter } from "../guards/positions";
+import { extraStops } from "../inputRules/heldRun";
 import { type PaintPort, chromeForCaret, isVisual, lineAt } from "../kernel";
 import type { DocLine, DocStructure } from "../model/docStructure";
 import { pipActive } from "../model/registry";
@@ -115,8 +116,11 @@ export function stopsIn(state: EditorState, structure: DocStructure, paint: Pain
     (pos > 0 && isNewline(pos) && hiddenAt(pos - 1)) ||
     (pos >= end && hiddenAt(pos - 1));
 
+  // Between the halves of a pair a typed marker just wrote, and just past a run → left.
+  const extra = extraStops(state);
   const isStop = (pos: number): boolean => {
     if (!visual) return true;
+    if (extra.includes(pos)) return true;
     const line = lineAt(structure, state, pos);
     if (!line) return true;
     if (isBlankRow(line)) return false;
@@ -173,6 +177,7 @@ export function stopsIn(state: EditorState, structure: DocStructure, paint: Pain
   };
 
   const held = (pos: number, origin: number): number => {
+    if (extra.includes(pos)) return pos;
     const line = lineAt(structure, state, pos);
     let p = pos;
     if (line) {

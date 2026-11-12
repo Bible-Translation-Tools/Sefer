@@ -88,6 +88,8 @@
   --editor-link-x: #7c3aed;
   --editor-nested-fg: #6d28d9;
   --editor-nested-line: #ddd0f7;
+  /* Words of Jesus: the stylesheet's red, darkened to read on paper. */
+  --editor-wj: #b91c1c;
 
   /* The USFM view: a code editor's palette, in the app's theme. Light keeps
      the same hues, darkened to read on paper; dark is the terminal palette. */
@@ -117,6 +119,7 @@
   --editor-link-x: #b393f5;
   --editor-nested-fg: #b393f5;
   --editor-nested-line: #3d3357;
+  --editor-wj: #f87171;
 
   --usfm-bg: #0c0a09;
   --usfm-fg: #d6d3d1;
@@ -143,6 +146,7 @@
     --editor-link-x: #b393f5;
     --editor-nested-fg: #b393f5;
     --editor-nested-line: #3d3357;
+    --editor-wj: #f87171;
 
     --usfm-bg: #0c0a09;
     --usfm-fg: #d6d3d1;
@@ -253,13 +257,75 @@
 .cm-mode-regular .usfm-block {
   padding-bottom: 0.5em;
 }
-.cm-mode-regular .usfm-p,
-.cm-mode-regular .usfm-pi {
+.cm-mode-regular :is(.usfm-p, .usfm-po, .usfm-pm, .usfm-pi, .usfm-pi1, .usfm-pi2, .usfm-pi3) {
   text-indent: calc(var(--usfm-indent) * 1em);
 }
 .cm-mode-regular .usfm-m,
 .cm-mode-regular .usfm-nb {
   text-indent: 0;
+}
+
+/* The rest of the paragraphs, after Paratext's default stylesheet
+   (`usfm_sb.sty`), one indent unit standing for its quarter inch. What tells
+   them apart is where the text sits, never its type: \pc centred, \pr right,
+   \pi and \mi in a level each, \pm and its kin in from both sides (a letter
+   or a quoted message within the text), \ph hanging like a list item. */
+.cm-mode-regular :is(.usfm-pi, .usfm-pi1, .usfm-mi, .usfm-mi1, .usfm-qd) {
+  --usfm-level: 1;
+}
+.cm-mode-regular :is(.usfm-pi2, .usfm-mi2) {
+  --usfm-level: 2;
+}
+.cm-mode-regular :is(.usfm-pi3, .usfm-mi3) {
+  --usfm-level: 3;
+}
+.cm-mode-regular
+  :is(
+    .usfm-pi,
+    .usfm-pi1,
+    .usfm-pi2,
+    .usfm-pi3,
+    .usfm-mi,
+    .usfm-mi1,
+    .usfm-mi2,
+    .usfm-mi3,
+    .usfm-qd
+  ) {
+  padding-inline-start: calc(var(--usfm-level) * var(--usfm-indent) * 1em);
+}
+.cm-mode-regular :is(.usfm-mi, .usfm-mi1, .usfm-mi2, .usfm-mi3) {
+  text-indent: 0;
+}
+.cm-mode-regular :is(.usfm-pm, .usfm-pmo, .usfm-pmc, .usfm-pmr) {
+  padding-inline: calc(var(--usfm-indent) * 1em);
+}
+.cm-mode-regular :is(.usfm-pmo, .usfm-pmc) {
+  text-indent: 0;
+}
+.cm-mode-regular :is(.usfm-pc, .usfm-qc) {
+  text-align: center;
+  text-indent: 0;
+}
+.cm-mode-regular :is(.usfm-pr, .usfm-cls, .usfm-pmr, .usfm-qr, .usfm-lit) {
+  text-align: end;
+  text-indent: 0;
+}
+.cm-mode-regular .usfm-lit {
+  font-weight: 700;
+}
+.cm-mode-regular .usfm-po {
+  padding-block: 0.25em;
+}
+.cm-mode-regular :is(.usfm-ph, .usfm-ph1, .usfm-ph2, .usfm-ph3) {
+  --usfm-level: 1;
+  padding-inline-start: calc(var(--usfm-level) * var(--usfm-indent) * 1em);
+  text-indent: calc(var(--usfm-indent) * -1em);
+}
+.cm-mode-regular .usfm-ph2 {
+  --usfm-level: 2;
+}
+.cm-mode-regular .usfm-ph3 {
+  --usfm-level: 3;
 }
 
 /* Poetry: every level further in than a paragraph's first line (\q1 two
@@ -297,6 +363,28 @@
 }
 .cm-mode-regular .usfm-q4 {
   --usfm-level: 5;
+}
+/* Embedded poetry (\qm#: a psalm quoted inside a letter) sits a level in from
+   the poetry around it; centred, right-aligned and Selah lines, and an
+   acrostic heading, are poetry's italic without its indent. */
+.cm-mode-regular :is(.usfm-qm, .usfm-qm1, .usfm-qm2, .usfm-qm3) {
+  --usfm-level: 3;
+  font-style: italic;
+  padding-top: calc(var(--usfm-poetry-gap) * 1em);
+  padding-bottom: 0;
+  padding-inline-start: calc(var(--usfm-level) * var(--usfm-indent) * 1em);
+}
+.cm-mode-regular .usfm-qm2 {
+  --usfm-level: 4;
+}
+.cm-mode-regular .usfm-qm3 {
+  --usfm-level: 5;
+}
+.cm-mode-regular :is(.usfm-qc, .usfm-qr, .usfm-qd, .usfm-qa) {
+  font-style: italic;
+}
+.cm-mode-regular .usfm-qa {
+  padding-top: 0.6em;
 }
 
 /* Lists: \li# and \lim# a level each, like poetry, with a hanging indent so a
@@ -422,10 +510,183 @@
 .cm-mode-regular .usfm-front {
   text-indent: 0;
 }
-.cm-mode-regular .usfm-mt {
+/* Headings, told apart as the stylesheet tells them apart. \s1 is the bold
+   heading of the design direction ("headings bold"), and stays at the edge
+   where the stylesheet centres it: the page's headings line up with its text.
+   A heading lower in the outline loses weight before it loses anything else
+   (\s2 italic, \s3 and \s4 italic and closer to their text); a major
+   section (\ms) is the one heading set larger and centred, its references
+   (\mr) under it.
+
+   \sp names who speaks the lines after it (Job, the Song of Songs). It is a
+   label, not a section: italic, ordinary weight, and close to the speech it
+   belongs to. */
+.cm-mode-regular :is(.usfm-s2, .usfm-s3, .usfm-s4, .usfm-sp, .usfm-ms3) {
+  font-weight: 400;
+  font-style: italic;
+}
+.cm-mode-regular :is(.usfm-s3, .usfm-s4) {
+  padding-top: 0.7em;
+}
+.cm-mode-regular .usfm-sp {
+  padding: 0.6em 0 0;
+}
+.cm-mode-regular :is(.usfm-ms, .usfm-ms1, .usfm-ms2, .usfm-ms3) {
+  font-size: 1.2em;
+  text-align: center;
+  padding-top: 1.4em;
+}
+.cm-mode-regular :is(.usfm-mr, .usfm-sr) {
+  font-size: 0.92em;
+  color: var(--editor-muted);
+  padding-top: 0;
+}
+.cm-mode-regular .usfm-mr {
+  font-weight: 400;
+  font-style: italic;
+  text-align: center;
+}
+.cm-mode-regular .usfm-cd {
+  font-weight: 400;
+  font-size: 0.92em;
+  padding-top: 0.3em;
+}
+/* \sd# is space between divisions and nothing else. */
+.cm-mode-regular :is(.usfm-sd, .usfm-sd1, .usfm-sd2, .usfm-sd3, .usfm-sd4) {
+  font-weight: 400;
+  padding-top: 1.6em;
+}
+.cm-mode-regular .usfm-sd2 {
+  padding-top: 1.2em;
+}
+.cm-mode-regular :is(.usfm-sd3, .usfm-sd4) {
+  padding-top: 0.8em;
+}
+
+/* The book's titles: \mt1 the big one, \mt2 the italic line over or under it,
+   \mt3 a smaller bold line, \mt4 a plain one. The ending titles (\mte#) and
+   the introduction's (\imt#, \imte#) take the same, the introduction's a size
+   down. */
+.cm-mode-regular
+  :is(.usfm-mt, .usfm-mt1, .usfm-mte, .usfm-mte1, .usfm-mt2, .usfm-mt3, .usfm-mt4, .usfm-mte2) {
   font: 700 1.7em/1.25 var(--font-scripture);
   text-align: center;
+  text-indent: 0;
   padding: 0.5em 0 0.2em;
+}
+.cm-mode-regular :is(.usfm-mt2, .usfm-mte2) {
+  font-size: 1.3em;
+  font-weight: 400;
+  font-style: italic;
+  padding-top: 0.1em;
+}
+.cm-mode-regular .usfm-mt3 {
+  font-size: 1.3em;
+  padding-top: 0.1em;
+}
+.cm-mode-regular .usfm-mt4 {
+  font-size: 1em;
+  font-weight: 400;
+  padding-top: 0.1em;
+}
+.cm-mode-regular
+  :is(
+    .usfm-imt,
+    .usfm-imt1,
+    .usfm-imte,
+    .usfm-imte1,
+    .usfm-imt2,
+    .usfm-imt3,
+    .usfm-imt4,
+    .usfm-imte2
+  ) {
+  font: 700 1.3em/1.3 var(--font-scripture);
+  text-align: center;
+  padding: 0.5em 0 0.2em;
+}
+.cm-mode-regular :is(.usfm-imt2, .usfm-imte2, .usfm-imt4) {
+  font-size: 1.1em;
+  font-weight: 400;
+  font-style: italic;
+  padding-top: 0.1em;
+}
+.cm-mode-regular .usfm-imt3 {
+  font-size: 1em;
+  padding-top: 0.1em;
+}
+
+/* The introduction (\i*), its paragraphs taking the body's shapes: \is# and
+   \iot headings, \ip a paragraph, \iq# poetry, \io# an outline a level
+   each, \ili# a list. */
+.cm-mode-regular :is(.usfm-is, .usfm-is1, .usfm-is2, .usfm-iot) {
+  font-weight: 700;
+  padding: 1.1em 0 0.15em;
+}
+.cm-mode-regular .usfm-is2 {
+  font-weight: 400;
+  font-style: italic;
+}
+.cm-mode-regular :is(.usfm-ip, .usfm-ipi, .usfm-ipq, .usfm-iex) {
+  text-indent: calc(var(--usfm-indent) * 1em);
+}
+.cm-mode-regular .usfm-iex {
+  padding-block: 0.25em;
+}
+.cm-mode-regular :is(.usfm-ipi, .usfm-imi, .usfm-ipq, .usfm-imq, .usfm-ipr) {
+  padding-inline: calc(var(--usfm-indent) * 1em);
+}
+.cm-mode-regular :is(.usfm-ipq, .usfm-imq, .usfm-ipr) {
+  font-style: italic;
+}
+.cm-mode-regular .usfm-ipr {
+  text-align: end;
+}
+.cm-mode-regular .usfm-ipc {
+  text-align: center;
+}
+.cm-mode-regular
+  :is(
+    .usfm-iq,
+    .usfm-iq1,
+    .usfm-iq2,
+    .usfm-iq3,
+    .usfm-io,
+    .usfm-io1,
+    .usfm-io2,
+    .usfm-io3,
+    .usfm-io4,
+    .usfm-ili,
+    .usfm-ili1,
+    .usfm-ili2
+  ) {
+  --usfm-level: 1;
+  padding-inline-start: calc(var(--usfm-level) * var(--usfm-indent) * 1em);
+}
+.cm-mode-regular :is(.usfm-iq, .usfm-iq1, .usfm-iq2, .usfm-iq3) {
+  --usfm-level: 2;
+  font-style: italic;
+}
+.cm-mode-regular .usfm-iq2 {
+  --usfm-level: 3;
+}
+.cm-mode-regular .usfm-iq3 {
+  --usfm-level: 4;
+}
+.cm-mode-regular :is(.usfm-ili, .usfm-ili1, .usfm-ili2) {
+  text-indent: calc(var(--usfm-indent) * -1em);
+}
+.cm-mode-regular .usfm-ili2 {
+  --usfm-level: 2;
+}
+/* An outline's first level is at the edge. */
+.cm-mode-regular :is(.usfm-io, .usfm-io1) {
+  --usfm-level: 0;
+}
+.cm-mode-regular .usfm-io3 {
+  --usfm-level: 2;
+}
+.cm-mode-regular .usfm-io4 {
+  --usfm-level: 3;
 }
 .cm-mode-regular .usfm-h,
 .cm-mode-regular .usfm-toc1,
@@ -843,12 +1104,109 @@
   border-radius: 3px;
 }
 
-.cm-mode-regular .usfm-word {
+/* Character markup is drawn as its style, after Paratext's default stylesheet
+   (ubsicap/usfm, `sty/usfm_sb.sty`), so a \wj, \add or \qt the reader can
+   read shows as what it is rather than as a mark that something is there.
+   One deliberate departure: \nd is small caps (LORD), as English Bibles print
+   it and the USFM documentation shows it, not the stylesheet's underline.
+   Sizes are left alone: the page has one size, and the sheet's 12pt is it.
+
+   The dotted underline is only for a run a press opens the attribute popover
+   on (`usfm-attrd`, `attributed` in core/paint/decorations.ts). */
+.cm-mode-regular .usfm-attrd {
   border-bottom: 1px dotted var(--editor-word-line);
-  cursor: help;
 }
-.cm-mode-regular .usfm-word:hover {
+.cm-mode-regular .usfm-attrd:hover {
   background: var(--editor-word-hover);
+}
+
+.cm-mode-regular
+  :is(
+    .usfm-c-qt,
+    .usfm-c-tl,
+    .usfm-c-dc,
+    .usfm-c-bk,
+    .usfm-c-sig,
+    .usfm-c-sls,
+    .usfm-c-it,
+    .usfm-c-em,
+    .usfm-c-rq,
+    .usfm-c-iqt,
+    .usfm-c-qs,
+    .usfm-c-qac,
+    .usfm-c-litl,
+    .usfm-c-lik,
+    .usfm-c-fq,
+    .usfm-c-fqa,
+    .usfm-c-xk,
+    .usfm-c-xq,
+    .usfm-c-wr
+  ) {
+  font-style: italic;
+}
+.cm-mode-regular .usfm-c-bd {
+  font-weight: 700;
+}
+.cm-mode-regular :is(.usfm-c-add, .usfm-c-k, .usfm-c-bdit, .usfm-c-fk, .usfm-c-fl) {
+  font-style: italic;
+  font-weight: 700;
+}
+.cm-mode-regular :is(.usfm-c-nd, .usfm-c-sc) {
+  font-variant: small-caps;
+}
+.cm-mode-regular .usfm-c-pn {
+  font-weight: 700;
+  text-decoration: underline;
+}
+.cm-mode-regular .usfm-c-png {
+  text-decoration: underline;
+}
+.cm-mode-regular .usfm-c-addpn {
+  font-style: italic;
+  font-weight: 700;
+  text-decoration: underline;
+}
+.cm-mode-regular .usfm-c-no {
+  font-style: normal;
+  font-weight: 400;
+}
+.cm-mode-regular :is(.usfm-c-sup, .usfm-c-ord, .usfm-c-fv, .usfm-c-fm) {
+  font-size: 0.7em;
+  vertical-align: super;
+  line-height: 0;
+}
+/* An alternate (\va, \ca) or published (\vp) number: beside the verse or
+   chapter number it varies, small and muted, so it reads as a second number
+   and not as part of the text. */
+.cm-mode-regular :is(.usfm-c-va, .usfm-c-vp, .usfm-c-ca) {
+  font: 600 0.62em/1 var(--font-ui);
+  vertical-align: super;
+  color: var(--editor-faint);
+  margin-inline-end: 0.2em;
+}
+.cm-mode-regular .usfm-c-pro {
+  font-size: 0.83em;
+}
+/* The run the caret is typing in (`runTint`, inputRules/heldRun.ts): at a
+   styled word's end the caret has two places that look alike, inside the
+   closer and after it, and this says which. An empty pair a typed marker just
+   wrote is a slot after the caret, where its words will go. */
+.cm-mode-regular .usfm-run-caret {
+  background: var(--editor-focus-bg);
+}
+.cm-mode-regular .usfm-run-empty {
+  display: inline-block;
+  width: 0.6em;
+  height: 1em;
+  vertical-align: -0.1em;
+  background: var(--editor-pair-bg);
+}
+.cm-mode-regular .usfm-c-wj {
+  color: var(--editor-wj);
+}
+.cm-mode-regular .usfm-c-jmp {
+  color: var(--editor-link);
+  text-decoration: underline;
 }
 /* The attribute popover paints its own box. Scoped to its own class:
    `.cm-tooltip-hover` is worn by EVERY hover tooltip, and stripping the
