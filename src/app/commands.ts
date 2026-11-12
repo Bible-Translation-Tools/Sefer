@@ -922,7 +922,8 @@ const chapterLabelCommands = (bridge: ShellBridge, h: Helpers) => [
  * each chosen book's header lines changed as asked (`headerChanges`,
  * core/rules/bookNames.ts), computed from the book's held parse at the press
  * and refused for a book whose parse is older than its text. One cross-book
- * edit, so one Undo. The project list follows on Record a version.
+ * edit; each changed book's own Undo takes its part back. The project list
+ * will follow on Record a version (needs bento's manifest handle).
  */
 const bookNameCommands = (bridge: ShellBridge, h: Helpers) => [
   registerCommand({

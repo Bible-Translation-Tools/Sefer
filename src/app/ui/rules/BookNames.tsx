@@ -96,7 +96,7 @@ const SPELLED: Record<AddableKey, string> = {
  * from a book's names mark. Each book shows the lines before its first `\c`
  * that name it (`headerOf`, core/rules/bookNames.ts): edit any, take any out
  * but `\id \usfm \ide`, and fill a missing `\h \toc1-3 \mt`. Save names is
- * one cross-book edit (`bookNames.save`), so one Undo; the project list
+ * one cross-book edit (`bookNames.save`), undone book by book; the project list
  * follows each book's short name when a version is recorded.
  */
 export function BookNamesDialog(props: {
