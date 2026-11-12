@@ -1,6 +1,6 @@
 import CorvuTooltip from "@corvu-next/tooltip";
 import type { JSX } from "@solidjs/web";
-import { Show, createSignal, onCleanup } from "solid-js";
+import { Show, createEffect, createSignal, createUniqueId, onCleanup } from "solid-js";
 
 import type { TooltipSide } from "./Tooltip";
 
@@ -50,6 +50,22 @@ export function Coachmark(props: CoachmarkProps) {
     clearTimeout(timer);
   });
   const shown = (): boolean => props.show && seen();
+  // The bubble describes the control it points at: a screen reader reads it
+  // when that control is focused. The wrapper is not focusable, so the link
+  // goes on the control inside it.
+  const noteId = createUniqueId();
+  createEffect(
+    () => shown(),
+    (showing) => {
+      const control = element?.querySelector<HTMLElement>(
+        "button, input, select, textarea, a[href], [tabindex]",
+      );
+      if (control === null || control === undefined) return;
+      if (showing) control.setAttribute("aria-describedby", noteId);
+      else if (control.getAttribute("aria-describedby") === noteId)
+        control.removeAttribute("aria-describedby");
+    },
+  );
   return (
     <CorvuTooltip
       open={shown()}
@@ -75,8 +91,9 @@ export function Coachmark(props: CoachmarkProps) {
         <CorvuTooltip.Portal>
           <CorvuTooltip.Content
             role="note"
+            id={noteId}
             data-testid={props.testId}
-            class="z-50 max-w-72 animate-[coach-in_220ms_ease-out] rounded-[12px] bg-on-surface-primary px-3 py-2.5 text-surface-primary shadow-large"
+            class="z-50 max-w-72 animate-[coach-in_220ms_ease-out] rounded-xl bg-on-surface-primary px-3 py-2.5 text-surface-primary shadow-large"
           >
             <p class="text-small font-semibold">{props.title}</p>
             <p class="mt-0.5 text-smallest leading-normal">{props.body}</p>
