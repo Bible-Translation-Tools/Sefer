@@ -23,6 +23,14 @@ import {
 import { Observability, type ObservabilityService } from "../observability";
 import type { Project } from "../project/project";
 import {
+  BOOK_NAMES_OFF,
+  headerOf,
+  judgeNames,
+  manifestNameOf,
+  type NameJudgement,
+  type NameMark,
+} from "../rules/bookNames";
+import {
   CHAPTER_LABELS_OFF,
   chapterLabelsOf,
   judge,
@@ -89,6 +97,13 @@ export interface ProjectAnalysisService {
    * marks. The Findings list carries one entry for them all, not these.
    */
   readonly chapterLabelsIn: (bookId: BookId) => readonly Finding[];
+
+  /**
+   * A book whose project-list name is not its short name, or that has no
+   * short name (`judgeNames`, core/rules/bookNames.ts), as findings for the
+   * editor's marks. The Findings list carries one entry for them all.
+   */
+  readonly bookNamesIn: (bookId: BookId) => readonly Finding[];
 
   readonly findingTotals: () => { readonly errors: number; readonly warnings: number };
 
@@ -194,6 +209,7 @@ const make = (
     let totalsCache: { readonly errors: number; readonly warnings: number } | undefined;
     let inventoryCache: Inventory | undefined;
     let labelsCache: LabelJudgement | undefined;
+    let namesCache: NameJudgement | undefined;
     let suppressions: Suppressions = NO_SUPPRESSIONS;
     const suppressionListeners = new Set<() => void>();
 
@@ -213,6 +229,7 @@ const make = (
       totalsCache = undefined;
       inventoryCache = undefined;
       labelsCache = undefined;
+      namesCache = undefined;
     };
 
     const arm = (bookId: BookId): void => {
@@ -351,6 +368,7 @@ const make = (
       suppressions = next;
       findingsCache = undefined;
       labelsCache = undefined;
+      namesCache = undefined;
       corpusCache = undefined;
       totalsCache = undefined;
       for (const listener of suppressionListeners) listener();
@@ -441,6 +459,66 @@ const make = (
       };
     };
 
+    const NO_NAMES: NameJudgement = { marks: new Map(), manifest: 0, missing: 0 };
+    const bookNames = (): NameJudgement => {
+      if (namesCache !== undefined) return namesCache;
+      if (quiet({ here: BOOK_NAMES_OFF })) {
+        namesCache = NO_NAMES;
+        return namesCache;
+      }
+      const metadata =
+        attached === undefined ? undefined : Option.getOrUndefined(attached.metadata());
+      const books = new Map<string, ReturnType<typeof headerOf>>();
+      for (const [bookId, entry] of entries)
+        if (entry.analysis !== undefined) books.set(bookId, headerOf(entry.analysis));
+      namesCache = judgeNames(books, (bookId) => manifestNameOf(metadata, bookId), quiet);
+      return namesCache;
+    };
+
+    /** A name mark as a finding, on its book's short name (else its first line); English, named by code in the app. */
+    const nameFinding = (mark: NameMark): Finding | undefined => {
+      const entry = entries.get(mark.bookId);
+      if (entry?.analysis === undefined || entry.stamp === undefined) return undefined;
+      const code = `bookName.${mark.reason}`;
+      const at = mark.line;
+      return {
+        id: `project:${mark.bookId}:${code}`,
+        bookId: mark.bookId,
+        severity: "info",
+        code,
+        producer: "project",
+        message:
+          mark.reason === "missing"
+            ? "This book has no short name (\\toc2 or \\h)"
+            : `The project list calls this book “${mark.listed ?? ""}”; the book calls itself “${mark.short ?? ""}”`,
+        from: at === undefined ? 0 : at.valueFrom,
+        to: at === undefined ? 0 : Math.max(at.valueFrom, at.valueTo),
+        stamp: entry.stamp,
+        engine: stampOf(entry.analysis),
+        suppression: mark.keys,
+        values: { listed: mark.listed ?? "", short: mark.short ?? "" },
+      };
+    };
+
+    const bookNamesIn = (bookId: BookId): readonly Finding[] =>
+      (bookNames().marks.get(bookId) ?? []).flatMap((mark) => nameFinding(mark) ?? []);
+
+    /** The Findings list's one entry for every book whose names need a look, at the first of them. */
+    const namesSummary = (): Finding | undefined => {
+      const judged = bookNames();
+      const first = [...judged.marks.values()][0]?.[0];
+      const at = first === undefined ? undefined : nameFinding(first);
+      if (at === undefined) return undefined;
+      return {
+        ...at,
+        id: BOOK_NAMES_OFF,
+        code: "bookNames.differ",
+        message: `Book names: ${String(judged.manifest)} differ from the project list, ${String(judged.missing)} have no short name`,
+        suppression: { here: BOOK_NAMES_OFF },
+        values: { manifest: String(judged.manifest), missing: String(judged.missing) },
+      };
+    };
+
     const findings = (): readonly Finding[] => {
       if (findingsCache !== undefined) return findingsCache;
       const out: Finding[] = [];
@@ -451,6 +529,8 @@ const make = (
       out.push(...crossBook());
       const labels = labelsSummary();
       if (labels !== undefined) out.push(labels);
+      const names = namesSummary();
+      if (names !== undefined) out.push(names);
       findingsCache = out;
       return out;
     };
@@ -662,6 +742,7 @@ const make = (
       crossBook,
       crossBookOf,
       chapterLabelsIn,
+      bookNamesIn,
       findingTotals,
       setSuppressions,
       suppressed,

@@ -14,6 +14,8 @@ import { localized, type LocalizedText } from "../localized";
 export interface BookNames {
   readonly bookNames: Readonly<Record<string, LocalizedText>>;
   readonly defaultLocale?: string | undefined;
+  /** The project's language: its name for a book comes before the default locale's (a Burrito's is `en`). */
+  readonly language?: { readonly tag: string } | undefined;
 }
 
 export type Testament = "ot" | "nt";
@@ -27,7 +29,8 @@ export const testamentOf = (id: string): Testament =>
   book(id.toUpperCase())?.division === "ot" ? "ot" : "nt";
 
 /**
- * What to call a book: what the project calls it, else what the book calls
+ * What to call a book: what the project calls it (in the project's language
+ * first, then its default locale), else what the book calls
  * itself (`heading` — its `\h` or `\toc2`, as the engine reads them, when the
  * caller holds a parse), else canon's English name (any book in canon's table,
  * peripheral ones included), else the id itself. Native
@@ -35,7 +38,10 @@ export const testamentOf = (id: string): Testament =>
  * can act on.
  */
 export const bookName = (id: string, metadata?: BookNames, heading?: string): string => {
-  const local = localized(metadata?.bookNames[id], [metadata?.defaultLocale]);
+  const local = localized(metadata?.bookNames[id], [
+    metadata?.language?.tag,
+    metadata?.defaultLocale,
+  ]);
   if (local !== "") return local;
   if (heading !== undefined && heading !== "") return heading;
   return name(id.toUpperCase(), "short")?.text ?? id;
