@@ -58,7 +58,7 @@ export interface BookHeader {
 }
 
 /** Keys that can be added to a book that lacks them, in the order they are written. */
-export const ADDABLE_KEYS = ["h", "toc1", "toc2", "toc3", "mt1"] as const;
+const ADDABLE_KEYS = ["h", "toc1", "toc2", "toc3", "mt1"] as const;
 export type AddableKey = (typeof ADDABLE_KEYS)[number];
 
 /** Where a header's lines go, so an added one lands among them, not after the title. */
@@ -167,8 +167,8 @@ export const shortNameOf = (header: BookHeader): string | undefined =>
   valueOf(header, "toc2") ?? valueOf(header, "h");
 
 /** The long name and abbreviation, for a Burrito's `long` and `abbr`. */
-export const longNameOf = (header: BookHeader): string | undefined => valueOf(header, "toc1");
-export const abbreviationOf = (header: BookHeader): string | undefined => valueOf(header, "toc3");
+const longNameOf = (header: BookHeader): string | undefined => valueOf(header, "toc1");
+const abbreviationOf = (header: BookHeader): string | undefined => valueOf(header, "toc3");
 
 /** The three names a manifest keeps for a book: short (`\toc2`, else `\h`), long (`\toc1`), abbreviation (`\toc3`). */
 export interface Names {
