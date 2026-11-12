@@ -20,6 +20,7 @@ import {
 
 import { runCommand } from "../../commands";
 import { useShell } from "../../ProjectContext";
+import { queueBookNames } from "../../recordVersion";
 import { Button, Dialog, IconButton, Input, Select } from "../primitives";
 import { bookName } from "../workspace/books";
 import { metadataOf } from "../workspace/project";
@@ -184,6 +185,21 @@ export function BookNamesDialog(props: {
     return out;
   });
 
+  /** Books the project list calls something other than their own short name, as they read now. */
+  const differing = createMemo((): readonly Entry[] =>
+    entries().filter((entry) => {
+      const short = shortAfter(entry);
+      return entry.listed.listed && short !== undefined && entry.listed.name !== short;
+    }),
+  );
+  const useOwnNames = (): void => {
+    const project = shell.project();
+    const books = differing().map((entry) => entry.id);
+    if (project === undefined || books.length === 0) return;
+    queueBookNames(project.root, books);
+    shell.report(m.book_names_queued({ count: books.length }));
+  };
+
   const save = (): void => {
     const chosenEdits = edits();
     props.onOpenChange(false);
@@ -219,6 +235,13 @@ export function BookNamesDialog(props: {
       >
         {(entry) => (
           <div class="flex flex-col gap-3" data-book-names-book={entry().id}>
+            <Show when={differing().length > 0}>
+              <div>
+                <Button variant="secondary" data-testid="book-names-use-own" onClick={useOwnNames}>
+                  {m.book_names_use_own_all({ count: differing().length })}
+                </Button>
+              </div>
+            </Show>
             <div class="flex items-center gap-controls">
               <IconButton
                 size="sm"

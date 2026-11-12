@@ -16,7 +16,7 @@ import { chapterLabelsOf, standardize } from "#core/rules/chapterLabels";
 import { personAuthor } from "./author";
 import { contentHostFor } from "./endpoints";
 import type { Message } from "./i18n";
-import { recordVersion } from "./recordVersion";
+import { queuedBookNames, recordVersion } from "./recordVersion";
 import type { Domain, Services } from "./services";
 import { shellKeys } from "./settings";
 import { copyPlaceLink } from "./shareLinks";
@@ -210,7 +210,8 @@ const saveWithoutReview = async (bridge: ShellBridge, project: Project): Promise
       params: { slug: bridge.slug() },
       search: { review: true },
     });
-  if (books.length === 0) {
+  const named = queuedBookNames(project.root).length > 0;
+  if (books.length === 0 && !named) {
     bridge.report(m.command_nothing_to_save());
     return;
   }
@@ -220,9 +221,12 @@ const saveWithoutReview = async (bridge: ShellBridge, project: Project): Promise
     return;
   }
   const metadata = Option.getOrUndefined(project.metadata());
-  const message = m.command_edited_books({
-    books: books.map((book) => bookName(book.id, metadata)).join(", "),
-  });
+  const message =
+    books.length === 0
+      ? m.book_names_record_message()
+      : m.command_edited_books({
+          books: books.map((book) => bookName(book.id, metadata)).join(", "),
+        });
   const outcome = await recordVersion(services, project, books, message, author);
   if (outcome.kind === "recorded") {
     bridge.changed({ kind: "book.write", books: outcome.books, recorded: true });

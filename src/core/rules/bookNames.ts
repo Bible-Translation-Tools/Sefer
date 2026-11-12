@@ -170,6 +170,27 @@ export const shortNameOf = (header: BookHeader): string | undefined =>
 export const longNameOf = (header: BookHeader): string | undefined => valueOf(header, "toc1");
 export const abbreviationOf = (header: BookHeader): string | undefined => valueOf(header, "toc3");
 
+/** The three names a manifest keeps for a book: short (`\toc2`, else `\h`), long (`\toc1`), abbreviation (`\toc3`). */
+export interface Names {
+  readonly short?: string;
+  readonly long?: string;
+  readonly abbr?: string;
+}
+
+export const namesOf = (header: BookHeader): Names => {
+  const short = shortNameOf(header);
+  const long = longNameOf(header);
+  const abbr = abbreviationOf(header);
+  return {
+    ...(short === undefined ? {} : { short }),
+    ...(long === undefined ? {} : { long }),
+    ...(abbr === undefined ? {} : { abbr }),
+  };
+};
+
+export const sameNames = (a: Names, b: Names): boolean =>
+  a.short === b.short && a.long === b.long && a.abbr === b.abbr;
+
 /** The addable keys a book has no line for. */
 export const missingKeys = (header: BookHeader): readonly AddableKey[] =>
   ADDABLE_KEYS.filter((key) => !header.lines.some((line) => line.key === key));

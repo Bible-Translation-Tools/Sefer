@@ -70,6 +70,8 @@ export interface Project {
   readonly failed: readonly FailedBook[];
   book(id: BookId): Book | undefined;
   metadata(): Option.Option<ProjectMetadata>;
+  /** Read the manifest again, after Sefer wrote it (a recorded version's book names). */
+  refreshMetadata(): Effect.Effect<void>;
   instantiate(id: BookId): Effect.Effect<Book, ProjectError>;
   release(id: BookId): Effect.Effect<void, ProjectError>;
   changed(fn: ProjectListener): () => void;
@@ -109,7 +111,8 @@ interface ProjectParts {
 }
 
 const makeProject = (parts: ProjectParts): Project => {
-  const { root, fileSystem, metadata, order, entries, failed, seat, observability } = parts;
+  const { root, fileSystem, order, entries, failed, seat, observability } = parts;
+  let metadata = parts.metadata;
 
   const id: ProjectId = Option.match(metadata, {
     onNone: () => root,
@@ -175,6 +178,11 @@ const makeProject = (parts: ProjectParts): Project => {
       return entry === undefined ? undefined : current(entry);
     },
     metadata: () => metadata,
+
+    refreshMetadata: () =>
+      Effect.map(readProjectMetadata(fileSystem, root), (read) => {
+        metadata = read.metadata;
+      }),
 
     instantiate: (bookId) =>
       Effect.suspend(() => {

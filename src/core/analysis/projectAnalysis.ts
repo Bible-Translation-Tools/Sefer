@@ -105,6 +105,9 @@ export interface ProjectAnalysisService {
    */
   readonly bookNamesIn: (bookId: BookId) => readonly Finding[];
 
+  /** The project's manifest changed (book names written on Record): judge names again. */
+  readonly metadataChanged: () => void;
+
   readonly findingTotals: () => { readonly errors: number; readonly warnings: number };
 
   readonly setSuppressions: (suppressions: Suppressions) => void;
@@ -743,6 +746,11 @@ const make = (
       crossBookOf,
       chapterLabelsIn,
       bookNamesIn,
+      metadataChanged: () => {
+        namesCache = undefined;
+        findingsCache = undefined;
+        for (const listener of suppressionListeners) listener();
+      },
       findingTotals,
       setSuppressions,
       suppressed,
