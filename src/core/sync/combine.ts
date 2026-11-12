@@ -2,7 +2,7 @@ import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import type { SourceStamp } from "@wycliffeassociates/sefer-text/source";
 import { Data, Effect, FileSystem, Option, type PlatformError, Result } from "effect";
 
-import { ProjectAdmin } from "../admin/projectAdmin";
+import { MANIFEST_FILES, ProjectAdmin } from "../admin/projectAdmin";
 import { parentPath } from "../fileSystem/path";
 import type { Galley } from "../galley";
 import {
@@ -19,6 +19,7 @@ import { Repositories } from "../git/repository";
 import { METADATA_FILE } from "../project/discovery";
 import type { Project } from "../project/project";
 import { Remote, type RemoteError } from "../remote/remote";
+import { namesAt, namesOfText, renamed } from "../rules/bookNamesRecorded";
 import { SaveCoordinator } from "../save/saveCoordinator";
 import {
   booksByPath,
@@ -65,6 +66,7 @@ interface CombineSurvey {
 
 interface CombineReplay {
   readonly branch: string;
+  readonly base: CommitId;
   readonly from: CommitId;
   readonly onto: CommitId;
   readonly paths: readonly string[];
@@ -86,6 +88,8 @@ const no = (refusal: CombineRefusal, detail: string): CombineDecision => ({
   refusal,
   detail,
 });
+
+const isManifest = (path: string): boolean => MANIFEST_FILES.some((name) => name === path);
 
 const planCombine = (survey: CombineSurvey): CombineDecision => {
   if (survey.branch === undefined) {
@@ -109,7 +113,8 @@ const planCombine = (survey: CombineSurvey): CombineDecision => {
   const mine = new Set([...survey.changed.map((entry) => entry.path), ...survey.unrecorded]);
   const both = survey.cloudChanged
     .filter(
-      (entry) => !isScripture(entry.path) && entry.path !== METADATA_FILE && mine.has(entry.path),
+      // Manifests are derived (checksums from the files, names from the books): taken from them and worked out again, never contested.
+      (entry) => !isScripture(entry.path) && !isManifest(entry.path) && mine.has(entry.path),
     )
     .map((entry) => entry.path);
   if (both.length > 0) return no("contested", `both sides changed ${both.join(", ")}`);
@@ -128,6 +133,7 @@ const planCombine = (survey: CombineSurvey): CombineDecision => {
     ok: true,
     replay: {
       branch: survey.branch,
+      base: survey.base,
       from: survey.localHead,
       onto: survey.cloudHead,
       paths,
@@ -347,7 +353,11 @@ const program = (options: CombineOptions) =>
       fileSystem.exists(`${repo.root}/${METADATA_FILE}`),
       () => false,
     );
-    const touched = [...new Set([...replay.taking, ...(metadataHere ? [METADATA_FILE] : [])])];
+    const manifestsHere: string[] = [];
+    for (const name of MANIFEST_FILES)
+      if (yield* Effect.orElseSucceed(fileSystem.exists(`${repo.root}/${name}`), () => false))
+        manifestsHere.push(name);
+    const touched = [...new Set([...replay.taking, ...manifestsHere])];
     const before: { readonly path: string; readonly bytes: Uint8Array | undefined }[] = [];
     for (const path of touched)
       before.push({
@@ -394,16 +404,34 @@ const program = (options: CombineOptions) =>
       Effect.gen(function* () {
         for (const file of arriving)
           yield* Effect.mapError(write(file.path, file.bytes), fromDisk("restored"));
+        const asCombineError = (error: { description?: string; reason: string }) =>
+          new CombineError({
+            refusal: undefined,
+            state: "restored",
+            description: error.description ?? error.reason,
+          });
         if (metadataHere && admin !== undefined)
-          yield* Effect.mapError(
-            admin.refreshChecksums(repo.root),
-            (error) =>
-              new CombineError({
-                refusal: undefined,
-                state: "restored",
-                description: error.description ?? error.reason,
-              }),
+          yield* Effect.mapError(admin.refreshChecksums(repo.root), asCombineError);
+        // Their manifest came with their names; the books renamed on this side get theirs back,
+        // from the combined text (RFC "Book names"). A book neither side renamed keeps what it had.
+        const ownNames: string[] = [];
+        if (manifestsHere.length > 0 && admin !== undefined) {
+          const renames: { book: string; short?: string; long?: string; abbr?: string }[] = [];
+          for (const path of replay.paths) {
+            const book = books.get(path);
+            if (book === undefined || !isScripture(path)) continue;
+            const before = yield* namesAt(repo, replay.base, path);
+            const mine = yield* namesAt(repo, replay.from, path);
+            if (mine === undefined || !renamed(before, mine)) continue;
+            const combined = yield* namesOfText(book.source().text, "bookNames.combine");
+            renames.push({ book: book.id.toUpperCase(), ...combined });
+          }
+          const written = yield* Effect.mapError(
+            admin.renameBooks(repo.root, renames),
+            asCombineError,
           );
+          ownNames.push(...written.written);
+        }
         const receipts: readonly SaveReceiptLike[] = [
           ...arriving.map((file) => ({
             path: file.path,
@@ -414,6 +442,7 @@ const program = (options: CombineOptions) =>
             ...receipt.also.map((path) => ({ path, stamp: receipt.stamp })),
           ]),
           ...(metadataHere ? [{ path: METADATA_FILE, stamp: { revision: 0, length: 0 } }] : []),
+          ...ownNames.map((path) => ({ path, stamp: { revision: 0, length: 0 } })),
         ];
         return yield* Effect.mapError(
           git.commit(

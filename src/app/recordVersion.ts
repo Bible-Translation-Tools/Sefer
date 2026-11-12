@@ -1,11 +1,11 @@
 import type { Book, BookId } from "@wycliffeassociates/sefer-text/book";
-import * as TextResult from "@wycliffeassociates/sefer-text/result";
-import { decode, type SourceStamp } from "@wycliffeassociates/sefer-text/source";
+import type { SourceStamp } from "@wycliffeassociates/sefer-text/source";
 import { Effect, Option, Result } from "effect";
 
-import { repositoryPath, type Author, type CommitId, type Repo } from "#core/git/git";
+import { repositoryPath, type Author, type CommitId } from "#core/git/git";
 import type { Project } from "#core/project/project";
-import { headerOf, namesOf, sameNames, type Names } from "#core/rules/bookNames";
+import { headerOf, namesOf, type Names } from "#core/rules/bookNames";
+import { namesAt, renamed } from "#core/rules/bookNamesRecorded";
 
 import type { Services } from "./services";
 
@@ -47,20 +47,6 @@ const namesNow = (services: Services, book: Book): Names => {
   return namesOf(headerOf(analysis));
 };
 
-/** A book's three names in the last recorded version; none when it has no recorded version. */
-const namesRecorded = (services: Services, project: Project, repo: Repo, book: Book) =>
-  Effect.gen(function* () {
-    const inside = repositoryPath(project.root, book.path);
-    if (Option.isNone(inside)) return undefined;
-    const bytes = yield* Effect.result(services.git.show(repo, "HEAD", inside.value));
-    if (Result.isFailure(bytes)) return undefined;
-    const source = decode(bytes.success);
-    if (TextResult.isFailure(source)) return undefined;
-    return namesOf(
-      headerOf(services.galley.analyzeText(source.success.text, "bookNames.recorded")),
-    );
-  });
-
 /**
  * The project list's names to write with this version (RFC "Book names"):
  * each recorded book whose names differ from its last recorded version, and
@@ -78,15 +64,18 @@ const renameForRecord = (services: Services, project: Project, books: readonly B
       seen.add(book.id);
       const now = namesNow(services, book);
       if (!chosen.has(book.id)) {
-        const before = yield* namesRecorded(services, project, repo, book);
-        if (before !== undefined && sameNames(before, now)) continue;
+        const inside = repositoryPath(project.root, book.path);
+        const before = Option.isNone(inside)
+          ? undefined
+          : yield* namesAt(repo, "HEAD", inside.value);
+        if (!renamed(before, now)) continue;
       }
       if (now.short === undefined && now.long === undefined && now.abbr === undefined) continue;
       renames.push({ book: book.id.toUpperCase(), ...now });
     }
     if (renames.length === 0) return [];
-    const renamed = yield* services.admin.renameBooks(project.root, renames);
-    return renamed.written;
+    const written = yield* services.admin.renameBooks(project.root, renames);
+    return written.written;
   });
 
 export const recordVersion = async (

@@ -21,14 +21,14 @@ import { zipSync } from "fflate";
 
 import { writeFileAtomic, writeFileStringAtomic } from "../fileSystem/atomic";
 import { joinPath, lastSegment, parentPath } from "../fileSystem/path";
-import { METADATA_FILE, readManifest } from "../project/discovery";
+import { METADATA_FILE, RC_MANIFEST_FILE, readManifest } from "../project/discovery";
 import { PROJECT_STATE_FILE, updateProjectState } from "../project/projectState";
 import { fromManifest, unreadable, type ProjectMetadata } from "../resources/projectMetadata";
 
 const SEFER_PROJECT_FILE = PROJECT_STATE_FILE;
 
 /** The manifests bento edits: a Scripture Burrito's and a Resource Container's. */
-const MANIFEST_FILES = [METADATA_FILE, "manifest.yaml"] as const;
+export const MANIFEST_FILES = [METADATA_FILE, RC_MANIFEST_FILE] as const;
 
 export type ExportFormat = "burrito" | "usfm-zip";
 

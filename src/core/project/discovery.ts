@@ -12,6 +12,9 @@ import { fromManifest, unreadable, type ProjectMetadata } from "../resources/pro
 
 export const METADATA_FILE = "metadata.json";
 
+/** A Resource Container's manifest, at the project root. */
+export const RC_MANIFEST_FILE = "manifest.yaml";
+
 const BOOK_EXTENSIONS: readonly string[] = [".usfm", ".sfm"];
 
 const USFM_MIME_TYPES: ReadonlySet<string> = new Set(["text/x-usfm", "text/usfm"]);

@@ -188,9 +188,6 @@ export const namesOf = (header: BookHeader): Names => {
   };
 };
 
-export const sameNames = (a: Names, b: Names): boolean =>
-  a.short === b.short && a.long === b.long && a.abbr === b.abbr;
-
 /** The addable keys a book has no line for. */
 export const missingKeys = (header: BookHeader): readonly AddableKey[] =>
   ADDABLE_KEYS.filter((key) => !header.lines.some((line) => line.key === key));
