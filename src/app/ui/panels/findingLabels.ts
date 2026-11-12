@@ -111,6 +111,16 @@ const SOUS = {
   lengthProportionality: m.finding_lengthproportionality,
 } satisfies Record<SousCode, Message>;
 
+/** Sefer's own project checks (`producer: "project"`, core/analysis/projectAnalysis.ts). */
+const PROJECT: Readonly<Record<string, Message>> = {
+  "chapterLabel.word": m.chapter_labels_title,
+  "chapterLabel.number": m.chapter_labels_title,
+  "chapterLabels.differ": m.chapter_labels_title,
+  "bookName.manifest": m.book_names_title,
+  "bookName.missing": m.book_names_title,
+  "bookNames.differ": m.book_names_title,
+};
+
 const lookup = (table: Readonly<Record<string, Message>>, key: string): Message | undefined =>
   Object.hasOwn(table, key) ? table[key] : undefined;
 
@@ -122,6 +132,8 @@ const SOUS_SPELLING: Readonly<Record<string, string>> = {
 export const codeLabel = (code: string): string => {
   const sous = code.startsWith("sous.") ? code.slice("sous.".length) : undefined;
   const label =
-    sous === undefined ? lookup(ONION, code) : lookup(SOUS, SOUS_SPELLING[sous] ?? sous);
+    sous === undefined
+      ? (lookup(ONION, code) ?? lookup(PROJECT, code))
+      : lookup(SOUS, SOUS_SPELLING[sous] ?? sous);
   return label === undefined ? code : label();
 };

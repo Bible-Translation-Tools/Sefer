@@ -32,9 +32,9 @@ interface Entry {
   readonly listed: ManifestName;
 }
 
-/** What has been typed for one book: lines by id (`null` takes one out), missing keys by key. */
+/** What has been typed for one book: lines by id (an empty one is taken out), missing keys by key. */
 interface Draft {
-  readonly set: ReadonlyMap<string, string | null>;
+  readonly set: ReadonlyMap<string, string>;
   readonly add: ReadonlyMap<AddableKey, string>;
 }
 
@@ -147,7 +147,7 @@ export function BookNamesDialog(props: {
   const update = (id: BookId, change: (draft: Draft) => Draft): void => {
     setDrafts(new Map(drafts()).set(id, change(draftOf(id))));
   };
-  const setLine = (id: BookId, line: HeaderLine, value: string | null): void => {
+  const setLine = (id: BookId, line: HeaderLine, value: string): void => {
     update(id, (draft) => ({ ...draft, set: new Map(draft.set).set(line.id, value) }));
   };
   const setMissing = (id: BookId, key: AddableKey, value: string): void => {
@@ -160,7 +160,7 @@ export function BookNamesDialog(props: {
       const draft = draftOf(entry.id);
       const line = entry.header.lines.find((each) => each.key === key);
       const typed = line === undefined ? draft.add.get(key) : draft.set.get(line.id);
-      const value = (typed === undefined ? line?.value : (typed ?? ""))?.trim();
+      const value = (typed === undefined ? line?.value : typed)?.trim();
       return value === undefined || value === "" ? undefined : value;
     };
     return valueFor("toc2") ?? valueFor("h");
@@ -170,7 +170,7 @@ export function BookNamesDialog(props: {
     for (const line of entry.header.lines) {
       if (line.fixed || !draft.set.has(line.id)) continue;
       const value = draft.set.get(line.id);
-      if (value === null || value?.trim() !== line.value) return true;
+      if (value?.trim() !== line.value) return true;
     }
     for (const value of draft.add.values()) if (value.trim() !== "") return true;
     return false;
@@ -263,48 +263,52 @@ export function BookNamesDialog(props: {
 
             <div class="flex max-h-[55vh] flex-col gap-2 overflow-y-auto">
               <For each={entry().header.lines}>
-                {(line) => (
-                  <Show when={draftOf(entry().id).set.get(line.id) !== null}>
-                    <label class="grid grid-cols-[10rem_1fr_auto] items-center gap-controls">
-                      <span class="text-on-surface-secondary">
-                        {labelOf(line.key, line.spelling)}
-                      </span>
+                {(line) => {
+                  const label = (): string => labelOf(line.key, line.spelling);
+                  const value = (): string => {
+                    const typed = draftOf(entry().id).set.get(line.id);
+                    return typed === undefined ? line.value : (typed ?? "");
+                  };
+                  return (
+                    <div class="grid grid-cols-[10rem_1fr_auto] items-center gap-controls">
+                      <span class="text-on-surface-secondary">{label()}</span>
                       <Show
                         when={!line.fixed}
                         fallback={<span class="px-3 py-2">{line.value}</span>}
                       >
                         <Input
+                          aria-label={label()}
                           data-book-names-line={line.id}
-                          value={draftOf(entry().id).set.get(line.id) ?? line.value}
+                          placeholder={m.book_names_empty()}
+                          value={value()}
                           onInput={(event) => setLine(entry().id, line, event.currentTarget.value)}
                         />
                       </Show>
-                      <Show when={!line.fixed} fallback={<span />}>
+                      <Show when={!line.fixed && value() !== ""} fallback={<span />}>
                         <IconButton
                           size="sm"
-                          label={m.book_names_remove({
-                            label: labelOf(line.key, line.spelling),
-                          })}
+                          label={m.book_names_remove({ label: label() })}
                           icon={<Trash2 />}
-                          onClick={() => setLine(entry().id, line, null)}
+                          onClick={() => setLine(entry().id, line, "")}
                         />
                       </Show>
-                    </label>
-                  </Show>
-                )}
+                    </div>
+                  );
+                }}
               </For>
               <For each={missingKeys(entry().header)}>
                 {(key) => (
-                  <label class="grid grid-cols-[10rem_1fr_auto] items-center gap-controls">
+                  <div class="grid grid-cols-[10rem_1fr_auto] items-center gap-controls">
                     <span class="text-on-surface-secondary">{labelOf(key, SPELLED[key])}</span>
                     <Input
+                      aria-label={labelOf(key, SPELLED[key])}
                       data-book-names-missing={key}
                       placeholder={m.book_names_empty()}
                       value={draftOf(entry().id).add.get(key) ?? ""}
                       onInput={(event) => setMissing(entry().id, key, event.currentTarget.value)}
                     />
                     <span />
-                  </label>
+                  </div>
                 )}
               </For>
             </div>
