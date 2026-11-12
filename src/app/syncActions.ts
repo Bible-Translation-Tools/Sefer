@@ -91,6 +91,10 @@ const startWaiting = (root: string): void => {
   next.start();
 };
 
+/** A sync may have brought a new manifest (its book names among them): the project reads it again. */
+const rereadManifest = (services: Services, project: Project): Promise<void> =>
+  services.run(project.refreshMetadata());
+
 const checkShared = async (
   services: Services,
   project: Project,
@@ -125,6 +129,7 @@ const checkShared = async (
     }
     if (!receives) return;
     const received = await services.run(Effect.result(receive({ project })));
+    if (received._tag === "Success") await rereadManifest(services, project);
     syncPhase.send(root, { kind: "received" });
     services.composition.observability.note(
       "sync.receive",
@@ -405,6 +410,7 @@ const settle = async (
     Effect.result(receive({ project, settled, ...optionalTheirs(overrides.theirs) })),
   );
   if (received._tag === "Success") {
+    await rereadManifest(services, project);
     const dirty = project.books.filter((book) => services.save.dirty(book));
     const recorded = await recordVersion(services, project, dirty, message, author);
     syncPhase.send(project.root, { kind: "settled" });
@@ -438,6 +444,8 @@ const settle = async (
     ),
   );
   void syncWatch.refresh(services, project).catch(() => undefined);
+  if (combined._tag === "Success" || combined.failure.state === "recorded")
+    await rereadManifest(services, project);
   if (combined._tag === "Success")
     return { kind: "combined", commit: combined.success.commit, sent: true, to: sendTo };
   if (combined.failure.state === "recorded")

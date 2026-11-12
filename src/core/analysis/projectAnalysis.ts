@@ -105,9 +105,6 @@ export interface ProjectAnalysisService {
    */
   readonly bookNamesIn: (bookId: BookId) => readonly Finding[];
 
-  /** The project's manifest changed (book names written on Record): judge names again. */
-  readonly metadataChanged: () => void;
-
   readonly findingTotals: () => { readonly errors: number; readonly warnings: number };
 
   readonly setSuppressions: (suppressions: Suppressions) => void;
@@ -637,9 +634,17 @@ const make = (
           arm(bookId);
         });
 
+        // The manifest's names are half of the names check: judge them again when it is re-read.
+        const unwatchMetadata = project.metadataChanged(() => {
+          namesCache = undefined;
+          findingsCache = undefined;
+          for (const listener of suppressionListeners) listener();
+        });
+
         yield* Effect.addFinalizer(() =>
           Effect.sync(() => {
             unwatchProject();
+            unwatchMetadata();
             for (const off of unsubscribes.values()) off();
             unsubscribes.clear();
             if (attached === project) attached = undefined;
@@ -746,11 +751,6 @@ const make = (
       crossBookOf,
       chapterLabelsIn,
       bookNamesIn,
-      metadataChanged: () => {
-        namesCache = undefined;
-        findingsCache = undefined;
-        for (const listener of suppressionListeners) listener();
-      },
       findingTotals,
       setSuppressions,
       suppressed,

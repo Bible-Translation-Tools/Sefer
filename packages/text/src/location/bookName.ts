@@ -38,10 +38,9 @@ export const testamentOf = (id: string): Testament =>
  * can act on.
  */
 export const bookName = (id: string, metadata?: BookNames, heading?: string): string => {
-  const local = localized(metadata?.bookNames[id], [
-    metadata?.language?.tag,
-    metadata?.defaultLocale,
-  ]);
+  // Manifests key books by their code in capitals; a file's `\id` may be written in lower case.
+  const names = metadata?.bookNames[id] ?? metadata?.bookNames[id.toUpperCase()];
+  const local = localized(names, [metadata?.language?.tag, metadata?.defaultLocale]);
   if (local !== "") return local;
   if (heading !== undefined && heading !== "") return heading;
   return name(id.toUpperCase(), "short")?.text ?? id;

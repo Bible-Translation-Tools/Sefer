@@ -7,11 +7,11 @@ import type { Author } from "#core/git/git";
 import { personAuthor } from "../../../author";
 import { collaboration } from "../../../collaboration";
 import type { Shell } from "../../../ProjectContext";
+import { queuedBookNames } from "../../../recordVersion";
 import type { Services } from "../../../services";
 import { syncPreferences } from "../../../syncSettings";
 import { unsavedChanges } from "../../panels/changes";
 import { bookName } from "../../workspace/books";
-import { metadataOf } from "../../workspace/project";
 import type { ReviewRoute } from "./createReviewRoute";
 import type { Sides } from "./createSides";
 
@@ -100,15 +100,19 @@ export function createSaveForm(inputs: SaveFormInputs) {
   const openRecord = (): void => openRecordWith(inputs, setRecordOpen, setAuthor, setSends);
 
   const unsaved = () => unsavedChanges(shell);
+  /** Book names queued for the project list (a names finding's fix, the dialog's shortcut): a version to record on their own. */
+  const namesQueued = (): boolean => queuedBookNames(shell.project()?.root ?? "").length > 0;
 
   const defaultMessage = (): string => {
-    const names = unsaved().map((book) => bookName(book.bookId, metadataOf(shell.project())));
+    const names = unsaved().map((book) => bookName(book.bookId, shell.metadata()));
+    if (names.length === 0 && namesQueued()) return m.book_names_record_message();
     return names.length === 0
       ? m.review_edited()
       : m.review_edited_books({ books: names.join(", ") });
   };
 
   return {
+    namesQueued,
     message,
     setMessage,
     recordOpen,

@@ -133,7 +133,6 @@ export const recordVersion = async (
   if (manifests.length > 0) {
     queued.delete(project.root);
     await services.run(project.refreshMetadata());
-    services.projectAnalysis.metadataChanged();
   }
   return { kind: "recorded", commit: recorded.success, receipts: receipts.length, books: ids };
 };

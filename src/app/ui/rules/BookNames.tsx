@@ -24,7 +24,6 @@ import { useShell } from "../../ProjectContext";
 import { queueBookNames } from "../../recordVersion";
 import { Button, Dialog, IconButton, Input, MultiSelect } from "../primitives";
 import { bookName } from "../workspace/books";
-import { metadataOf } from "../workspace/project";
 
 /** One book in the dialog: its header as the parse read it when the dialog opened. */
 interface Entry {
@@ -111,7 +110,7 @@ export function BookNamesDialog(props: {
     if (!props.open) return [];
     const project = shell.project();
     if (project === undefined) return [];
-    const metadata = metadataOf(project);
+    const metadata = shell.metadata();
     return project.books.flatMap((book) => {
       const held = shell.services.projectAnalysis.analysis(book.id);
       if (Option.isNone(held)) return [];

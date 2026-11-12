@@ -39,7 +39,6 @@ import { lastVerses, supplyExpectedVerses } from "./expectedVerses";
 import { FollowToggle } from "./FollowToggle";
 
 import "@wycliffeassociates/sefer-editor/editor.css";
-import { metadataOf } from "./project";
 
 export interface ReferencePaneProps {
   readonly resource: Resource;
@@ -411,7 +410,7 @@ export function ReferencePane(props: ReferencePaneProps) {
   const missing = (): string =>
     m.workspace_title_has_no_book({
       title: props.resource.title,
-      book: bookName(bookId, metadataOf(shell.project())),
+      book: bookName(bookId, shell.metadata()),
     });
 
   return (

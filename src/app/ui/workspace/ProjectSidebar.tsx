@@ -12,7 +12,7 @@ import { useShell } from "../../ProjectContext";
 import { Badge, Button, Input } from "../primitives";
 import { BookChaptersRow, chaptersOf, type ChapterTile } from "./BookChapters";
 import { bookName, testamentOf, type Testament } from "./books";
-import { metadataOf, projectLanguage, projectName } from "./project";
+import { projectLanguage, projectName } from "./project";
 import { chapterOf, typedChapter } from "./typedPlace";
 
 interface Row {
@@ -88,7 +88,7 @@ export function ProjectSidebar() {
     (): readonly Row[] => {
       const project = shell.project();
       if (project === undefined) return [];
-      const metadata = metadataOf(project);
+      const metadata = shell.metadata();
       return project.books.map((book) => ({
         id: book.id,
         name: bookName(book.id, metadata),
