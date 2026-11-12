@@ -9,7 +9,7 @@ import { useShell, type Shell } from "../../ProjectContext";
 import { reviewNeeded, suggestMyChanges } from "../../suggestions";
 import { ago } from "../panels/format";
 import { Button, toasts } from "../primitives";
-import { chooseShared } from "./collab";
+import { chooseOwnCopy, chooseShared } from "./collab";
 import { offerRefusalCopy } from "./copy";
 
 type Facts = NonNullable<ReturnType<typeof collaboration.facts>>;
@@ -20,9 +20,7 @@ const speaks = (held: Facts | undefined): Facts | undefined => {
   if (held === undefined) return undefined;
   const speaking =
     held.mode === "copy" ||
-    // No permission is the popover's own note and its Submit changes button,
-    // so this section doesn't say it a second time.
-    (held.mode === "shared" && held.canWrite !== false && held.waiting > 0);
+    (held.mode === "shared" && (held.canWrite === false || held.waiting > 0));
   return speaking ? held : undefined;
 };
 
@@ -56,6 +54,7 @@ const createCollabActions = (onLeave: () => void) => {
   const { services } = shell;
   const facts = () => collaboration.facts(shell.project()?.root);
   const [busy, setBusy] = createSignal(false, { name: "collabBusy" });
+  const [standalone, setStandalone] = createSignal(false, { name: "collabStandalone" });
 
   const press = (work: (project: Project) => Promise<unknown>) => {
     const project = shell.project();
@@ -72,15 +71,52 @@ const createCollabActions = (onLeave: () => void) => {
   return {
     facts,
     busy,
+    standalone,
+    ownCopy: (): void =>
+      press(async (project) =>
+        setStandalone((await chooseOwnCopy(services, project)) === "standalone"),
+      ),
     offer: (): void => press((project) => offerChanges(services, project, toReview)),
     workDirectly: (): void => press((project) => chooseShared(services, project)),
     toReview,
+    toSettings: (): void => {
+      onLeave();
+      void navigate({ to: "/project/$slug/settings", params: { slug: shell.slug() } });
+    },
     toSuggestions: (): void => {
       onLeave();
       void navigate({ to: "/project/$slug/suggestions", params: { slug: shell.slug() } });
     },
   };
 };
+
+const CannotWrite = (props: {
+  readonly standalone: boolean;
+  readonly busy: boolean;
+  readonly onSettings: () => void;
+  readonly onOwnCopy: () => void;
+}) => (
+  <>
+    <p class="text-small font-semibold">{m.cloud_you_can_suggest_changes_to()}</p>
+    <Show
+      when={!props.standalone}
+      fallback={
+        <p class="text-small text-on-surface-secondary">
+          {m.cloud_this_shared_project_is_yours_to()}
+          <button type="button" class="text-brand underline" onClick={props.onSettings}>
+            {m.common_settings()}
+          </button>
+          .
+        </p>
+      }
+    >
+      <p class="text-small text-on-surface-secondary">{m.cloud_work_in_your_own_copy()}</p>
+      <Button size="sm" variant="primary" loading={props.busy} onClick={props.onOwnCopy}>
+        {m.cloud_work_in_my_own_copy()}
+      </Button>
+    </Show>
+  </>
+);
 
 const WaitingNote = (props: { readonly waiting: number; readonly onSee: () => void }) => (
   <div class="flex items-center gap-2">
@@ -188,6 +224,15 @@ export function CollabSection(props: { readonly onLeave: () => void }) {
       {(held) => (
         <div class="space-y-2 border-t border-surface-border pt-3" data-sync-collab={held().mode}>
           <Switch>
+            <Match when={held().mode === "shared" && held().canWrite === false}>
+              <CannotWrite
+                standalone={actions.standalone()}
+                busy={actions.busy()}
+                onSettings={actions.toSettings}
+                onOwnCopy={actions.ownCopy}
+              />
+            </Match>
+
             <Match when={held().mode === "shared" && held().waiting > 0}>
               <WaitingNote waiting={held().waiting} onSee={actions.toSuggestions} />
             </Match>
