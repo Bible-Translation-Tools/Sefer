@@ -1,5 +1,6 @@
 import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import { Option } from "effect";
+import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronLeft from "lucide-solid/icons/chevron-left";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import Trash2 from "lucide-solid/icons/trash-2";
@@ -21,7 +22,7 @@ import {
 import { runCommand } from "../../commands";
 import { useShell } from "../../ProjectContext";
 import { queueBookNames } from "../../recordVersion";
-import { Button, Dialog, IconButton, Input, Select } from "../primitives";
+import { Button, Dialog, IconButton, Input, MultiSelect } from "../primitives";
 import { bookName } from "../workspace/books";
 import { metadataOf } from "../workspace/project";
 
@@ -250,23 +251,50 @@ export function BookNamesDialog(props: {
                 disabled={position() <= 0}
                 onClick={() => step(-1)}
               />
-              <Select
-                aria-label={m.book_names_position({
-                  at: position() + 1,
-                  count: entries().length,
-                })}
-                wrapperClass="flex-1"
-                value={entry().id}
-                onChange={(event) => setChosen(event.currentTarget.value)}
-              >
-                <For each={entries()}>
+              <div class="min-w-0 flex-1">
+                <MultiSelect
+                  single
+                  id="book-names-book"
+                  triggerClass="w-full"
+                  label={m.book_names_position({ at: position() + 1, count: entries().length })}
+                  summary={entry().name}
+                  narrowed={false}
+                  items={entries()}
+                  key={(each: Entry) => each.id}
+                  match={(each, query) =>
+                    `${each.name} ${each.id}`.toLowerCase().includes(query.toLowerCase())
+                  }
+                  placeholder={m.book_names_search()}
+                  selected={(each) => each.id === entry().id}
+                  onToggle={(each) => setChosen(each.id)}
+                  trigger={
+                    <button
+                      type="button"
+                      data-testid="book-names-book"
+                      aria-haspopup="listbox"
+                      aria-label={m.book_names_position({
+                        at: position() + 1,
+                        count: entries().length,
+                      })}
+                      class="flex h-12 w-full cursor-pointer items-center justify-between gap-2 rounded-lg border border-surface-border bg-surface-primary ps-3 pe-3 text-small text-on-surface-primary transition-colors hover:border-brand/40 focus:border-brand"
+                    >
+                      <span class="truncate">
+                        {edits().has(entry().id) ? `${entry().name} •` : entry().name}
+                      </span>
+                      <ChevronDown aria-hidden="true" class="size-5 text-on-surface-tertiary" />
+                    </button>
+                  }
+                >
                   {(each) => (
-                    <option value={each.id}>
-                      {edits().has(each.id) ? `${each.name} •` : each.name}
-                    </option>
+                    <span class="flex min-w-0 flex-1 items-center justify-between gap-2">
+                      <span class="truncate">{each.name}</span>
+                      <span class="text-smallest text-on-surface-tertiary">
+                        {edits().has(each.id) ? "•" : each.id}
+                      </span>
+                    </span>
                   )}
-                </For>
-              </Select>
+                </MultiSelect>
+              </div>
               <IconButton
                 size="sm"
                 label={m.book_names_next()}
@@ -284,7 +312,7 @@ export function BookNamesDialog(props: {
               </p>
             </Show>
 
-            <div class="flex max-h-[55vh] flex-col gap-2 overflow-y-auto">
+            <div class="-mx-1 flex max-h-[55vh] flex-col gap-2 overflow-y-auto px-1 py-1">
               <For each={entry().header.lines}>
                 {(line) => {
                   const label = (): string => labelOf(line.key, line.spelling);

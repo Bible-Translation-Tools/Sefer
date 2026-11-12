@@ -118,6 +118,7 @@
   "book_names_nothing": "Nothing was changed",
   "book_names_stale": "A book changed while this was open; open Book names again",
   "book_names_previous": "Previous book",
+  "book_names_search": "Search books…",
   "book_names_next": "Next book",
   "book_names_position": "Book {at} of {count}",
   "book_names_label_h": "Running head",

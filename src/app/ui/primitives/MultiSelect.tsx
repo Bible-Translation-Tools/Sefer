@@ -25,6 +25,8 @@ export interface MultiSelectProps<T> {
   readonly id?: string;
   readonly single?: boolean;
   readonly trigger?: JSX.Element;
+  /** Classes for the trigger's wrapper: `w-full` lets a field-shaped trigger fill its row. */
+  readonly triggerClass?: string;
   readonly empty?: string;
   readonly onOpen?: () => void;
 }
@@ -70,6 +72,7 @@ export function MultiSelect<T>(props: MultiSelectProps<T>) {
       align="start"
       class="flex w-72 flex-col gap-2"
       fitViewport
+      {...(props.triggerClass === undefined ? {} : { triggerClass: props.triggerClass })}
       initialFocus={props.match === undefined ? "[role=listbox]" : "input"}
       open={open()}
       onOpenChange={(next) => {
