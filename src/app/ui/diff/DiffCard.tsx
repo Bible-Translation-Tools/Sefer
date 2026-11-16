@@ -26,6 +26,7 @@ import { cardPolicy } from "../multibuffer/policy";
 import { cx } from "../primitives";
 import { hunkKind, type Hunk } from "./hunks";
 import { hunkPaint, sidePaint, type Controls } from "./paint";
+import { ReplacedLine, type Replaced } from "./Replaced";
 
 export interface DiffSides {
   readonly bookId: string;
@@ -97,6 +98,8 @@ export interface DiffCardProps {
     readonly current: readonly CardAction[];
   };
   readonly below?: JSX.Element;
+  /** The editor's words this card's decision wrote over, shown under the editor's text. */
+  readonly replaced?: readonly Replaced[];
   readonly open?: CardAction;
   readonly onStep?: (step: ContextStep) => void;
   readonly onMounted?: (ms: number) => void;
@@ -469,7 +472,15 @@ export function DiffCard(props: DiffCardProps) {
             </Show>
           </div>
         </Show>
-        <Show when={props.editing === true} fallback={<div class="min-w-0" ref={setRight} />}>
+        <Show
+          when={props.editing === true}
+          fallback={
+            <div class="min-w-0">
+              <div ref={setRight} />
+              <ReplacedLine replaced={props.replaced ?? []} usfm={usfm()} />
+            </div>
+          }
+        >
           <div class="min-w-0">
             <Show
               when={editingBook()}

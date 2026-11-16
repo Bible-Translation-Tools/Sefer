@@ -172,7 +172,11 @@ function ReaderRegion(props: { readonly body: ReviewBodyProps }) {
         decidable={props.body.writes.editable()}
         usfm={props.body.usfm}
         onUsfm={props.body.onUsfm}
-        currentLabel={props.body.sides.leftLabel()}
+        currentLabel={
+          props.body.writes.editable() && props.body.sides.leftLabel() === m.review_in_the_editor()
+            ? m.review_in_the_editor_to_be_saved()
+            : props.body.sides.leftLabel()
+        }
         baselineLabel={props.body.sides.rightLabel()}
         currentShort={props.body.sides.leftShort()}
         baselineShort={props.body.sides.rightShort()}

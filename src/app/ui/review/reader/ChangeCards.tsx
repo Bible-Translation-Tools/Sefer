@@ -6,7 +6,7 @@ import BookOpen from "lucide-solid/icons/book-open";
 import { m } from "#app/paraglide/messages";
 import type { Analysis } from "#core/galley";
 
-import { DiffCard, type Controls, type Hunk } from "../../diff";
+import { DiffCard, type Controls, type Hunk, type Replaced } from "../../diff";
 import type { CardAction } from "../../multibuffer/CardAction";
 import { CardList } from "../../multibuffer/CardList";
 import type { ContextStep } from "../../multibuffer/cardState";
@@ -46,6 +46,7 @@ interface ChangeCardsProps {
   readonly seat: (bookId: BookId) => Promise<EditorBook | undefined>;
   readonly analyze: (bookId: BookId, text: string) => Analysis;
   readonly headerActions: (hunk: Hunk) => readonly CardAction[];
+  readonly replacedOf: (hunk: Hunk) => readonly Replaced[];
   readonly onStep: (key: string, step: ContextStep) => void;
   readonly onOpen: (hunk: Hunk) => void;
   readonly onEditing: (editing: boolean) => void;
@@ -89,6 +90,7 @@ export function ChangeCards(props: ChangeCardsProps): JSX.Element {
             seat={() => props.seat(item().hunk.bookId)}
             analyze={(text) => props.analyze(item().hunk.bookId, text)}
             headerActions={props.headerActions(item().hunk)}
+            replaced={props.replacedOf(item().hunk)}
             onStep={(step) => props.onStep(item().hunk.key, step)}
             open={{
               kind: "icon",

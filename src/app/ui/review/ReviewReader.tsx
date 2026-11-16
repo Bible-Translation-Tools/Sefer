@@ -10,7 +10,7 @@ import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
 import type { Services } from "../../services";
 import { shellKeys } from "../../settings";
-import { estimate, type Controls, type Hunk } from "../diff";
+import { changed, estimate, type Controls, type Hunk, type Replaced } from "../diff";
 import type { CardAction } from "../multibuffer/CardAction";
 import type { ContextStep } from "../multibuffer/cardState";
 import { createCardViews } from "../multibuffer/cardViews";
@@ -113,6 +113,7 @@ interface ReaderModel {
   readonly scopeCount: () => number;
   readonly scopeDecided: () => number;
   readonly allOf: (side: MergeSide) => boolean;
+  readonly replacedOf: (hunk: Hunk) => readonly Replaced[];
   readonly decideAll: (side: MergeSide | undefined) => void;
   readonly cardDecision: (hunk: Hunk) => readonly CardAction[];
   readonly expand: (key: string, step: ContextStep) => void;
@@ -179,12 +180,62 @@ function createViews(services: Services, keys: Keys) {
   return { views, expand };
 }
 
-function createControls(props: ReviewReaderProps, prepared: Accessor<readonly Prepared[]>) {
+/**
+ * What each take wrote over. Taking the other side rewrites the editor when
+ * decisions are live, so the editor's words are kept here, as they stood, for
+ * the card's "Was" line; keeping them again or clearing drops the record.
+ */
+function createReplaced(
+  props: ReviewReaderProps,
+  prepared: Accessor<readonly Prepared[]>,
+): {
+  readonly decide: ReviewReaderProps["decide"];
+  readonly replacedOf: (hunk: Hunk) => readonly Replaced[];
+} {
+  const [held, setHeld] = createSignal<ReadonlyMap<string, Replaced>>(new Map(), {
+    name: "reviewReplaced",
+  });
+  const keyOf = (bookId: string, unitId: string): string => `${bookId}\0${unitId}`;
+  const decide: ReviewReaderProps["decide"] = (bookId, units, side) => {
+    const live = props.writesDecisions ?? props.decidable;
+    const analysis = untrack(prepared).find((each) => each.book.bookId === bookId)?.sides.current;
+    setHeld((was) => {
+      const next = new Map(was);
+      for (const unit of units) {
+        const key = keyOf(bookId, unit.id);
+        if (side !== "baseline") next.delete(key);
+        else if (
+          live &&
+          analysis !== undefined &&
+          unit.current !== undefined &&
+          changed(unit) &&
+          untrack(() => props.decision(bookId, unit.id)) !== "baseline"
+        )
+          next.set(key, { unit, analysis });
+      }
+      return next;
+    });
+    props.decide(bookId, units, side);
+  };
+  const replacedOf = (hunk: Hunk): readonly Replaced[] =>
+    hunk.units.flatMap((unit) => {
+      if (props.decision(hunk.bookId, unit.id) !== "baseline") return [];
+      const found = held().get(keyOf(hunk.bookId, unit.id));
+      return found === undefined ? [] : [found];
+    });
+  return { decide, replacedOf };
+}
+
+function createControls(
+  props: ReviewReaderProps,
+  prepared: Accessor<readonly Prepared[]>,
+  decide: ReviewReaderProps["decide"],
+) {
   const controlsFor = (bookId: BookId): Controls | undefined =>
     props.decidable
       ? {
           decision: (unit) => props.decision(bookId, unit.id),
-          decide: (unit, side) => props.decide(bookId, [unit], side),
+          decide: (unit, side) => decide(bookId, [unit], side),
           keepTitle: m.review_keep_source_s({ source: props.currentShort }),
           takeTitle: m.review_take_source_s({ source: props.baselineShort }),
           live: props.writesDecisions ?? props.decidable,
@@ -209,6 +260,7 @@ function createScopeDecide(
   scope: Accessor<Scope>,
   prepared: Accessor<readonly Prepared[]>,
   selectedBook: () => Prepared | undefined,
+  decide: ReviewReaderProps["decide"],
 ) {
   const inScope = (): readonly Prepared[] => {
     if (scope() === "changes") return prepared();
@@ -218,7 +270,7 @@ function createScopeDecide(
   const scopeCount = (): number => inScope().reduce((sum, held) => sum + held.shown.length, 0);
   const decideAll = (side: MergeSide | undefined): void => {
     for (const held of untrack(inScope))
-      if (held.shown.length > 0) props.decide(held.book.bookId, held.shown, side);
+      if (held.shown.length > 0) decide(held.book.bookId, held.shown, side);
   };
   const sidesInScope = (): readonly (MergeSide | undefined)[] =>
     inScope().flatMap((held) =>
@@ -236,6 +288,7 @@ function cardDecisionFor(
   props: ReviewReaderProps,
   split: () => boolean,
   hunk: Hunk,
+  decide: ReviewReaderProps["decide"],
 ): readonly CardAction[] {
   if (hunk.units.length === 0) return [];
   if (!props.decidable) {
@@ -253,7 +306,7 @@ function cardDecisionFor(
       : m.review_take_all_of_source_s({ source: props.baselineShort });
   };
   const choose = (chosen: MergeSide): void =>
-    props.decide(hunk.bookId, hunk.units, side === chosen ? undefined : chosen);
+    decide(hunk.bookId, hunk.units, side === chosen ? undefined : chosen);
   const buttons: CardAction[] = [
     {
       kind: "button",
@@ -426,6 +479,7 @@ function ChangeCardsView(props: { readonly reader: ReaderModel }): JSX.Element {
       seat={props.reader.props.seat}
       analyze={(bookId, text) => props.reader.analysisOf(bookId, "current", text)}
       headerActions={props.reader.cardDecision}
+      replacedOf={props.reader.replacedOf}
       onStep={props.reader.expand}
       onOpen={props.reader.cursor.openInBook}
       onEditing={(now) => props.reader.props.onEditing?.(now)}
@@ -461,7 +515,8 @@ export function ReviewReader(props: ReviewReaderProps) {
   const selectedBook = (): Prepared | undefined =>
     prepared().find((held) => held.book.bookId === props.selected) ?? prepared()[0];
 
-  const { controls, decidedOf } = createControls(props, prepared);
+  const { decide, replacedOf } = createReplaced(props, prepared);
+  const { controls, decidedOf } = createControls(props, prepared, decide);
 
   const cursor = createCursor({
     scope,
@@ -482,8 +537,10 @@ export function ReviewReader(props: ReviewReaderProps) {
     scope,
     prepared,
     selectedBook,
+    decide,
   );
-  const cardDecision = (hunk: Hunk): readonly CardAction[] => cardDecisionFor(props, split, hunk);
+  const cardDecision = (hunk: Hunk): readonly CardAction[] =>
+    cardDecisionFor(props, split, hunk, decide);
   const sections = createSections(prepared);
 
   if (untrack(() => props.claimSidebar) !== false)
@@ -502,7 +559,7 @@ export function ReviewReader(props: ReviewReaderProps) {
             baselineShort={props.baselineShort}
             currentShort={props.currentShort}
             onPick={cursor.pickBook}
-            onDecide={(bookId, units, side) => props.decide(bookId, units, side)}
+            onDecide={(bookId, units, side) => decide(bookId, units, side)}
           />
         ),
         { show: m.sidebar_show_changes(), hide: m.sidebar_hide_changes() },
@@ -547,6 +604,7 @@ export function ReviewReader(props: ReviewReaderProps) {
     allOf,
     decideAll,
     cardDecision,
+    replacedOf,
     expand,
   };
 
