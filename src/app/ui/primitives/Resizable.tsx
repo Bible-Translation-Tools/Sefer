@@ -16,6 +16,9 @@ interface PanelSpec {
   readonly initialSize?: number;
   readonly minSize: number;
   readonly maxSize: number;
+  /** A floor in pixels, read at each drag: a panel whose content has a measure of its own. */
+  readonly minPixels?: () => number;
+  readonly maxPixels?: () => number;
   readonly onCollapse?: () => void;
 }
 
@@ -129,9 +132,13 @@ function Root(props: ResizableRootProps) {
       }
       const room = from + to;
       const next = clamp(
-        clamp(from + pixels / total, first.minSize, first.maxSize),
-        room - second.maxSize,
-        room - second.minSize,
+        clamp(
+          from + pixels / total,
+          Math.max(first.minSize, (first.minPixels?.() ?? 0) / total),
+          first.maxSize,
+        ),
+        room - Math.min(second.maxSize, (second.maxPixels?.() ?? Number.POSITIVE_INFINITY) / total),
+        room - Math.max(second.minSize, (second.minPixels?.() ?? 0) / total),
       );
       const moved = [...started];
       moved[before] = next;
@@ -162,6 +169,13 @@ interface ResizablePanelProps {
   readonly initialSize?: number;
   readonly minSize?: number;
   readonly maxSize?: number;
+  /**
+   * A floor in pixels as well as the fraction: the drag stops there, and the
+   * panel will not shrink below it when the window does.
+   */
+  readonly minPixels?: () => number;
+  /** A ceiling in pixels as well as the fraction, the same way. */
+  readonly maxPixels?: () => number;
   readonly onCollapse?: () => void;
   readonly collapseHint?: { readonly title: string; readonly detail: string };
   readonly class?: ClassValue;
@@ -177,6 +191,8 @@ function Panel(props: ResizablePanelProps) {
       initialSize: props.initialSize,
       minSize: props.minSize ?? 0,
       maxSize: props.maxSize ?? 1,
+      minPixels: () => props.minPixels?.() ?? 0,
+      maxPixels: () => props.maxPixels?.() ?? Number.POSITIVE_INFINITY,
       onCollapse: props.onCollapse,
     }),
   );
@@ -184,7 +200,13 @@ function Panel(props: ResizablePanelProps) {
   return (
     <div
       data-resizable-panel={index}
-      style={{ "flex-basis": `${split.sizeOf(index) * 100}%` }}
+      style={{
+        "flex-basis": `${split.sizeOf(index) * 100}%`,
+        [split.orientation === "horizontal" ? "min-width" : "min-height"]:
+          props.minPixels === undefined ? undefined : `${props.minPixels()}px`,
+        [split.orientation === "horizontal" ? "max-width" : "max-height"]:
+          props.maxPixels === undefined ? undefined : `${props.maxPixels()}px`,
+      }}
       class={cx("relative min-h-0 min-w-0 shrink grow-0 overflow-hidden", props.class)}
     >
       {props.children}

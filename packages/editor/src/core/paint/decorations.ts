@@ -335,21 +335,31 @@ class CallerWidget extends WidgetType {
   readonly mark: string;
   readonly kind: string;
   readonly at: number;
-  constructor(mark: string, kind: string, at: number) {
+  /** The note's words, for the tooltip. */
+  readonly body: string;
+  constructor(mark: string, kind: string, at: number, body: string) {
     super();
     this.mark = mark;
     this.kind = kind;
     this.at = at;
+    this.body = body;
   }
   eq(other: CallerWidget) {
-    return other.mark === this.mark && other.kind === this.kind && other.at === this.at;
+    return (
+      other.mark === this.mark &&
+      other.kind === this.kind &&
+      other.at === this.at &&
+      other.body === this.body
+    );
   }
   toDOM(view: EditorView) {
     const span = document.createElement("span");
     span.className = `usfm-caller usfm-caller-${this.kind}`;
     span.dataset["noteAt"] = String(this.at);
     span.textContent = this.mark;
-    span.title = "click to read this note at the foot of the chapter";
+    // The note itself, then where a click takes the reader (Thomas, 2026-11-13).
+    const go = "Click to go to this note at the foot of the chapter";
+    span.title = this.body === "" ? go : `${this.body}\n\n${go}`;
     span.onmousedown = (e) => {
       e.preventDefault();
       toggleNote(view, this.at, "caller");
@@ -938,7 +948,12 @@ export function buildRegular(
         from: note.point.from,
         to: note.point.to,
         deco: Decoration.replace({
-          widget: new CallerWidget(note.mark, note.kind, note.from),
+          widget: new CallerWidget(
+            note.mark,
+            note.kind,
+            note.from,
+            noteApparatusText(doc, note, NOTE_PART.BODY),
+          ),
           ...UNIT,
         }),
       });

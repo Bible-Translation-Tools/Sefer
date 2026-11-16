@@ -25,6 +25,7 @@ import { sendAfterSave, sendNow } from "./syncActions";
 import { syncPreferences } from "./syncSettings";
 import { syncWatch } from "./syncWatch";
 import { sendOutcomeCopy } from "./ui/cloud/copy";
+import { openFind } from "./ui/find/findState";
 import { bookName } from "./ui/workspace/books";
 
 export type CommandResult =
@@ -412,8 +413,21 @@ const importCommands = (bridge: ShellBridge, h: Helpers) => {
 };
 
 const searchCommands = (bridge: ShellBridge, h: Helpers) => {
-  const { hasProject } = h;
+  const { hasProject, hasBook } = h;
   return [
+    registerCommand({
+      id: "find.box",
+      title: m.find_box_title,
+      keys: "Mod-f",
+      when: hasBook,
+      run: () => {
+        const book = bridge.focused();
+        if (book === undefined) return;
+        const range = book.selection() ?? { from: 0, to: 0 };
+        const picked = book.source().text.slice(range.from, range.to);
+        openFind(/\\|\n/.test(picked) ? "" : picked, { bookId: book.id, offset: range.from });
+      },
+    }),
     registerCommand({
       id: "search.open",
       title: m.common_find_in_project,

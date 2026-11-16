@@ -1,5 +1,11 @@
 import { forEachDiagnostic, setDiagnosticsEffect } from "@codemirror/lint";
-import { Compartment, EditorState, StateEffect, type TransactionSpec } from "@codemirror/state";
+import {
+  Compartment,
+  EditorSelection,
+  EditorState,
+  StateEffect,
+  type TransactionSpec,
+} from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import type { Address } from "@wycliffeassociates/sefer-text/location/address";
 
@@ -12,7 +18,8 @@ import {
   type AttributedMarkup,
   attributesAt,
 } from "./core/attributes";
-import { footnoteWithText } from "./core/commands/insert";
+import { actionCommand, type EditorAction } from "./core/commands/actions";
+import { footnoteWithText, wordBoundaryAt } from "./core/commands/insert";
 import {
   lineKindAt,
   turnLineInto,
@@ -30,12 +37,13 @@ import { structureAt } from "./core/editorState";
 import { setExpectedVerses, type ExpectedVerses } from "./core/expectedVerses";
 import { type Figure, figuresIn } from "./core/figures";
 import { frontMatterCard } from "./core/frontmatter";
-import { typedMarker } from "./core/inputRules/typedMarker";
+import { styleWords, typedMarker } from "./core/inputRules/typedMarker";
 import { annotateOpen } from "./core/instrument/instrument";
 import { keystrokeMeter } from "./core/instrument/meter";
 import { span } from "./core/instrument/timing";
 import { trusted } from "./core/kernel";
 import { type Keybinding, userKeybindings } from "./core/keymaps";
+import { findMarks, setFindMarks, verseRangeOf, type FindMarks } from "./core/paint/findMarks";
 import { changePreferences, editorPreferences, type EditorPreferences } from "./core/preferences";
 import { type UnsupportedMarkup, unsupportedMarkup } from "./core/unsupported";
 import { chapterTitleAction } from "./core/verseLines";
@@ -47,6 +55,7 @@ import { annotateEmptyBlocks, blockNamer, showEmptyBlocks } from "./recipes/empt
 import { flash, flashing } from "./recipes/flash";
 import { showCorpusFindings, type CorpusFinding } from "./recipes/lint";
 import { pairingHere, showBlockPairs } from "./recipes/pairing";
+import { revealInBand } from "./surfaces/align";
 import { noteBookIs } from "./surfaces/noteEditor";
 import { pickChapter, policyKey, policyView, type EditorPolicy } from "./views";
 
@@ -164,6 +173,21 @@ export interface BookEditorMount extends EditorHandle {
    * offset (past the word it is in); empty text, an empty note.
    */
   addFootnote(text: string, at?: number): boolean;
+  /**
+   * A character style (`wj`, `nd`, `add`) around `from`–`to`, or its empty
+   * pair at `from` with the caret in it; false where it cannot go.
+   */
+  styleWords(name: string, from: number, to: number): boolean;
+  /** An insert action (`insert.paragraph`, `insert.lineBreak`) past the word at an offset, the caret moved there first. */
+  performAt(offset: number, action: EditorAction): boolean;
+  /** Puts the caret at an offset without scrolling: what the reader sees stays still. */
+  placeCaret(offset: number): void;
+  /** The floating Find box's highlights in this book; null clears them. */
+  setFindMarks(marks: FindMarks | null): void;
+  /** Scrolls `from..to` just into view, only when it is not already on screen; the caret stays. */
+  showRange(from: number, to: number): void;
+  /** The USFM under the selection's main range ("" for a caret). */
+  selectedText(): string;
   /** The selection's main range (`from === to` for a caret). */
   selectionRange(): { readonly from: number; readonly to: number };
   /** Removes the marker of the verse at an offset; its text joins the verse before. */
@@ -351,6 +375,7 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
         }),
         meterFor(book).extension,
         flashing(),
+        findMarks,
         EditorView.updateListener.of((update) => {
           if (!update.selectionSet) return;
           for (const listener of heard) listener(update.state.selection.main.head);
@@ -522,6 +547,41 @@ export function mountBookEditor(options: BookEditorOptions): BookEditorMount {
       ),
     addFootnote: (text: string, at?: number) =>
       run(footnoteWithText(created.state, structureAt(created.state), text, at)),
+    styleWords: (name: string, from: number, to: number) => {
+      const made = styleWords(created.state, name, from, to);
+      if (made === null) return false;
+      created.dispatch(made);
+      return true;
+    },
+    performAt: (offset: number, action: EditorAction) => {
+      // Past the word the press landed in, as a footnote goes: an insert never splits a word.
+      const at = wordBoundaryAt(created.state, structureAt(created.state), offset);
+      created.dispatch({ selection: { anchor: at } });
+      return actionCommand(action)(created);
+    },
+    setFindMarks: (marks: FindMarks | null) => {
+      created.dispatch({ effects: setFindMarks.of(marks) });
+      // The match is in the other text: bring this text's same verse on screen.
+      if (marks === null || marks.active >= 0 || marks.verse === undefined) return;
+      const verse = verseRangeOf(created.state, marks.verse);
+      if (verse !== undefined) revealInBand(created, verse.from);
+    },
+    showRange: (from: number, to: number) => {
+      const length = created.state.doc.length;
+      created.dispatch({
+        effects: EditorView.scrollIntoView(
+          EditorSelection.range(Math.min(from, length), Math.min(to, length)),
+          { y: "nearest", yMargin: 64 },
+        ),
+      });
+    },
+    placeCaret: (offset: number) => {
+      created.dispatch({ selection: { anchor: Math.min(offset, created.state.doc.length) } });
+    },
+    selectedText: () => {
+      const { from, to } = created.state.selection.main;
+      return created.state.sliceDoc(from, to);
+    },
     selectionRange: () => {
       const { from, to } = created.state.selection.main;
       return { from, to };

@@ -39,6 +39,7 @@ export {
   type DrawnDiagnostic,
   type RememberedPlace,
 } from "./bookEditor";
+export type { FindMarks } from "./core/paint/findMarks";
 export {
   mountCard,
   type CardCaret,

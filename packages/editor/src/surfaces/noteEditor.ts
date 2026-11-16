@@ -69,6 +69,9 @@ const flashRow = (view: EditorView, at: number, tries = 12): void => {
     if (tries > 0) requestAnimationFrame(() => flashRow(view, at, tries - 1));
     return;
   }
+  // The block's position lands short of the list; the row itself, centred,
+  // is the note the reader followed (Thomas, 2026-11-13).
+  row.scrollIntoView({ block: "center", behavior: "smooth" });
   row.classList.add("usfm-note-found");
   setTimeout(() => row.classList.remove("usfm-note-found"), FLASH_MS);
 };

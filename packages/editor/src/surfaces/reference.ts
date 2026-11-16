@@ -1,4 +1,4 @@
-import { Compartment, EditorState } from "@codemirror/state";
+import { Compartment, EditorSelection, EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
 import { readingLayer, viewLayer } from "../core/compose";
@@ -7,6 +7,7 @@ import { anchorFrom } from "../core/guards/clip";
 import { span } from "../core/instrument/timing";
 import { type Analyze, analyzer } from "../core/model/analyzer";
 import { structureAt, type ChapterRow } from "../core/model/docStructure";
+import { findMarks, setFindMarks, verseRangeOf, type FindMarks } from "../core/paint/findMarks";
 import { handleFor, markMoved, type EditorHandle } from "../handle";
 import { pairingThere, showBlockPairs, showPaired, type PairedRange } from "../recipes/pairing";
 import { modeView, pickChapter, type ProjectionName } from "../views";
@@ -60,6 +61,10 @@ export interface ReferenceMount extends EditorHandle {
    * the eye. Reading down the middle of a chapter is still still.
    */
   showPair(range: PairedRange | null, reveal?: boolean): void;
+  /** The floating Find box's highlights in this text; null clears them. */
+  setFindMarks(marks: FindMarks | null): void;
+  /** Scrolls `from..to` just into view, only when it is not already on screen. */
+  showRange(from: number, to: number): void;
   /** Follows the reader's "show what the markup corresponds to" setting. */
   pairBlocks(on: boolean): void;
   destroy(): void;
@@ -81,6 +86,7 @@ export function mountReference(options: ReferenceOptions): ReferenceMount {
       projection.of(modeView(options.mode)),
       hiddenFrontMatter(),
       pairingThere(options.pairBlocks === true),
+      findMarks,
       EditorState.readOnly.of(true),
       EditorView.editable.of(false),
     ],
@@ -124,6 +130,24 @@ export function mountReference(options: ReferenceOptions): ReferenceMount {
       showPaired(view, range);
       if (range === null || !reveal) return;
       revealInBand(view, range.from);
+    },
+
+    setFindMarks: (marks: FindMarks | null) => {
+      view.dispatch({ effects: setFindMarks.of(marks) });
+      // The match is in the other text: bring this text's same verse on screen.
+      if (marks === null || marks.active >= 0 || marks.verse === undefined) return;
+      const verse = verseRangeOf(view.state, marks.verse);
+      if (verse !== undefined) revealInBand(view, verse.from);
+    },
+
+    showRange: (from: number, to: number) => {
+      const length = view.state.doc.length;
+      view.dispatch({
+        effects: EditorView.scrollIntoView(
+          EditorSelection.range(Math.min(from, length), Math.min(to, length)),
+          { y: "nearest", yMargin: 64 },
+        ),
+      });
     },
 
     pairBlocks: (on: boolean) => {

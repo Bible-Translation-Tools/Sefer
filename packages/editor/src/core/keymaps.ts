@@ -9,7 +9,7 @@ import { tableCommands } from "./commands/tableCommands";
 import { PAINT_PORT, planAt, structureAt } from "./editorState";
 import { expectedVersesField } from "./expectedVerses";
 import { guardedBackspace, guardedDelete, mergeParagraphBackwards } from "./guards/deletion";
-import { guardedEnter, setBlockMarker } from "./guards/input";
+import { guardedEnter, lineBreak, setBlockMarker } from "./guards/input";
 import { plainPasteFollowsTyping } from "./inputRules/plainPaste";
 import { typedMarkerBehaviour, typedMarkerCommands } from "./inputRules/typedMarker";
 import { verseNumberCommands } from "./inputRules/verseNumbers";
@@ -150,6 +150,7 @@ const DELETION_BINDINGS: readonly Keybinding[] = [
 const editingCommands: Readonly<Record<string, Command>> = {
   ...motionCommands,
   "edit.enter": traced("guardedEnter", guardedEnter(structureAt, planAt)),
+  "edit.lineBreak": traced("lineBreak", lineBreak(structureAt, planAt)),
   ...deletionCommands,
   "line.toPoetry": traced("setBlockMarker", setBlockMarker(structureAt, "q1")),
   "line.toParagraph": traced("setBlockMarker", setBlockMarker(structureAt, "p")),
@@ -244,6 +245,7 @@ export const KEY_BUNDLES: readonly KeyBundle[] = [
     bindings: [
       ...MOTION_BINDINGS,
       { key: "Enter", command: "edit.enter" },
+      { key: "Shift-Enter", command: "edit.lineBreak" },
       ...DELETION_BINDINGS,
       { key: "Mod-Alt-1", command: "line.toPoetry" },
       { key: "Mod-Alt-0", command: "line.toParagraph" },
