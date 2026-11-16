@@ -89,7 +89,7 @@ export function ColumnChoice(props: {
   return (
     <Button
       size="sm"
-      variant="tertiary"
+      variant="secondary"
       aria-pressed={props.all ? "true" : "false"}
       data-review-column-choice={props.side}
       onClick={() => props.onDecide(props.all ? undefined : props.side)}
