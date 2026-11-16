@@ -79,9 +79,10 @@ export function DecideAll(props: {
   );
 }
 
-/** "Use this side for all", for the column it stands above. Pressed when every change in scope already uses this side; pressing it again clears them. */
+/** "Use the file's for all", standing in for the label of the column it takes. Pressed when every change in scope already uses this side; pressing it again clears them. */
 export function ColumnChoice(props: {
   readonly side: MergeSide;
+  readonly label: string;
   readonly all: boolean;
   readonly onDecide: (side: MergeSide | undefined) => void;
 }): JSX.Element {
@@ -93,34 +94,35 @@ export function ColumnChoice(props: {
       data-review-column-choice={props.side}
       onClick={() => props.onDecide(props.all ? undefined : props.side)}
     >
-      {m.review_use_this_side_for_all()}
+      {props.label}
     </Button>
   );
 }
 
 /**
- * The cards' column heads: each side's label with its choice, laid out on the
- * cards' own two columns so each choice stands over the text it takes.
+ * The cards' column heads: one choice per side, laid out on the cards' own two
+ * columns so each stands over the text it takes.
  */
 export function ColumnChoices(props: {
-  readonly baselineLabel: string;
-  readonly currentLabel: string;
+  readonly baselineShort: string;
+  readonly currentShort: string;
   readonly currentFirst: boolean;
   readonly allOf: (side: MergeSide) => boolean;
   readonly onDecide: (side: MergeSide | undefined) => void;
 }): JSX.Element {
   const head = (side: MergeSide, label: string, last: boolean) => (
-    <div class={cx("flex min-w-0 items-center gap-2 px-3", last && "order-last")}>
-      <span class="truncate">{label}</span>
-      <span class="ms-auto shrink-0">
-        <ColumnChoice side={side} all={props.allOf(side)} onDecide={props.onDecide} />
-      </span>
+    <div class={cx("flex min-w-0 items-center px-1", last && "order-last")}>
+      <ColumnChoice side={side} label={label} all={props.allOf(side)} onDecide={props.onDecide} />
     </div>
   );
   return (
-    <div class="grid grid-cols-2 text-smallest text-on-surface-tertiary" data-review-column-choices>
-      {head("baseline", props.baselineLabel, props.currentFirst)}
-      {head("current", props.currentLabel, false)}
+    <div class="grid grid-cols-2" data-review-column-choices>
+      {head(
+        "baseline",
+        m.review_take_source_s_for_all({ source: props.baselineShort }),
+        props.currentFirst,
+      )}
+      {head("current", m.review_keep_source_s_for_all({ source: props.currentShort }), false)}
     </div>
   );
 }

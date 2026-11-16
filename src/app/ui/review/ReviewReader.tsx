@@ -347,6 +347,11 @@ function WholeBookView(props: { readonly reader: ReaderModel }): JSX.Element {
           ? (side) => (
               <ColumnChoice
                 side={side}
+                label={
+                  side === "baseline"
+                    ? m.review_take_source_s_for_all({ source: props.reader.props.baselineShort })
+                    : m.review_keep_source_s_for_all({ source: props.reader.props.currentShort })
+                }
                 all={props.reader.allOf(side)}
                 onDecide={props.reader.decideAll}
               />
@@ -382,20 +387,14 @@ function WholeBookView(props: { readonly reader: ReaderModel }): JSX.Element {
 }
 
 function ColumnChoicesView(props: { readonly reader: ReaderModel }): JSX.Element {
-  const first = (): BookId | undefined =>
-    props.reader.inScope().find((held) => held.shown.length > 0)?.book.bookId;
   return (
     <Show
-      when={
-        props.reader.props.decidable && props.reader.split() && props.reader.scopeCount() > 0
-          ? first()
-          : undefined
-      }
+      when={props.reader.props.decidable && props.reader.split() && props.reader.scopeCount() > 0}
     >
-      {(bookId) => (
+      {(_shown) => (
         <ColumnChoices
-          baselineLabel={labelOf(props.reader.props.baselineLabel, bookId())}
-          currentLabel={labelOf(props.reader.props.currentLabel, bookId())}
+          baselineShort={props.reader.props.baselineShort}
+          currentShort={props.reader.props.currentShort}
           currentFirst={props.reader.props.currentFirst === true}
           allOf={props.reader.allOf}
           onDecide={props.reader.decideAll}

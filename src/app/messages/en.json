@@ -1223,7 +1223,6 @@
   "review_changes_in_book": "{changes} in {book}",
   "review_take_source_s_for_all": "Use {source}'s for all",
   "review_keep_source_s_for_all": "Use {source}'s for all",
-  "review_use_this_side_for_all": "Use this side for all",
   "review_clear_these_decisions": "Clear these decisions",
   "review_view": "View",
   "review_show": "Show",

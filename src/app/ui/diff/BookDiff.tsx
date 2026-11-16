@@ -51,7 +51,7 @@ export interface BookDiffProps {
   readonly split: boolean;
   readonly usfm: boolean;
   readonly controls: Controls | undefined;
-  /** A choice to stand above each column, side by side only. */
+  /** A choice to stand above each column in place of its label, side by side only. */
   readonly columnChoice?: ((side: MergeSide) => JSX.Element) | undefined;
   readonly currentLabel: string;
   readonly baselineLabel: string;
@@ -327,9 +327,11 @@ export function BookDiff(props: BookDiffProps) {
       <Show when={props.split}>
         <div class={cx("flex min-h-0 flex-col", props.currentFirst === true && "order-last")}>
           <div class="flex min-w-0 items-center gap-2 pb-1 text-smallest text-on-surface-tertiary">
-            <p class="truncate">{props.baselineLabel}</p>
-            <Show when={props.columnChoice}>
-              {(choice) => <span class="ms-auto shrink-0">{choice()("baseline")}</span>}
+            <Show
+              when={props.columnChoice}
+              fallback={<p class="truncate">{props.baselineLabel}</p>}
+            >
+              {(choice) => choice()("baseline")}
             </Show>
           </div>
           <div class="cm-diff-pane min-h-0 flex-1" ref={setLeft} />
@@ -337,14 +339,25 @@ export function BookDiff(props: BookDiffProps) {
       </Show>
       <div class="flex min-h-0 flex-col">
         <div class="flex min-w-0 items-center gap-2 pb-1 text-smallest text-on-surface-tertiary">
-          <p class="truncate">
-            {props.currentLabel}
-            <Show when={props.live !== undefined}>
-              <span class="text-brand"> · {m.diff_editable()}</span>
-            </Show>
-          </p>
-          <Show when={props.split ? props.columnChoice : undefined}>
-            {(choice) => <span class="ms-auto shrink-0">{choice()("current")}</span>}
+          <Show
+            when={props.split ? props.columnChoice : undefined}
+            fallback={
+              <p class="truncate">
+                {props.currentLabel}
+                <Show when={props.live !== undefined}>
+                  <span class="text-brand"> · {m.diff_editable()}</span>
+                </Show>
+              </p>
+            }
+          >
+            {(choice) => (
+              <>
+                {choice()("current")}
+                <Show when={props.live !== undefined}>
+                  <span class="truncate text-brand">{m.diff_editable()}</span>
+                </Show>
+              </>
+            )}
           </Show>
         </div>
         <div
