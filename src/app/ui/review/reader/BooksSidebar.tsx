@@ -49,12 +49,12 @@ function BookMenu(props: { readonly sidebar: BooksSidebarProps; readonly held: P
           props.sidebar.onDecide(props.held.book.bookId, props.held.shown, "baseline")
         }
       >
-        {m.review_take_all_of_source_s({ source: props.sidebar.baselineShort })}
+        {m.review_take_source_s_for_all({ source: props.sidebar.baselineShort })}
       </MenuItem>
       <MenuItem
         onSelect={() => props.sidebar.onDecide(props.held.book.bookId, props.held.shown, "current")}
       >
-        {m.review_keep_all_of_source_s({ source: props.sidebar.currentShort })}
+        {m.review_keep_source_s_for_all({ source: props.sidebar.currentShort })}
       </MenuItem>
       <MenuItem
         onSelect={() => props.sidebar.onDecide(props.held.book.bookId, props.held.shown, undefined)}

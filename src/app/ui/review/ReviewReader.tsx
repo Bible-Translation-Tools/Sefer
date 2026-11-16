@@ -22,7 +22,7 @@ import { createChapterNav, type ChapterNav } from "./reader/createChapterNav";
 import { createCursor, type Cursor } from "./reader/createCursor";
 import { createPrepared } from "./reader/createPrepared";
 import { createSeats } from "./reader/createSeats";
-import { DecideAll } from "./reader/DecideAll";
+import { ColumnChoice, ColumnChoices, DecideAll } from "./reader/DecideAll";
 import { chaptersOf, chapterWords, labelOf, toLayout } from "./reader/helpers";
 import { createMeasure } from "./reader/measure";
 import { ReaderToolbar } from "./reader/ReaderToolbar";
@@ -111,6 +111,8 @@ interface ReaderModel {
   readonly editable: () => boolean;
   readonly inScope: () => readonly Prepared[];
   readonly scopeCount: () => number;
+  readonly scopeDecided: () => number;
+  readonly allOf: (side: MergeSide) => boolean;
   readonly decideAll: (side: MergeSide | undefined) => void;
   readonly cardDecision: (hunk: Hunk) => readonly CardAction[];
   readonly expand: (key: string, step: ContextStep) => void;
@@ -218,7 +220,16 @@ function createScopeDecide(
     for (const held of untrack(inScope))
       if (held.shown.length > 0) props.decide(held.book.bookId, held.shown, side);
   };
-  return { inScope, scopeCount, decideAll };
+  const sidesInScope = (): readonly (MergeSide | undefined)[] =>
+    inScope().flatMap((held) =>
+      held.shown.map((unit) => props.decision(held.book.bookId, unit.id)),
+    );
+  const scopeDecided = (): number => sidesInScope().filter((side) => side !== undefined).length;
+  const allOf = (side: MergeSide): boolean => {
+    const sides = sidesInScope();
+    return sides.length > 0 && sides.every((each) => each === side);
+  };
+  return { inScope, scopeCount, scopeDecided, allOf, decideAll };
 }
 
 function cardDecisionFor(
@@ -305,7 +316,9 @@ function ReaderToolbarView(props: { readonly reader: ReaderModel }): JSX.Element
       decideAll={
         <DecideAll
           decidable={props.reader.props.decidable}
+          split={props.reader.split()}
           count={props.reader.scopeCount()}
+          decided={props.reader.scopeDecided()}
           scope={props.reader.scope()}
           bookName={props.reader.inScope()[0]?.book.name ?? ""}
           books={props.reader.inScope().filter((held) => held.shown.length > 0).length}
@@ -329,6 +342,17 @@ function WholeBookView(props: { readonly reader: ReaderModel }): JSX.Element {
       linked={props.reader.linked}
       onToggleLinked={() => props.reader.setLinked((on) => !on)}
       controls={(bookId) => props.reader.controls().get(bookId)}
+      columnChoice={
+        props.reader.props.decidable && props.reader.scopeCount() > 0
+          ? (side) => (
+              <ColumnChoice
+                side={side}
+                all={props.reader.allOf(side)}
+                onDecide={props.reader.decideAll}
+              />
+            )
+          : undefined
+      }
       currentLabel={(bookId) => labelOf(props.reader.props.currentLabel, bookId)}
       baselineLabel={(bookId) => labelOf(props.reader.props.baselineLabel, bookId)}
       currentFirst={props.reader.props.currentFirst === true}
@@ -354,6 +378,30 @@ function WholeBookView(props: { readonly reader: ReaderModel }): JSX.Element {
         },
       }}
     />
+  );
+}
+
+function ColumnChoicesView(props: { readonly reader: ReaderModel }): JSX.Element {
+  const first = (): BookId | undefined =>
+    props.reader.inScope().find((held) => held.shown.length > 0)?.book.bookId;
+  return (
+    <Show
+      when={
+        props.reader.props.decidable && props.reader.split() && props.reader.scopeCount() > 0
+          ? first()
+          : undefined
+      }
+    >
+      {(bookId) => (
+        <ColumnChoices
+          baselineLabel={labelOf(props.reader.props.baselineLabel, bookId())}
+          currentLabel={labelOf(props.reader.props.currentLabel, bookId())}
+          currentFirst={props.reader.props.currentFirst === true}
+          allOf={props.reader.allOf}
+          onDecide={props.reader.decideAll}
+        />
+      )}
+    </Show>
   );
 }
 
@@ -430,7 +478,7 @@ export function ReviewReader(props: ReviewReaderProps) {
     goToChapter: cursor.goToChapter,
   });
 
-  const { inScope, scopeCount, decideAll } = createScopeDecide(
+  const { inScope, scopeCount, scopeDecided, allOf, decideAll } = createScopeDecide(
     props,
     scope,
     prepared,
@@ -496,6 +544,8 @@ export function ReviewReader(props: ReviewReaderProps) {
     editable,
     inScope,
     scopeCount,
+    scopeDecided,
+    allOf,
     decideAll,
     cardDecision,
     expand,
@@ -516,6 +566,7 @@ export function ReviewReader(props: ReviewReaderProps) {
           </Show>
         }
       >
+        <ColumnChoicesView reader={reader} />
         <ChangeCardsView reader={reader} />
       </Show>
     </div>

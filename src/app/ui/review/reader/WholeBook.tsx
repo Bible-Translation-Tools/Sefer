@@ -3,7 +3,7 @@ import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import { Show, untrack } from "solid-js";
 
 import { m } from "#app/paraglide/messages";
-import type { DecisionUnit } from "#core/galley";
+import type { DecisionUnit, MergeSide } from "#core/galley";
 
 import { BookDiff, type BookDiffApi, type Controls } from "../../diff";
 import type { CrumbChapter } from "../../workspace/Crumbs";
@@ -28,6 +28,7 @@ interface WholeBookProps {
   readonly linked: () => boolean;
   readonly onToggleLinked: () => void;
   readonly controls: (bookId: BookId) => Controls | undefined;
+  readonly columnChoice: ((side: MergeSide) => JSX.Element) | undefined;
   readonly currentLabel: (bookId: BookId) => string;
   readonly baselineLabel: (bookId: BookId) => string;
   readonly currentFirst: boolean;
@@ -100,6 +101,7 @@ export function WholeBook(props: WholeBookProps): JSX.Element {
           split={props.split}
           usfm={props.usfm}
           controls={props.controls(held().book.bookId)}
+          columnChoice={props.columnChoice}
           currentLabel={props.currentLabel(held().book.bookId)}
           baselineLabel={props.baselineLabel(held().book.bookId)}
           currentFirst={props.currentFirst}

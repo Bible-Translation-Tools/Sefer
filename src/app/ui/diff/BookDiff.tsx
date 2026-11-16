@@ -1,3 +1,4 @@
+import type { JSX } from "@solidjs/web";
 import {
   createAlignedGroup,
   editorPolicy,
@@ -10,7 +11,7 @@ import {
 import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
 
 import { m } from "#app/paraglide/messages";
-import type { Analysis } from "#core/galley";
+import type { Analysis, MergeSide } from "#core/galley";
 import type { DecisionUnit } from "#core/galley/diff";
 
 import "@wycliffeassociates/sefer-editor/editor.css";
@@ -50,6 +51,8 @@ export interface BookDiffProps {
   readonly split: boolean;
   readonly usfm: boolean;
   readonly controls: Controls | undefined;
+  /** A choice to stand above each column, side by side only. */
+  readonly columnChoice?: ((side: MergeSide) => JSX.Element) | undefined;
   readonly currentLabel: string;
   readonly baselineLabel: string;
   readonly currentFirst?: boolean;
@@ -323,17 +326,27 @@ export function BookDiff(props: BookDiffProps) {
     >
       <Show when={props.split}>
         <div class={cx("flex min-h-0 flex-col", props.currentFirst === true && "order-last")}>
-          <p class="truncate pb-1 text-smallest text-on-surface-tertiary">{props.baselineLabel}</p>
+          <div class="flex min-w-0 items-center gap-2 pb-1 text-smallest text-on-surface-tertiary">
+            <p class="truncate">{props.baselineLabel}</p>
+            <Show when={props.columnChoice}>
+              {(choice) => <span class="ms-auto shrink-0">{choice()("baseline")}</span>}
+            </Show>
+          </div>
           <div class="cm-diff-pane min-h-0 flex-1" ref={setLeft} />
         </div>
       </Show>
       <div class="flex min-h-0 flex-col">
-        <p class="truncate pb-1 text-smallest text-on-surface-tertiary">
-          {props.currentLabel}
-          <Show when={props.live !== undefined}>
-            <span class="text-brand"> · {m.diff_editable()}</span>
+        <div class="flex min-w-0 items-center gap-2 pb-1 text-smallest text-on-surface-tertiary">
+          <p class="truncate">
+            {props.currentLabel}
+            <Show when={props.live !== undefined}>
+              <span class="text-brand"> · {m.diff_editable()}</span>
+            </Show>
+          </p>
+          <Show when={props.split ? props.columnChoice : undefined}>
+            {(choice) => <span class="ms-auto shrink-0">{choice()("current")}</span>}
           </Show>
-        </p>
+        </div>
         <div
           class={cx(
             "cm-diff-pane min-h-0 flex-1",
