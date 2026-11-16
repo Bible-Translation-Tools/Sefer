@@ -10,14 +10,14 @@ export function createDecisions() {
     name: "reviewDecisions",
   });
   const [receipt, setReceipt] = createSignal("", { name: "reviewReceipt" });
-  const [showChoices, setShowChoices] = createSignal(false, { name: "reviewShowChoices" });
+  const [showChoices, setShowChoices] = createSignal(true, { name: "reviewShowChoices" });
   const originals = new Map<BookId, string>();
 
   const startOver = (): void => {
     setDecisions(new Map());
     originals.clear();
     setReceipt("");
-    setShowChoices(false);
+    setShowChoices(true);
   };
 
   const decisionFor = (bookId: BookId, unitId: string): MergeSide | undefined =>
