@@ -41,21 +41,24 @@ interface ReviewBodyProps {
 function ReviewNotices(props: { readonly body: ReviewBodyProps }) {
   return (
     <>
-      <SyncLine
-        comparison={
-          props.body.compare.result() === undefined
-            ? undefined
-            : {
-                changes: props.body.units.totals().total,
-                books: props.body.compare.result()?.changedBooks ?? 0,
-                decided: props.body.units.totals().decided,
-              }
-        }
-        onSee={props.body.sides.seeShared}
-        seeing={props.body.sides.againstShared()}
-        onSeeWriter={() => props.body.sides.pick("right", "writer")}
-        seeingWriter={props.body.sides.againstWriter()}
-      />
+      {/* Tucked up to the title: the count belongs to the heading, not to the controls below. */}
+      <div class="-mt-1.5">
+        <SyncLine
+          comparison={
+            props.body.compare.result() === undefined
+              ? undefined
+              : {
+                  changes: props.body.units.totals().total,
+                  books: props.body.compare.result()?.changedBooks ?? 0,
+                  decided: props.body.units.totals().decided,
+                }
+          }
+          onSee={props.body.sides.seeShared}
+          seeing={props.body.sides.againstShared()}
+          onSeeWriter={() => props.body.sides.pick("right", "writer")}
+          seeingWriter={props.body.sides.againstWriter()}
+        />
+      </div>
       <Show when={props.body.route.pull()}>{(number) => <SuggestionLine number={number()} />}</Show>
       <Show when={props.body.route.pull() !== undefined && props.body.units.mineOnlyCount() > 0}>
         <p
@@ -159,7 +162,7 @@ function ReaderRegion(props: { readonly body: ReviewBodyProps }) {
   return (
     <div
       class={[
-        "flex min-h-0 flex-1 flex-col",
+        "mt-2 flex min-h-0 flex-1 flex-col",
         { hidden: props.body.settled && !props.body.decisions.showChoices() },
       ]}
       data-review-units={props.body.units.totals().total}
