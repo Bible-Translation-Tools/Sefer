@@ -664,6 +664,7 @@
   "find_next_match": "Próxima correspondência",
   "find_match_options": "Opções de correspondência",
   "find_match_case": "Diferenciar maiúsculas de minúsculas",
+  "find_match_accents": "Diferenciar acentos",
   "find_whole_word": "Palavra inteira",
   "find_regular_expression": "Expressão regular",
   "find_search_the_markup_not_the": "Buscar na marcação, não na leitura",

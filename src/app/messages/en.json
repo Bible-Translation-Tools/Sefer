@@ -715,6 +715,7 @@
   "find_next_match": "Next match",
   "find_match_options": "Match options",
   "find_match_case": "Match case",
+  "find_match_accents": "Match accents",
   "find_whole_word": "Whole word",
   "find_regular_expression": "Regular expression",
   "find_search_the_markup_not_the": "Search the markup, not the reading",

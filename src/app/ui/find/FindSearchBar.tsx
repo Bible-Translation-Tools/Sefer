@@ -1,5 +1,6 @@
 import CaseSensitiveIcon from "lucide-solid/icons/case-sensitive";
 import CodeIcon from "lucide-solid/icons/code";
+import LanguagesIcon from "lucide-solid/icons/languages";
 import RegexIcon from "lucide-solid/icons/regex";
 import SearchIcon from "lucide-solid/icons/search";
 import WholeWordIcon from "lucide-solid/icons/whole-word";
@@ -35,6 +36,13 @@ export function FindSearchBar(props: { query: FindQuery; commit: () => void }) {
           icon={<CaseSensitiveIcon />}
           aria-pressed={props.query.matchCase() ? "true" : "false"}
           onClick={() => props.query.setMatchCase((held) => !held)}
+        />
+        <IconButton
+          size="sm"
+          label={m.find_match_accents()}
+          icon={<LanguagesIcon />}
+          aria-pressed={props.query.matchAccents() ? "true" : "false"}
+          onClick={() => props.query.setMatchAccents((held) => !held)}
         />
         <IconButton
           size="sm"

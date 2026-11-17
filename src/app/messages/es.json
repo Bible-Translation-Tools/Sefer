@@ -670,6 +670,7 @@
   "find_next_match": "Coincidencia siguiente",
   "find_match_options": "Opciones de coincidencia",
   "find_match_case": "Coincidir mayúsculas y minúsculas",
+  "find_match_accents": "Distinguir acentos",
   "find_whole_word": "Palabra completa",
   "find_regular_expression": "Expresión regular",
   "find_search_the_markup_not_the": "Buscar en los marcadores, no en la vista de lectura",

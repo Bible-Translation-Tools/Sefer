@@ -22,6 +22,8 @@ export interface Query {
   readonly wholeWord?: boolean;
   readonly regex?: boolean;
   readonly unicode?: boolean;
+  /** Match `jesus` against `Jesús`: combining marks are ignored on both sides. */
+  readonly ignoreAccents?: boolean;
 }
 
 export interface Options {
@@ -157,7 +159,7 @@ const previewAt = (
 };
 
 const matcherFor = (query: Query): Result.Result<RegExp, SearchError> => {
-  const source = query.regex ? query.text : escapeLiteral(query.text);
+  const source = query.regex ? patternText(query) : escapeLiteral(patternText(query));
   const flags = `g${query.caseSensitive === true ? "" : "i"}${query.unicode === true ? "u" : ""}`;
   try {
     return Result.succeed(new RegExp(source, flags));
@@ -183,18 +185,54 @@ const patternToRun = (
   return Result.succeed(matcher.success);
 };
 
+const MARK = /\p{M}/gu;
+
+/**
+ * `text` with every combining mark removed, and where each of its UTF-16 units
+ * came from in the original. `at[i]` is the original offset of the character
+ * that produced folded unit `i`; `at[folded.length]` is `text.length`. A match
+ * `[from, to)` in the folded text is `[at[from], at[to])` in the original, so a
+ * mark left after the last letter (`e` + U+0301) stays inside the match and a
+ * Replace overwrites the whole accented letter.
+ *
+ * Only characters that carry a mark are decomposed: Hangul syllables and the
+ * like decompose to letters, not marks, and stay as they are.
+ */
+export const foldAccents = (text: string): { readonly folded: string; readonly at: Int32Array } => {
+  let folded = "";
+  const at: number[] = [];
+  let offset = 0;
+  for (const char of text) {
+    const decomposed = char.normalize("NFD");
+    const bare = decomposed.replace(MARK, "");
+    const kept = bare === decomposed ? char : bare;
+    folded += kept;
+    for (let unit = 0; unit < kept.length; unit += 1) at.push(offset);
+    offset += char.length;
+  }
+  at.push(text.length);
+  return { folded, at: Int32Array.from(at) };
+};
+
+const patternText = (query: Query): string =>
+  query.ignoreAccents === true ? foldAccents(query.text).folded : query.text;
+
 function* matchesIn(
   pattern: RegExp,
-  text: string,
+  original: string,
   wholeWord: boolean,
+  ignoreAccents = false,
 ): Generator<{ readonly from: number; readonly to: number }> {
+  const fold = ignoreAccents ? foldAccents(original) : undefined;
+  const text = fold?.folded ?? original;
   pattern.lastIndex = 0;
   for (let match = pattern.exec(text); match !== null; match = pattern.exec(text)) {
     const from = match.index;
     const to = from + match[0].length;
     if (to === from) pattern.lastIndex = from + 1;
     if (wholeWord && (isWordChar(text, from - 1) || isWordChar(text, to))) continue;
-    yield { from, to };
+    // SAFETY: `from` and `to` are offsets into `text`, and `at` has one entry past its end.
+    yield fold === undefined ? { from, to } : { from: fold.at[from]!, to: fold.at[to]! };
   }
 }
 
@@ -216,7 +254,12 @@ export const find = (
     const { text, stamp } = book.source();
     const addressOf = lazily(() => addressesOf(options?.analysisOf, book.id, book.id, text));
 
-    for (const { from, to } of matchesIn(pattern, text, query.wholeWord === true)) {
+    for (const { from, to } of matchesIn(
+      pattern,
+      text,
+      query.wholeWord === true,
+      query.ignoreAccents === true,
+    )) {
       hits.push({
         bookId: book.id,
         stamp,
@@ -254,7 +297,12 @@ export const findInReading = (
     const text = reading.text;
     const addressOf = lazily(() => addressesOf(options?.analysisOf, book.id, book.id, source.text));
 
-    for (const { from, to } of matchesIn(pattern, text, query.wholeWord === true)) {
+    for (const { from, to } of matchesIn(
+      pattern,
+      text,
+      query.wholeWord === true,
+      query.ignoreAccents === true,
+    )) {
       const pieces = reading.pieces(from, to);
       const first = pieces[0];
       if (first === undefined) continue;
@@ -356,7 +404,12 @@ export const findInReferences = (
       addressesOf(options?.analysisOf, reference.id, bookId, reference.text),
     );
 
-    for (const { from, to } of matchesIn(pattern, text, query.wholeWord === true)) {
+    for (const { from, to } of matchesIn(
+      pattern,
+      text,
+      query.wholeWord === true,
+      query.ignoreAccents === true,
+    )) {
       const first = reading.pieces(from, to)[0];
       if (first === undefined) continue;
       hits.push({
@@ -396,7 +449,12 @@ export const findInDocuments = (
   const hits: DocumentHit[] = [];
   for (const document of documents) {
     const { text } = document;
-    for (const { from, to } of matchesIn(pattern, text, query.wholeWord === true)) {
+    for (const { from, to } of matchesIn(
+      pattern,
+      text,
+      query.wholeWord === true,
+      query.ignoreAccents === true,
+    )) {
       hits.push({
         document: document.id,
         addresses: document.addresses,
