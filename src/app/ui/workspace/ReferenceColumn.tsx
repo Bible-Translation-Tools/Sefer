@@ -48,6 +48,7 @@ import Download from "lucide-solid/icons/download";
 import Globe from "lucide-solid/icons/globe";
 import MoreVertical from "lucide-solid/icons/more-vertical";
 import Pilcrow from "lucide-solid/icons/pilcrow";
+import Search from "lucide-solid/icons/search";
 import Trash from "lucide-solid/icons/trash-2";
 import X from "lucide-solid/icons/x";
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
@@ -61,7 +62,7 @@ import {
   type RelatedResource,
 } from "#core/resources/relationships";
 
-import { announceSourceTexts, libraryRevision, sourceTextCopy } from "../../arrival";
+import { announceSourceTexts, libraryRevision, ownerAndRepo, sourceTextCopy } from "../../arrival";
 import { listSourceTexts, listTranslationNotes, type ListedText } from "../../catalogue";
 import { findCommand, runCommand } from "../../commands";
 import { describe, remoteReasonOf } from "../../describe";
@@ -74,7 +75,7 @@ import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
 import { ResourcePane } from "../kinds/registry";
 import { listProjects, type ProjectSummary } from "../landing/summaries";
-import { Button, EmptyState, IconButton, Menu, MenuItem, Popover, cx } from "../primitives";
+import { Button, EmptyState, IconButton, Input, Menu, MenuItem, Popover, cx } from "../primitives";
 
 const ROLES: readonly Role[] = KIND_ROLES;
 
@@ -493,6 +494,8 @@ export function ReferenceColumn() {
         readonly key: string;
         readonly name: string;
         readonly resource: Resource;
+        /** `owner/repo`, when another text in the language has the same name. */
+        readonly detail?: string;
       }
     | {
         readonly kind: "project";
@@ -552,19 +555,36 @@ export function ReferenceColumn() {
       const add = (key: string, item: Item): void => {
         held.set(key, [...(held.get(key) ?? []), item]);
       };
-      // One row per text in a language: a ULB bound to the project and a
-      // downloaded ULB are the same text to the reader, so the first (the
-      // project's, as `installed` lists it) stands for both.
+      // One row per repository: the project's copy and a downloaded copy of
+      // the SAME repository are one text, the first (the project's, as
+      // `installed` lists it) standing for both. Two repositories are two
+      // rows even when they share a name (Will, 2026-11-17): WA's ULB and
+      // another organisation's can differ, so each says whose it is.
       const seen = new Set<string>();
+      const texts: Resource[] = [];
       for (const resource of installed()) {
-        const same = `${languageOf(resource)}:${shortName(resource)}`;
+        const same =
+          resource.upstream === undefined ? resource.id : normaliseRepoUrl(resource.upstream.url);
         if (seen.has(same)) continue;
         seen.add(same);
+        texts.push(resource);
+      }
+      const nameOf = (resource: Resource): string =>
+        isBible(resource) ? resource.title : m.reference_shelf_notes();
+      const named = (resource: Resource): string => `${languageOf(resource)}:${nameOf(resource)}`;
+      const counts = new Map<string, number>();
+      for (const resource of texts)
+        counts.set(named(resource), (counts.get(named(resource)) ?? 0) + 1);
+      for (const resource of texts) {
+        const upstream = resource.upstream;
+        const shared = (counts.get(named(resource)) ?? 0) > 1;
+        const whose = shared && upstream !== undefined ? ownerAndRepo(upstream.url) : undefined;
         add(languageOf(resource), {
           kind: "text",
           key: resource.id,
-          name: isBible(resource) ? resource.title : m.reference_shelf_notes(),
+          name: nameOf(resource),
           resource,
+          ...(whose === undefined ? {} : { detail: `${whose.owner}/${whose.repo}` }),
         });
       }
       for (const row of otherProjects())
@@ -589,6 +609,25 @@ export function ReferenceColumn() {
     { name: "referenceLanguages" },
   );
 
+  /**
+   * The filter at the top of the dropdown (Will, 2026-11-17): it narrows
+   * both groups, by language name, tag or a resource's name; the groups stay.
+   */
+  const [filter, setFilter] = createSignal("", { name: "referenceFilter" });
+  const passes = (language: Language): boolean => {
+    const wanted = filter().trim().toLowerCase();
+    if (wanted === "") return true;
+    return [language.name, language.key, ...language.items.map((item) => item.name)].some((said) =>
+      said.toLowerCase().includes(wanted),
+    );
+  };
+  const heldShown = createMemo(() => languages().held.filter(passes), {
+    name: "referenceHeldShown",
+  });
+  const toGetShown = createMemo(() => languages().toGet.filter(passes), {
+    name: "referenceToGetShown",
+  });
+
   /** Which languages are open in the dropdown; the one on show opens with it. */
   const [expanded, setExpanded] = createSignal<ReadonlySet<string>>(new Set(), {
     name: "referenceExpanded",
@@ -611,6 +650,7 @@ export function ReferenceColumn() {
   const manage = (open: boolean): void => {
     setManaging(open);
     if (!open) return;
+    setFilter("");
     offer();
     const key = shownLanguage();
     setExpanded(new Set(key === undefined ? [] : [key]));
@@ -660,9 +700,7 @@ export function ReferenceColumn() {
           else startSoon(item.key, () => item.download());
         }}
       >
-        <span class="min-w-0 flex-1 truncate" title={item.name}>
-          {item.name}
-        </span>
+        <span class="min-w-0 flex-1 break-words">{item.name}</span>
         <Show
           when={item.pulling()}
           fallback={
@@ -709,8 +747,13 @@ export function ReferenceColumn() {
             setManaging(false);
           }}
         >
-          <span class="min-w-0 flex-1 truncate" title={item.name}>
-            {item.name}
+          <span class="flex min-w-0 flex-1 flex-col">
+            <span class="break-words">{item.name}</span>
+            <Show when={item.kind === "text" ? item.detail : undefined}>
+              {(detail) => (
+                <span class="break-all text-caption text-on-surface-tertiary">({detail()})</span>
+              )}
+            </Show>
           </span>
           <Show when={current()}>
             <CircleCheck aria-label={m.reference_showing()} class="size-5 shrink-0" />
@@ -741,10 +784,9 @@ export function ReferenceColumn() {
             <span class="flex min-w-0 flex-1 flex-col">
               <span
                 class={cx(
-                  "truncate font-medium",
+                  "break-words font-medium",
                   active() ? "text-brand" : "text-on-surface-primary",
                 )}
-                title={rowProps.language.name}
               >
                 {rowProps.language.name}
               </span>
@@ -833,46 +875,34 @@ export function ReferenceColumn() {
 
   const GROUP_HEAD = "flex items-center gap-3 p-3 text-small font-semibold text-on-surface-primary";
 
-  /** The formatting commands, by the text they read from (Thomas, 2026-11-16). */
-  const FormatMenu = () => (
-    <Menu
-      label={m.refine_formatting()}
-      side="bottom"
-      align="end"
-      class="w-64"
-      fitViewport
-      trigger={
-        <IconButton
-          data-testid="reference-formatting"
-          label={m.refine_formatting()}
-          icon={<Pilcrow />}
-        />
-      }
-    >
-      <MenuItem
+  /**
+   * Formatting: one control (Thomas, 2026-11-16; Will, 2026-11-17). It
+   * matches every book's formatting to the Bible on show here, so the ¶
+   * acts on the text beside it. Format book and Format project stay in the
+   * command palette.
+   */
+  const FormatButton = () => {
+    const bible = (): Resource | undefined => {
+      const entry = shown()?.entry;
+      return entry !== undefined && entry.role === "source" ? entry.resource : undefined;
+    };
+    return (
+      <IconButton
         data-testid="toolbar-overlay"
-        class={ROW}
-        disabled={findCommand("overlay.book")?.available() !== true}
-        onSelect={() => runCommand("overlay.book")}
-      >
-        {m.workspace_match_formatting_from_source()}
-      </MenuItem>
-      <MenuItem
-        class={ROW}
-        data-testid="kebab-format-book"
-        onSelect={() => runCommand("format.book")}
-      >
-        {m.common_format_book()}
-      </MenuItem>
-      <MenuItem
-        class={ROW}
-        data-testid="kebab-format-project"
-        onSelect={() => runCommand("format.project")}
-      >
-        {m.workspace_format_project()}
-      </MenuItem>
-    </Menu>
-  );
+        label={
+          bible() === undefined
+            ? m.refine_formatting()
+            : m.reference_match_formatting_to({ name: bible()!.title })
+        }
+        icon={<Pilcrow />}
+        disabled={bible() === undefined || findCommand("overlay.project")?.available() !== true}
+        onClick={() => {
+          const resource = bible();
+          if (resource !== undefined) runCommand("overlay.project", resource.id);
+        }}
+      />
+    );
+  };
 
   const GatewayPicker = () => (
     <div data-testid="gateway-picker" class="flex w-full shrink-0 items-center gap-controls">
@@ -916,18 +946,27 @@ export function ReferenceColumn() {
           data-testid="language-list"
           class="scrollbar-padded flex max-h-[min(70vh,32rem)] flex-col overflow-y-auto py-2"
         >
-          <h3 class={GROUP_HEAD}>
-            {m.reference_installed_count({ count: languages().held.length })}
-          </h3>
+          <div class="px-3 pb-2">
+            <Input
+              data-testid="reference-filter"
+              wrapperClass="w-full"
+              type="search"
+              value={filter()}
+              placeholder={m.reference_filter_languages()}
+              aria-label={m.reference_filter_languages()}
+              icon={<Search aria-hidden="true" />}
+              onInput={(event) => setFilter(event.currentTarget.value)}
+            />
+          </div>
+          <h3 class={GROUP_HEAD}>{m.reference_installed_count({ count: heldShown().length })}</h3>
           <ul>
-            <For each={languages().held}>
-              {(language) => <LanguageRow language={language} held />}
-            </For>
+            <For each={heldShown()}>{(language) => <LanguageRow language={language} held />}</For>
           </ul>
-          <span aria-hidden="true" class="my-2 block h-px bg-surface-border" />
+          {/* The two groups read as two (Will, 2026-11-17): the panel's 2px rule between them. */}
+          <span aria-hidden="true" class="my-3 block h-0.5 shrink-0 bg-surface-border" />
           <div class={GROUP_HEAD}>
             <h3 class="min-w-0 flex-1">
-              {m.reference_available_count({ count: languages().toGet.length })}
+              {m.reference_available_count({ count: toGetShown().length })}
             </h3>
             {/* Sideloading a reference text has no flow yet; the place is held for it. */}
             <button
@@ -944,13 +983,13 @@ export function ReferenceColumn() {
             <p class="p-3 text-small text-on-surface-tertiary">{m.reference_list_loading()}</p>
           </Show>
           <ul>
-            <For each={languages().toGet}>
+            <For each={toGetShown()}>
               {(language) => <LanguageRow language={language} held={false} />}
             </For>
           </ul>
         </div>
       </Popover>
-      <FormatMenu />
+      <FormatButton />
     </div>
   );
 

@@ -850,11 +850,27 @@ const overlayFocused = (bridge: ShellBridge, scope: "chapter" | "book") =>
     );
   });
 
-const overlayProject = (bridge: ShellBridge, multibook: Helpers["multibook"]) =>
+/**
+ * The text to match formatting to: the one the reference pane shows when it
+ * names one (Will, 2026-11-17: any two texts, not only the manifest's
+ * source), else the project's bound source (the command palette).
+ */
+const overlaySource = (bridge: ShellBridge, projectRoot: string, resourceId: string | undefined) =>
+  resourceId === undefined
+    ? boundSource(bridge, projectRoot)
+    : Effect.map(bridge.services.library.resources(), (held) =>
+        held.find((resource) => resource.id === resourceId),
+      );
+
+const overlayProject = (
+  bridge: ShellBridge,
+  multibook: Helpers["multibook"],
+  resourceId?: string,
+) =>
   Effect.gen(function* () {
     const project = bridge.project();
     if (project === undefined) return;
-    const source = yield* boundSource(bridge, project.root);
+    const source = yield* overlaySource(bridge, project.root, resourceId);
     if (source === undefined) {
       bridge.report(m.command_no_source_text_is_bound());
       return;
@@ -999,7 +1015,8 @@ const overlayCommands = (bridge: ShellBridge, h: Helpers) => {
       id: "overlay.project",
       title: m.command_match_formatting_from_source_every,
       when: hasProject,
-      run: () => overlayProject(bridge, h.multibook),
+      run: (argument) =>
+        overlayProject(bridge, h.multibook, typeof argument === "string" ? argument : undefined),
     }),
   ];
 };

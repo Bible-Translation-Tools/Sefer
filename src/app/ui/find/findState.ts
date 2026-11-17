@@ -22,7 +22,7 @@ export interface FindSource {
 }
 
 /** A match Replace changed: kept in the list, highlighted, until the box closes. */
-export interface Replaced {
+interface Replaced {
   readonly bookId: BookId;
   readonly from: number;
   readonly to: number;

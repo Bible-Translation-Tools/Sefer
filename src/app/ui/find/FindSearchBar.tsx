@@ -1,6 +1,5 @@
 import CaseSensitiveIcon from "lucide-solid/icons/case-sensitive";
 import CodeIcon from "lucide-solid/icons/code";
-import LanguagesIcon from "lucide-solid/icons/languages";
 import RegexIcon from "lucide-solid/icons/regex";
 import SearchIcon from "lucide-solid/icons/search";
 import WholeWordIcon from "lucide-solid/icons/whole-word";
@@ -40,7 +39,7 @@ export function FindSearchBar(props: { query: FindQuery; commit: () => void }) {
         <IconButton
           size="sm"
           label={m.find_match_accents()}
-          icon={<LanguagesIcon />}
+          icon={<AccentGlyph />}
           aria-pressed={props.query.matchAccents() ? "true" : "false"}
           onClick={() => props.query.setMatchAccents((held) => !held)}
         />
@@ -70,5 +69,20 @@ export function FindSearchBar(props: { query: FindQuery; commit: () => void }) {
         {m.common_find()}
       </Button>
     </div>
+  );
+}
+
+/**
+ * An `é` drawn in the same 24-unit box as the Lucide icons beside it, so the
+ * button's size rule and its pressed colour reach it as they reach Match case's
+ * `Aa`. Lucide has no accent icon.
+ */
+function AccentGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <text x="12" y="17" text-anchor="middle" font-size="16" font-weight="600">
+        é
+      </text>
+    </svg>
   );
 }
