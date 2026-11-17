@@ -86,6 +86,10 @@ describe("find ignoring accents", () => {
     expect(spans("בְּרֵאשִׁית בראשית", "בְּרֵאשִׁית")).toEqual(["בְּרֵאשִׁית", "בראשית"]);
   });
 
+  test("a query of marks alone finds nothing", () => {
+    expect(spans(text, "\u0301\u0301")).toEqual([]);
+  });
+
   test("with accents matched, only the exact spelling is found", () => {
     expect(spans(text, "jesus", false)).toEqual(["jesus", "Jesus"]);
   });

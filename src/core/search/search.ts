@@ -158,8 +158,8 @@ const previewAt = (
   };
 };
 
-const matcherFor = (query: Query): Result.Result<RegExp, SearchError> => {
-  const source = query.regex ? patternText(query) : escapeLiteral(patternText(query));
+const matcherFor = (query: Query, text: string): Result.Result<RegExp, SearchError> => {
+  const source = query.regex ? text : escapeLiteral(text);
   const flags = `g${query.caseSensitive === true ? "" : "i"}${query.unicode === true ? "u" : ""}`;
   try {
     return Result.succeed(new RegExp(source, flags));
@@ -178,8 +178,10 @@ const patternToRun = (
   query: Query,
   limit: number | undefined,
 ): Result.Result<RegExp | null, SearchError> => {
-  if (query.text === "") return Result.succeed(null);
-  const matcher = matcherFor(query);
+  // Checked after folding: a query of marks alone folds to nothing, which would match everywhere.
+  const text = patternText(query);
+  if (text === "") return Result.succeed(null);
+  const matcher = matcherFor(query, text);
   if (Result.isFailure(matcher)) return Result.fail(matcher.failure);
   if (limit !== undefined && limit <= 0) return Result.succeed(null);
   return Result.succeed(matcher.success);
