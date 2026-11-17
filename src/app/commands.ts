@@ -80,7 +80,9 @@ const [registry, setRegistry] = createSignal<readonly Command[]>([], {
 export const availableCommands = (): readonly Command[] =>
   registry().filter((command) => command.available());
 
-let runner: ((effect: Effect.Effect<unknown, unknown, Domain | Scope.Scope>) => void) | undefined;
+let runner:
+  | ((effect: Effect.Effect<unknown, unknown, Domain | Scope.Scope>) => Promise<void>)
+  | undefined;
 
 let narrator: ObservabilityService | undefined;
 
@@ -89,7 +91,7 @@ const setCommandObservability = (observability: ObservabilityService): void => {
 };
 
 const setCommandRunner = (
-  run: (effect: Effect.Effect<unknown, unknown, Domain | Scope.Scope>) => void,
+  run: (effect: Effect.Effect<unknown, unknown, Domain | Scope.Scope>) => Promise<void>,
 ): void => {
   runner = run;
 };
@@ -105,21 +107,26 @@ export const registerCommand = (spec: CommandSpec): (() => void) => {
 export const findCommand = (id: string): Command | undefined =>
   registry().find((command) => command.id === id);
 
-export const runCommand = (id: string, argument?: unknown): void => {
+/**
+ * Runs a command and settles when it has finished, for a control that shows
+ * it working (the reference panel's ¶ spinner). Failures are reported by the
+ * runner, so this never rejects.
+ */
+export const runCommandAndWait = (id: string, argument?: unknown): Promise<void> => {
   const command = findCommand(id);
-  if (command === undefined || !command.available()) return;
+  if (command === undefined || !command.available()) return Promise.resolve();
   const gesture = narrator?.operation(`command.${id}`);
   const outcome = command.run(argument);
   if (outcome === undefined) {
     gesture?.end("ready");
-    return;
+    return Promise.resolve();
   }
   if (Effect.isEffect(outcome)) {
     if (runner === undefined) {
       gesture?.end("failed");
       throw new Error(`command ${id} returned an Effect before a command runner was installed`);
     }
-    runner(
+    return runner(
       Effect.onExit(
         gesture === undefined ? outcome : Effect.provideService(outcome, Observability, gesture),
         (exit) =>
@@ -128,10 +135,16 @@ export const runCommand = (id: string, argument?: unknown): void => {
           }),
       ),
     );
-    return;
   }
   gesture?.end("ready");
-  void outcome;
+  return Promise.resolve(outcome).then(
+    () => undefined,
+    () => undefined,
+  );
+};
+
+export const runCommand = (id: string, argument?: unknown): void => {
+  void runCommandAndWait(id, argument);
 };
 
 const MOD = (event: KeyboardEvent): boolean => (event.metaKey ? true : event.ctrlKey);
@@ -1024,11 +1037,14 @@ const overlayCommands = (bridge: ShellBridge, h: Helpers) => {
 export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
   const { services } = bridge;
   setCommandObservability(services.composition.observability);
-  setCommandRunner((effect) => {
-    void services.run(effect).catch((cause: unknown) => {
-      bridge.report(m.command_failed_cause({ cause: String(cause) }));
-    });
-  });
+  setCommandRunner((effect) =>
+    services.run(effect).then(
+      () => undefined,
+      (cause: unknown) => {
+        bridge.report(m.command_failed_cause({ cause: String(cause) }));
+      },
+    ),
+  );
   const h = shellHelpers(bridge);
   const registrations = [
     ...paletteCommands(bridge),
