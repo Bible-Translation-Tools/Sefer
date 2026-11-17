@@ -34,6 +34,28 @@ describe("foldAccents", () => {
   test("leaves characters without marks alone, Hangul included", () => {
     expect(foldAccents("한국 \u{1F600}").folded).toBe("한국 \u{1F600}");
   });
+
+  test("folds Spanish accents and Hebrew points", () => {
+    expect(foldAccents("Jesús, María, niño").folded).toBe("Jesus, Maria, nino");
+    expect(foldAccents("e\u0301").folded).toBe("e");
+    expect(foldAccents("בְּרֵאשִׁית").folded).toBe("בראשית");
+  });
+
+  test("keeps vowel signs and viramas, which are letters to their readers", () => {
+    for (const word of ["कुत्ता", "किताब", "ที่", "क़"]) expect(foldAccents(word).folded).toBe(word);
+  });
+
+  test("keeps the punctuation among the Hebrew marks", () => {
+    expect(foldAccents("בֵּית־אֵל׀ ׃").folded).toBe("בית־אל׀ ׃");
+  });
+
+  test("maps a Hebrew word back across its points", () => {
+    const text = "בְּרֵאשִׁית";
+    const { folded, at } = foldAccents(text);
+    const from = folded.indexOf("רא");
+    // SAFETY: `from` and `from + 2` are offsets into `folded`, which `at` covers.
+    expect(text.slice(at[from]!, at[from + 2]!)).toBe("רֵא");
+  });
 });
 
 describe("find ignoring accents", () => {
@@ -54,6 +76,14 @@ describe("find ignoring accents", () => {
 
   test("a match ending on a decomposed letter keeps its mark", () => {
     expect(spans("café!", "cafe")).toEqual(["café"]);
+  });
+
+  test("a Hindi query needs its vowel signs", () => {
+    expect(spans("कुत्ता कत्त", "कुत्ता")).toEqual(["कुत्ता"]);
+  });
+
+  test("a pointed Hebrew query finds the word with or without points", () => {
+    expect(spans("בְּרֵאשִׁית בראשית", "בְּרֵאשִׁית")).toEqual(["בְּרֵאשִׁית", "בראשית"]);
   });
 
   test("with accents matched, only the exact spelling is found", () => {

@@ -22,7 +22,7 @@ export interface Query {
   readonly wholeWord?: boolean;
   readonly regex?: boolean;
   readonly unicode?: boolean;
-  /** Match `jesus` against `Jesús`: combining marks are ignored on both sides. */
+  /** Match `jesus` against `Jesús`: accent marks are ignored on both sides. */
   readonly ignoreAccents?: boolean;
 }
 
@@ -185,18 +185,30 @@ const patternToRun = (
   return Result.succeed(matcher.success);
 };
 
-const MARK = /\p{M}/gu;
+/**
+ * The marks a search that ignores accents leaves out: the combining diacritics
+ * (Greek accents and breathings decompose into U+0300–036F, so they are here
+ * too), Hebrew points and cantillation, and Arabic harakat and Quranic marks.
+ *
+ * NOT every `\p{M}`. Vowel signs and viramas are marks too, and they are
+ * letters to the people who read them: without them Hindi किताब is कतब and Thai
+ * ที่ is ท. The Hebrew and Arabic blocks hold punctuation and signs among their
+ * marks — maqaf, paseq, sof pasuq, nun hafukha, the end of ayah — and those
+ * stay, so a search for בית־אל still needs its maqaf.
+ */
+const FOLDABLE =
+  /[\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f\u0591-\u05bd\u05bf\u05c1\u05c2\u05c4\u05c5\u05c7\u064b-\u065f\u0670\u06d6-\u06dc\u06df-\u06e4\u06e7\u06e8\u06ea-\u06ed]/gu;
 
 /**
- * `text` with every combining mark removed, and where each of its UTF-16 units
+ * `text` with its accent marks removed, and where each of its UTF-16 units
  * came from in the original. `at[i]` is the original offset of the character
  * that produced folded unit `i`; `at[folded.length]` is `text.length`. A match
  * `[from, to)` in the folded text is `[at[from], at[to])` in the original, so a
  * mark left after the last letter (`e` + U+0301) stays inside the match and a
  * Replace overwrites the whole accented letter.
  *
- * Only characters that carry a mark are decomposed: Hangul syllables and the
- * like decompose to letters, not marks, and stay as they are.
+ * A character whose decomposition holds no foldable mark keeps its original
+ * form, so a Devanagari nukta letter or a Hangul syllable is never rewritten.
  */
 export const foldAccents = (text: string): { readonly folded: string; readonly at: Int32Array } => {
   let folded = "";
@@ -204,7 +216,7 @@ export const foldAccents = (text: string): { readonly folded: string; readonly a
   let offset = 0;
   for (const char of text) {
     const decomposed = char.normalize("NFD");
-    const bare = decomposed.replace(MARK, "");
+    const bare = decomposed.replace(FOLDABLE, "");
     const kept = bare === decomposed ? char : bare;
     folded += kept;
     for (let unit = 0; unit < kept.length; unit += 1) at.push(offset);
