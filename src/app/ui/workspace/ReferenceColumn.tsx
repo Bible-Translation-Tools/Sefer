@@ -62,7 +62,7 @@ import {
   type RelatedResource,
 } from "#core/resources/relationships";
 
-import { announceSourceTexts, libraryRevision, sourceTextCopy } from "../../arrival";
+import { announceSourceTexts, libraryRevision, ownerAndRepo, sourceTextCopy } from "../../arrival";
 import { listSourceTexts, listTranslationNotes, type ListedText } from "../../catalogue";
 import { findCommand, runCommand } from "../../commands";
 import { describe, remoteReasonOf } from "../../describe";
@@ -494,6 +494,8 @@ export function ReferenceColumn() {
         readonly key: string;
         readonly name: string;
         readonly resource: Resource;
+        /** `owner/repo`, when another text in the language has the same name. */
+        readonly detail?: string;
       }
     | {
         readonly kind: "project";
@@ -553,19 +555,36 @@ export function ReferenceColumn() {
       const add = (key: string, item: Item): void => {
         held.set(key, [...(held.get(key) ?? []), item]);
       };
-      // One row per text in a language: a ULB bound to the project and a
-      // downloaded ULB are the same text to the reader, so the first (the
-      // project's, as `installed` lists it) stands for both.
+      // One row per repository: the project's copy and a downloaded copy of
+      // the SAME repository are one text, the first (the project's, as
+      // `installed` lists it) standing for both. Two repositories are two
+      // rows even when they share a name (Will, 2026-11-17): WA's ULB and
+      // another organisation's can differ, so each says whose it is.
       const seen = new Set<string>();
+      const texts: Resource[] = [];
       for (const resource of installed()) {
-        const same = `${languageOf(resource)}:${shortName(resource)}`;
+        const same =
+          resource.upstream === undefined ? resource.id : normaliseRepoUrl(resource.upstream.url);
         if (seen.has(same)) continue;
         seen.add(same);
+        texts.push(resource);
+      }
+      const nameOf = (resource: Resource): string =>
+        isBible(resource) ? resource.title : m.reference_shelf_notes();
+      const named = (resource: Resource): string => `${languageOf(resource)}:${nameOf(resource)}`;
+      const counts = new Map<string, number>();
+      for (const resource of texts)
+        counts.set(named(resource), (counts.get(named(resource)) ?? 0) + 1);
+      for (const resource of texts) {
+        const upstream = resource.upstream;
+        const shared = (counts.get(named(resource)) ?? 0) > 1;
+        const whose = shared && upstream !== undefined ? ownerAndRepo(upstream.url) : undefined;
         add(languageOf(resource), {
           kind: "text",
           key: resource.id,
-          name: isBible(resource) ? resource.title : m.reference_shelf_notes(),
+          name: nameOf(resource),
           resource,
+          ...(whose === undefined ? {} : { detail: `${whose.owner}/${whose.repo}` }),
         });
       }
       for (const row of otherProjects())
@@ -728,7 +747,14 @@ export function ReferenceColumn() {
             setManaging(false);
           }}
         >
-          <span class="min-w-0 flex-1 break-words">{item.name}</span>
+          <span class="flex min-w-0 flex-1 flex-col">
+            <span class="break-words">{item.name}</span>
+            <Show when={item.kind === "text" ? item.detail : undefined}>
+              {(detail) => (
+                <span class="break-all text-caption text-on-surface-tertiary">({detail()})</span>
+              )}
+            </Show>
+          </span>
           <Show when={current()}>
             <CircleCheck aria-label={m.reference_showing()} class="size-5 shrink-0" />
           </Show>

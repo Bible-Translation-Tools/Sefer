@@ -55,7 +55,8 @@ const libraryChanged = (): void => {
 };
 export const noteLibraryChanged = libraryChanged;
 
-const ownerAndRepo = (url: string): { readonly owner: string; readonly repo: string } => {
+/** A repository address's owner and name, as the Library stores it (lower case). */
+export const ownerAndRepo = (url: string): { readonly owner: string; readonly repo: string } => {
   const parts = normaliseRepoUrl(url).split("/");
   return { repo: parts.at(-1) ?? "repo", owner: parts.at(-2) ?? "unknown" };
 };
