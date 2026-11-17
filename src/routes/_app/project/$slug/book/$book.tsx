@@ -79,9 +79,9 @@ function EditorPanel(props: { readonly book: EditorBook; readonly split?: boolea
       // The page is grey; only the editor and the book menu are white. No
       // outline: the white is the edge. Line by line's own verse boxes sit
       // on the white.
-      // As wide as the text and no wider: it fits its content, and the text
-      // column caps itself at 60ch of the editor's font (editor.css), which a
-      // width set here, in the interface's font, could not match.
+      // As wide as the text and no wider: it fits its content, the ruler
+      // below, which is 60ch of the editor's font (a width set here, in the
+      // interface's font, could not match it).
       // Split, it sits in a column and grows DOWN (`flex-1`); alone, it
       // sits in a row, where `flex-1` would grow it across, so it keeps its
       // width there (`flex-none`) and the row's stretch gives it the height.
@@ -125,9 +125,23 @@ function EditorPanel(props: { readonly book: EditorBook; readonly split?: boolea
           </BookTools>
         </div>
       </div>
+      {/* The panel's width, in every view (Will, 2026-11-17): a zero-height
+          ruler 60ch of the editor's reading font wide, plus the text's 3rem a
+          side less the scrollbar, as `.cm-mode-regular .cm-content` has it.
+          `w-fit` hugs this, and the editor below adds nothing to that width
+          (`w-0 min-w-full`), so USFM's long lines no longer widen the panel. */}
+      <div
+        aria-hidden="true"
+        class="h-0 max-w-full"
+        style={{
+          "font-family": "var(--font-scripture)",
+          "font-size": "var(--editor-font-size, 18px)",
+          width: "calc(var(--editor-measure) + 6rem - 12px)",
+        }}
+      />
       {/* No side padding: the scroller runs to the panel's edge, so its
           scrollbar sits flush right; the text keeps its own inset (editor.css). */}
-      <div class="flex min-h-0 flex-1 flex-col">
+      <div class="flex min-h-0 w-0 min-w-full flex-1 flex-col">
         <Show when={props.book.id} keyed>
           <BookEditor book={props.book} />
         </Show>
