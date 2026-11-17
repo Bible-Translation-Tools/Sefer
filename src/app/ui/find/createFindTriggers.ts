@@ -17,7 +17,7 @@ export interface TriggersInputs {
 
 export function createFindTriggers(inputs: TriggersInputs) {
   const { asked, scope, run, updateSearch } = inputs;
-  const { text, setText, matchCase, wholeWord, regex, markup } = inputs.query;
+  const { text, setText, matchCase, matchAccents, wholeWord, regex, markup } = inputs.query;
   const { custom } = inputs.books;
   const { bound } = inputs.sources;
 
@@ -44,7 +44,14 @@ export function createFindTriggers(inputs: TriggersInputs) {
 
   let toggled = false;
   createEffect(
-    () => [matchCase(), wholeWord(), regex(), markup(), scope() === "custom" ? custom() : 0],
+    () => [
+      matchCase(),
+      matchAccents(),
+      wholeWord(),
+      regex(),
+      markup(),
+      scope() === "custom" ? custom() : 0,
+    ],
     () => {
       if (!toggled) {
         toggled = true;
