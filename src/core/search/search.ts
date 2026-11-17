@@ -198,6 +198,30 @@ const patternToRun = (
  */
 const FOLDABLE =
   /[\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f\u0591-\u05bd\u05bf\u05c1\u05c2\u05c4\u05c5\u05c7\u064b-\u065f\u0670\u06d6-\u06dc\u06df-\u06e4\u06e7\u06e8\u06ea-\u06ed]/gu;
+const ANY_FOLDABLE = new RegExp(FOLDABLE.source, "u");
+
+/** Below À nothing decomposes, so those characters skip normalisation. */
+const FIRST_DECOMPOSABLE = 0xc0;
+
+/**
+ * What one character becomes, or `null` when it stays as written. A character
+ * whose decomposition holds no foldable mark keeps its original form, so a
+ * Devanagari nukta letter or a Hangul syllable is never rewritten.
+ */
+const foldedChars = new Map<number, string | null>();
+
+const foldedChar = (point: number, char: string): string | null => {
+  const held = foldedChars.get(point);
+  if (held !== undefined) return held;
+  const decomposed = char.normalize("NFD");
+  const bare = decomposed.replace(FOLDABLE, "");
+  const folded = bare === decomposed ? null : bare;
+  foldedChars.set(point, folded);
+  return folded;
+};
+
+/** Whether folding could change `text` at all. A Hindi or Thai Bible cannot, nor plain ASCII. */
+const hasFoldable = (text: string): boolean => ANY_FOLDABLE.test(text.normalize("NFD"));
 
 /**
  * `text` with its accent marks removed, and where each of its UTF-16 units
@@ -206,24 +230,39 @@ const FOLDABLE =
  * `[from, to)` in the folded text is `[at[from], at[to])` in the original, so a
  * mark left after the last letter (`e` + U+0301) stays inside the match and a
  * Replace overwrites the whole accented letter.
- *
- * A character whose decomposition holds no foldable mark keeps its original
- * form, so a Devanagari nukta letter or a Hangul syllable is never rewritten.
  */
 export const foldAccents = (text: string): { readonly folded: string; readonly at: Int32Array } => {
-  let folded = "";
-  const at: number[] = [];
-  let offset = 0;
-  for (const char of text) {
-    const decomposed = char.normalize("NFD");
-    const bare = decomposed.replace(FOLDABLE, "");
-    const kept = bare === decomposed ? char : bare;
-    folded += kept;
-    for (let unit = 0; unit < kept.length; unit += 1) at.push(offset);
-    offset += char.length;
+  let at = new Int32Array(text.length + 1);
+  const parts: string[] = [];
+  let run = 0;
+  let out = 0;
+  let index = 0;
+  while (index < text.length) {
+    if (text.charCodeAt(index) < FIRST_DECOMPOSABLE) {
+      at[out++] = index++;
+      continue;
+    }
+    // SAFETY: `index` is inside `text`.
+    const point = text.codePointAt(index)!;
+    const width = point > 0xffff ? 2 : 1;
+    const folded = foldedChar(point, text.slice(index, index + width));
+    if (folded === null) {
+      for (let unit = 0; unit < width; unit += 1) at[out++] = index;
+    } else {
+      if (out + folded.length >= at.length) {
+        const grown = new Int32Array(Math.max(at.length * 2, out + folded.length + 1));
+        grown.set(at);
+        at = grown;
+      }
+      parts.push(text.slice(run, index), folded);
+      for (let unit = 0; unit < folded.length; unit += 1) at[out++] = index;
+      run = index + width;
+    }
+    index += width;
   }
-  at.push(text.length);
-  return { folded, at: Int32Array.from(at) };
+  parts.push(text.slice(run));
+  at[out] = text.length;
+  return { folded: parts.join(""), at: at.subarray(0, out + 1) };
 };
 
 const patternText = (query: Query): string =>
@@ -235,7 +274,7 @@ function* matchesIn(
   wholeWord: boolean,
   ignoreAccents = false,
 ): Generator<{ readonly from: number; readonly to: number }> {
-  const fold = ignoreAccents ? foldAccents(original) : undefined;
+  const fold = ignoreAccents && hasFoldable(original) ? foldAccents(original) : undefined;
   const text = fold?.folded ?? original;
   pattern.lastIndex = 0;
   for (let match = pattern.exec(text); match !== null; match = pattern.exec(text)) {
