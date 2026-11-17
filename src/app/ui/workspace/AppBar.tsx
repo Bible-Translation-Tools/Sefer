@@ -24,7 +24,7 @@ import { useShell } from "../../ProjectContext";
 import { SyncChip } from "../cloud/SyncButton";
 import { IconButton, Kbd, Menu, MenuItem, MenuSeparator, SegmentedControl } from "../primitives";
 import { AccountButton } from "./AccountButton";
-import { NetworkChip, SaveStatus } from "./StatusChips";
+import { NetworkChip, SaveButton } from "./StatusChips";
 
 function BarButton(props: {
   readonly label: string;
@@ -358,7 +358,6 @@ export function AppBar() {
           }
         >
           <SyncChip />
-          <SaveStatus />
         </Show>
       </div>
 
@@ -366,6 +365,7 @@ export function AppBar() {
 
       <div class="flex shrink-0 items-center gap-2">
         <Show when={open()}>
+          <SaveButton />
           <BarButton
             label={m.common_undo()}
             testId="toolbar-undo"

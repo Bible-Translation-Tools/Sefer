@@ -1,0 +1,101 @@
+---
+id: dda1e441-657a-4d72-b3a1-1db7633ac754
+title: "Reference picker: formatting, whole-language downloads, and the language menu"
+kind: note
+status: discussing
+created: 2026-11-16
+updated: 2026-11-16
+sha: 77817c82
+tags: [reference, formatting, downloads]
+---
+
+For paisano, from Thomas (2026-11-16). The reference panel's language dropdown is now grouped into
+**Installed on device** and **Available to download**. Each language is an accordion of its
+resources, and the ULB | Notes segmented control is gone. Formatting moved from the editor's ⋮
+menu to a ¶ button beside the language dropdown (`src/app/ui/workspace/ReferenceColumn.tsx`).
+
+## Formatting: one option?
+
+The ¶ menu still holds all three commands: Match formatting from source, Format book and Format
+project. Thomas wants to condense them, either to one button or to a button that opens a menu of
+options.
+
+- Is there a real reason **not** to match the entire project to the source text wherever that is
+  viable? The same question applies to the gateway language.
+- If there isn't, "Match formatting from source" could become one project-wide action, with
+  "Format book / project" folded under it.
+
+## Downloads: one click per language?
+
+For now, each resource under a language downloads on its own (ULB, then Translation Notes).
+Thomas suggests that downloading **English** fetch every text resource in it (ULB, Notes…) in one
+step.
+
+- Going offline would stop that download. The dropdown should then let it be started again.
+- Is it worth it, given the sizes involved, compared with keeping per-resource downloads?
+
+## The language's ⋮ menu
+
+Each installed language has a ⋮ next to its chevron. It replaces the old "Remove Translation
+Notes" trash button, which sat on one resource row and was only there because notes were the one
+download that could be deleted.
+
+- **Remove language** works. It deletes every Library copy in that language from this device. The
+  reader's own projects in that language stay, because they are not the Library's. If the text on
+  show is removed, the panel falls back to what is left. Should it ask before deleting?
+- **Check for updates** does not exist yet, so it is disabled with "Coming soon". Proposed: fetch
+  each Library copy's upstream and compare it with the commit it was cloned at (`Upstream.commit`).
+  If there is a newer one, offer "Update" per resource or for the whole language. Thomas isn't sure
+  this is needed; it could also happen silently in the background when online.
+- **Export language** does not exist yet, so it is disabled with "Coming soon". Proposed: zip the
+  language's Library copies so they can be carried to an offline machine and brought back in through
+  Import. Thomas isn't sure whether this should be "Export" or "Share".
+
+## Import
+
+An **Import** link in the "Available to download" heading holds the place for sideloading a
+reference text. No flow exists for it yet, so the link is disabled with "Coming soon".
+
+- Proposed: pick a folder or zip (Resource Container or Scripture Burrito), recognise it the way
+  `library.add` does, and copy it into the Library. It is the other half of Export language.
+- Thomas may move the link.
+
+## Duplicate ULB under one language (fixed in the UI, worth a look)
+
+On Thomas's Matthew project, English listed ULB twice. Hiding catalogue rows by download address
+was not enough: a ULB that came from elsewhere (the project's declared source, or another
+organisation's repository) still left the catalogue's ULB on offer. Two installed copies of the
+same text were also both listed.
+
+The dropdown now treats texts in a language with the same short name (`ulb`) as one: it lists
+the first, preferring the project's copy, and offers no catalogue copy of it. Is matching on the
+short name safe, or should the Library itself refuse a second copy of the same text?
+
+## Open questions
+
+<Question id="format-whole-project">
+  Is there a reason not to match the whole project's formatting to the source text (and the gateway
+  language) wherever that is viable?
+</Question>
+
+<Question id="format-one-control">
+  Condense the three formatting commands into a single button, or a button that opens a menu of
+  options?
+</Question>
+
+<Question id="check-updates">
+  Do reference texts need Check for updates at all, or should updates happen quietly when online?
+</Question>
+
+<Question id="export-or-share">
+  Export language or Share language? What should the reader get: a zip, a link, or both?
+</Question>
+
+<Question id="remove-confirm">
+  Should Remove language ask first, and should it say how much space it frees?
+</Question>
+
+<Question id="whole-language-download">
+  Should downloading a language fetch all of its text resources in one step, restartable from the
+  dropdown after going offline?
+</Question>

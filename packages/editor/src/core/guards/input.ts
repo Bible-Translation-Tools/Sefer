@@ -4,6 +4,7 @@ import {
   EditorState,
   type SelectionRange,
   type StateCommand,
+  type Transaction,
 } from "@codemirror/state";
 
 import { note, noteTr, tracing } from "../instrument/trace";
@@ -391,6 +392,51 @@ export function setBlockMarker(structureAt: GetStructure, marker: string): State
         annotations: trusted.of("set-block-marker"),
         userEvent: "input.usfm.reparent",
         scrollIntoView: true,
+      }),
+    );
+    return true;
+  };
+}
+
+/**
+ * Shift-Enter in Refine: a line break inside the stanza or paragraph rather
+ * than a new one, as Word's soft break. Enter's split, then a `\b` line
+ * before the new line, which carries on in the same kind (a paragraph's
+ * carries on as `\m`, flush, since it is not a new paragraph). `\b` draws
+ * a smaller gap than a paragraph's. One Undo step.
+ */
+export function lineBreak(structureAt: GetStructure, plansAt: GetPlan): StateCommand {
+  return ({ state, dispatch }) => {
+    if (!isVisual(state) || state.facet(newlineIsABreak) || state.readOnly) return false;
+    const made: Transaction[] = [];
+    guardedEnter(structureAt, plansAt)({ state, dispatch: (tr) => made.push(tr) });
+    const split = made[0];
+    if (split === undefined) return false;
+    const after = split.state;
+    const b = blockAt(structureAt(after), after.selection.main.head);
+    const head = b?.lines[0];
+    if (b === null || b === undefined || head === undefined || !opensAParagraph(head)) return false;
+    const kind = b.kind === "p" ? "m" : b.kind;
+    const nlch = nl(after);
+    const caret = after.selection.main.head;
+    const insert = `\\b${nlch}\\${kind} `;
+    const shift = insert.length - (head.contentFrom - head.from);
+    const marked = after.update({
+      changes: { from: head.from, to: head.contentFrom, insert },
+      selection: { anchor: caret + (caret >= head.contentFrom ? shift : 0) },
+      // Hidden markup in Refine: untrusted, the guards would drop it.
+      annotations: trusted.of("line-break"),
+      filter: false,
+    });
+    note(state, { rule: "lineBreak", verdict: "rewrote", detail: `\\b before \\${kind}` });
+    dispatch(
+      state.update({
+        changes: split.changes.compose(marked.changes),
+        selection: marked.state.selection,
+        annotations: trusted.of("line-break"),
+        userEvent: "input.usfm.lineBreak",
+        scrollIntoView: true,
+        filter: false,
       }),
     );
     return true;

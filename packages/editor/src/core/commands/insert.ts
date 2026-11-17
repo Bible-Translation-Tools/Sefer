@@ -14,6 +14,8 @@ import { opensAParagraph, type DocStructure } from "../model/docStructure";
 export type EditorAction =
   | "insert.verse"
   | "insert.paragraph"
+  | "insert.margin"
+  | "insert.lineBreak"
   | "insert.poetry"
   | "insert.poetry1"
   | "insert.poetry2"
@@ -31,7 +33,7 @@ const WORD = /[\p{L}\p{N}'’‐-]/u;
 const isWordChar = (state: EditorState, at: number): boolean =>
   at >= 0 && at < state.doc.length && WORD.test(state.doc.sliceString(at, at + 1));
 
-function wordBoundaryAt(state: EditorState, structure: DocStructure, pos: number): number {
+export function wordBoundaryAt(state: EditorState, structure: DocStructure, pos: number): number {
   const line = structure.lines.maybe(state.doc.lineAt(pos).number - 1);
   const wrapper = line?.words.find((w) => pos > w.from && pos < w.to);
   if (wrapper) return wrapper.to;
@@ -143,6 +145,10 @@ const nextPoetryLevel = (current: string | null): string => {
 export const insertParagraph = (structureAt: GetStructure): StateCommand =>
   insertBlock(structureAt, "paragraph", () => "p");
 
+/** A new margin line (`\\m`): a paragraph's words carried on flush, without its indent. */
+export const insertMargin = (structureAt: GetStructure): StateCommand =>
+  insertBlock(structureAt, "paragraph", () => "m");
+
 export const insertPoetry = (structureAt: GetStructure, level?: 1 | 2): StateCommand =>
   insertBlock(structureAt, "poetry", (current) =>
     level === undefined ? nextPoetryLevel(current) : `q${level}`,
@@ -171,8 +177,11 @@ export function footnoteWithText(
   const body = text.replaceAll(/[\\\r\n]+/g, " ").trim();
   return {
     changes: { from: where, insert: `${NOTE_OPEN}${body}${NOTE_CLOSE}` },
-    userEvent: "input.usfm.footnote",
-    scrollIntoView: true,
+    // Not `input.usfm.footnote`, which opens the new note's row for typing
+    // and scrolls to it: this note's words are already written.
+    userEvent: "input.usfm.footnoteWritten",
+    // The page stays where the reader left it: the note is added where they
+    // pointed, already on screen (Thomas, 2026-11-13).
   };
 }
 
