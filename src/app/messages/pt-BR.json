@@ -1748,5 +1748,6 @@
   "reference_language_actions": "Ações de {name}",
   "reference_check_updates": "Verificar atualizações",
   "reference_export_language": "Exportar idioma",
+  "reference_remove_nothing": "Nada em {name} para remover: os textos aqui são seus próprios projetos, que ficam neste dispositivo.",
   "reference_remove_language": "Remover idioma"
 }

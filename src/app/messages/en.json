@@ -1886,5 +1886,6 @@
   "reference_language_actions": "{name} actions",
   "reference_check_updates": "Check for updates",
   "reference_export_language": "Export language",
+  "reference_remove_nothing": "Nothing in {name} to remove: its texts here are your own projects, which stay on this device.",
   "reference_remove_language": "Remove language"
 }
