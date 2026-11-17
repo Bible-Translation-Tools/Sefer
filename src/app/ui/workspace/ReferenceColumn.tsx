@@ -833,46 +833,34 @@ export function ReferenceColumn() {
 
   const GROUP_HEAD = "flex items-center gap-3 p-3 text-small font-semibold text-on-surface-primary";
 
-  /** The formatting commands, by the text they read from (Thomas, 2026-11-16). */
-  const FormatMenu = () => (
-    <Menu
-      label={m.refine_formatting()}
-      side="bottom"
-      align="end"
-      class="w-64"
-      fitViewport
-      trigger={
-        <IconButton
-          data-testid="reference-formatting"
-          label={m.refine_formatting()}
-          icon={<Pilcrow />}
-        />
-      }
-    >
-      <MenuItem
+  /**
+   * Formatting: one control (Thomas, 2026-11-16; Will, 2026-11-17). It
+   * matches every book's formatting to the Bible on show here, so the ¶
+   * acts on the text beside it. Format book and Format project stay in the
+   * command palette.
+   */
+  const FormatButton = () => {
+    const bible = (): Resource | undefined => {
+      const entry = shown()?.entry;
+      return entry !== undefined && entry.role === "source" ? entry.resource : undefined;
+    };
+    return (
+      <IconButton
         data-testid="toolbar-overlay"
-        class={ROW}
-        disabled={findCommand("overlay.book")?.available() !== true}
-        onSelect={() => runCommand("overlay.book")}
-      >
-        {m.workspace_match_formatting_from_source()}
-      </MenuItem>
-      <MenuItem
-        class={ROW}
-        data-testid="kebab-format-book"
-        onSelect={() => runCommand("format.book")}
-      >
-        {m.common_format_book()}
-      </MenuItem>
-      <MenuItem
-        class={ROW}
-        data-testid="kebab-format-project"
-        onSelect={() => runCommand("format.project")}
-      >
-        {m.workspace_format_project()}
-      </MenuItem>
-    </Menu>
-  );
+        label={
+          bible() === undefined
+            ? m.refine_formatting()
+            : m.reference_match_formatting_to({ name: bible()!.title })
+        }
+        icon={<Pilcrow />}
+        disabled={bible() === undefined || findCommand("overlay.project")?.available() !== true}
+        onClick={() => {
+          const resource = bible();
+          if (resource !== undefined) runCommand("overlay.project", resource.id);
+        }}
+      />
+    );
+  };
 
   const GatewayPicker = () => (
     <div data-testid="gateway-picker" class="flex w-full shrink-0 items-center gap-controls">
@@ -950,7 +938,7 @@ export function ReferenceColumn() {
           </ul>
         </div>
       </Popover>
-      <FormatMenu />
+      <FormatButton />
     </div>
   );
 
