@@ -53,6 +53,7 @@ import Trash from "lucide-solid/icons/trash-2";
 import X from "lucide-solid/icons/x";
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 
+import { lastSegment } from "#core/fileSystem/path";
 import { Observability } from "#core/observability";
 import { remoteVerdict } from "#core/remote/remote";
 import { answers, type Resource, type Role } from "#core/resources/library";
@@ -64,7 +65,7 @@ import {
 
 import { announceSourceTexts, libraryRevision, ownerAndRepo, sourceTextCopy } from "../../arrival";
 import { listSourceTexts, listTranslationNotes, type ListedText } from "../../catalogue";
-import { findCommand, runCommand } from "../../commands";
+import { findCommand, runCommandAndWait } from "../../commands";
 import { describe, remoteReasonOf } from "../../describe";
 import { downloadRuns } from "../../downloadRuns";
 import { downloadHelp, helpDownloads, removeHelp } from "../../kinds/download";
@@ -75,7 +76,17 @@ import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
 import { ResourcePane } from "../kinds/registry";
 import { listProjects, type ProjectSummary } from "../landing/summaries";
-import { Button, EmptyState, IconButton, Input, Menu, MenuItem, Popover, cx } from "../primitives";
+import {
+  Button,
+  EmptyState,
+  IconButton,
+  Input,
+  Menu,
+  MenuItem,
+  Popover,
+  cx,
+  toasts,
+} from "../primitives";
 
 const ROLES: readonly Role[] = KIND_ROLES;
 
@@ -401,9 +412,16 @@ export function ReferenceColumn() {
    * reader's own projects in it stay: they are not the Library's to delete.
    */
   const removeLanguage = (key: string): void => {
-    for (const resource of copies()) {
-      if (languageOf(resource) !== key) continue;
-      if (!resource.root.startsWith(`${services.libraryRoot}/`)) continue;
+    const removable = copies().filter(
+      (resource) =>
+        languageOf(resource) === key && resource.root.startsWith(`${services.libraryRoot}/`),
+    );
+    // Only your own projects in it: say so, rather than do nothing (Will, 2026-11-17).
+    if (removable.length === 0) {
+      toasts.info({ title: m.reference_remove_nothing({ name: nameOfLanguage(key) }) });
+      return;
+    }
+    for (const resource of removable) {
       if (chosen() === resource.id) setChosen(undefined);
       void removeHelp(services, resource);
     }
@@ -518,6 +536,23 @@ export function ReferenceColumn() {
    * are all one. Held and offered copies with the same name are one text,
    * whichever repository either came from.
    */
+  /**
+   * Where a text came from, to tell two of the same name apart: the
+   * repository it was downloaded from, else its Library folder
+   * (`<library>/<owner>/<repo>`), else the folder it lives in (one of the
+   * reader's own projects, added as a reference).
+   */
+  const whereFrom = (resource: Resource): string => {
+    if (resource.upstream !== undefined) {
+      const { owner, repo } = ownerAndRepo(resource.upstream.url);
+      return `${owner}/${repo}`;
+    }
+    const inLibrary = resource.root.startsWith(`${services.libraryRoot}/`)
+      ? resource.root.slice(services.libraryRoot.length + 1)
+      : undefined;
+    return inLibrary ?? lastSegment(resource.root);
+  };
+
   const shortName = (resource: Resource): string =>
     isBible(resource) ? (resource.abbreviation ?? resource.title).toLowerCase() : "notes";
   const fetchItems = (key: string): Item[] => [
@@ -576,15 +611,13 @@ export function ReferenceColumn() {
       for (const resource of texts)
         counts.set(named(resource), (counts.get(named(resource)) ?? 0) + 1);
       for (const resource of texts) {
-        const upstream = resource.upstream;
         const shared = (counts.get(named(resource)) ?? 0) > 1;
-        const whose = shared && upstream !== undefined ? ownerAndRepo(upstream.url) : undefined;
         add(languageOf(resource), {
           kind: "text",
           key: resource.id,
           name: nameOf(resource),
           resource,
-          ...(whose === undefined ? {} : { detail: `${whose.owner}/${whose.repo}` }),
+          ...(shared ? { detail: whereFrom(resource) } : {}),
         });
       }
       for (const row of otherProjects())
@@ -882,6 +915,8 @@ export function ReferenceColumn() {
    * command palette.
    */
   const FormatButton = () => {
+    // A whole project takes a moment; the ¶ turns while it runs (Will, 2026-11-17).
+    const [matching, setMatching] = createSignal(false, { name: "referenceMatching" });
     const bible = (): Resource | undefined => {
       const entry = shown()?.entry;
       return entry !== undefined && entry.role === "source" ? entry.resource : undefined;
@@ -894,11 +929,26 @@ export function ReferenceColumn() {
             ? m.refine_formatting()
             : m.reference_match_formatting_to({ name: bible()!.title })
         }
-        icon={<Pilcrow />}
-        disabled={bible() === undefined || findCommand("overlay.project")?.available() !== true}
+        icon={
+          <Show when={matching()} fallback={<Pilcrow />}>
+            <span
+              role="status"
+              aria-label={m.common_loading()}
+              class="size-5 animate-spin rounded-full border-2 border-on-surface-tertiary border-t-transparent"
+            />
+          </Show>
+        }
+        aria-busy={matching() ? "true" : undefined}
+        disabled={
+          matching() ||
+          bible() === undefined ||
+          findCommand("overlay.project")?.available() !== true
+        }
         onClick={() => {
           const resource = bible();
-          if (resource !== undefined) runCommand("overlay.project", resource.id);
+          if (resource === undefined) return;
+          setMatching(true);
+          void runCommandAndWait("overlay.project", resource.id).finally(() => setMatching(false));
         }}
       />
     );

@@ -240,6 +240,11 @@
   /* No minimum: the reference gives way when the two panels do not fit. */
   min-width: 0;
 }
+/* Bare in Refine's reference column, under its dropdown, the 56px the
+   editor keeps below its own bar is only a gap (Will, 2026-11-17). */
+[data-bare][data-reference] .cm-mode-regular .cm-content {
+  padding-top: 0.75rem;
+}
 .cm-mode-regular .cm-cursor {
   border-left-color: var(--editor-accent);
   border-left-width: 2px;
