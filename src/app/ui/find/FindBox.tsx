@@ -360,7 +360,13 @@ export function FindBox(props: {
     });
   };
 
+  /**
+   * Closing leaves the reader where Find took them (Will, 2026-11-17): the
+   * caret goes after the current match in this book, as in Google Docs. With
+   * no match to stand on, they go back to where they opened the box.
+   */
   const close = (): void => {
+    const current = untrack(() => items()[index()]);
     const origin = findBox.origin();
     findBox.setOpen(false);
     findBox.setAt(undefined);
@@ -368,6 +374,13 @@ export function FindBox(props: {
     findBox.setReplaced([]);
     props.editor.setFindMarks(null);
     source()?.mount.setFindMarks(null);
+    if (current !== undefined) {
+      if (current.source === undefined && current.bookId === bookId) {
+        props.editor.placeCaret(current.to);
+        props.editor.focus();
+      }
+      return;
+    }
     if (origin === undefined) return;
     if (origin.bookId === bookId) {
       props.editor.placeCaret(origin.offset);
