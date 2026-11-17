@@ -174,6 +174,7 @@ function createRun(inputs: SearchInputs, readings: Scan["readings"]) {
       "find.books": only === undefined ? books.length : only.length,
       "find.regex": staticQuery.regex === true,
       "find.case": staticQuery.caseSensitive === true,
+      "find.ignore_accents": staticQuery.ignoreAccents === true,
       "find.whole_word": staticQuery.wholeWord === true,
       "find.markup": markup(),
       "find.chars": staticQuery.text.length,

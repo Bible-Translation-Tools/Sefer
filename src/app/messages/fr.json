@@ -664,6 +664,7 @@
   "find_next_match": "Correspondance suivante",
   "find_match_options": "Options de correspondance",
   "find_match_case": "Respecter la casse",
+  "find_match_accents": "Respecter les accents",
   "find_whole_word": "Mot entier",
   "find_regular_expression": "Expression régulière",
   "find_search_the_markup_not_the": "Rechercher dans le balisage, pas dans la lecture",

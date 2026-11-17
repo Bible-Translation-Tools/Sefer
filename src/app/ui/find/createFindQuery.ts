@@ -11,6 +11,8 @@ export function createFindQuery(asked: () => string) {
   const [markup, setMarkup] = createSignal(false, { name: "markup" });
   const [matchCase, setMatchCase] = createSignal(false, { name: "matchCase" });
   const [wholeWord, setWholeWord] = createSignal(false, { name: "wholeWord" });
+  // Off by default: `jesus` finds `Jesús`, which is what a translator expects.
+  const [matchAccents, setMatchAccents] = createSignal(false, { name: "matchAccents" });
   const [box, setBox] = createSignal<HTMLInputElement | undefined>(undefined, { name: "box" });
 
   createEffect(
@@ -27,6 +29,7 @@ export function createFindQuery(asked: () => string) {
     caseSensitive: matchCase(),
     wholeWord: wholeWord(),
     regex: regex(),
+    ignoreAccents: !matchAccents(),
   });
 
   return {
@@ -40,6 +43,8 @@ export function createFindQuery(asked: () => string) {
     setMatchCase,
     wholeWord,
     setWholeWord,
+    matchAccents,
+    setMatchAccents,
     setBox,
     query,
   };
