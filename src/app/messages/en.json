@@ -1880,6 +1880,7 @@
   "reference_available": "Available to download",
   "reference_installed_count": "Installed on device ({count})",
   "reference_available_count": "Available to download ({count})",
+  "reference_filter_languages": "Filter languages",
   "reference_import": "Import",
   "reference_import_soon": "Coming soon",
   "reference_language_actions": "{name} actions",

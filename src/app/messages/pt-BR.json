@@ -1742,6 +1742,7 @@
   "reference_available": "Disponível para baixar",
   "reference_installed_count": "Instalado no dispositivo ({count})",
   "reference_available_count": "Disponível para baixar ({count})",
+  "reference_filter_languages": "Filtrar idiomas",
   "reference_import": "Importar",
   "reference_import_soon": "Em breve",
   "reference_language_actions": "Ações de {name}",

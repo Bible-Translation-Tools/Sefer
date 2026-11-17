@@ -48,6 +48,7 @@ import Download from "lucide-solid/icons/download";
 import Globe from "lucide-solid/icons/globe";
 import MoreVertical from "lucide-solid/icons/more-vertical";
 import Pilcrow from "lucide-solid/icons/pilcrow";
+import Search from "lucide-solid/icons/search";
 import Trash from "lucide-solid/icons/trash-2";
 import X from "lucide-solid/icons/x";
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
@@ -74,7 +75,7 @@ import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
 import { ResourcePane } from "../kinds/registry";
 import { listProjects, type ProjectSummary } from "../landing/summaries";
-import { Button, EmptyState, IconButton, Menu, MenuItem, Popover, cx } from "../primitives";
+import { Button, EmptyState, IconButton, Input, Menu, MenuItem, Popover, cx } from "../primitives";
 
 const ROLES: readonly Role[] = KIND_ROLES;
 
@@ -589,6 +590,25 @@ export function ReferenceColumn() {
     { name: "referenceLanguages" },
   );
 
+  /**
+   * The filter at the top of the dropdown (Will, 2026-11-17): it narrows
+   * both groups, by language name, tag or a resource's name; the groups stay.
+   */
+  const [filter, setFilter] = createSignal("", { name: "referenceFilter" });
+  const passes = (language: Language): boolean => {
+    const wanted = filter().trim().toLowerCase();
+    if (wanted === "") return true;
+    return [language.name, language.key, ...language.items.map((item) => item.name)].some((said) =>
+      said.toLowerCase().includes(wanted),
+    );
+  };
+  const heldShown = createMemo(() => languages().held.filter(passes), {
+    name: "referenceHeldShown",
+  });
+  const toGetShown = createMemo(() => languages().toGet.filter(passes), {
+    name: "referenceToGetShown",
+  });
+
   /** Which languages are open in the dropdown; the one on show opens with it. */
   const [expanded, setExpanded] = createSignal<ReadonlySet<string>>(new Set(), {
     name: "referenceExpanded",
@@ -611,6 +631,7 @@ export function ReferenceColumn() {
   const manage = (open: boolean): void => {
     setManaging(open);
     if (!open) return;
+    setFilter("");
     offer();
     const key = shownLanguage();
     setExpanded(new Set(key === undefined ? [] : [key]));
@@ -660,9 +681,7 @@ export function ReferenceColumn() {
           else startSoon(item.key, () => item.download());
         }}
       >
-        <span class="min-w-0 flex-1 truncate" title={item.name}>
-          {item.name}
-        </span>
+        <span class="min-w-0 flex-1 break-words">{item.name}</span>
         <Show
           when={item.pulling()}
           fallback={
@@ -709,9 +728,7 @@ export function ReferenceColumn() {
             setManaging(false);
           }}
         >
-          <span class="min-w-0 flex-1 truncate" title={item.name}>
-            {item.name}
-          </span>
+          <span class="min-w-0 flex-1 break-words">{item.name}</span>
           <Show when={current()}>
             <CircleCheck aria-label={m.reference_showing()} class="size-5 shrink-0" />
           </Show>
@@ -741,10 +758,9 @@ export function ReferenceColumn() {
             <span class="flex min-w-0 flex-1 flex-col">
               <span
                 class={cx(
-                  "truncate font-medium",
+                  "break-words font-medium",
                   active() ? "text-brand" : "text-on-surface-primary",
                 )}
-                title={rowProps.language.name}
               >
                 {rowProps.language.name}
               </span>
@@ -904,18 +920,27 @@ export function ReferenceColumn() {
           data-testid="language-list"
           class="scrollbar-padded flex max-h-[min(70vh,32rem)] flex-col overflow-y-auto py-2"
         >
-          <h3 class={GROUP_HEAD}>
-            {m.reference_installed_count({ count: languages().held.length })}
-          </h3>
+          <div class="px-3 pb-2">
+            <Input
+              data-testid="reference-filter"
+              wrapperClass="w-full"
+              type="search"
+              value={filter()}
+              placeholder={m.reference_filter_languages()}
+              aria-label={m.reference_filter_languages()}
+              icon={<Search aria-hidden="true" />}
+              onInput={(event) => setFilter(event.currentTarget.value)}
+            />
+          </div>
+          <h3 class={GROUP_HEAD}>{m.reference_installed_count({ count: heldShown().length })}</h3>
           <ul>
-            <For each={languages().held}>
-              {(language) => <LanguageRow language={language} held />}
-            </For>
+            <For each={heldShown()}>{(language) => <LanguageRow language={language} held />}</For>
           </ul>
-          <span aria-hidden="true" class="my-2 block h-px bg-surface-border" />
+          {/* The two groups read as two (Will, 2026-11-17): the panel's 2px rule between them. */}
+          <span aria-hidden="true" class="my-3 block h-0.5 shrink-0 bg-surface-border" />
           <div class={GROUP_HEAD}>
             <h3 class="min-w-0 flex-1">
-              {m.reference_available_count({ count: languages().toGet.length })}
+              {m.reference_available_count({ count: toGetShown().length })}
             </h3>
             {/* Sideloading a reference text has no flow yet; the place is held for it. */}
             <button
@@ -932,7 +957,7 @@ export function ReferenceColumn() {
             <p class="p-3 text-small text-on-surface-tertiary">{m.reference_list_loading()}</p>
           </Show>
           <ul>
-            <For each={languages().toGet}>
+            <For each={toGetShown()}>
               {(language) => <LanguageRow language={language} held={false} />}
             </For>
           </ul>
