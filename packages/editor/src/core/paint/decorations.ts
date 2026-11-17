@@ -1115,7 +1115,7 @@ function nameChapters(
   add: Pending[],
   outside: (from: number, to: number) => boolean,
 ): void {
-  const { bookLabel, chapters } = chapterTitles(doc, structure);
+  const { bookLabel, bookLabels, chapters } = chapterTitles(doc, structure);
   const namedDeco =
     bookLabel === ""
       ? CHAPTER_NAMED
@@ -1129,6 +1129,11 @@ function nameChapters(
   // between them stays the text's.
   const hides: { from: number; to: number }[] = [];
   const titled: { at: number; to: number; own: string }[] = [];
+  // The book's label (`\\cl` before the first chapter) names every chapter
+  // above, so its own line is hidden too, wherever it stands in the header.
+  for (const label of bookLabels)
+    if (!outside(label.from, label.to) && doc.slice(label.contentFrom, label.to).trim() !== "")
+      hides.push({ from: Math.max(0, label.from - 1), to: label.to });
   for (const chapter of chapters) {
     const line = chapter.line;
     if (outside(line.from, Math.max(line.to, ...chapter.labels.map((label) => label.to)))) continue;
