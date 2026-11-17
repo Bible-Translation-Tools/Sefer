@@ -80,7 +80,7 @@ export function FindSearchBar(props: { query: FindQuery; commit: () => void }) {
 function AccentGlyph() {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <text x="12" y="17" text-anchor="middle" font-size="16" font-weight="600">
+      <text x="12" y="18.5" text-anchor="middle" font-size="23" font-weight="700">
         é
       </text>
     </svg>
