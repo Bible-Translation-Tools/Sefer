@@ -25,6 +25,7 @@ import { Git } from "#core/git/git";
 import { Observability } from "#core/observability";
 import { readProjectMetadata } from "#core/project/discovery";
 import { projectTracking } from "#core/project/projectIndex";
+import type { RemoteArrival } from "#core/project/provenance";
 import { hostOfUrl, sourceKey } from "#core/project/shareLink";
 import { cloneRepository } from "#core/remote/clone";
 import { Remote } from "#core/remote/remote";
@@ -84,7 +85,7 @@ export const cloneArrival = (
   kind: ArrivalKind,
   url: string,
   options?: {
-    readonly catalogueId?: string;
+    readonly catalogue?: Pick<RemoteArrival, "catalogueId" | "language">;
     readonly clone?: CloneOptions;
   },
 ): Effect.Effect<
@@ -118,7 +119,7 @@ export const cloneArrival = (
       cloneRepository(
         url,
         into,
-        options?.catalogueId,
+        options?.catalogue,
         kind === "sourceText" ? { history: "latest" } : options?.clone,
       ),
       // The folder is new, so a failed clone leaves nothing behind to make the retry fail too.
@@ -152,7 +153,7 @@ export const sourceTextCopy = (
       services,
       "sourceText",
       url,
-      catalogueId === undefined ? undefined : { catalogueId },
+      catalogueId === undefined ? undefined : { catalogue: { catalogueId } },
     );
     if (arrived.resource !== undefined) return arrived.resource;
     return yield* Effect.fail(new Error(`${url} arrived without a Library entry`));

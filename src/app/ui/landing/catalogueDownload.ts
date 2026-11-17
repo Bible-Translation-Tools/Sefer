@@ -152,7 +152,10 @@ const fetchEntry = async (
             if (Option.isSome(held)) return "held" as const;
           }
           const arrived = yield* cloneArrival(services, kind, entry.gitUrl, {
-            catalogueId: entry.id,
+            catalogue: {
+              catalogueId: entry.id,
+              language: { tag: entry.code, name: entry.naturalName },
+            },
           });
           arrivedAt = arrived.root;
           return "cloned" as const;
