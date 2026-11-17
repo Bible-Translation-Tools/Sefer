@@ -204,6 +204,34 @@ export const standardize = (book: BookLabels, word: string): readonly Change[] =
 };
 
 /**
+ * A label whose number is not its chapter's ("Chapter 14" reading "अध्याय 8"):
+ * the one-click repairs the dialog offers, and only for a word and a number
+ * (`mismatched`), so a label written as words is never touched.
+ * `renumbered` writes the chapter's own number in the label's digits
+ * (Devanagari stays Devanagari); `removed` takes the line out, and the book's
+ * label (or the bare number) names the chapter.
+ */
+export const renumbered = (label: ChapterLabel): Change | undefined => {
+  if (!label.mismatched || label.chapter === null) return undefined;
+  const after = WORD_NUMBER.exec(label.text);
+  const run = after?.[2] ?? NUMBER_WORD.exec(label.text)?.[1];
+  const lead = run === undefined ? undefined : [...run][0];
+  if (run === undefined || lead === undefined) return undefined;
+  const zero = (lead.codePointAt(0) ?? 0x30) - digitValue(lead);
+  const digits = [...String(label.chapter)]
+    .map((digit) => String.fromCodePoint(zero + Number(digit)))
+    .join("");
+  const at = label.textFrom + (after === null ? 0 : label.text.length - run.length);
+  return { from: at, to: at + run.length, insert: digits };
+};
+
+export const removed = (label: ChapterLabel): Change => ({
+  from: label.from,
+  to: label.lineEnd,
+  insert: "",
+});
+
+/**
  * One chapter label that reads differently from the rest (Will, 2026-10-29):
  * its word is not its book's (the book label, when the book has one) or, in
  * a book with none, not the project's most used word; or its number is not

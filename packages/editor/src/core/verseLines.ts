@@ -354,8 +354,8 @@ const lineByLineClass = EditorView.editorAttributes.of((view) => {
  * chapter rows), never "the line after `\\c`": with `\\c 2`, `\\s Heading`,
  * `\\cl Sura 2` the heading stays where it is and "Sura 2" names the chapter.
  * Only the `\\c` line and the label lines are hidden; the title is drawn on the
- * `\\c` line. A chapter with no label of its own is "Chapter 2", or the book's
- * label (`\\cl Psalm` before the first chapter) and the number.
+ * `\\c` line. A chapter with no label of its own is the book's label
+ * (`\\cl Psalm` before the first chapter) and the number, or the number alone.
  */
 export interface ChapterTitle {
   /** The `\\c` line. */

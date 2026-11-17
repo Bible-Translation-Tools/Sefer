@@ -1368,8 +1368,11 @@
   padding-top: 4em;
   padding-bottom: 2em;
 }
+/* With a book label (`\cl` before chapter 1) it stands before each number;
+   without one the number alone is the title. No fallback word: a project that
+   uses numbers only reads "1", not an English "Chapter 1". */
 .cm-mode-regular .usfm-chap-named .usfm-num-c::before {
-  content: var(--usfm-chapter-label, "Chapter") " ";
+  content: var(--usfm-chapter-label) " ";
 }
 .cm-mode-regular .usfm-chap-named .usfm-num-c {
   font-size: 1.6em;

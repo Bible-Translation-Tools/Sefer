@@ -45,3 +45,6 @@ left out.
 Not mapped yet: Findings, Key terms (`/terms`), Suggestions, Cloud sync
 (needs a WACS account), import from a folder or zip, the character inventory.
 Add each as it's next verified.
+
+- [Chapter labels](./chapter-labels.md): the book's label, numbers only, the dialog's
+  add-a-word, Standardize and the wrong-number repair. The fixture is enough.
