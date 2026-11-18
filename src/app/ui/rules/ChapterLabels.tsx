@@ -1,6 +1,7 @@
 import { useNavigate } from "@tanstack/solid-router";
 import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import { Option } from "effect";
+import ChevronRight from "lucide-solid/icons/chevron-right";
 import { For, Show, createMemo, createSignal } from "solid-js";
 
 import { m } from "#app/paraglide/messages";
@@ -124,6 +125,10 @@ export function ChapterLabelsDialog(props: {
       to: "/project/$slug/book/$book",
       params: { slug: shell.slug(), book: encodeURIComponent(row.id) },
     });
+  };
+  const keptCount = createMemo(() => books().reduce((sum, row) => sum + row.kept.length, 0));
+  const removeKept = (only?: BookId): void => {
+    runCommand("chapterLabels.removeKept", only === undefined ? {} : { books: [only] });
   };
   const fix = (row: Row, label: ChapterLabel, action: "renumber" | "remove"): void => {
     runCommand("chapterLabels.fix", { book: row.id, from: label.from, action });
@@ -249,17 +254,35 @@ export function ChapterLabelsDialog(props: {
       </Show>
       <Show when={row.kept.length > 0}>
         <details
-          class="text-on-surface-secondary"
+          class="group text-on-surface-secondary"
           open={row.kept.some((label) => label.mismatched) || difference(row) === "kept"}
         >
-          <summary class="cursor-pointer">
-            {m.chapter_labels_kept({ count: row.kept.length })}
+          <summary class="flex cursor-pointer list-none items-center gap-2">
+            <ChevronRight
+              aria-hidden="true"
+              class="size-4 shrink-0 transition-transform group-open:rotate-90"
+            />
+            <span class="min-w-0 flex-1">{m.chapter_labels_kept({ count: row.kept.length })}</span>
+            <Show when={row.kept.length > 1}>
+              <Button
+                size="sm"
+                variant="tertiary"
+                data-testid="chapter-labels-remove-book"
+                onClick={(event) => {
+                  // Inside the summary: act, without opening or closing it.
+                  event.preventDefault();
+                  removeKept(row.id);
+                }}
+              >
+                {m.chapter_labels_remove_all()}
+              </Button>
+            </Show>
           </summary>
           <ul class="mt-1 flex flex-col gap-1 ps-4">
             <For each={row.kept}>
               {(label) => (
-                <li class="flex flex-wrap items-center gap-2">
-                  <span>
+                <li class="flex items-center gap-2">
+                  <span class="min-w-0 flex-1">
                     {label.mismatched
                       ? m.chapter_labels_number_differs({
                           chapter: String(label.chapter),
@@ -270,34 +293,36 @@ export function ChapterLabelsDialog(props: {
                           text: label.text,
                         })}
                   </span>
-                  <Show when={label.mismatched ? renumbered(label) : undefined}>
-                    {(change) => (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        data-testid="chapter-labels-renumber"
-                        onClick={() => fix(row, label, "renumber")}
-                      >
-                        {m.chapter_labels_renumber({ number: change().insert })}
-                      </Button>
-                    )}
-                  </Show>
-                  <Button
-                    size="sm"
-                    variant="tertiary"
-                    data-testid="chapter-labels-remove"
-                    onClick={() => fix(row, label, "remove")}
-                  >
-                    {m.chapter_labels_remove()}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="tertiary"
-                    data-testid="chapter-labels-go"
-                    onClick={() => goTo(row, label)}
-                  >
-                    {m.chapter_labels_go()}
-                  </Button>
+                  <div class="flex shrink-0 items-center gap-1">
+                    <Show when={label.mismatched ? renumbered(label) : undefined}>
+                      {(change) => (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          data-testid="chapter-labels-renumber"
+                          onClick={() => fix(row, label, "renumber")}
+                        >
+                          {m.chapter_labels_renumber({ number: change().insert })}
+                        </Button>
+                      )}
+                    </Show>
+                    <Button
+                      size="sm"
+                      variant="tertiary"
+                      data-testid="chapter-labels-remove"
+                      onClick={() => fix(row, label, "remove")}
+                    >
+                      {m.chapter_labels_remove()}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="tertiary"
+                      data-testid="chapter-labels-go"
+                      onClick={() => goTo(row, label)}
+                    >
+                      {m.chapter_labels_go()}
+                    </Button>
+                  </div>
                 </li>
               )}
             </For>
@@ -361,7 +386,16 @@ export function ChapterLabelsDialog(props: {
             {m.chapter_labels_use_everywhere()}
           </Button>
         </div>
-        <div class="flex flex-wrap items-center gap-x-2 pb-3">
+        <div class="flex flex-wrap items-center gap-x-2 gap-y-1 pb-3">
+          <Show when={keptCount() > 0}>
+            <Button
+              variant="secondary"
+              data-testid="chapter-labels-remove-kept"
+              onClick={() => removeKept()}
+            >
+              {m.chapter_labels_remove_kept_everywhere({ count: keptCount() })}
+            </Button>
+          </Show>
           <Show when={mostUsed()}>
             {(most) => (
               <Button

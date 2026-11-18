@@ -11,7 +11,13 @@ import { makeMultiBook } from "#core/multibook/multibook";
 import { Observability, type ObservabilityService } from "#core/observability";
 import type { Project } from "#core/project/project";
 import { headerChanges, headerOf, isHeaderEdit } from "#core/rules/bookNames";
-import { chapterLabelsOf, removed, renumbered, standardize } from "#core/rules/chapterLabels";
+import {
+  chapterLabelsOf,
+  keptAsWritten,
+  removed,
+  renumbered,
+  standardize,
+} from "#core/rules/chapterLabels";
 
 import { personAuthor } from "./author";
 import { contentHostFor } from "./endpoints";
@@ -1010,6 +1016,48 @@ const chapterLabelCommands = (bridge: ShellBridge, h: Helpers) => [
       bridge.report(
         action === "remove" ? m.chapter_labels_removed() : m.chapter_labels_renumbered(),
       );
+    },
+  }),
+  /**
+   * Every chapter label written its own way taken out, in the books given
+   * (`{ books }`) or in every book: most translations name every chapter the
+   * same way, so a `\cl` after `\c` that is not the book's word is noise.
+   * The book's label, or the bare number, then names each chapter. One Undo.
+   */
+  registerCommand({
+    id: "chapterLabels.removeKept",
+    title: m.command_remove_kept_chapter_labels,
+    when: h.hasProject,
+    run: (argument) => {
+      const given: unknown =
+        typeof argument === "object" && argument !== null
+          ? Reflect.get(argument, "books")
+          : undefined;
+      const only = Array.isArray(given)
+        ? new Set(given.filter((id): id is string => typeof id === "string"))
+        : undefined;
+      const analyses = bridge.services.projectAnalysis;
+      let stale = false;
+      let count = 0;
+      const operation = h.multibook.runAcrossBooks("chapterLabels", (book) => {
+        if (only !== undefined && !only.has(book.id)) return null;
+        const held = analyses.analysis(book.id);
+        if (Option.isNone(held)) return null;
+        const kept = keptAsWritten(chapterLabelsOf(held.value.analysis));
+        if (kept.length === 0) return null;
+        if (!analyses.fresh(book.id, book.source().stamp)) {
+          stale = true;
+          return null;
+        }
+        count += kept.length;
+        return kept.map(removed);
+      });
+      if (operation === null) {
+        bridge.report(stale ? m.chapter_labels_stale() : m.chapter_labels_nothing());
+        return;
+      }
+      bridge.changed({ kind: "book.apply", books: operation.books });
+      bridge.report(m.chapter_labels_removed_kept({ count }));
     },
   }),
 ];
