@@ -2,7 +2,7 @@
 id: 98ec1e8b-5511-4907-ac74-d2d3b22a36ca
 title: "Autosave to disk: the journal goes, review moves to the device boundary"
 kind: plan
-status: in-progress
+status: done
 created: 2026-11-18
 updated: 2026-11-18
 sha: 57fc8a07
@@ -161,3 +161,33 @@ outside Sefer: a `git pull`, another app, or a folder shared over Dropbox.
 <Followup id="daily-version">
   MEL floated an automatic daily version. Not built; add it if someone asks to see a day's work.
 </Followup>
+
+## Built (2026-11-18, branch `feat/autosave-to-disk`)
+
+All seven pieces, plus the pre-write check. Driven on the Web fixture: an
+edit shows "Saving changes…" then "Saved" and a `save` of the book;
+Review lists it against "Last version" though the file already holds it;
+Record a version commits it (History shows one version) and the next edit
+reads against that version alone; two writes in a row pass the check.
+Unit tests, typecheck, lint, boundaries, deadcode and the build pass.
+
+<Followup id="desktop-drive">Run `pnpm test:desktop` (the rewritten save claim) and drive
+the window close: the flush before close and `core:window:allow-destroy`.
+Neither was run.</Followup>
+
+<Followup id="feature-file">`agents/skills/verify-sefer/features/edit-and-save.md` still
+says Save never writes straight away; the agent sandbox cannot write
+`agents/skills`, so it needs a hand edit.</Followup>
+
+<Followup id="copy-pass">For the PO copy pass: Review's right side still says "In the
+editor, to be saved"; the side pickers now offer "Last version" and "The last
+recorded version", which coincide in a git project.</Followup>
+
+<Followup id="old-journals">Journals older builds wrote stay in `appData/journals` and are
+never offered. Fine for testers; decide before a release whether one last
+"unsaved work from an older version" offer is owed.</Followup>
+
+<Followup id="conflict-drive">The outside-change refusal and its Keep mine toast are not
+driven: nothing on the Web writes OPFS behind Sefer. Desktop can, by editing
+the file while Sefer is open.</Followup>
+
