@@ -35,7 +35,7 @@ export interface SyncReading {
   readonly remoteHead: Commit | undefined;
   readonly ahead: readonly Commit[];
   readonly behind: readonly Commit[];
-  /** Books whose file differs from HEAD: autosaved work no version holds yet. */
+  /** The project's books, metadata and manifest that differ from HEAD: work no version holds yet. */
   readonly uncommitted: number;
   readonly mergeInProgress: boolean;
   readonly lastFailure: RemoteFailureReason | undefined;
