@@ -105,6 +105,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  isomorphic-git@1.42.2: b77d92f250ce12c7feb2edb6c419464d8d75bba5be832b1c17c54b8739690612
+
 importers:
 
   .:
@@ -183,7 +186,7 @@ importers:
         version: 12.1.2
       isomorphic-git:
         specifier: 1.42.2
-        version: 1.42.2
+        version: 1.42.2(patch_hash=b77d92f250ce12c7feb2edb6c419464d8d75bba5be832b1c17c54b8739690612)
       lucide-solid:
         specifier: 1.47.0
         version: 1.47.0(solid-js@2.0.0-rc.9)
@@ -11768,7 +11771,7 @@ snapshots:
 
   isexe@4.0.0: {}
 
-  isomorphic-git@1.42.2:
+  isomorphic-git@1.42.2(patch_hash=b77d92f250ce12c7feb2edb6c419464d8d75bba5be832b1c17c54b8739690612):
     dependencies:
       async-lock: 1.4.1
       clean-git-ref: 2.0.1

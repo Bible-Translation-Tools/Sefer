@@ -3,6 +3,7 @@ import git from "isomorphic-git";
 import http from "isomorphic-git/http/web";
 
 import { nodeFsView, type IsomorphicFs } from "#core/fileSystem/nodeView";
+import { cachedObjects } from "#core/fileSystem/objectCache";
 import { joinPath } from "#core/fileSystem/path";
 import { DEFAULT_BRANCH, REPLAYED_REF, type Repo } from "#core/git/git";
 import { Credentials, type CredentialsService } from "#core/host/credentials";
@@ -287,7 +288,8 @@ const makeWebRemote = (
         }
         const credential = Option.getOrNull(held);
         return {
-          fs,
+          // One transfer's objects, cached for it alone (`cachedObjects`).
+          fs: cachedObjects(fs),
           http: transported,
           dir,
           remote: ORIGIN,
@@ -560,7 +562,13 @@ const makeWebRemote = (
           if (head === to) return;
           if (head !== undefined) {
             const forward = yield* attempt(() =>
-              git.isDescendent({ fs, dir: repo.root, oid: to, ancestor: head, depth: -1 }),
+              git.isDescendent({
+                fs: cachedObjects(fs),
+                dir: repo.root,
+                oid: to,
+                ancestor: head,
+                depth: -1,
+              }),
             );
             if (!forward)
               return yield* Effect.fail(

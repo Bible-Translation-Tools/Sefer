@@ -4,6 +4,7 @@ import { Effect, FileSystem, Layer, Option } from "effect";
 import git from "isomorphic-git";
 
 import { nodeFsView } from "#core/fileSystem/nodeView";
+import { cachedObjects } from "#core/fileSystem/objectCache";
 import {
   DEFAULT_BRANCH,
   type Author,
@@ -80,6 +81,12 @@ const makeWebGit = (
   observability: Option.Option<typeof Observability.Service>,
 ): GitService => {
   const fs = nodeFsView(fileSystem, Effect.runPromise);
+  /**
+   * `fs` for one isomorphic-git operation that walks objects: missing loose
+   * objects and the pack listing answered from memory (`cachedObjects`). A
+   * full log of a migrated Bible went from ~57,000 OPFS calls to ~270.
+   */
+  const objects = () => cachedObjects(fs);
 
   const show = (repo: Repo, rev: string, path: string): Effect.Effect<Uint8Array, GitError> =>
     Effect.gen(function* () {
@@ -90,6 +97,7 @@ const makeWebGit = (
       );
       return yield* attempt("Conflict", async () => {
         const cache = {};
+        const fs = objects();
         const { commit } = await git.readCommit({ fs, dir: repo.root, oid, cache });
         let at = commit.tree;
         const parts = filepath.split("/").filter((part) => part !== "");
@@ -172,6 +180,7 @@ const makeWebGit = (
    * `until` commit is in, or the history ends.
    */
   const logUntil = async (repo: Repo, ref: string, stop: LogStop | undefined) => {
+    const fs = objects();
     if (stop === undefined) return git.log({ fs, dir: repo.root, ref });
     const wanted = stop.until ?? [];
     if (wanted.length === 0) return git.log({ fs, dir: repo.root, ref, depth: stop.depth ?? 1 });
@@ -192,13 +201,19 @@ const makeWebGit = (
       if (filepath !== undefined && isIndexedBook(filepath))
         return (yield* bookHistory(repo, filepath)).map(asCommit);
       const entries = yield* attempt("Io", () =>
-        git.log(filepath === undefined ? { fs, dir: repo.root } : { fs, dir: repo.root, filepath }),
+        git.log(
+          filepath === undefined
+            ? { fs: objects(), dir: repo.root }
+            : { fs: objects(), dir: repo.root, filepath },
+        ),
       );
       return entries.map(commitOf);
     });
 
   const objectReader = (repo: Repo): ObjectReader => {
     const cache = {};
+    // One cache for the reader's life: it reads a history, never writes one.
+    const fs = objects();
     return (ids) =>
       attempt("Io", async () => {
         const out = new Map<string, GitObject>();
@@ -308,7 +323,7 @@ const makeWebGit = (
           attempt("Conflict", () => git.resolveRef({ fs, dir: repo.root, ref: b })),
         ]);
         const found = yield* attempt("Conflict", () =>
-          git.findMergeBase({ fs, dir: repo.root, oids: [left, right] }),
+          git.findMergeBase({ fs: objects(), dir: repo.root, oids: [left, right] }),
         );
         const first: unknown = found[0];
         return typeof first === "string" ? Option.some(first) : Option.none();
@@ -348,7 +363,7 @@ const makeWebGit = (
     changedPathsBetween: (repo, from, to) =>
       attempt("Conflict", () =>
         git.walk({
-          fs,
+          fs: objects(),
           dir: repo.root,
           trees: [git.TREE({ ref: from }), git.TREE({ ref: to })],
           map: async (filepath, entries) => {
