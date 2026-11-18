@@ -11,9 +11,13 @@ import type { Project } from "#core/project/project";
 import type { Services } from "./services";
 import { booksOf, type ShellEvent } from "./shellEvent";
 
+/**
+ * `unsaved`: an edit autosave has not written yet; `onDisk`: written, not yet
+ * in a recorded version; `recorded`: the file is the last version.
+ */
 export type SaveState = "unsaved" | "onDisk" | "recorded";
 
-/** `idle` until the first edit; then `saving` until the backup reports in. */
+/** `idle` until the first edit; then `saving` until autosave reports the file written. */
 export type BackupStatus =
   | { readonly kind: "idle" }
   | { readonly kind: "saving" }
@@ -34,7 +38,7 @@ export interface ShellStores {
 
   readonly unsaved: (book: Book) => boolean;
   readonly saveState: (book: Book) => SaveState;
-  /** Where the backup of this session's edits stands, as the backup itself reports it. */
+  /** Where autosave stands, as autosave itself reports it. */
   readonly backup: Accessor<BackupStatus>;
   readonly stampOf: (bookId: BookId) => SourceStamp | undefined;
   readonly historyDepth: (bookId: BookId) => { readonly undo: number; readonly redo: number };
@@ -124,11 +128,10 @@ const createFindingsStore = (services: Services, open: () => Project | undefined
 };
 
 const createBooksStore = (services: Services, open: () => Project | undefined) => {
-  const onDisk = new Set<BookId>();
-
   const saveStateOf = (book: Book): SaveState => {
-    if (Option.isSome(services.save.baseline(book)) && services.save.dirty(book)) return "unsaved";
-    return onDisk.has(book.id) ? "onDisk" : "recorded";
+    if (Option.isNone(services.save.baseline(book))) return "recorded";
+    if (services.save.unwritten(book)) return "unsaved";
+    return services.save.dirty(book) ? "onDisk" : "recorded";
   };
 
   const [books, setBooks] = createStore<Record<BookId, BookRow>>({}, { name: "books" });
@@ -156,7 +159,8 @@ const createBooksStore = (services: Services, open: () => Project | undefined) =
       }
     });
   };
-  const unsaved = (book: Book): boolean => books[book.id]?.saveState === "unsaved";
+  /** Not yet in a recorded version, written or not. */
+  const unsaved = (book: Book): boolean => (books[book.id]?.saveState ?? "recorded") !== "recorded";
 
   const saveState = (book: Book): SaveState => books[book.id]?.saveState ?? "recorded";
 
@@ -176,7 +180,6 @@ const createBooksStore = (services: Services, open: () => Project | undefined) =
   };
 
   return {
-    onDisk,
     refreshBooks,
     clearBooks,
     unsaved,
@@ -222,8 +225,10 @@ export const makeShellStores = (options: {
     inventory,
   } = createFindingsStore(services, open);
 
-  const { onDisk, refreshBooks, clearBooks, unsaved, saveState, stampOf, historyDepth } =
-    createBooksStore(services, open);
+  const { refreshBooks, clearBooks, unsaved, saveState, stampOf, historyDepth } = createBooksStore(
+    services,
+    open,
+  );
 
   const [backup, setBackup] = createSignal<BackupStatus>({ kind: "idle" }, { name: "backup" });
 
@@ -231,11 +236,6 @@ export const makeShellStores = (options: {
     if (event.kind === "project.open") {
       setBackup({ kind: "idle" });
     }
-    if (event.kind === "book.write")
-      for (const bookId of event.books) {
-        if (event.recorded) onDisk.delete(bookId);
-        else onDisk.add(bookId);
-      }
     refreshBooks(booksOf(event));
     if (
       event.kind === "project.open" ||
@@ -249,11 +249,13 @@ export const makeShellStores = (options: {
   watchAnalysis(services, changed);
 
   const watchingBackups = services.runtime.runFork(
-    Stream.runForEach(services.recovery.backups(), (state) =>
+    Stream.runForEach(services.autosave.states(), (state) =>
       Effect.sync(() => {
         if (state.kind === "pending") setBackup({ kind: "saving" });
         else if (state.kind === "written") setBackup({ kind: "saved" });
         else setBackup({ kind: "failed", reason: state.reason });
+        // A write moves books from unsaved to on disk; nothing else says so.
+        if (state.kind !== "pending") refreshBooks("all");
       }),
     ),
   );

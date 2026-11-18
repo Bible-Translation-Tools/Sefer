@@ -120,12 +120,17 @@ export const recordVersion = async (
       }
 
   const ids = books.map((book) => book.id);
+  // Autosave stands aside: the files must not move between the commit and marking them recorded.
   const recorded = await services.run(
-    Effect.result(
-      Effect.gen(function* () {
-        const repo = yield* services.git.init(project.root);
-        return yield* services.git.commit(repo, receipts, message, author);
-      }),
+    services.autosave.hold(
+      Effect.result(
+        Effect.gen(function* () {
+          const repo = yield* services.git.init(project.root);
+          const commit = yield* services.git.commit(repo, receipts, message, author);
+          for (const book of project.books) if (staged.has(book.path)) services.save.recorded(book);
+          return commit;
+        }),
+      ),
     ),
   );
   if (Result.isFailure(recorded))

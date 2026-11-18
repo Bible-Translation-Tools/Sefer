@@ -20,6 +20,7 @@ import { METADATA_FILE } from "../project/discovery";
 import type { Project } from "../project/project";
 import { Remote, type RemoteError } from "../remote/remote";
 import { namesAt, namesOfText, renamed } from "../rules/bookNamesRecorded";
+import { standingAside } from "../save/autosave";
 import { SaveCoordinator } from "../save/saveCoordinator";
 import {
   booksByPath,
@@ -284,7 +285,7 @@ export const combine = (
     const repo = yield* Effect.mapError(git.open(options.project.root), fromPort("untouched"));
     yield* Effect.mapError(remote.fetch(repo), fromPort("untouched"));
     return yield* Effect.catchTag(
-      repositories.exclusive(options.project.root, "combine", program(options)),
+      repositories.exclusive(options.project.root, "combine", standingAside(program(options))),
       "RepositoryError",
       (error) =>
         Effect.fail(

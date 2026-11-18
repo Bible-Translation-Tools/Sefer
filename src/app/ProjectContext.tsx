@@ -22,7 +22,6 @@ import type { Inventory } from "#core/findings/inventory";
 import type { Rung } from "#core/findings/suppressions";
 import type { ProjectPhase } from "#core/project/lifecycle";
 import type { Project } from "#core/project/project";
-import type { Restorable } from "#core/recovery/recovery";
 import type { ProjectMetadata } from "#core/resources/projectMetadata";
 
 import { registerShellCommands, type ShellBridge } from "./commands";
@@ -63,8 +62,6 @@ export interface Shell {
   readonly openProject: (root: string) => Promise<void>;
   /** Which project the shell has, and how far an open has got; `src/core/project/lifecycle.ts`. */
   readonly projectPhase: Accessor<ProjectPhase>;
-  readonly recoveryOffer: Accessor<readonly Restorable[] | undefined>;
-  readonly setRecoveryOffer: (offer: readonly Restorable[]) => void;
   readonly closeProject: () => Promise<void>;
 
   readonly focused: Accessor<EditorBook | undefined>;
@@ -331,13 +328,10 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
 
   const {
     phase: projectPhase,
-    recoveryOffer,
-    setRecoveryOffer,
     closeProject,
     openProject,
   } = createLifecycle({
     services,
-    keys,
     stores,
     suppressions,
     resources,
@@ -369,8 +363,6 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     metadata,
     openProject,
     projectPhase,
-    recoveryOffer,
-    setRecoveryOffer,
     closeProject,
     focused,
     focus: reader.focus,

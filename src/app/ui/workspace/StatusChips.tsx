@@ -13,11 +13,11 @@ import { syncStatus } from "../../syncStatus";
 import { Button, Popover, SegmentedControl, Tooltip, cx } from "../primitives";
 
 /**
- * The app bar's Save button, in the save model's own terms: "Save" while any
- * book differs from its last version (pressing it is Save & Review, as Mod-S),
- * "Saving changes…" while the backup journal is being written, "Saved" when
- * no book differs. The journal still writes on its own as the person types;
- * the button is where they see it and where they record a version.
+ * The app bar's Save button, in the save model's own terms: "Saving changes…"
+ * while autosave has an edit waiting, "Saved" once it is in the file, "Save"
+ * (with a warning) when a write failed. Pressing it is Save & Review, as Mod-S:
+ * where the person records a version, which nothing requires until work comes
+ * in or goes out.
  */
 export function SaveButton() {
   const shell = useShell();
@@ -26,8 +26,8 @@ export function SaveButton() {
   const saving = (): boolean => shell.backup().kind === "saving";
   const failed = (): boolean => shell.backup().kind === "failed";
   const label = (): string => {
-    if (saving()) return m.status_saving();
-    return unsaved() || failed() ? m.status_save() : m.status_saved();
+    if (failed()) return m.status_save();
+    return saving() ? m.status_saving() : m.status_saved();
   };
   const explained = (): string => {
     if (failed()) return m.status_backup_failed_body();

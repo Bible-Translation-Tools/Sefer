@@ -2,7 +2,7 @@ import { Schema } from "effect";
 
 import { PRODUCERS, SEVERITIES } from "#core/findings/filter";
 import type { SettingKey, SettingsService } from "#core/host/settings";
-import { DEFAULT_JOURNAL_POLICY } from "#core/recovery/recovery";
+import { DEFAULT_AUTOSAVE_POLICY } from "#core/save/autosave";
 
 import type { Message } from "./i18n";
 import { automaticLocale, nativeName, shippedLocales } from "./locale";
@@ -121,7 +121,6 @@ export interface ShellKeys {
   /** Tech and project manager mode: the Writer migration screens, which are slow and confusing for a translator. */
   readonly techMode: SettingKey<boolean>;
   /** Ask about unsaved work found when a project opens. Backups are written either way. */
-  readonly offerRecovery: SettingKey<boolean>;
   readonly excerptContext: SettingKey<number>;
   readonly reviewLayout: SettingKey<string>;
   readonly reviewScope: SettingKey<string>;
@@ -188,7 +187,7 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
     backupIdleMs: settings.register(
       "shell.backupIdleMs",
       Schema.Number,
-      DEFAULT_JOURNAL_POLICY.idleMs,
+      DEFAULT_AUTOSAVE_POLICY.idleMs,
     ),
     preferChapterView: settings.register("editor.preferChapterView", Schema.Boolean, false),
     lineByLine: settings.register("editor.lineByLine", Schema.Boolean, false),
@@ -200,7 +199,6 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
     enableReplaceAll: settings.register("find.enableReplaceAll", Schema.Boolean, false),
     showGatewayProjects: settings.register("projects.showGateways", Schema.Boolean, false),
     techMode: settings.register("shell.techMode", Schema.Boolean, false),
-    offerRecovery: settings.register("recovery.offerOnOpen", Schema.Boolean, true),
     excerptContext: settings.register("excerpts.context", Schema.Number, 0),
     reviewLayout: settings.register("review.layout", Schema.String, "auto"),
     reviewScope: settings.register("review.scope", Schema.String, "changes"),
@@ -445,13 +443,6 @@ const advancedRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
     max: 10000,
     step: 100,
     unit: "ms",
-  },
-  {
-    key: keys.offerRecovery,
-    label: m.settings_offer_unsaved_work_on_open(),
-    description: m.settings_ask_about_unsaved_work_found(),
-    kind: "boolean",
-    group: "advanced",
   },
   {
     key: keys.enableReplaceAll,
