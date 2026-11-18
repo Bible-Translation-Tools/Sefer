@@ -61,7 +61,15 @@ export interface ExternalChangeSource {
 export type ResolveChoice = "keepMine" | "takeDisk" | "compare";
 
 export interface SaveCoordinatorService {
-  readonly save: (book: Book) => Effect.Effect<SaveReceipt, SaveError>;
+  /**
+   * Write the book's file. `checked` (autosave's writes) first reads the file
+   * and refuses with `Conflict` when it is not what Sefer last wrote: something
+   * outside Sefer changed it, and writing would overwrite that silently.
+   */
+  readonly save: (
+    book: Book,
+    options?: { readonly checked?: boolean },
+  ) => Effect.Effect<SaveReceipt, SaveError>;
   readonly adopt: (book: Book) => Effect.Effect<void>;
   /**
    * The book's last recorded version (local HEAD): what Review, the changes
@@ -80,6 +88,8 @@ export interface SaveCoordinatorService {
   /** The recorded version is `text` (local HEAD read on open, when the file differs from it). */
   readonly recordedAs: (book: Book, text: string) => void;
   readonly externalChanges: (source: ExternalChangeSource) => Stream.Stream<ExternalChange>;
+  /** Books whose file changed outside Sefer and that wait for `resolve` before they save again. */
+  readonly conflicted: () => readonly ExternalChange[];
   readonly resolve: (
     change: ExternalChange,
     choice: ResolveChoice,
@@ -204,26 +214,51 @@ const make = (
         });
       });
 
-    const save = (book: Book): Effect.Effect<SaveReceipt, SaveError> => {
+    const save = (
+      book: Book,
+      options?: { readonly checked?: boolean },
+    ): Effect.Effect<SaveReceipt, SaveError> => {
       const saving = observability?.operation("save", {
         "book.id": book.id,
         "fs.path": book.path,
       });
-      return Effect.onExit(saveIn(book, saving ?? observability), (exit) =>
-        Effect.sync(() => {
-          if (exit._tag === "Success")
-            saving?.end("ready", {
-              "fs.bytes": exit.value.bytes,
-              "book.revision": exit.value.stamp.revision,
-            });
-          else saving?.end("failed");
-        }),
+      return Effect.onExit(
+        saveIn(book, saving ?? observability, options?.checked === true),
+        (exit) =>
+          Effect.sync(() => {
+            if (exit._tag === "Success")
+              saving?.end("ready", {
+                "fs.bytes": exit.value.bytes,
+                "book.revision": exit.value.stamp.revision,
+              });
+            else saving?.end("failed");
+          }),
       );
     };
+
+    // The file is not what Sefer last wrote or read: changed or removed outside Sefer.
+    const movedOnDisk = (book: Book): Effect.Effect<ExternalChange | undefined> =>
+      Effect.gen(function* () {
+        const baseline = baselines.get(book.id);
+        if (baseline === undefined) return undefined;
+        const read = yield* Effect.result(fileSystem.readFile(book.path));
+        if (Result.isFailure(read))
+          return read.failure.reason._tag === "NotFound"
+            ? { bookId: book.id, path: book.path, kind: "removed" as const }
+            : undefined;
+        const decoded = decode(read.success);
+        const same = TextResult.isFailure(decoded)
+          ? false
+          : baseline.hash !== undefined && hasher !== undefined
+            ? hasher(decoded.success.text) === baseline.hash
+            : decoded.success.text === baseline.text;
+        return same ? undefined : { bookId: book.id, path: book.path, kind: "changed" as const };
+      });
 
     const saveIn = (
       book: Book,
       observability: ObservabilityService | undefined,
+      checked: boolean,
     ): Effect.Effect<SaveReceipt, SaveError> =>
       Effect.gen(function* () {
         remember(book);
@@ -240,6 +275,17 @@ const make = (
         // The text is read once the file's turn comes, so queued saves write the newest text.
         const written = yield* serialize(book.path)(
           Effect.gen(function* () {
+            if (checked) {
+              const moved = yield* movedOnDisk(book);
+              if (moved !== undefined) {
+                conflicts.set(book.id, moved);
+                observability?.note("file.changed", "declined", "before autosave", {
+                  "book.id": book.id,
+                  "save.change": moved.kind,
+                });
+                return { kind: "moved", moved } as const;
+              }
+            }
             const source = book.source();
             const text = source.text;
             const bytes = encode(source);
@@ -260,9 +306,23 @@ const make = (
                 text,
                 savedAt: Date.now(),
               });
-            return { result, stamp: source.stamp, hash, bytes: bytes.length };
+            return {
+              kind: "wrote",
+              result,
+              stamp: source.stamp,
+              hash,
+              bytes: bytes.length,
+            } as const;
           }),
         );
+        if (written.kind === "moved")
+          return yield* Effect.fail(
+            refuse(
+              book,
+              "Conflict",
+              `${book.path} was ${written.moved.kind} outside Sefer; resolve before saving`,
+            ),
+          );
         if (Result.isFailure(written.result)) {
           const reason = failureFor(written.result.failure);
           observability?.note("save", "failed", reason, {
@@ -444,6 +504,8 @@ const make = (
         }),
 
       takeDisk,
+
+      conflicted: () => [...conflicts.values()],
 
       forget: () =>
         Effect.sync(() => {

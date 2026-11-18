@@ -1,16 +1,46 @@
 import type { JSX } from "@solidjs/web";
+import { Effect } from "effect";
 import CircleAlert from "lucide-solid/icons/circle-alert";
 import Save from "lucide-solid/icons/save";
 import Wifi from "lucide-solid/icons/wifi";
 import WifiOff from "lucide-solid/icons/wifi-off";
-import { createSignal } from "solid-js";
+import { createEffect, createSignal } from "solid-js";
+
+import type { ExternalChange } from "#core/project/project";
 
 import { runCommand } from "../../commands";
 import { chooseWorkOffline } from "../../network";
 import { m } from "../../paraglide/messages";
-import { useShell } from "../../ProjectContext";
+import { useShell, type Shell } from "../../ProjectContext";
 import { syncStatus } from "../../syncStatus";
-import { Button, Popover, SegmentedControl, Tooltip, cx } from "../primitives";
+import { Button, Popover, SegmentedControl, Tooltip, cx, toasts } from "../primitives";
+import { bookName } from "./books";
+
+/**
+ * A book's file changed outside Sefer, so autosave stopped writing it rather
+ * than overwrite that change. One toast per book until it is answered: Keep
+ * mine writes the editor's text over it; reopening the project takes the file.
+ */
+const offerConflict = (shell: Shell, change: ExternalChange): void => {
+  const id = `autosave-conflict-${change.bookId}`;
+  toasts.error({
+    id,
+    title: m.status_changed_outside_sefer({ book: bookName(change.bookId, shell.metadata()) }),
+    message: m.status_changed_outside_sefer_body(),
+    action: {
+      label: m.status_keep_mine(),
+      onPress: () => {
+        toasts.dismiss(id);
+        void shell.services.run(
+          Effect.flatMap(
+            shell.services.save.resolve(change, "keepMine"),
+            () => shell.services.autosave.flush,
+          ),
+        );
+      },
+    },
+  });
+};
 
 /**
  * The app bar's Save button, in the save model's own terms: "Saving changes…"
@@ -33,6 +63,13 @@ export function SaveButton() {
     if (failed()) return m.status_backup_failed_body();
     return unsaved() ? m.status_unsaved_tooltip() : m.status_saved_tooltip();
   };
+  createEffect(
+    () => shell.backup().kind,
+    (kind) => {
+      if (kind === "failed")
+        for (const change of shell.services.save.conflicted()) offerConflict(shell, change);
+    },
+  );
 
   return (
     <Tooltip label={explained()} side="bottom">

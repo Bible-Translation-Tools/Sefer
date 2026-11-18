@@ -75,7 +75,7 @@ const make = (
       let wrote = 0;
       for (const book of books) {
         if (!save.unwritten(book)) continue;
-        const saved = yield* Effect.result(save.save(book));
+        const saved = yield* Effect.result(save.save(book, { checked: true }));
         if (Result.isFailure(saved)) {
           failed += 1;
           reason = saved.failure.description;

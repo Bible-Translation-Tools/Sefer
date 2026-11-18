@@ -1,7 +1,8 @@
 /**
  * The desktop app launches, a project arrives on the native disk and opens, a
  * book shows its text, an edit and Undo round-trip, and the save model holds:
- * an edit reaches the backup journal, and only Record a version writes the file.
+ * an edit reaches the book file on its own (autosave), and only Record a version
+ * makes it a version (a commit).
  *
  * The template for promoting more desktop checks: each `it` makes one claim
  * only the desktop host can get wrong (the Tauri IPC, the native filesystem,
@@ -23,7 +24,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, readFileSync, readdirSync } from "node:fs";
+import { cpSync, existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -38,30 +39,14 @@ const projects = path.join(
   "org.wycliffe.sefer",
   "projects",
 );
-const appData = path.join(home, "Library", "Application Support", "org.wycliffe.sefer");
 const editor = "[data-testid='editor-host'] .cm-content";
 const mod = process.platform === "darwin" ? "Meta" : "Control";
 
-/**
- * The backup journals holding `word`: `.jsonl` files under app data, outside
- * the projects and the Library (the journals sit beside them, each under its
- * project's path).
- */
-const journalsHolding = (word: string): string[] => {
-  const found: string[] = [];
-  const walk = (directory: string): void => {
-    for (const entry of readdirSync(directory, { withFileTypes: true })) {
-      const at = path.join(directory, entry.name);
-      if (directory === appData && (entry.name === "projects" || entry.name === "library"))
-        continue;
-      if (entry.isDirectory()) walk(at);
-      else if (entry.name.endsWith(".jsonl") && readFileSync(at, "utf8").includes(word))
-        found.push(at);
-    }
-  };
-  if (existsSync(appData)) walk(appData);
-  return found;
-};
+/** The book's file as git sees it: `M` while it differs from HEAD, empty when HEAD holds it. */
+const gitStatusOf = (file: string): string =>
+  spawnSync("git", ["-C", path.dirname(file), "status", "--porcelain", "--", path.basename(file)], {
+    encoding: "utf8",
+  }).stdout.trim();
 
 const bodyText = (): Promise<string> => browser.execute(() => document.body.innerText);
 
@@ -196,17 +181,17 @@ describe("the desktop app", () => {
     });
   });
 
-  it("keeps an edit in the backup journal and writes the file only on Record a version", async () => {
+  it("autosaves an edit to the file and records it only on Record a version", async () => {
     const book = path.join(projects, "small-nt", "19-PSA.usfm");
     await placeCaret("who does not walk");
     await $(editor).addValue(" RECORDED");
-    // The journal flush is debounced (500 ms of quiet, 5 s at most).
-    await browser.waitUntil(() => journalsHolding("RECORDED").length > 0, {
+    // Autosave is debounced (1.5 s of quiet, 5 s at most).
+    await browser.waitUntil(() => readFileSync(book, "utf8").includes("RECORDED"), {
       timeout: 15_000,
       interval: 500,
-      timeoutMsg: "no backup journal holds the edit",
+      timeoutMsg: "autosave did not write the edit to the book",
     });
-    expect(readFileSync(book, "utf8").includes("RECORDED")).toBe(false);
+    expect(gitStatusOf(book)).toMatch(/^M/);
 
     // In-app, not a reload: a reload would drop the unsaved edit.
     await browser.keys([mod, "s"]);
@@ -223,10 +208,10 @@ describe("the desktop app", () => {
         ?.click(),
     );
 
-    await browser.waitUntil(() => readFileSync(book, "utf8").includes("RECORDED"), {
+    await browser.waitUntil(() => gitStatusOf(book) === "", {
       timeout: 30_000,
       interval: 500,
-      timeoutMsg: "Record a version did not write the book",
+      timeoutMsg: "Record a version did not commit the book",
     });
     const head = spawnSync("git", ["-C", path.dirname(book), "log", "-1", "--format=%s"], {
       encoding: "utf8",
