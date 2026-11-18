@@ -26,6 +26,7 @@ import {
   addToProject,
   assembleProject,
   forgetPicked,
+  historyFor,
   openOne,
   releaseOpened,
   pickLocal,
@@ -38,6 +39,7 @@ import {
   Badge,
   Button,
   Card,
+  Checkbox,
   Dialog,
   Input,
   Menu,
@@ -53,6 +55,9 @@ import { WriterLanguages } from "./WriterLanguages";
 type Step = "find" | "books";
 
 const OPEN_AT_ONCE = 10;
+
+/** Picked copies whose full history is fetched at once before Assemble. */
+const HISTORY_AT_ONCE = 6;
 
 const refuseAdd = (
   label: string,
@@ -99,6 +104,11 @@ const settle = (work: Promise<void>, failure: string, done: () => void): void =>
     .finally(done);
 };
 
+/**
+ * One testament's books. Each has a box to leave it out of the run, so a team
+ * can migrate one testament or part of one (the PO, 2026-11-17); the heading's
+ * box takes or leaves the whole testament.
+ */
 function TestamentSection(props: {
   readonly testament: "ot" | "nt";
   readonly title: string;
@@ -106,33 +116,62 @@ function TestamentSection(props: {
   readonly count: string;
   readonly current: string | undefined;
   readonly markOf: (row: BookRow) => { readonly tone: BadgeTone; readonly label: string };
+  readonly included: (book: string) => boolean;
+  readonly onInclude: (books: readonly string[], on: boolean) => void;
   readonly onSelect: (book: string) => void;
 }) {
   const own = (): readonly BookRow[] =>
     props.rows.filter((row) => testamentOfBook(row.book) === props.testament);
+  const taken = (): number => own().filter((row) => props.included(row.book)).length;
   return (
     <Show when={own().length > 0}>
-      <div class="flex items-baseline justify-between border-b border-surface-border bg-surface-secondary px-3 py-1.5 text-smallest font-semibold text-on-surface-secondary">
-        <span>{props.title}</span>
-        <span class="font-normal">{props.count}</span>
+      <div class="sticky top-0 z-10 flex items-center gap-2 border-b border-surface-border bg-surface-secondary px-3 py-2">
+        <Checkbox
+          checked={taken() === own().length}
+          indeterminate={taken() > 0 && taken() < own().length}
+          aria-label={m.migrate_include_testament({ testament: props.title })}
+          data-testid={`migrate-include-${props.testament}`}
+          onChange={(on) =>
+            props.onInclude(
+              own().map((row) => row.book),
+              on,
+            )
+          }
+        />
+        <span class="me-auto text-small font-semibold text-on-surface-primary">{props.title}</span>
+        <span class="text-smallest text-on-surface-secondary">{props.count}</span>
       </div>
       <For each={own()}>
         {(row) => (
-          <button
-            type="button"
-            data-testid={`migrate-row-${row.book}`}
-            aria-current={props.current === row.book ? "true" : undefined}
+          <div
             class={cx(
-              "flex w-full items-center gap-2 border-b border-surface-border px-3 py-1.5 text-start text-small hover:bg-surface-secondary",
-              props.current === row.book && "bg-surface-tertiary font-semibold",
+              "flex items-center gap-2 border-b border-surface-border ps-3 hover:bg-surface-secondary",
+              props.current === row.book && "bg-surface-tertiary",
             )}
-            onClick={() => props.onSelect(row.book)}
           >
-            <span class="me-auto truncate">{bookName(row.book)}</span>
-            <Badge tone={props.markOf(row).tone} class="max-w-28 truncate">
-              {props.markOf(row).label}
-            </Badge>
-          </button>
+            <Checkbox
+              checked={props.included(row.book)}
+              aria-label={m.migrate_include_book({ book: bookName(row.book) })}
+              data-testid={`migrate-include-${row.book}`}
+              onChange={(on) => props.onInclude([row.book], on)}
+            />
+            <button
+              type="button"
+              data-testid={`migrate-row-${row.book}`}
+              aria-current={props.current === row.book ? "true" : undefined}
+              class={cx(
+                "flex min-w-0 flex-1 items-center gap-2 py-1.5 pe-3 text-start text-small",
+                props.current === row.book && "font-semibold",
+                !props.included(row.book) && "text-on-surface-tertiary",
+              )}
+              onClick={() => props.onSelect(row.book)}
+            >
+              <span class="me-auto truncate">{bookName(row.book)}</span>
+              <Badge tone={props.markOf(row).tone} class="max-w-28 truncate">
+                {props.markOf(row).label}
+              </Badge>
+            </button>
+          </div>
         )}
       </For>
     </Show>
@@ -366,6 +405,17 @@ export function MigrateScreen(props: {
     name: "migrateSelected",
   });
   const [assembling, setAssembling] = createSignal(false, { name: "migrateAssembling" });
+  /**
+   * Books left out of this run: not opened, not assembled. `leftOut` is the
+   * plain copy the opening queue reads: a signal written in one pass still
+   * reads its old value in that pass (Solid 2), so ticking a book and then
+   * queueing it would see it as still left out.
+   */
+  const leftOut = new Set<string>();
+  const [skipped, setSkipped] = createSignal<ReadonlySet<string>>(new Set(), {
+    name: "migrateSkipped",
+  });
+  const included = (book: string): boolean => !skipped().has(book);
 
   onCleanup(forgetPicked);
   onCleanup(() => untrack(opened).forEach(releaseOpened));
@@ -383,13 +433,16 @@ export function MigrateScreen(props: {
     const initialQueue = listed.filter(
       (candidate) =>
         openedOf(candidate.id).state === "waiting" &&
+        !leftOut.has(candidate.book) &&
         (inactiveToo || candidate.hints.status !== "Inactive"),
     );
     for (const candidate of initialQueue) setOpenedOf(candidate.id, { state: "opening" });
     const next = async (): Promise<void> => {
       const candidate = initialQueue.shift();
       if (candidate === undefined) return;
-      setOpenedOf(candidate.id, await openOne(services, candidate));
+      // Left out while it waited: no clone, no history. Ticking it again opens it.
+      if (leftOut.has(candidate.book)) setOpenedOf(candidate.id, { state: "waiting" });
+      else setOpenedOf(candidate.id, await openOne(services, candidate));
       await next();
     };
     await Promise.all(Array.from({ length: OPEN_AT_ONCE }, next));
@@ -491,14 +544,33 @@ export function MigrateScreen(props: {
 
   const contested = (row: BookRow): boolean => visible(row).length > 1;
 
+  const include = (list: readonly string[], on: boolean): void => {
+    for (const book of list) {
+      if (on) leftOut.delete(book);
+      else leftOut.add(book);
+    }
+    setSkipped(new Set(leftOut));
+    if (on) {
+      const wanted = new Set(list);
+      void openPending(
+        candidates().filter((candidate) => wanted.has(candidate.book)),
+        showInactive(),
+      );
+    }
+  };
+
+  const takenRows = createMemo(() => allRows().filter((row) => included(row.book)), {
+    name: "migrateTakenRows",
+  });
+
   const needsChoice = createMemo(
-    () => allRows().filter((row) => contested(row) && !chosen().has(row.book)),
+    () => takenRows().filter((row) => contested(row) && !chosen().has(row.book)),
     { name: "migrateNeedsChoice" },
   );
 
   const picked = createMemo(
     () =>
-      allRows().flatMap((row) => {
+      takenRows().flatMap((row) => {
         const candidate = pick(row);
         return candidate === undefined ? [] : [candidate];
       }),
@@ -526,7 +598,45 @@ export function MigrateScreen(props: {
     return m.migrate_have_of_total({ have: have.length, total });
   };
 
+  /** Books whose history is still being fetched before Assemble: 0 when not fetching. */
+  const [fetching, setFetching] = createSignal(0, { name: "migrateFetching" });
+
+  /**
+   * Every picked copy with its saves (`historyFor`), a few at a time. Copies
+   * are checked with their latest commit only, so this is the one download of
+   * the history Assemble replays; each is kept, so a retry does not fetch again.
+   */
+  const withHistories = async (): Promise<readonly StagedBook[]> => {
+    // What was picked when Assemble was clicked; a later pick does not join this run.
+    const initialPicks = picked().flatMap((candidate) => {
+      const held = openedOf(candidate.id);
+      return held.state === "ready" ? [held] : [];
+    });
+    const out: StagedBook[] = initialPicks.map((held) => held.staged);
+    let next = 0;
+    setFetching(initialPicks.length);
+    const worker = async (): Promise<void> => {
+      while (next < initialPicks.length) {
+        const at = next;
+        next += 1;
+        const held = initialPicks[at];
+        if (held === undefined) continue;
+        const staged = await historyFor(services, held);
+        out[at] = staged;
+        setOpenedOf(staged.candidate.id, { ...held, staged });
+        setFetching((left) => left - 1);
+      }
+    };
+    try {
+      await Promise.all(Array.from({ length: HISTORY_AT_ONCE }, worker));
+    } finally {
+      setFetching(0);
+    }
+    return out;
+  };
+
   const assembleLabel = (): string => {
+    if (fetching() > 0) return m.migrate_fetching_history({ count: fetching() });
     if (assembling() && ready().some((staged) => (staged.history?.saves ?? 0) > 0))
       return m.migrate_writing_count_books_history({ count: picked().length });
     if (props.into === undefined) return m.migrate_assemble_count_books({ count: picked().length });
@@ -534,12 +644,12 @@ export function MigrateScreen(props: {
   };
 
   const runAssemble = (): void => {
-    const books = ready();
-    const form = prefillForm(books);
-    const name = `${form.language.id}_${form.resource}`.trim() || "writer-project";
     setAssembling(true);
     settle(
       (async () => {
+        const books = await withHistories();
+        const form = prefillForm(books);
+        const name = `${form.language.id}_${form.resource}`.trim() || "writer-project";
         const { root } = await services.run(assembleProject(services, name, form, books));
         toasts.success({
           title: m.migrate_assembled_count_books({ count: books.length }),
@@ -556,10 +666,10 @@ export function MigrateScreen(props: {
   const runAdd = (): void => {
     const root = props.into;
     if (root === undefined) return;
-    const books = ready();
     setAssembling(true);
     settle(
       (async () => {
+        const books = await withHistories();
         await services.run(addToProject(services, root, held, books));
         toasts.success({
           title: m.migrate_added_count_books({ count: books.length }),
@@ -591,7 +701,8 @@ export function MigrateScreen(props: {
 
   const mark = (row: BookRow): { readonly tone: BadgeTone; readonly label: string } => {
     const shown = visible(row);
-    if (shown.length === 0) return { tone: "muted", label: m.migrate_left_out() };
+    if (!included(row.book) || shown.length === 0)
+      return { tone: "muted", label: m.migrate_left_out() };
     if (shown.length > 1 && !chosen().has(row.book))
       return { tone: "warning", label: m.migrate_choose_count({ count: shown.length }) };
     const candidate = pick(row);
@@ -657,6 +768,8 @@ export function MigrateScreen(props: {
               count={counted("ot")}
               current={current()?.book}
               markOf={mark}
+              included={included}
+              onInclude={include}
               onSelect={setSelected}
             />
             <TestamentSection
@@ -666,6 +779,8 @@ export function MigrateScreen(props: {
               count={counted("nt")}
               current={current()?.book}
               markOf={mark}
+              included={included}
+              onInclude={include}
               onSelect={setSelected}
             />
           </Card>

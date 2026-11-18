@@ -136,17 +136,19 @@ export const openCandidate = (
     let upstream: StagedBook["upstream"];
     if (candidate.origin.kind === "remote") {
       root = `${stagingRoot}/${candidate.origin.owner}_${candidate.origin.repo}`;
-      const staged =
-        (yield* Effect.orElseSucceed(fileSystem.exists(`${root}/manifest.json`), () => false)) &&
-        !(yield* Effect.orElseSucceed(
-          Effect.flatMap(git.open(root), (repo) => git.shallow(repo)),
-          () => true,
-        ));
+      const staged = yield* Effect.orElseSucceed(
+        fileSystem.exists(`${root}/manifest.json`),
+        () => false,
+      );
       if (!staged) {
         const cloned = observability.span("migrate.clone");
         yield* Effect.ignore(fileSystem.remove(root, { recursive: true }));
         yield* Effect.mapError(
-          remote.clone(candidate.origin.url, root, { history: "all" }),
+          // The latest commit only: enough to check and compare a copy. Only the
+          // copy picked for a book needs its saves, fetched at Assemble
+          // (`fullHistory`). Bemba, 2026-11-18: 160 copies, 69 MB with every
+          // save against 24 MB without, and ~24 s of history reading saved.
+          remote.clone(candidate.origin.url, root, { history: "latest" }),
           (error) =>
             new CandidateError({
               reason: "Unreachable",
@@ -202,7 +204,9 @@ export const openCandidate = (
         ? `${candidate.origin.owner}/${candidate.origin.repo}`
         : lastSegment(root);
     let history: WriterHistory | undefined;
-    if (repo._tag === "Some") {
+    const shallow =
+      repo._tag === "Some" && (yield* Effect.orElseSucceed(git.shallow(repo.value), () => false));
+    if (repo._tag === "Some" && !shallow) {
       const read = observability.span("migrate.history.read");
       history = yield* Effect.tapError(readHistory(root, source), (error) =>
         Effect.sync(() => {
@@ -225,6 +229,53 @@ export const openCandidate = (
       source,
       ...(upstream === undefined ? {} : { upstream }),
       ...(history === undefined ? {} : { history }),
+    };
+  });
+
+/**
+ * The picked copy of a book with all its saves: a copy opened with its latest
+ * commit only (every remote one, `openCandidate`) fetches the rest, and its
+ * history is read for the replay; its authors come from the whole log. A
+ * copy that already has its history is returned as it is.
+ */
+export const fullHistory = (
+  staged: StagedBook,
+): Effect.Effect<
+  StagedBook,
+  CandidateError,
+  FileSystem.FileSystem | Git | Remote | Observability | WriterEngine
+> =>
+  Effect.gen(function* () {
+    if (staged.history !== undefined) return staged;
+    const git = yield* Git;
+    const remote = yield* Remote;
+    const observability = yield* Observability;
+    const repo = yield* Effect.option(git.open(staged.root));
+    if (repo._tag === "None") return staged;
+    if (yield* Effect.orElseSucceed(git.shallow(repo.value), () => false)) {
+      const deepened = observability.span("migrate.deepen");
+      yield* Effect.mapError(
+        remote.deepen(repo.value, "all"),
+        (error) =>
+          new CandidateError({
+            reason: "Unreachable",
+            description: error.description ?? error.reason,
+          }),
+      );
+      deepened();
+    }
+    const log = yield* Effect.orElseSucceed(git.log(repo.value), () => []);
+    const read = observability.span("migrate.history.read");
+    const history = yield* readHistory(staged.root, staged.source);
+    read({ "migrate.saves": history.saves, "migrate.commits": log.length });
+    return {
+      ...staged,
+      authors: authorsFrom(
+        staged.project,
+        log.map((commit) => commit.author),
+      ),
+      ...(history.saves > 0 ? { usfm: history.usfm() } : {}),
+      history,
     };
   });
 

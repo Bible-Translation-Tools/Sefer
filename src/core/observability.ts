@@ -49,6 +49,7 @@ export type OperationName =
   | "sync.check"
   | "upstream.check"
   | "migrate.open"
+  | "migrate.fullHistory"
   | "migrate.assemble"
   | "history.deepen"
   | "terms.load"

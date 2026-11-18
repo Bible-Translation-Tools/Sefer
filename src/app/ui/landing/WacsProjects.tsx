@@ -1,11 +1,12 @@
 import { useNavigate } from "@tanstack/solid-router";
+import { Effect, Fiber, Stream } from "effect";
 import ArrowDown from "lucide-solid/icons/arrow-down";
 import ArrowUp from "lucide-solid/icons/arrow-up";
 import Download from "lucide-solid/icons/download";
 import Filter from "lucide-solid/icons/filter";
 import SearchIcon from "lucide-solid/icons/search";
 import X from "lucide-solid/icons/x";
-import { For, Show, createEffect, createSignal } from "solid-js";
+import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 
 import { sourceKey } from "#core/project/shareLink";
 import { through } from "#core/remote/transport";
@@ -393,6 +394,8 @@ type Repos = "consolidated" | "writer" | "gateway";
 
 const CatalogueToolbar = (props: {
   readonly gatewaysOffered: boolean;
+  /** Writer repos are for tech and project managers (`techMode`). */
+  readonly writerOffered: boolean;
   readonly filters: Filters;
   readonly repos: Repos;
   readonly onRepos: (repos: Repos) => void;
@@ -404,7 +407,9 @@ const CatalogueToolbar = (props: {
       label={m.landing_repos_label()}
       items={[
         { value: "consolidated", label: m.landing_repos_consolidated() },
-        { value: "writer", label: m.landing_repos_writer() },
+        ...(props.writerOffered
+          ? [{ value: "writer" as const, label: m.landing_repos_writer() }]
+          : []),
         ...(props.gatewaysOffered
           ? [{ value: "gateway" as const, label: m.landing_gateway_languages() }]
           : []),
@@ -582,6 +587,19 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
   const { services } = shell;
   const catalogue = catalogueFor(services.settings);
   const gatewaysOffered = services.settings.get(shellKeys(services.settings).showGatewayProjects);
+  // Live, so the Writer tutorial can switch tech mode on from this page.
+  const techKey = shellKeys(services.settings).techMode;
+  const [writerOffered, setWriterOffered] = createSignal(services.settings.get(techKey), {
+    name: "catalogueWriterOffered",
+  });
+  const techChanges = services.runtime.runFork(
+    Stream.runForEach(services.settings.changes(techKey), (on) =>
+      Effect.sync(() => setWriterOffered(on)),
+    ),
+  );
+  onCleanup(() => {
+    Effect.runFork(Fiber.interrupt(techChanges));
+  });
 
   const downloadReason = downloadReasonFor(services);
   const navigate = useNavigate();
@@ -615,6 +633,7 @@ export function WacsProjects(props: { readonly downloads: DownloadTracker }) {
     <section class="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
       <CatalogueToolbar
         gatewaysOffered={gatewaysOffered}
+        writerOffered={writerOffered()}
         filters={filters}
         repos={repos()}
         onRepos={(next) => {
