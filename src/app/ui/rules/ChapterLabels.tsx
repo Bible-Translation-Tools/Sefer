@@ -15,7 +15,7 @@ import {
 
 import { runCommand } from "../../commands";
 import { useShell } from "../../ProjectContext";
-import { Badge, Button, Dialog, Input, Select } from "../primitives";
+import { Button, Dialog, Input, Select } from "../primitives";
 import { bookName } from "../workspace/books";
 import { metadataOf } from "../workspace/project";
 
@@ -147,9 +147,14 @@ export function ChapterLabelsDialog(props: {
 
   const difference = (row: Row): Difference | undefined =>
     row.labeled ? differenceOf(row, mostUsed()?.word) : undefined;
-  const standardCount = createMemo(
-    () => rows().filter((row) => row.labeled && difference(row) === undefined).length,
+  /** Books to look at first; books already standard fold away below them. */
+  const differing = createMemo(() =>
+    rows().filter((row) => row.labeled && difference(row) !== undefined),
   );
+  const standard = createMemo(() =>
+    rows().filter((row) => row.labeled && difference(row) === undefined),
+  );
+  const wordless = createMemo(() => rows().filter((row) => !row.labeled));
 
   const useEverywhere = (given?: string): void => {
     const word = (given ?? everyWord()).trim();
@@ -176,6 +181,108 @@ export function ChapterLabelsDialog(props: {
     openChange(false);
     if (chosen.size > 0) runCommand("chapterLabels.standardize", chosen);
   };
+
+  const bookRow = (row: Row) => (
+    <div
+      class="flex flex-col gap-2 border-t border-surface-border py-3"
+      data-chapter-labels-book={row.id}
+    >
+      <div class="flex items-center justify-between gap-controls">
+        <div class="flex min-w-0 flex-col">
+          <span
+            class={
+              row.labeled && difference(row) === undefined
+                ? "text-on-surface-secondary"
+                : "font-medium"
+            }
+          >
+            {row.name}
+          </span>
+          <Show when={difference(row)}>
+            {(differs) => (
+              <span class="text-smallest text-on-surface-warning">
+                {differenceText(differs(), row, mostUsed()?.word ?? "")}
+              </span>
+            )}
+          </Show>
+        </div>
+        <Select
+          wrapperClass="w-60 shrink-0"
+          aria-label={row.name}
+          value={choiceOf(row)}
+          onChange={(event) => choose(row.id, event.currentTarget.value)}
+        >
+          <option value={LEAVE}>{m.chapter_labels_leave()}</option>
+          <For each={row.words}>
+            {([word, count]) => (
+              <option value={word}>
+                {word === row.bookWord
+                  ? m.chapter_labels_book_label({ word, count })
+                  : m.chapter_labels_word_count({ word, count })}
+              </option>
+            )}
+          </For>
+          <option value={OTHER}>{m.chapter_labels_other()}</option>
+        </Select>
+      </div>
+      <Show when={choiceOf(row) === OTHER}>
+        <Input
+          aria-label={m.chapter_labels_other()}
+          value={typed().get(row.id) ?? ""}
+          onInput={(event) => type(row.id, event.currentTarget.value)}
+        />
+      </Show>
+      <Show when={row.kept.length > 0}>
+        <details
+          class="text-on-surface-secondary"
+          open={row.kept.some((label) => label.mismatched)}
+        >
+          <summary class="cursor-pointer">
+            {m.chapter_labels_kept({ count: row.kept.length })}
+          </summary>
+          <ul class="mt-1 flex flex-col gap-1 ps-4">
+            <For each={row.kept}>
+              {(label) => (
+                <li class="flex flex-wrap items-center gap-2">
+                  <span>
+                    {label.mismatched
+                      ? m.chapter_labels_number_differs({
+                          chapter: String(label.chapter),
+                          text: label.text,
+                        })
+                      : m.chapter_labels_kept_row({
+                          chapter: String(label.chapter),
+                          text: label.text,
+                        })}
+                  </span>
+                  <Show when={label.mismatched ? renumbered(label) : undefined}>
+                    {(change) => (
+                      <>
+                        <Button
+                          variant="secondary"
+                          data-testid="chapter-labels-renumber"
+                          onClick={() => fix(row, label, "renumber")}
+                        >
+                          {m.chapter_labels_renumber({ number: change().insert })}
+                        </Button>
+                        <Button
+                          variant="tertiary"
+                          data-testid="chapter-labels-remove"
+                          onClick={() => fix(row, label, "remove")}
+                        >
+                          {m.chapter_labels_remove()}
+                        </Button>
+                      </>
+                    )}
+                  </Show>
+                </li>
+              )}
+            </For>
+          </ul>
+        </details>
+      </Show>
+    </div>
+  );
 
   return (
     <Dialog
@@ -231,151 +338,46 @@ export function ChapterLabelsDialog(props: {
             {m.chapter_labels_use_everywhere()}
           </Button>
         </div>
-        <Show when={mostUsed()}>
-          {(most) => (
-            <div class="pb-3">
+        <div class="flex flex-wrap items-center gap-x-2 pb-3">
+          <Show when={mostUsed()}>
+            {(most) => (
               <Button
-                variant="secondary"
+                variant="tertiary"
                 data-testid="chapter-labels-use-most"
                 onClick={() => useEverywhere(most().word)}
               >
                 {m.chapter_labels_use_most({ word: most().word, count: most().count })}
               </Button>
-            </div>
-          )}
-        </Show>
-        <Show when={mostUsed()}>
-          {(most) => (
-            <p
-              class="pb-3 text-small text-on-surface-secondary"
-              data-testid="chapter-labels-standard-count"
-            >
-              {m.chapter_labels_standard_count({
-                standard: standardCount(),
-                books: rows().filter((row) => row.labeled).length,
-                word: most().word,
-              })}
-            </p>
-          )}
-        </Show>
-        <Show when={!adding() && unlabeled() > 0}>
-          <div class="pb-3">
+            )}
+          </Show>
+          <Show when={!adding() && unlabeled() > 0}>
             <Button variant="tertiary" onClick={() => setAdding(true)}>
               {m.chapter_labels_add_word_others({ count: unlabeled() })}
             </Button>
-          </div>
-        </Show>
+          </Show>
+        </div>
         <div class="max-h-[60vh] overflow-y-auto" data-testid="chapter-labels-books">
-          <For each={rows()}>
-            {(row) => (
-              <div
-                class="flex flex-col gap-2 border-t border-surface-border py-3"
-                data-chapter-labels-book={row.id}
-              >
-                <div class="flex items-center justify-between gap-controls">
-                  <div class="flex min-w-0 flex-wrap items-center gap-2">
-                    <span
-                      class={
-                        row.labeled && difference(row) === undefined
-                          ? "text-on-surface-secondary"
-                          : "font-semibold"
-                      }
-                    >
-                      {row.name}
-                    </span>
-                    <Show
-                      when={difference(row)}
-                      fallback={
-                        <Show when={row.labeled}>
-                          <Badge tone="muted">{m.chapter_labels_standard()}</Badge>
-                        </Show>
-                      }
-                    >
-                      {(differs) => (
-                        <Badge tone="warning">
-                          {differenceText(differs(), row, mostUsed()?.word ?? "")}
-                        </Badge>
-                      )}
-                    </Show>
-                  </div>
-                  <Select
-                    wrapperClass="w-60 shrink-0"
-                    aria-label={row.name}
-                    value={choiceOf(row)}
-                    onChange={(event) => choose(row.id, event.currentTarget.value)}
-                  >
-                    <option value={LEAVE}>{m.chapter_labels_leave()}</option>
-                    <For each={row.words}>
-                      {([word, count]) => (
-                        <option value={word}>
-                          {word === row.bookWord
-                            ? m.chapter_labels_book_label({ word, count })
-                            : m.chapter_labels_word_count({ word, count })}
-                        </option>
-                      )}
-                    </For>
-                    <option value={OTHER}>{m.chapter_labels_other()}</option>
-                  </Select>
-                </div>
-                <Show when={choiceOf(row) === OTHER}>
-                  <Input
-                    aria-label={m.chapter_labels_other()}
-                    value={typed().get(row.id) ?? ""}
-                    onInput={(event) => type(row.id, event.currentTarget.value)}
-                  />
-                </Show>
-                <Show when={row.kept.length > 0}>
-                  <details
-                    class="text-on-surface-secondary"
-                    open={row.kept.some((label) => label.mismatched)}
-                  >
-                    <summary class="cursor-pointer">
-                      {m.chapter_labels_kept({ count: row.kept.length })}
-                    </summary>
-                    <ul class="mt-1 flex flex-col gap-1 ps-4">
-                      <For each={row.kept}>
-                        {(label) => (
-                          <li class="flex flex-wrap items-center gap-2">
-                            <span>
-                              {label.mismatched
-                                ? m.chapter_labels_number_differs({
-                                    chapter: String(label.chapter),
-                                    text: label.text,
-                                  })
-                                : m.chapter_labels_kept_row({
-                                    chapter: String(label.chapter),
-                                    text: label.text,
-                                  })}
-                            </span>
-                            <Show when={label.mismatched ? renumbered(label) : undefined}>
-                              {(change) => (
-                                <>
-                                  <Button
-                                    variant="secondary"
-                                    data-testid="chapter-labels-renumber"
-                                    onClick={() => fix(row, label, "renumber")}
-                                  >
-                                    {m.chapter_labels_renumber({ number: change().insert })}
-                                  </Button>
-                                  <Button
-                                    variant="tertiary"
-                                    data-testid="chapter-labels-remove"
-                                    onClick={() => fix(row, label, "remove")}
-                                  >
-                                    {m.chapter_labels_remove()}
-                                  </Button>
-                                </>
-                              )}
-                            </Show>
-                          </li>
-                        )}
-                      </For>
-                    </ul>
-                  </details>
-                </Show>
-              </div>
-            )}
-          </For>
+          <For each={differing()}>{bookRow}</For>
+          <Show when={wordless().length > 0}>
+            <p class="pt-4 pb-1 text-smallest font-medium text-on-surface-tertiary">
+              {m.chapter_labels_without_word()}
+            </p>
+            <For each={wordless()}>{bookRow}</For>
+          </Show>
+          <Show when={standard().length > 0}>
+            <details
+              class="border-t border-surface-border"
+              open={differing().length === 0 && wordless().length === 0}
+            >
+              <summary class="cursor-pointer py-3 text-small text-on-surface-secondary">
+                {m.chapter_labels_already_standard({
+                  count: standard().length,
+                  word: mostUsed()?.word ?? "",
+                })}
+              </summary>
+              <For each={standard()}>{bookRow}</For>
+            </details>
+          </Show>
         </div>
       </Show>
     </Dialog>
