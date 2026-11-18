@@ -160,8 +160,18 @@ const writeHistory = (fileSystem: FileSystem.FileSystem, root: string, replayed:
       `${replayed.head}\n`,
     );
     yield* fileSystem.writeFileString(joinPath(git, "HEAD"), `ref: refs/heads/${DEFAULT_BRANCH}\n`);
-    // The pack is the whole line up to this head and needs nothing else, so a
-    // first publish can send it as it is (`REPLAYED_REF`, the Web remote).
+  });
+
+/**
+ * The pack is the whole line up to this head and needs nothing else, so a
+ * first publish can send it as it is (`REPLAYED_REF`, the Web remote).
+ * Written after intake: adopting a repository drops every ref outside
+ * heads and tags, and took this one with them (2026-11-18, a Bemba New
+ * Testament fell back to the full push, which Cloudflare refuses over 100 MB).
+ */
+const markReplayed = (fileSystem: FileSystem.FileSystem, root: string, replayed: Replayed) =>
+  Effect.gen(function* () {
+    const git = joinPath(root, ".git");
     yield* fileSystem.makeDirectory(joinPath(git, "refs/sefer"), { recursive: true });
     yield* fileSystem.writeFileString(joinPath(git, REPLAYED_REF), `${replayed.head}\n`);
   });
@@ -370,6 +380,9 @@ export const assemble = (options: {
       );
       if (replayed !== undefined && !result.adopted)
         return yield* abandon("the replayed Writer history could not be opened");
+      // Best effort: without it the first publish is the ordinary push.
+      if (replayed !== undefined)
+        yield* Effect.ignore(markReplayed(fileSystem, options.root, replayed));
       replayingSpan?.(replayStats(replayed));
       return result;
     });
