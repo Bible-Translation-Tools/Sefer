@@ -59,7 +59,8 @@ function openRecordWith(
     )
     .then((origin) =>
       setSends(
-        Option.isSome(origin) && syncPreferences(services.settings, project.root).sendOnSave,
+        Option.isSome(origin) &&
+          (inputs.route.upload() || syncPreferences(services.settings, project.root).sendOnSave),
       ),
     );
 }

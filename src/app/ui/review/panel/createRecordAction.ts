@@ -9,7 +9,7 @@ import type { Navigate, Shell } from "../../../ProjectContext";
 import { recordVersion } from "../../../recordVersion";
 import type { Services } from "../../../services";
 import { acceptSuggestion, declineSuggestion } from "../../../suggestions";
-import { sendAfterSave, settleWithShared } from "../../../syncActions";
+import { sendAfterSave, sendNow, settleWithShared } from "../../../syncActions";
 import { setAuthorName } from "../../../syncSettings";
 import { forgetWriterWork, takeWriterWork, writerWatch } from "../../../writerWatch";
 import { combineTrouble } from "../../cloud/copy";
@@ -267,7 +267,11 @@ function reportRecorded(
       });
       inputs.form.setMessage("");
       inputs.sides.version.refresh();
-      follow(sendAfterSave(services, project));
+      follow(
+        inputs.route.upload()
+          ? sendNow(services, project, "save")
+          : sendAfterSave(services, project),
+      );
       break;
   }
 }

@@ -9,6 +9,8 @@ export function createReviewRoute(shell: Shell) {
   const search = useSearch({ from: "/_app/project/$slug/review" });
   const pull = (): number | undefined => untrack(() => search().pull);
   const fromCopy = (): boolean => search().copy === 1;
+  /** Opened by "Review and upload": the save uploads too, whatever send-on-save says. */
+  const upload = (): boolean => untrack(() => search().upload === 1);
   const theirsRef = (): string | undefined => {
     const number = pull();
     if (number !== undefined) return suggestionRef(number);
@@ -21,7 +23,7 @@ export function createReviewRoute(shell: Shell) {
     if (against === "shared") return "shared";
     return against === "writer" ? "writer" : "disk";
   };
-  return { search, pull, fromCopy, theirsRef, initialRightId };
+  return { search, pull, fromCopy, upload, theirsRef, initialRightId };
 }
 
 export type ReviewRoute = ReturnType<typeof createReviewRoute>;

@@ -1,3 +1,4 @@
+import { useNavigate } from "@tanstack/solid-router";
 import { Effect, Option } from "effect";
 import CircleHelp from "lucide-solid/icons/circle-help";
 import CloudUpload from "lucide-solid/icons/cloud-upload";
@@ -367,7 +368,17 @@ const WacsBody = (props: {
   const facts = () => collaboration.facts(shell.project()?.root);
   const noWrite = (): boolean =>
     props.noWrite ?? (facts()?.canWrite === false || facts()?.mode === "copy");
-  const waiting = (): number => props.held?.reading.ahead.length ?? 0;
+  // Books autosave wrote that no version holds yet: work that has not gone up either.
+  const unrecorded = (): readonly string[] => {
+    const project = shell.project();
+    if (project === undefined) return [];
+    const metadata = Option.getOrUndefined(project.metadata());
+    return project.books
+      .filter((book) => shell.unsaved(book))
+      .map((book) => bookName(book.id, metadata));
+  };
+  const waiting = (): number => (props.held?.reading.ahead.length ?? 0) + unrecorded().length;
+  const navigate = useNavigate();
 
   // The books the waiting versions touch: what changed between WACS's copy
   // and this device's, read from git once per pair of commits.
@@ -412,6 +423,13 @@ const WacsBody = (props: {
         });
     },
   );
+  // Everything not on WACS by name: the versions' books and the unrecorded ones. While the
+  // versions' books are still being read, the generic wording ("Your saved changes").
+  const waitingNames = (): readonly string[] | undefined => {
+    const versions = waitingBooks();
+    if ((props.held?.reading.ahead.length ?? 0) > 0 && versions === undefined) return undefined;
+    return [...new Set([...(versions ?? []), ...unrecorded()])];
+  };
   const user = (): string | undefined => account.session()?.username;
 
   const opened = untrack(() => shell.project());
@@ -582,7 +600,7 @@ const WacsBody = (props: {
           m.wacs_offline_body(),
           ...(waiting() === 0
             ? []
-            : [m.wacs_ready_when_online({ what: waitingWhat(waitingBooks()) })]),
+            : [m.wacs_ready_when_online({ what: waitingWhat(waitingNames()) })]),
         ];
       case "reading":
         return [m.cloud_reading_this_project()];
@@ -595,14 +613,14 @@ const WacsBody = (props: {
       case "new":
         return [m.wacs_not_on_wacs(), m.wacs_name_suggested()];
       case "review":
-        return [m.wacs_on_wacs(), m.wacs_review_needed({ what: waitingWhat(waitingBooks()) })];
+        return [m.wacs_on_wacs(), m.wacs_review_needed({ what: waitingWhat(waitingNames()) })];
       case "incoming":
         return [m.wacs_on_wacs()];
       case "on-wacs":
         return [
           m.wacs_on_wacs(),
           waiting() > 0
-            ? m.wacs_not_uploaded_yet({ what: waitingWhat(waitingBooks()) })
+            ? m.wacs_not_uploaded_yet({ what: waitingWhat(waitingNames()) })
             : m.wacs_all_uploaded(),
           ...(refused() ? [m.wacs_last_upload_failed()] : []),
         ];
@@ -765,7 +783,18 @@ const WacsBody = (props: {
               class="w-full justify-center"
               icon={<CloudUpload size={20} />}
               disabled={waiting() === 0}
-              onClick={() => (noWrite() ? submit() : upload())}
+              onClick={() => {
+                // Work no version holds goes through Review first, and its save uploads.
+                if (unrecorded().length > 0) {
+                  props.onLeave();
+                  void navigate({
+                    to: "/project/$slug/review",
+                    params: { slug: shell.slug() },
+                    search: { upload: 1 },
+                  });
+                } else if (noWrite()) submit();
+                else upload();
+              }}
               data-testid="wacs-upload"
             >
               {refused()
