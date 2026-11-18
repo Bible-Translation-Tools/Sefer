@@ -1,7 +1,7 @@
 import { Effect, FileSystem, Option, Result } from "effect";
 
 import type { Galley } from "#core/galley";
-import { DEFAULT_BRANCH, Git, type Commit, type Repo } from "#core/git/git";
+import { DEFAULT_BRANCH, Git, type Commit, type LogStop, type Repo } from "#core/git/git";
 import type { Project } from "#core/project/project";
 import { Gitea } from "#core/remote/gitea";
 import { Remote } from "#core/remote/remote";
@@ -98,8 +98,6 @@ const surveyRepo = (
 
     // SAFETY: the fallback is the empty list, which inhabits `readonly Commit[]` for any element type; the annotation only stops TypeScript inferring `never[]` and then rejecting the real log.
     const empty = [] as readonly Commit[];
-    const localLog = yield* orEmpty(git.log(repo), empty);
-    const remoteLog = remoteKnown ? yield* orEmpty(git.logFrom(repo, tracking), empty) : empty;
     const copyUrl = Option.getOrUndefined(
       yield* orEmpty(remote.urlOf(repo, "copy"), Option.none()),
     );
@@ -113,7 +111,29 @@ const surveyRepo = (
     const copied = copyRef(branch ?? DEFAULT_BRANCH);
     const copyKnown =
       inCopyMode && Option.isSome(yield* orEmpty(git.resolve(repo, copied), Option.none()));
-    const sentLog = copyKnown ? yield* orEmpty(git.logFrom(repo, copied), empty) : remoteLog;
+
+    // Each log only back to where the lines meet: ahead and behind, and the
+    // incoming plan's base, need nothing older, and a Bible migrated from
+    // Writer has ~28,000 commits (all of them read took this ~43 s). With no
+    // copy on WACS yet, one commit says whether there is anything to send.
+    const baseWith = (ref: string) =>
+      Effect.map(orEmpty(git.mergeBase(repo, "HEAD", ref), Option.none()), Option.getOrUndefined);
+    const remoteBase = remoteKnown ? yield* baseWith(tracking) : undefined;
+    const copyBase = copyKnown ? yield* baseWith(copied) : undefined;
+    const stopAt = (...bases: readonly (string | undefined)[]): LogStop | undefined => {
+      const until = bases.filter((id): id is string => id !== undefined);
+      return until.length === bases.length ? { until } : undefined;
+    };
+    const localStop: LogStop | undefined = !remoteKnown
+      ? { depth: 1 }
+      : stopAt(remoteBase, ...(copyKnown ? [copyBase] : []));
+    const localLog = yield* orEmpty(git.logFrom(repo, "HEAD", localStop), empty);
+    const remoteLog = remoteKnown
+      ? yield* orEmpty(git.logFrom(repo, tracking, stopAt(remoteBase)), empty)
+      : empty;
+    const sentLog = copyKnown
+      ? yield* orEmpty(git.logFrom(repo, copied, stopAt(copyBase)), empty)
+      : remoteLog;
     const ahead = notIn(localLog, sentLog);
     const behind = notIn(remoteLog, localLog);
     const status = yield* orEmpty(git.status(repo), { changed: [] });
