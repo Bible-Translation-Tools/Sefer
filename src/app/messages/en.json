@@ -997,6 +997,8 @@
   "migrate_added_count_books": "{count, plural, one {Added # book} other {Added # books}}",
   "migrate_could_not_add_the_books": "Could not add the books",
   "migrate_left_out": "left out",
+  "migrate_include_testament": "Migrate every book of the {testament}",
+  "migrate_include_book": "Migrate {book}",
   "migrate_choose_count": "choose · {count}",
   "migrate_refused": "refused",
   "migrate_checking_2": "checking",
