@@ -145,7 +145,7 @@ export function FindBox(props: {
       const project = shell.project();
       const text = findBox.text();
       if (project === undefined || !Search.longEnough(text)) return [];
-      const query: Search.Query = { text, caseSensitive: false };
+      const query: Search.Query = { text, caseSensitive: false, ignoreAccents: true };
       const found = asksForUsfm(text)
         ? Search.find(project.books, query)
         : Search.findInReading(readings, project.books, query);
