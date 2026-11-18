@@ -19,6 +19,7 @@ import {
 import { identityOf, through, type Transport } from "#core/remote/transport";
 
 import "./git";
+import { appendToPack, objectsSince } from "./packAppend";
 
 export interface WebRemoteOptions {
   readonly contentHost: string | null;
@@ -312,32 +313,38 @@ const makeWebRemote = (
      * migration's own pack (`REPLAYED_REF`) in one receive-pack request.
      * isomorphic-git's push would walk every object and repack them without
      * deltas — for a Bible's Writer history 28,408 commits went from a 31 MB
-     * pack to an 823 MB upload built whole in memory. The push after this one
-     * sends only what came since. Anything unexpected leaves it to that push.
+     * pack to an 823 MB upload built whole in memory. The commits made on top
+     * of the replay go in the same pack (`objectsSince`), so this one request
+     * takes the branch to the project's tip and `publish` pushes nothing
+     * after it: that second push took ~44 s in the browser for one commit
+     * (Bemba New Testament, 2026-11-18). Answers whether it sent everything.
+     * Anything unexpected leaves it to the ordinary push.
      */
-    const seedFromReplay = (repo: Repo): Effect.Effect<void, RemoteError> =>
+    const seedFromReplay = (repo: Repo): Effect.Effect<boolean, RemoteError> =>
       Effect.gen(function* () {
         const head = yield* Effect.orElseSucceed(
           attempt(() => git.resolveRef({ fs, dir: repo.root, ref: REPLAYED_REF })),
           () => undefined,
         );
-        if (head === undefined) return;
+        if (head === undefined) return false;
         const packs = joinPath(repo.root, ".git/objects/pack");
         const names = yield* Effect.orElseSucceed(fileSystem.readDirectory(packs), () => []);
         let pack: Uint8Array | undefined;
+        let index: Uint8Array = new Uint8Array();
         for (const name of names.filter((each) => each.endsWith(".idx"))) {
           const idx = yield* Effect.orElseSucceed(
             fileSystem.readFile(joinPath(packs, name)),
             () => new Uint8Array(),
           );
           if (!indexHolds(idx, head)) continue;
+          index = idx;
           pack = yield* Effect.orElseSucceed(
             fileSystem.readFile(joinPath(packs, name.replace(/\.idx$/u, ".pack"))),
             () => undefined,
           );
           break;
         }
-        if (pack === undefined) return;
+        if (pack === undefined) return false;
         const last = { current: { phase: "done", loaded: 0 } satisfies Progress };
         const wire = yield* wireFor(repo, last, "required");
         const url = yield* urlNamed(repo);
@@ -351,11 +358,31 @@ const makeWebRemote = (
             protocolVersion: 1,
           }),
         );
-        if ((info.refs ?? []).some((entry) => entry.ref.startsWith("refs/heads/"))) return;
+        if ((info.refs ?? []).some((entry) => entry.ref.startsWith("refs/heads/"))) return false;
         const branch = yield* branchOf(repo);
+        // The commits made on the replay go in the same pack; if they cannot
+        // be gathered, the replay's head goes alone and the push sends them.
+        const local = yield* attempt(() =>
+          git.resolveRef({ fs, dir: repo.root, ref: `refs/heads/${branch}` }),
+        );
+        const replayed = pack;
+        const extra =
+          local === head
+            ? []
+            : yield* Effect.orElseSucceed(
+                attempt(() =>
+                  objectsSince({ fs, dir: repo.root }, local, head, (oid) =>
+                    indexHolds(index, oid),
+                  ),
+                ),
+                () => undefined,
+              );
+        const tip = extra === undefined ? head : local;
+        const body =
+          extra === undefined ? replayed : yield* attempt(() => appendToPack(replayed, extra));
         const credential = wire.onAuth?.();
-        const update = `${"0".repeat(40)} ${head} refs/heads/${branch}\0report-status\n`;
-        const total = pack.byteLength;
+        const update = `${"0".repeat(40)} ${tip} refs/heads/${branch}\0report-status\n`;
+        const total = body.byteLength;
         PubSub.publishUnsafe(events, { phase: "Sending history", loaded: 0, total, unit: "bytes" });
         const response = yield* attempt(() =>
           transported.request({
@@ -371,7 +398,7 @@ const makeWebRemote = (
                     Authorization: `Basic ${btoa(`${credential.username}:${credential.password}`)}`,
                   }),
             },
-            body: streamOf([pktLine(update), new TextEncoder().encode("0000"), pack]),
+            body: streamOf([pktLine(update), new TextEncoder().encode("0000"), body]),
           }),
         );
         const reply = new TextDecoder().decode(
@@ -399,6 +426,18 @@ const makeWebRemote = (
         yield* Effect.ignore(
           attempt(() => git.deleteRef({ fs, dir: repo.root, ref: REPLAYED_REF })),
         );
+        if (tip !== local) return false;
+        // What a push would have recorded: WACS's branch is now here.
+        yield* attempt(() =>
+          git.writeRef({
+            fs,
+            dir: repo.root,
+            ref: `refs/remotes/${ORIGIN}/${branch}`,
+            value: tip,
+            force: true,
+          }),
+        );
+        return true;
       });
 
     const transfer = (
@@ -559,7 +598,8 @@ const makeWebRemote = (
                 "this build has no WACS server: set one in Settings",
               );
           yield* attach(repo, url);
-          yield* seedFromReplay(repo);
+          // Everything went in the replay's one request: nothing left to push.
+          if (yield* seedFromReplay(repo)) return;
           yield* transfer(repo, "required", (wire, branch) =>
             git.push({ ...wire, ref: branch, remoteRef: branch }),
           );
