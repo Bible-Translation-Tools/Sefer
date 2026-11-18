@@ -361,10 +361,21 @@ const advancedCommands = (bridge: ShellBridge) => {
 const saveCommands = (bridge: ShellBridge, h: Helpers) => {
   const { hasProject } = h;
   return [
+    // ⌘S writes whatever autosave is still holding, at once, and nothing else: the habit
+    // key must not open a screen. Review is the Save button and ⌘⇧S.
     registerCommand({
       id: "book.save",
-      title: m.command_save_review,
+      title: m.status_save,
       keys: "Mod-s",
+      when: hasProject,
+      run: () => {
+        void bridge.services.run(bridge.services.autosave.flush);
+      },
+    }),
+
+    registerCommand({
+      id: "book.review",
+      title: m.command_save_review,
       when: hasProject,
       run: () => {
         const project = bridge.project();

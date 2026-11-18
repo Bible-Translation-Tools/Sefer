@@ -81,7 +81,7 @@ export function SaveButton() {
         aria-live="polite"
         class={cx("shrink-0 disabled:opacity-100!", failed() && "text-on-surface-warning")}
         icon={<Save aria-hidden="true" />}
-        onClick={() => runCommand("book.save")}
+        onClick={() => runCommand("book.review")}
       >
         <span class="whitespace-nowrap">{label()}</span>
       </Button>

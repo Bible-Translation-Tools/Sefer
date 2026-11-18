@@ -518,14 +518,23 @@ which reverses the explicit-only model of 2026-09-14):
 | What             | Written by                                 | When                                                                                                           |
 | ---------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
 | The project file | `Autosave` → `SaveCoordinator.save`        | 1.5 s after typing stops, at most every 5 s; at once on blur, a hidden page, closing the window or the project |
-| A version        | `recordVersion` → `saveAll` + `Git.commit` | Review's **Save** (or the save key with "Skip review of my changes" on)                                        |
+| A version        | `recordVersion` → `saveAll` + `Git.commit` | Review's **Save** (or the app bar's Save with "Skip review of my changes" on)                                  |
+
+**⌘S (Mod-S, `book.save`) writes what autosave holds, at once, and opens
+nothing**: it is the habit key, and Review is not a habit. The app bar's Save
+button and the menu's Save & Review are `book.review`; ⌘⇧S is
+`project.saveAll`, "Record a version", which opens Review too.
 
 **"Saved" means the file holds the work.** The app bar's Save button reads
 `Autosave`'s states: "Saving changes…" while an edit waits, "Saved" once it is
 written, "Save" with a warning when a write failed (the books stay waiting and
 go again with the next edit). Pressing it is still Save & Review. Nothing
 requires a version until work comes in or goes out (WACS, a sideload); that is
-when review is mandatory, and the sync paths ask for it ([sync](sync.md)).
+when review is mandatory, and the sync paths ask for it ([sync](sync.md)):
+books that differ from HEAD count as `uncommitted` in the sync reading and make
+the project `ahead`, and the WACS panel's Review and upload (or the chip's
+Send) opens Review with `upload=1`, whose save records the version and
+uploads it whatever "Send my changes on save" says.
 There is no journal and no "restore unsaved work" banner: the file is the
 backup.
 
