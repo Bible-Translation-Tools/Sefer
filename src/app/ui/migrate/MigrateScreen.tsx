@@ -26,6 +26,7 @@ import {
   addToProject,
   assembleProject,
   forgetPicked,
+  historyFor,
   openOne,
   releaseOpened,
   pickLocal,
@@ -54,6 +55,9 @@ import { WriterLanguages } from "./WriterLanguages";
 type Step = "find" | "books";
 
 const OPEN_AT_ONCE = 10;
+
+/** Picked copies whose full history is fetched at once before Assemble. */
+const HISTORY_AT_ONCE = 6;
 
 const refuseAdd = (
   label: string,
@@ -594,7 +598,45 @@ export function MigrateScreen(props: {
     return m.migrate_have_of_total({ have: have.length, total });
   };
 
+  /** Books whose history is still being fetched before Assemble: 0 when not fetching. */
+  const [fetching, setFetching] = createSignal(0, { name: "migrateFetching" });
+
+  /**
+   * Every picked copy with its saves (`historyFor`), a few at a time. Copies
+   * are checked with their latest commit only, so this is the one download of
+   * the history Assemble replays; each is kept, so a retry does not fetch again.
+   */
+  const withHistories = async (): Promise<readonly StagedBook[]> => {
+    // What was picked when Assemble was clicked; a later pick does not join this run.
+    const initialPicks = picked().flatMap((candidate) => {
+      const held = openedOf(candidate.id);
+      return held.state === "ready" ? [held] : [];
+    });
+    const out: StagedBook[] = initialPicks.map((held) => held.staged);
+    let next = 0;
+    setFetching(initialPicks.length);
+    const worker = async (): Promise<void> => {
+      while (next < initialPicks.length) {
+        const at = next;
+        next += 1;
+        const held = initialPicks[at];
+        if (held === undefined) continue;
+        const staged = await historyFor(services, held);
+        out[at] = staged;
+        setOpenedOf(staged.candidate.id, { ...held, staged });
+        setFetching((left) => left - 1);
+      }
+    };
+    try {
+      await Promise.all(Array.from({ length: HISTORY_AT_ONCE }, worker));
+    } finally {
+      setFetching(0);
+    }
+    return out;
+  };
+
   const assembleLabel = (): string => {
+    if (fetching() > 0) return m.migrate_fetching_history({ count: fetching() });
     if (assembling() && ready().some((staged) => (staged.history?.saves ?? 0) > 0))
       return m.migrate_writing_count_books_history({ count: picked().length });
     if (props.into === undefined) return m.migrate_assemble_count_books({ count: picked().length });
@@ -602,12 +644,12 @@ export function MigrateScreen(props: {
   };
 
   const runAssemble = (): void => {
-    const books = ready();
-    const form = prefillForm(books);
-    const name = `${form.language.id}_${form.resource}`.trim() || "writer-project";
     setAssembling(true);
     settle(
       (async () => {
+        const books = await withHistories();
+        const form = prefillForm(books);
+        const name = `${form.language.id}_${form.resource}`.trim() || "writer-project";
         const { root } = await services.run(assembleProject(services, name, form, books));
         toasts.success({
           title: m.migrate_assembled_count_books({ count: books.length }),
@@ -624,10 +666,10 @@ export function MigrateScreen(props: {
   const runAdd = (): void => {
     const root = props.into;
     if (root === undefined) return;
-    const books = ready();
     setAssembling(true);
     settle(
       (async () => {
+        const books = await withHistories();
         await services.run(addToProject(services, root, held, books));
         toasts.success({
           title: m.migrate_added_count_books({ count: books.length }),

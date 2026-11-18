@@ -998,6 +998,8 @@
   "migrate_added_count_books": "{count, plural, one {Added # book} other {Added # books}}",
   "migrate_could_not_add_the_books": "Could not add the books",
   "migrate_left_out": "left out",
+  "migrate_history_did_not_arrive": "The history of {book} did not arrive in time",
+  "migrate_fetching_history": "Fetching the history of {count, plural, one {# book} other {# books}}…",
   "migrate_include_testament": "Migrate every book of the {testament}",
   "migrate_include_book": "Migrate {book}",
   "migrate_choose_count": "choose · {count}",
