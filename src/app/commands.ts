@@ -307,7 +307,7 @@ const paletteCommands = (bridge: ShellBridge) => {
       title: m.common_settings,
       keys: "Mod-,",
       run: () => {
-        void bridge.navigate({ to: "/project/$slug/settings", params: { slug: bridge.slug() } });
+        openSettings(bridge);
       },
     }),
 
@@ -323,6 +323,12 @@ const paletteCommands = (bridge: ShellBridge) => {
   ];
 };
 
+/** Settings under the open project, or `/settings` when none is open. */
+const openSettings = (bridge: ShellBridge): void => {
+  if (bridge.slug() === "") void bridge.navigate({ to: "/settings" });
+  else void bridge.navigate({ to: "/project/$slug/settings", params: { slug: bridge.slug() } });
+};
+
 const advancedCommands = (bridge: ShellBridge) => {
   return [
     registerCommand({
@@ -334,13 +340,7 @@ const advancedCommands = (bridge: ShellBridge) => {
         const key = shellKeys(bridge.services.settings).showAdvancedSettings;
         return Effect.gen(function* () {
           yield* bridge.services.settings.set(key, true);
-          yield* Effect.sync(
-            () =>
-              void bridge.navigate({
-                to: "/project/$slug/settings",
-                params: { slug: bridge.slug() },
-              }),
-          );
+          yield* Effect.sync(() => openSettings(bridge));
         });
       },
     }),
