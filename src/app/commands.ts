@@ -11,7 +11,7 @@ import { makeMultiBook } from "#core/multibook/multibook";
 import { Observability, type ObservabilityService } from "#core/observability";
 import type { Project } from "#core/project/project";
 import { headerChanges, headerOf, isHeaderEdit } from "#core/rules/bookNames";
-import { chapterLabelsOf, standardize } from "#core/rules/chapterLabels";
+import { chapterLabelsOf, removed, renumbered, standardize } from "#core/rules/chapterLabels";
 
 import { personAuthor } from "./author";
 import { contentHostFor } from "./endpoints";
@@ -960,6 +960,52 @@ const chapterLabelCommands = (bridge: ShellBridge, h: Helpers) => [
       }
       bridge.changed({ kind: "book.apply", books: operation.books });
       bridge.report(m.chapter_labels_done({ count: operation.books.length }));
+    },
+  }),
+  /**
+   * One label whose number is not its chapter's, repaired from the dialog:
+   * `{ book, from, action }`, `action` "renumber" (its chapter's number, in
+   * its own digits) or "remove". Found again in the held parse by where it
+   * starts, and refused when the book changed or that label is no longer one.
+   */
+  registerCommand({
+    id: "chapterLabels.fix",
+    title: m.command_fix_chapter_label,
+    when: h.hasProject,
+    run: (argument) => {
+      if (typeof argument !== "object" || argument === null) return;
+      const id: unknown = Reflect.get(argument, "book");
+      const from: unknown = Reflect.get(argument, "from");
+      const action: unknown = Reflect.get(argument, "action");
+      if (typeof id !== "string" || typeof from !== "number") return;
+      if (action !== "renumber" && action !== "remove") return;
+      const analyses = bridge.services.projectAnalysis;
+      let stale = false;
+      const operation = h.multibook.runAcrossBooks("chapterLabels", (book) => {
+        if (book.id !== id) return null;
+        const held = analyses.analysis(book.id);
+        if (Option.isNone(held) || !analyses.fresh(book.id, book.source().stamp)) {
+          stale = true;
+          return null;
+        }
+        const label = chapterLabelsOf(held.value.analysis).labels.find(
+          (each) => each.from === from && each.mismatched,
+        );
+        if (label === undefined) {
+          stale = true;
+          return null;
+        }
+        const change = action === "remove" ? removed(label) : renumbered(label);
+        return change === undefined ? null : [change];
+      });
+      if (operation === null) {
+        bridge.report(stale ? m.chapter_labels_stale() : m.chapter_labels_nothing());
+        return;
+      }
+      bridge.changed({ kind: "book.apply", books: operation.books });
+      bridge.report(
+        action === "remove" ? m.chapter_labels_removed() : m.chapter_labels_renumbered(),
+      );
     },
   }),
 ];

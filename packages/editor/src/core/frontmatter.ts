@@ -27,6 +27,7 @@ const FRONT_MARKERS = [
   "mt1",
   "mt2",
   "mt3",
+  "cl",
 ] as const;
 
 const FRONT = new Set<string>(FRONT_MARKERS);
@@ -46,6 +47,7 @@ const LABELS: Record<string, string> = {
   mt1: "Main title",
   mt2: "Subtitle",
   mt3: "Subtitle",
+  cl: "Chapter label",
 };
 
 interface FrontRow {

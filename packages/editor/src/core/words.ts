@@ -111,13 +111,13 @@ export const fixWords = (state: EditorState, name: string, english: string | nul
 const cssString = (text: string): string => `"${text.replace(/["\\]/g, "\\$&")}"`;
 
 /**
- * The words the stylesheet draws itself ("Verse 1", "Chapter 2", as `::before`
- * content), handed to it as custom properties in the host's words.
+ * The words the stylesheet draws itself ("Verse 1", as `::before` content),
+ * handed to it as custom properties in the host's words. Not a chapter's: a
+ * chapter title is the translation's own word (its book label, set per line by
+ * `nameChapters`) or the number alone, never the interface's "Chapter".
  */
 export const drawnWords = EditorView.editorAttributes.of((view) => ({
-  style:
-    `--usfm-verse-label: ${cssString(phrase(view.state, "verseLines.verse"))}; ` +
-    `--usfm-chapter-label: ${cssString(phrase(view.state, "verseLines.chapter"))}`,
+  style: `--usfm-verse-label: ${cssString(phrase(view.state, "verseLines.verse"))}`,
 }));
 
 /** A marker in the host's words, or English: `\tr` is "table row", `\fig*` "figure end". */

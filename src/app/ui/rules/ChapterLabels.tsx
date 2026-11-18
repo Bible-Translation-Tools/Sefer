@@ -6,6 +6,7 @@ import { m } from "#app/paraglide/messages";
 import {
   chapterLabelsOf,
   keptAsWritten,
+  renumbered,
   wordsOf,
   type ChapterLabel,
 } from "#core/rules/chapterLabels";
@@ -24,6 +25,8 @@ interface Row {
   /** The book label's word, when it has one. */
   readonly bookWord?: string;
   readonly kept: readonly ChapterLabel[];
+  /** Whether the book has any chapter label: one without is listed only while adding a word. */
+  readonly labeled: boolean;
 }
 
 /** The select's two values that are not a word. */
@@ -35,15 +38,26 @@ const OTHER = "\u0000other";
  * labels is a row: leave it, or pick the word its chapters should read (its
  * own words, most used first, or another), and Standardize makes each chosen
  * book one book label with that word (`chapterLabels.standardize`). Labels a
- * book writes its own way ("Psalm One") are listed under it and never changed.
+ * book writes its own way ("Psalm One") are listed under it and never changed;
+ * one whose number is not its chapter's can be renumbered or removed
+ * (`chapterLabels.fix`). A project with no labels reads numbers only, which is
+ * fine; "Add a word" lists every book so one can be given.
  */
 export function ChapterLabelsDialog(props: {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
 }) {
   const shell = useShell();
-  const rows = createMemo((): readonly Row[] => {
+  const [adding, setAdding] = createSignal(false);
+  const openChange = (open: boolean): void => {
+    if (!open) setAdding(false);
+    props.onOpenChange(open);
+  };
+  const books = createMemo((): readonly Row[] => {
     if (!props.open) return [];
+    // Read again when the analysis republishes, so a label fixed from here
+    // (the dialog stays open) drops out of its book's list.
+    shell.findings();
     const project = shell.project();
     if (project === undefined) return [];
     const metadata = metadataOf(project);
@@ -51,7 +65,6 @@ export function ChapterLabelsDialog(props: {
       const held = shell.services.projectAnalysis.analysis(book.id);
       if (Option.isNone(held)) return [];
       const labels = chapterLabelsOf(held.value.analysis);
-      if (labels.labels.every((label) => label.text === "")) return [];
       return [
         {
           id: book.id,
@@ -59,10 +72,16 @@ export function ChapterLabelsDialog(props: {
           words: [...wordsOf(labels)],
           ...(labels.book === undefined ? {} : { bookWord: labels.book.text }),
           kept: keptAsWritten(labels),
+          labeled: labels.labels.some((label) => label.text !== ""),
         },
       ];
     });
   });
+  const rows = createMemo(() => books().filter((row) => row.labeled || adding()));
+  const unlabeled = createMemo(() => books().filter((row) => !row.labeled).length);
+  const fix = (row: Row, label: ChapterLabel, action: "renumber" | "remove"): void => {
+    runCommand("chapterLabels.fix", { book: row.id, from: label.from, action });
+  };
 
   const [choices, setChoices] = createSignal<ReadonlyMap<BookId, string>>(new Map());
   const [typed, setTyped] = createSignal<ReadonlyMap<BookId, string>>(new Map());
@@ -98,11 +117,17 @@ export function ChapterLabelsDialog(props: {
   const useEverywhere = (given?: string): void => {
     const word = (given ?? everyWord()).trim();
     if (word === "") return;
+    // One write per map: a signal read back in the same pass still holds what
+    // it held before (Solid 2), so a write per row kept only the last row.
+    const chose = new Map(choices());
+    const wrote = new Map(typed());
     for (const row of rows()) {
       const own = row.words.some(([candidate]) => candidate === word);
-      choose(row.id, own ? word : OTHER);
-      if (!own) type(row.id, word);
+      chose.set(row.id, own ? word : OTHER);
+      if (!own) wrote.set(row.id, word);
     }
+    setChoices(chose);
+    setTyped(wrote);
   };
 
   const standardize = (): void => {
@@ -111,20 +136,20 @@ export function ChapterLabelsDialog(props: {
       const word = wordFor(row);
       if (word !== undefined) chosen.set(row.id, word);
     }
-    props.onOpenChange(false);
+    openChange(false);
     if (chosen.size > 0) runCommand("chapterLabels.standardize", chosen);
   };
 
   return (
     <Dialog
       open={props.open}
-      onOpenChange={props.onOpenChange}
+      onOpenChange={openChange}
       title={m.chapter_labels_title()}
       description={m.chapter_labels_description()}
       class="w-[min(40rem,92vw)]"
       footer={
         <>
-          <Button variant="tertiary" onClick={() => props.onOpenChange(false)}>
+          <Button variant="tertiary" onClick={() => openChange(false)}>
             {m.common_cancel()}
           </Button>
           <Button
@@ -140,7 +165,18 @@ export function ChapterLabelsDialog(props: {
     >
       <Show
         when={rows().length > 0}
-        fallback={<p class="text-on-surface-secondary">{m.chapter_labels_none()}</p>}
+        fallback={
+          <div class="flex flex-col items-start gap-3">
+            <p class="text-on-surface-secondary">{m.chapter_labels_none()}</p>
+            <Button
+              variant="secondary"
+              data-testid="chapter-labels-add-word"
+              onClick={() => setAdding(true)}
+            >
+              {m.chapter_labels_add_word()}
+            </Button>
+          </div>
+        }
       >
         <div class="flex items-center gap-controls pb-3">
           <Input
@@ -170,6 +206,13 @@ export function ChapterLabelsDialog(props: {
               </Button>
             </div>
           )}
+        </Show>
+        <Show when={!adding() && unlabeled() > 0}>
+          <div class="pb-3">
+            <Button variant="tertiary" onClick={() => setAdding(true)}>
+              {m.chapter_labels_add_word_others({ count: unlabeled() })}
+            </Button>
+          </div>
         </Show>
         <div class="max-h-[60vh] overflow-y-auto" data-testid="chapter-labels-books">
           <For each={rows()}>
@@ -206,23 +249,48 @@ export function ChapterLabelsDialog(props: {
                   />
                 </Show>
                 <Show when={row.kept.length > 0}>
-                  <details class="text-on-surface-secondary">
+                  <details
+                    class="text-on-surface-secondary"
+                    open={row.kept.some((label) => label.mismatched)}
+                  >
                     <summary class="cursor-pointer">
                       {m.chapter_labels_kept({ count: row.kept.length })}
                     </summary>
                     <ul class="mt-1 flex flex-col gap-1 ps-4">
                       <For each={row.kept}>
                         {(label) => (
-                          <li>
-                            {label.mismatched
-                              ? m.chapter_labels_number_differs({
-                                  chapter: String(label.chapter),
-                                  text: label.text,
-                                })
-                              : m.chapter_labels_kept_row({
-                                  chapter: String(label.chapter),
-                                  text: label.text,
-                                })}
+                          <li class="flex flex-wrap items-center gap-2">
+                            <span>
+                              {label.mismatched
+                                ? m.chapter_labels_number_differs({
+                                    chapter: String(label.chapter),
+                                    text: label.text,
+                                  })
+                                : m.chapter_labels_kept_row({
+                                    chapter: String(label.chapter),
+                                    text: label.text,
+                                  })}
+                            </span>
+                            <Show when={label.mismatched ? renumbered(label) : undefined}>
+                              {(change) => (
+                                <>
+                                  <Button
+                                    variant="secondary"
+                                    data-testid="chapter-labels-renumber"
+                                    onClick={() => fix(row, label, "renumber")}
+                                  >
+                                    {m.chapter_labels_renumber({ number: change().insert })}
+                                  </Button>
+                                  <Button
+                                    variant="tertiary"
+                                    data-testid="chapter-labels-remove"
+                                    onClick={() => fix(row, label, "remove")}
+                                  >
+                                    {m.chapter_labels_remove()}
+                                  </Button>
+                                </>
+                              )}
+                            </Show>
                           </li>
                         )}
                       </For>
