@@ -35,6 +35,7 @@ export interface SyncReading {
   readonly remoteHead: Commit | undefined;
   readonly ahead: readonly Commit[];
   readonly behind: readonly Commit[];
+  /** Books whose file differs from HEAD: autosaved work no version holds yet. */
   readonly uncommitted: number;
   readonly mergeInProgress: boolean;
   readonly lastFailure: RemoteFailureReason | undefined;
@@ -67,7 +68,9 @@ const syncStateOf = (reading: SyncReading): SyncState => {
   if (!reading.signedIn || reading.lastFailure === "Unauthorized") return "unauthorized";
   if (reading.origin === undefined) return "detached";
   if (!reading.remoteKnown) return "unpublished";
-  const ahead = reading.ahead.length > 0;
+  // Autosaved books no version holds are work this device has and WACS lacks, as much as
+  // versions are; they go up through Review, which records them first.
+  const ahead = reading.ahead.length > 0 || reading.uncommitted > 0;
   const behind = reading.behind.length > 0;
   if (ahead && behind) return "diverged";
   if (ahead) return "ahead";

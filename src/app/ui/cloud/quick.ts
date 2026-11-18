@@ -182,6 +182,15 @@ export const createQuickSync = (shell: Shell, onSee?: () => void): QuickSync => 
         void checkForChanges(services, project).finally(() => setBusy(""));
         return;
       case "send":
+        // Books no version holds go through Review first; its save records and uploads.
+        if ((sync()?.reading.uncommitted ?? 0) > 0) {
+          void navigate({
+            to: "/project/$slug/review",
+            params: { slug: shell.slug() },
+            search: { upload: 1 },
+          });
+          return;
+        }
         setBusy("send");
         void sendNow(services, project)
           .then((outcome) => announceSend(outcome, syncWatch.sync(project.root)?.state))

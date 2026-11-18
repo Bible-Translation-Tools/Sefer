@@ -1,7 +1,7 @@
 import { Effect, FileSystem, Option, Result } from "effect";
 
 import type { Galley } from "#core/galley";
-import { DEFAULT_BRANCH, Git, type Commit, type Repo } from "#core/git/git";
+import { DEFAULT_BRANCH, Git, repositoryPath, type Commit, type Repo } from "#core/git/git";
 import type { Project } from "#core/project/project";
 import { Gitea } from "#core/remote/gitea";
 import { Remote } from "#core/remote/remote";
@@ -117,6 +117,13 @@ const surveyRepo = (
     const ahead = notIn(localLog, sentLog);
     const behind = notIn(remoteLog, localLog);
     const status = yield* orEmpty(git.status(repo), { changed: [] });
+    // Books only: autosave keeps the person's edits in them, and a stray file must not
+    // keep a project "ahead" for good.
+    const bookPaths = new Set(
+      options.project.books.flatMap((book) =>
+        Option.toArray(repositoryPath(options.root, book.path)),
+      ),
+    );
 
     const reading: SyncReading = {
       ...base,
@@ -127,7 +134,7 @@ const surveyRepo = (
       remoteHead: remoteLog[0],
       ahead,
       behind,
-      uncommitted: status.changed.length,
+      uncommitted: status.changed.filter((entry) => bookPaths.has(entry.path)).length,
       mergeInProgress: yield* mergeInProgress(fileSystem, options.root),
     };
 
