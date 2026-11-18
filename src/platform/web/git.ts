@@ -16,6 +16,7 @@ import {
   GitError,
   type GitFailureReason,
   type GitService,
+  type LogStop,
   type Repo,
   relativeOrRefuse,
   type SaveReceiptLike,
@@ -164,6 +165,27 @@ const makeWebGit = (
     at: version.commit.at,
   });
 
+  /**
+   * isomorphic-git's log, ended early when asked (`LogStop`): a Bible migrated
+   * from Writer has ~28,000 commits, and reading them all from OPFS took the
+   * sync survey ~43 s (2026-11-18). Grows the depth fourfold until every
+   * `until` commit is in, or the history ends.
+   */
+  const logUntil = async (repo: Repo, ref: string, stop: LogStop | undefined) => {
+    if (stop === undefined) return git.log({ fs, dir: repo.root, ref });
+    const wanted = stop.until ?? [];
+    if (wanted.length === 0) return git.log({ fs, dir: repo.root, ref, depth: stop.depth ?? 1 });
+    for (let depth = stop.depth ?? 64; ; depth *= 4) {
+      const entries = await git.log({ fs, dir: repo.root, ref, depth });
+      const missing = new Set(wanted);
+      for (const [at, entry] of entries.entries()) {
+        missing.delete(entry.oid);
+        if (missing.size === 0) return entries.slice(0, at + 1);
+      }
+      if (entries.length < depth) return entries;
+    }
+  };
+
   const log = (repo: Repo, path?: string): Effect.Effect<readonly Commit[], GitError> =>
     Effect.gen(function* () {
       const filepath = path === undefined ? undefined : yield* relativeOrRefuse(repo, path);
@@ -294,9 +316,9 @@ const makeWebGit = (
 
     log,
 
-    logFrom: (repo, ref) =>
+    logFrom: (repo, ref, stop) =>
       Effect.map(
-        attempt("Conflict", () => git.log({ fs, dir: repo.root, ref })),
+        attempt("Conflict", () => logUntil(repo, ref, stop)),
         (entries) => entries.map(commitOf),
       ),
 
