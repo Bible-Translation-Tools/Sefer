@@ -1,9 +1,11 @@
 import type { JSX } from "@solidjs/web";
 import CircleAlert from "lucide-solid/icons/circle-alert";
+import Save from "lucide-solid/icons/save";
 import Wifi from "lucide-solid/icons/wifi";
 import WifiOff from "lucide-solid/icons/wifi-off";
-import { For, createSignal } from "solid-js";
+import { createSignal } from "solid-js";
 
+import { runCommand } from "../../commands";
 import { chooseWorkOffline } from "../../network";
 import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
@@ -11,52 +13,41 @@ import { syncStatus } from "../../syncStatus";
 import { Button, Popover, SegmentedControl, Tooltip, cx } from "../primitives";
 
 /**
- * The app bar's save status, in the save model's own terms: "Unsaved changes"
- * while any book differs from its last version, "Saved" when none does. The
- * backup journal is not a save and is not announced as one; it shows only
- * when it could not be written.
+ * The app bar's Save button, in the save model's own terms: "Save" while any
+ * book differs from its last version (pressing it is Save & Review, as Mod-S),
+ * "Saving changes…" while the backup journal is being written, "Saved" when
+ * no book differs. The journal still writes on its own as the person types;
+ * the button is where they see it and where they record a version.
  */
-export function SaveStatus() {
+export function SaveButton() {
   const shell = useShell();
   const unsaved = (): boolean =>
     shell.project()?.books.some((book) => shell.unsaved(book)) === true;
+  const saving = (): boolean => shell.backup().kind === "saving";
+  const failed = (): boolean => shell.backup().kind === "failed";
   const label = (): string => {
-    if (shell.backup().kind === "failed") return m.status_not_saved();
-    return unsaved() ? m.status_unsaved() : m.status_saved();
+    if (saving()) return m.status_saving();
+    return unsaved() || failed() ? m.status_save() : m.status_saved();
   };
   const explained = (): string => {
-    if (shell.backup().kind === "failed") return m.status_backup_failed_body();
+    if (failed()) return m.status_backup_failed_body();
     return unsaved() ? m.status_unsaved_tooltip() : m.status_saved_tooltip();
   };
 
-  // Every label sits in the same grid cell, the others invisible, so the
-  // status is always as wide as its longest words and nothing beside it moves.
   return (
     <Tooltip label={explained()} side="bottom">
-      <span
-        tabindex="0"
-        aria-live="polite"
-        data-testid="app-bar-save-status"
+      <Button
+        variant="accent"
+        data-testid="app-bar-save"
         data-backup={shell.backup().kind}
         data-unsaved={unsaved()}
-        class={cx(
-          "grid shrink-0 rounded-md px-1 text-small whitespace-nowrap",
-          shell.backup().kind === "failed"
-            ? "text-on-surface-warning"
-            : "text-on-surface-secondary",
-        )}
+        aria-live="polite"
+        class={cx("shrink-0 disabled:opacity-100!", failed() && "text-on-surface-warning")}
+        icon={<Save aria-hidden="true" />}
+        onClick={() => runCommand("book.save")}
       >
-        <For each={[m.status_unsaved(), m.status_saved(), m.status_not_saved()]}>
-          {(text) => (
-            <span
-              class={cx("[grid-area:1/1]", text !== label() && "invisible")}
-              aria-hidden={text === label() ? undefined : "true"}
-            >
-              {text}
-            </span>
-          )}
-        </For>
-      </span>
+        <span class="whitespace-nowrap">{label()}</span>
+      </Button>
     </Tooltip>
   );
 }

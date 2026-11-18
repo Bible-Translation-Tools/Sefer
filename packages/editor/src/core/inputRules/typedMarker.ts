@@ -145,7 +145,7 @@ const runsAround = (structure: DocStructure, pos: number) => {
  * The pair a typed character marker writes, empty at the caret or around a
  * selection; null when it cannot be written there.
  */
-function writtenCharacter(state: EditorState, held: Composing, name: string): Transaction | null {
+function writtenCharacter(state: EditorState, name: string, held: Composing): Transaction | null {
   if (characterNamed(name) === undefined) return null;
   const structure = structureAt(state);
   const from = held.wrap?.from ?? held.at;
@@ -192,7 +192,7 @@ function written(state: EditorState, held: Composing): Transaction | null {
   const typed = held.text;
   const character = /^\\\+?([a-z]+\d*)$/.exec(typed)?.[1];
   if (character !== undefined && characterNamed(character) !== undefined)
-    return writtenCharacter(state, held, character);
+    return writtenCharacter(state, character, held);
   if (held.wrap !== null) return null;
   const verse = /^\\v[ \t]+(\d{1,3}[a-z]?(?:-\d{1,3}[a-z]?)?)$/.exec(typed);
   if (verse !== null) {
@@ -294,3 +294,23 @@ export const typedMarkerBehaviour: Extension = [
   Prec.highest(typing),
   heldRunBehaviour,
 ];
+
+/**
+ * A character style from a menu (`wj`, `nd`, `add`): around `from`–`to`, or
+ * its empty pair at `from` with the caret inside; the same rules as typing
+ * it. Null when it cannot be written there.
+ */
+export function styleWords(
+  state: EditorState,
+  name: string,
+  from: number,
+  to: number,
+): Transaction | null {
+  if (!inRefine(state) || state.readOnly) return null;
+  return writtenCharacter(state, name, {
+    at: from,
+    text: `\\${name}`,
+    wrong: false,
+    wrap: from < to ? { from, to } : null,
+  });
+}

@@ -42,13 +42,18 @@
 
 import { Effect, Option, Result } from "effect";
 import BookMarked from "lucide-solid/icons/book-marked";
-import Check from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
+import CircleCheck from "lucide-solid/icons/circle-check";
 import Download from "lucide-solid/icons/download";
+import Globe from "lucide-solid/icons/globe";
+import MoreVertical from "lucide-solid/icons/more-vertical";
+import Pilcrow from "lucide-solid/icons/pilcrow";
+import Search from "lucide-solid/icons/search";
 import Trash from "lucide-solid/icons/trash-2";
 import X from "lucide-solid/icons/x";
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 
+import { lastSegment } from "#core/fileSystem/path";
 import { Observability } from "#core/observability";
 import { remoteVerdict } from "#core/remote/remote";
 import { answers, type Resource, type Role } from "#core/resources/library";
@@ -58,8 +63,9 @@ import {
   type RelatedResource,
 } from "#core/resources/relationships";
 
-import { announceSourceTexts, libraryRevision, sourceTextCopy } from "../../arrival";
+import { announceSourceTexts, libraryRevision, ownerAndRepo, sourceTextCopy } from "../../arrival";
 import { listSourceTexts, listTranslationNotes, type ListedText } from "../../catalogue";
+import { findCommand, runCommandAndWait } from "../../commands";
 import { describe, remoteReasonOf } from "../../describe";
 import { downloadRuns } from "../../downloadRuns";
 import { downloadHelp, helpDownloads, removeHelp } from "../../kinds/download";
@@ -70,7 +76,17 @@ import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
 import { ResourcePane } from "../kinds/registry";
 import { listProjects, type ProjectSummary } from "../landing/summaries";
-import { Button, EmptyState, Menu, MenuItem, Popover, cx } from "../primitives";
+import {
+  Button,
+  EmptyState,
+  IconButton,
+  Input,
+  Menu,
+  MenuItem,
+  Popover,
+  cx,
+  toasts,
+} from "../primitives";
 
 const ROLES: readonly Role[] = KIND_ROLES;
 
@@ -99,9 +115,6 @@ type Listing =
 type Shown = { readonly entry: Entry; readonly book: string } | undefined;
 
 const ROW = "px-6";
-
-const textName = (text: ListedText): string =>
-  `${text.languageName || text.language} (${text.language})`;
 
 const readLibraryState = (
   services: ReturnType<typeof useShell>["services"],
@@ -300,30 +313,6 @@ export function ReferenceColumn() {
   /** What the left half calls a language: its name and tag, or that it is unknown. */
   const languageLabel = (key: string): string =>
     key === "" ? m.reference_no_language() : `${nameOfLanguage(key)} (${key})`;
-  /** The text last on show in each language, so returning to it returns to that text. */
-  const [lastIn, setLastIn] = createSignal<Readonly<Record<string, string>>>(
-    {},
-    { name: "referenceLastIn" },
-  );
-  /** The bound texts grouped by language, in the order they are bound. */
-  const languageTabs = createMemo(
-    (): readonly { readonly key: string; readonly entries: readonly Entry[] }[] => {
-      const groups = new Map<string, Entry[]>();
-      for (const entry of entries()) {
-        const key = languageOf(entry.resource);
-        const held = groups.get(key);
-        if (held === undefined) groups.set(key, [entry]);
-        else held.push(entry);
-      }
-      return [...groups].map(([key, grouped]) => ({ key, entries: grouped }));
-    },
-    { name: "referenceLanguageTabs" },
-  );
-  /** The text a language opens on: the last one shown in it, else its scripture. */
-  const openingOf = (group: readonly Entry[], key: string): Entry | undefined =>
-    group.find((entry) => entry.resource.id === lastIn()[key]) ??
-    group.find((entry) => isBible(entry.resource)) ??
-    group[0];
   const [chosen, setChosen] = createSignal<string | undefined>(undefined, {
     name: "referenceShown",
   });
@@ -332,7 +321,6 @@ export function ReferenceColumn() {
     const project = shell.project();
     if (project === undefined) return;
     setChosen(resource.id);
-    setLastIn((held) => ({ ...held, [languageOf(resource)]: resource.id }));
     if (entries().some((entry) => entry.resource.id === resource.id)) return;
     void services
       .run(services.library.pick(project.root, roleFor(resource), resource.id))
@@ -418,10 +406,25 @@ export function ReferenceColumn() {
 
   const heldHelps = (): readonly Resource[] => copies().filter((resource) => !isBible(resource));
 
-  /** Deletes downloaded notes from this device; showing them, the panel falls back to what is left. */
-  const removeNotes = (resource: Resource): void => {
-    if (chosen() === resource.id) setChosen(undefined);
-    void removeHelp(services, resource);
+  /**
+   * Deletes every Library copy in a language from this device (Thomas,
+   * 2026-11-16); showing one, the panel falls back to what is left. The
+   * reader's own projects in it stay: they are not the Library's to delete.
+   */
+  const removeLanguage = (key: string): void => {
+    const removable = copies().filter(
+      (resource) =>
+        languageOf(resource) === key && resource.root.startsWith(`${services.libraryRoot}/`),
+    );
+    // Only your own projects in it: say so, rather than do nothing (Will, 2026-11-17).
+    if (removable.length === 0) {
+      toasts.info({ title: m.reference_remove_nothing({ name: nameOfLanguage(key) }) });
+      return;
+    }
+    for (const resource of removable) {
+      if (chosen() === resource.id) setChosen(undefined);
+      void removeHelp(services, resource);
+    }
   };
 
   /**
@@ -496,214 +499,199 @@ export function ReferenceColumn() {
     },
   );
 
-  /** The split dropdown's language list, open or shut. */
-  const [managing, setManaging] = createSignal(false, { name: "referenceManaging" });
-  const manage = (open: boolean): void => {
-    setManaging(open);
-    if (open) offer();
-  };
-  /** A listing still on its way: nothing read yet, or the read in flight. */
-  const listing = (read: Listing | undefined): boolean =>
-    read === undefined || read.state === "loading";
-  /** A row of the add list: what it is called, how to sort it, and what its button does. */
-  type Offer =
+  /**
+   * One language in the dropdown: an accordion whose body is every resource
+   * in it (Thomas, 2026-11-16). Held languages list what is on this device
+   * first, then what there is to fetch in the same language; a language
+   * still to download lists each of its resources, each downloaded on its own
+   * for now (one-click "whole language" is an open question for paisano).
+   */
+  type Item =
     | {
-        readonly kind: "held";
+        readonly kind: "text";
         readonly key: string;
         readonly name: string;
-        readonly add: () => void;
+        readonly resource: Resource;
+        /** `owner/repo`, when another text in the language has the same name. */
+        readonly detail?: string;
       }
     | {
-        readonly kind: "download";
+        readonly kind: "project";
+        readonly key: string;
+        readonly name: string;
+        readonly row: ProjectSummary;
+      }
+    | {
+        readonly kind: "fetch";
         readonly key: string;
         readonly name: string;
         readonly download: () => Promise<boolean>;
         readonly pulling: () => boolean;
       };
-  const byName = (a: Offer, b: Offer): number => a.name.localeCompare(b.name);
+  type Language = { readonly key: string; readonly name: string; readonly items: readonly Item[] };
+  const byName = (a: Language, b: Language): number => a.name.localeCompare(b.name);
 
   /**
-   * The left half: LANGUAGES only, one row each. Those on this device (its
-   * texts, and the reader's other projects) A–Z, then those to download A–Z.
-   * Choosing a held language opens its scripture; what else it holds is the
-   * right half's.
+   * What a text is by name — its shorthand (`ulb`), else its title; notes
+   * are all one. Held and offered copies with the same name are one text,
+   * whichever repository either came from.
    */
-  const offers = (): readonly Offer[] => {
-    const texts = new Map<string, Resource[]>();
-    for (const resource of installed()) {
-      const key = languageOf(resource);
-      texts.set(key, [...(texts.get(key) ?? []), resource]);
+  /**
+   * Where a text came from, to tell two of the same name apart: the
+   * repository it was downloaded from, else its Library folder
+   * (`<library>/<owner>/<repo>`), else the folder it lives in (one of the
+   * reader's own projects, added as a reference).
+   */
+  const whereFrom = (resource: Resource): string => {
+    if (resource.upstream !== undefined) {
+      const { owner, repo } = ownerAndRepo(resource.upstream.url);
+      return `${owner}/${repo}`;
     }
-    const projectsIn = new Map<string, ProjectSummary[]>();
-    for (const row of otherProjects()) {
-      const key = projectLanguageOf(row);
-      projectsIn.set(key, [...(projectsIn.get(key) ?? []), row]);
-    }
-    const heldKeys = new Set([...texts.keys(), ...projectsIn.keys()]);
-    const held: Offer[] = [...heldKeys].map((key): Offer => {
-      const here = texts.get(key) ?? [];
-      const projectsHere = projectsIn.get(key) ?? [];
-      return {
-        kind: "held",
-        key,
-        name: languageLabel(key),
-        add: () => {
-          const opening = here.find(isBible) ?? here[0];
-          if (opening !== undefined) show(opening);
-          else if (projectsHere[0] !== undefined) showProject(projectsHere[0]);
-        },
-      };
-    });
-    // To download: a language with a gateway Bible, or only Translation
-    // Notes, and nothing here yet. Its Bible first when it has one.
-    const toGet = new Map<string, Offer>();
-    for (const text of offeredBibles()) {
-      const key = text.language.toLowerCase();
-      if (heldKeys.has(key) || toGet.has(key)) continue;
-      toGet.set(key, {
-        kind: "download",
+    const inLibrary = resource.root.startsWith(`${services.libraryRoot}/`)
+      ? resource.root.slice(services.libraryRoot.length + 1)
+      : undefined;
+    return inLibrary ?? lastSegment(resource.root);
+  };
+
+  const shortName = (resource: Resource): string =>
+    isBible(resource) ? (resource.abbreviation ?? resource.title).toLowerCase() : "notes";
+  const fetchItems = (key: string): Item[] => [
+    ...offeredBibles()
+      .filter(
+        (text) =>
+          text.language.toLowerCase() === key &&
+          !installed().some(
+            (resource) =>
+              languageOf(resource) === key && shortName(resource) === text.title.toLowerCase(),
+          ),
+      )
+      .map((text): Item => ({
+        kind: "fetch",
         key: text.repository,
-        name: textName(text),
+        name: text.title,
         download: () => fetchBible(text, true),
         pulling: () => pulling().has(text.repository),
-      });
-    }
-    for (const help of helps()) {
-      const key = help.language.toLowerCase();
-      if (heldKeys.has(key) || toGet.has(key)) continue;
-      toGet.set(key, {
-        kind: "download",
+      })),
+    ...helps()
+      .filter((help) => help.language.toLowerCase() === key)
+      .map((help): Item => ({
+        kind: "fetch",
         key: help.repository,
-        name: textName(help),
+        name: m.reference_shelf_notes(),
         download: () => fetchHelp(help),
         pulling: () => helpDownloads().has(help.repository),
-      });
-    }
-    return [...held.sort(byName), ...[...toGet.values()].sort(byName)];
-  };
+      })),
+  ];
+
+  /** The two groups: on this device, and to download, each A–Z by language. */
+  const languages = createMemo(
+    (): { readonly held: readonly Language[]; readonly toGet: readonly Language[] } => {
+      const held = new Map<string, Item[]>();
+      const add = (key: string, item: Item): void => {
+        held.set(key, [...(held.get(key) ?? []), item]);
+      };
+      // One row per repository: the project's copy and a downloaded copy of
+      // the SAME repository are one text, the first (the project's, as
+      // `installed` lists it) standing for both. Two repositories are two
+      // rows even when they share a name (Will, 2026-11-17): WA's ULB and
+      // another organisation's can differ, so each says whose it is.
+      const seen = new Set<string>();
+      const texts: Resource[] = [];
+      for (const resource of installed()) {
+        const same =
+          resource.upstream === undefined ? resource.id : normaliseRepoUrl(resource.upstream.url);
+        if (seen.has(same)) continue;
+        seen.add(same);
+        texts.push(resource);
+      }
+      const nameOf = (resource: Resource): string =>
+        isBible(resource) ? resource.title : m.reference_shelf_notes();
+      const named = (resource: Resource): string => `${languageOf(resource)}:${nameOf(resource)}`;
+      const counts = new Map<string, number>();
+      for (const resource of texts)
+        counts.set(named(resource), (counts.get(named(resource)) ?? 0) + 1);
+      for (const resource of texts) {
+        const shared = (counts.get(named(resource)) ?? 0) > 1;
+        add(languageOf(resource), {
+          kind: "text",
+          key: resource.id,
+          name: nameOf(resource),
+          resource,
+          ...(shared ? { detail: whereFrom(resource) } : {}),
+        });
+      }
+      for (const row of otherProjects())
+        add(projectLanguageOf(row), { kind: "project", key: row.root, name: row.name, row });
+      const heldList = [...held].map(([key, items]): Language => ({
+        key,
+        name: languageLabel(key),
+        items: [...items, ...fetchItems(key)],
+      }));
+      const toGet = new Set<string>();
+      for (const text of [...offeredBibles(), ...helps()]) {
+        const key = text.language.toLowerCase();
+        if (!held.has(key)) toGet.add(key);
+      }
+      const toGetList = [...toGet].map((key): Language => ({
+        key,
+        name: languageLabel(key),
+        items: fetchItems(key),
+      }));
+      return { held: heldList.sort(byName), toGet: toGetList.sort(byName) };
+    },
+    { name: "referenceLanguages" },
+  );
+
   /**
-   * The split dropdown's right half: everything in the language on show, of
-   * every kind. What is on this device (its scriptures, its Translation
-   * Notes…), the reader's other projects in it, then what there is to
-   * download: its gateway Bibles and its Translation Notes. Named by its
-   * shorthand (`ULB`, `REG`) where it has one, not its full title.
+   * The filter at the top of the dropdown (Will, 2026-11-17): it narrows
+   * both groups, by language name, tag or a resource's name; the groups stay.
    */
-  const ResourcePicker = (pickerProps: { readonly resource: Resource }) => {
-    const key = (): string => languageOf(pickerProps.resource);
-    const texts = (): readonly Resource[] =>
-      installed().filter((each) => languageOf(each) === key());
-    const projectsHere = (): readonly ProjectSummary[] =>
-      otherProjects().filter((row) => projectLanguageOf(row) === key());
-    const biblesHere = (): readonly ListedText[] =>
-      offeredBibles().filter((text) => text.language.toLowerCase() === key());
-    const notesHere = (): readonly ListedText[] =>
-      helps().filter((help) => help.language.toLowerCase() === key());
-    const heldNotesHere = (): readonly Resource[] =>
-      heldHelps().filter((each) => languageOf(each) === key());
-    return (
-      <Menu
-        label={m.reference_resource()}
-        triggerClass="min-w-0"
-        onOpenChange={(open) => {
-          if (open) offer();
-        }}
-        side="bottom"
-        // Its menu ends where the control does, flush with the panel's
-        // right edge, not hanging past it.
-        align="end"
-        class="w-80"
-        fitViewport
-        trigger={
-          <button type="button" data-testid="resource-picker" class={HALF}>
-            <span class="min-w-0 flex-1 truncate" title={pickerProps.resource.title}>
-              {pickerProps.resource.abbreviation?.toUpperCase() ?? pickerProps.resource.title}
-            </span>
-            <ChevronDown aria-hidden="true" class="size-5 shrink-0" />
-          </button>
-        }
-      >
-        <For each={texts()}>
-          {(text) => (
-            <MenuItem class={ROW} onSelect={() => show(text)}>
-              <span class="min-w-0 flex-1 truncate">{text.title}</span>
-              <Show when={text.id === pickerProps.resource.id}>
-                <Check aria-label={m.reference_showing()} class="size-5 shrink-0 text-brand" />
-              </Show>
-            </MenuItem>
-          )}
-        </For>
-        {/* Downloaded notes, and only those, can go again: a Library copy, never a project. */}
-        <For each={heldNotesHere()}>
-          {(notes) => (
-            <MenuItem
-              class={ROW}
-              data-testid="reference-remove-notes"
-              icon={<Trash aria-hidden="true" />}
-              onSelect={() => removeNotes(notes)}
-            >
-              {m.reference_remove_notes()}
-            </MenuItem>
-          )}
-        </For>
-        <For each={projectsHere()}>
-          {(row) => (
-            <MenuItem class={ROW} onSelect={() => showProject(row)}>
-              <span class="min-w-0 flex-1 truncate">{row.name}</span>
-            </MenuItem>
-          )}
-        </For>
-        <For each={biblesHere()}>
-          {(text) => (
-            <MenuItem class={ROW} onSelect={() => void fetchBible(text)}>
-              <span class="min-w-0 flex-1 truncate">{text.title}</span>
-              <Download aria-hidden="true" class="size-5 shrink-0" />
-            </MenuItem>
-          )}
-        </For>
-        <For each={notesHere()}>
-          {(help) => (
-            <MenuItem class={ROW} onSelect={() => void fetchHelp(help)}>
-              <span class="min-w-0 flex-1 truncate">{m.reference_shelf_notes()}</span>
-              <Show
-                when={helpDownloads().has(help.repository)}
-                fallback={<Download aria-hidden="true" class="size-5 shrink-0" />}
-              >
-                <span
-                  role="status"
-                  aria-label={m.reference_downloading()}
-                  class="size-5 shrink-0 animate-spin rounded-full border-2 border-on-surface-tertiary border-t-transparent"
-                />
-              </Show>
-            </MenuItem>
-          )}
-        </For>
-      </Menu>
+  const [filter, setFilter] = createSignal("", { name: "referenceFilter" });
+  const passes = (language: Language): boolean => {
+    const wanted = filter().trim().toLowerCase();
+    if (wanted === "") return true;
+    return [language.name, language.key, ...language.items.map((item) => item.name)].some((said) =>
+      said.toLowerCase().includes(wanted),
     );
   };
+  const heldShown = createMemo(() => languages().held.filter(passes), {
+    name: "referenceHeldShown",
+  });
+  const toGetShown = createMemo(() => languages().toGet.filter(passes), {
+    name: "referenceToGetShown",
+  });
 
-  /** The language a group is called by, as the split dropdown names it. */
-  const groupName = (group: {
-    readonly key: string;
-    readonly entries: readonly Entry[];
-  }): string => (group.key === "" ? m.reference_no_language() : nameOfLanguage(group.key));
+  /** Which languages are open in the dropdown; the one on show opens with it. */
+  const [expanded, setExpanded] = createSignal<ReadonlySet<string>>(new Set(), {
+    name: "referenceExpanded",
+  });
+  const toggle = (key: string): void => {
+    setExpanded((held) => {
+      const next = new Set(held);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
   /** The language of the text on show, if one is. */
   const shownLanguage = (): string | undefined => {
     const held = shown();
     return held === undefined ? undefined : languageOf(held.entry.resource);
   };
-  /**
-   * One half of the split dropdown: md — 3rem (48px) with the 1px border
-   * above and below, 14px, a 20px chevron, 24px sides — level with the
-   * editor's action bar.
-   */
-  const HALF =
-    "flex h-11.5 min-w-0 cursor-pointer items-center gap-3 px-6 text-start text-small font-semibold text-on-surface-primary transition-colors hover:bg-surface-secondary";
+  /** The split dropdown's language list, open or shut. */
+  const [managing, setManaging] = createSignal(false, { name: "referenceManaging" });
+  const manage = (open: boolean): void => {
+    setManaging(open);
+    if (!open) return;
+    setFilter("");
+    offer();
+    const key = shownLanguage();
+    setExpanded(new Set(key === undefined ? [] : [key]));
+  };
+  /** A listing still on its way: nothing read yet, or the read in flight. */
+  const listing = (read: Listing | undefined): boolean =>
+    read === undefined || read.state === "loading";
 
-  /**
-   * The split view's one control: | English ⌄ | ULB ⌄ |. The left half picks
-   * the language — the ones already beside this project, then the add list —
-   * and the right half picks the text within it.
-   */
   /**
    * A download from this list is the same machine as any other
    * (`src/core/remote/download.ts`): for two seconds the row reads
@@ -723,13 +711,251 @@ export function ReferenceColumn() {
   });
   const starting = (key: string): boolean => downloadRuns.of(key).kind === "pending";
 
+  const ROW_BUTTON =
+    "flex w-full cursor-pointer items-center gap-3 text-start text-small transition-colors hover:bg-surface-secondary disabled:cursor-default disabled:hover:bg-transparent";
+
+  /** One resource under an open language: show it, or fetch it. */
+  const FetchRow = (rowProps: { readonly item: Extract<Item, { kind: "fetch" }> }) => {
+    const item = rowProps.item; // oxlint-disable-line solid/reactivity -- a row is rebuilt with its list
+    return (
+      <button
+        type="button"
+        data-testid={`reference-fetch-${item.key}`}
+        aria-label={
+          starting(item.key)
+            ? m.reference_download_cancel({ name: item.name })
+            : m.reference_download_named({ name: item.name })
+        }
+        disabled={item.pulling()}
+        class={cx(ROW_BUTTON, "py-3 ps-6 pe-3 text-on-surface-primary")}
+        onClick={() => {
+          if (starting(item.key)) downloadRuns.cancel(item.key);
+          else startSoon(item.key, () => item.download());
+        }}
+      >
+        <span class="min-w-0 flex-1 break-words">{item.name}</span>
+        <Show
+          when={item.pulling()}
+          fallback={
+            <Show
+              when={starting(item.key)}
+              fallback={<Download aria-hidden="true" class="size-5 shrink-0" />}
+            >
+              <span class="flex shrink-0 items-center gap-1.5 text-on-surface-secondary">
+                {m.common_starting()}
+                <X aria-hidden="true" class="size-5" />
+              </span>
+            </Show>
+          }
+        >
+          {/* No byte count to show, so the bar runs until the copy lands. */}
+          <span
+            role="progressbar"
+            aria-label={m.common_downloading_name({ name: item.name })}
+            class="relative h-2 w-16 shrink-0 overflow-hidden rounded-full bg-surface-secondary"
+          >
+            <span class="absolute inset-y-0 w-1/3 animate-pulse rounded-full bg-brand" />
+          </span>
+        </Show>
+      </button>
+    );
+  };
+
+  const HeldRow = (rowProps: { readonly item: Exclude<Item, { kind: "fetch" }> }) => {
+    const item = rowProps.item; // oxlint-disable-line solid/reactivity -- a row is rebuilt with its list
+    const current = (): boolean =>
+      item.kind === "text" && shown()?.entry.resource.id === item.resource.id;
+    return (
+      <div class="flex items-center">
+        <button
+          type="button"
+          aria-current={current() ? "true" : undefined}
+          class={cx(
+            ROW_BUTTON,
+            "py-3 ps-6 pe-3 text-on-surface-primary aria-[current]:font-medium aria-[current]:text-brand",
+          )}
+          onClick={() => {
+            if (item.kind === "text") show(item.resource);
+            else if (item.kind === "project") showProject(item.row);
+            setManaging(false);
+          }}
+        >
+          <span class="flex min-w-0 flex-1 flex-col">
+            <span class="break-words">{item.name}</span>
+            <Show when={item.kind === "text" ? item.detail : undefined}>
+              {(detail) => (
+                <span class="break-all text-caption text-on-surface-tertiary">({detail()})</span>
+              )}
+            </Show>
+          </span>
+          <Show when={current()}>
+            <CircleCheck aria-label={m.reference_showing()} class="size-5 shrink-0" />
+          </Show>
+        </button>
+      </div>
+    );
+  };
+
+  /** A language's accordion: its name, where it is, and its resources when open. */
+  const LanguageRow = (rowProps: { readonly language: Language; readonly held: boolean }) => {
+    const open = (): boolean => expanded().has(rowProps.language.key);
+    const active = (): boolean => rowProps.held && shownLanguage() === rowProps.language.key;
+    return (
+      <li
+        data-testid={`gateway-language-${rowProps.language.key}`}
+        class="border-b border-surface-border last:border-b-0"
+      >
+        <div class="flex items-center">
+          <button
+            type="button"
+            aria-expanded={open() ? "true" : "false"}
+            class={cx(ROW_BUTTON, "p-3", rowProps.held && "pe-1")}
+            onClick={() => {
+              toggle(rowProps.language.key);
+            }}
+          >
+            <span class="flex min-w-0 flex-1 flex-col">
+              <span
+                class={cx(
+                  "break-words font-medium",
+                  active() ? "text-brand" : "text-on-surface-primary",
+                )}
+              >
+                {rowProps.language.name}
+              </span>
+              <span class="truncate text-caption text-on-surface-tertiary">
+                {rowProps.held ? m.reference_installed() : m.reference_available()}
+              </span>
+            </span>
+            <Show when={!rowProps.held}>
+              <Download aria-hidden="true" class="size-5 shrink-0" />
+            </Show>
+          </button>
+          <Show when={rowProps.held}>
+            {/* What can be done to the language as a whole; the chevron opens it. */}
+            <Menu
+              label={m.reference_language_actions({ name: rowProps.language.name })}
+              side="bottom"
+              align="end"
+              class="w-64"
+              fitViewport
+              trigger={
+                <IconButton
+                  data-testid="reference-language-menu"
+                  label={m.reference_language_actions({ name: rowProps.language.name })}
+                  icon={<MoreVertical />}
+                />
+              }
+            >
+              <MenuItem
+                class={ROW}
+                disabled
+                title={m.reference_import_soon()}
+                onSelect={() => undefined}
+              >
+                {m.reference_check_updates()}
+              </MenuItem>
+              <MenuItem
+                class={ROW}
+                disabled
+                title={m.reference_import_soon()}
+                onSelect={() => undefined}
+              >
+                {m.reference_export_language()}
+              </MenuItem>
+              <MenuItem
+                class={ROW}
+                data-testid="reference-remove-language"
+                icon={<Trash aria-hidden="true" />}
+                onSelect={() => removeLanguage(rowProps.language.key)}
+              >
+                {m.reference_remove_language()}
+              </MenuItem>
+            </Menu>
+            <button
+              type="button"
+              tabindex="-1"
+              aria-hidden="true"
+              class="flex h-12 shrink-0 cursor-pointer items-center pe-3 ps-1"
+              onClick={() => {
+                toggle(rowProps.language.key);
+              }}
+            >
+              <ChevronDown class={cx("size-5 transition-transform", open() && "rotate-180")} />
+            </button>
+          </Show>
+        </div>
+        <Show when={open()}>
+          <ul class="pb-2">
+            <For each={rowProps.language.items}>
+              {(item) => (
+                <li>
+                  <Show
+                    when={item.kind === "fetch" ? item : undefined}
+                    // SAFETY: the `when` above took every "fetch" item, so this one is not.
+                    fallback={<HeldRow item={item as Exclude<Item, { kind: "fetch" }>} />}
+                  >
+                    {(fetch) => <FetchRow item={fetch()} />}
+                  </Show>
+                </li>
+              )}
+            </For>
+          </ul>
+        </Show>
+      </li>
+    );
+  };
+
+  const GROUP_HEAD = "flex items-center gap-3 p-3 text-small font-semibold text-on-surface-primary";
+
+  /**
+   * Formatting: one control (Thomas, 2026-11-16; Will, 2026-11-17). It
+   * matches every book's formatting to the Bible on show here, so the ¶
+   * acts on the text beside it. Format book and Format project stay in the
+   * command palette.
+   */
+  const FormatButton = () => {
+    // A whole project takes a moment; the ¶ turns while it runs (Will, 2026-11-17).
+    const [matching, setMatching] = createSignal(false, { name: "referenceMatching" });
+    const bible = (): Resource | undefined => {
+      const entry = shown()?.entry;
+      return entry !== undefined && entry.role === "source" ? entry.resource : undefined;
+    };
+    return (
+      <IconButton
+        data-testid="toolbar-overlay"
+        label={
+          bible() === undefined
+            ? m.refine_formatting()
+            : m.reference_match_formatting_to({ name: bible()!.title })
+        }
+        icon={
+          <Show when={matching()} fallback={<Pilcrow />}>
+            <span
+              role="status"
+              aria-label={m.common_loading()}
+              class="size-5 animate-spin rounded-full border-2 border-on-surface-tertiary border-t-transparent"
+            />
+          </Show>
+        }
+        aria-busy={matching() ? "true" : undefined}
+        disabled={
+          matching() ||
+          bible() === undefined ||
+          findCommand("overlay.project")?.available() !== true
+        }
+        onClick={() => {
+          const resource = bible();
+          if (resource === undefined) return;
+          setMatching(true);
+          void runCommandAndWait("overlay.project", resource.id).finally(() => setMatching(false));
+        }}
+      />
+    );
+  };
+
   const GatewayPicker = () => (
-    // The panel's whole width. The language takes what is left over; the text,
-    // by its shorthand, only what it needs.
-    <div
-      data-testid="gateway-picker"
-      class="flex w-full shrink-0 overflow-hidden rounded-lg border border-surface-border"
-    >
+    <div data-testid="gateway-picker" class="flex w-full shrink-0 items-center gap-controls">
       <Popover
         label={m.reference_language()}
         side="bottom"
@@ -741,128 +967,79 @@ export function ReferenceColumn() {
         onOpenChange={manage}
         triggerClass="min-w-0 flex-1"
         trigger={
-          <button type="button" data-testid="gateway-language" class={cx(HALF, "w-full")}>
-            <span class="min-w-0 flex-1 truncate">
-              {(() => {
-                const key = shownLanguage();
-                const group = languageTabs().find((each) => each.key === key);
-                return group === undefined ? m.reference_choose_language() : groupName(group);
-              })()}
+          <button
+            type="button"
+            data-testid="gateway-language"
+            class="flex w-full min-w-0 cursor-pointer items-center gap-3 rounded-lg bg-surface-primary p-3 text-start text-small text-on-surface-primary transition-colors hover:bg-surface-secondary"
+          >
+            <Globe aria-hidden="true" class="size-5 shrink-0" />
+            <span class="flex min-w-0 flex-1 flex-col">
+              <span class="truncate font-semibold">
+                {(() => {
+                  const key = shownLanguage();
+                  return key === undefined ? m.reference_choose_language() : nameOfLanguage(key);
+                })()}
+              </span>
+              <Show when={shown()}>
+                {(held) => (
+                  <span class="truncate text-caption text-on-surface-tertiary">
+                    {held().entry.resource.title}
+                  </span>
+                )}
+              </Show>
             </span>
             <ChevronDown aria-hidden="true" class="size-5 shrink-0" />
           </button>
         }
       >
-        {/* One list, A–Z, no headings and no add or remove: every language
-            there is, on this device or to download. The one on show is
-            selected; choosing another shows it instead. One still to download
-            says so in its row. */}
-        <ul
+        <div
           data-testid="language-list"
           class="scrollbar-padded flex max-h-[min(70vh,32rem)] flex-col overflow-y-auto py-2"
         >
-          <Show when={listing(bibles())}>
-            <li class="px-4 py-2 text-small text-on-surface-tertiary">
-              {m.reference_list_loading()}
-            </li>
-          </Show>
-          <For each={[...offers()].sort(byName)}>
-            {(offer) => (
-              <li data-testid={`gateway-language-${offer.key}`}>
-                <Show
-                  when={offer.kind === "held" ? offer : undefined}
-                  fallback={
-                    // To download: the whole row is the action, blue like a
-                    // link. For two seconds it is "Starting…", and pressing
-                    // it again calls it off; then the bar, and nothing to press.
-                    offer.kind === "download" && (
-                      <button
-                        type="button"
-                        aria-label={
-                          starting(offer.key)
-                            ? m.reference_download_cancel({ name: offer.name })
-                            : m.reference_download_named({ name: offer.name })
-                        }
-                        disabled={offer.pulling()}
-                        class="flex min-h-12 w-full cursor-pointer items-center gap-3 px-4 text-start text-small text-on-surface-primary transition-colors hover:bg-surface-secondary disabled:cursor-default disabled:hover:bg-transparent"
-                        onClick={() => {
-                          if (starting(offer.key)) downloadRuns.cancel(offer.key);
-                          else startSoon(offer.key, () => offer.download());
-                        }}
-                      >
-                        <span class="min-w-0 flex-1 truncate" title={offer.name}>
-                          {offer.name}
-                        </span>
-                        <Show
-                          when={offer.pulling()}
-                          fallback={
-                            <Show
-                              when={starting(offer.key)}
-                              fallback={
-                                <span class="flex shrink-0 items-center gap-1.5 font-medium text-brand">
-                                  <Download aria-hidden="true" class="size-5" />
-                                  {m.common_download()}
-                                </span>
-                              }
-                            >
-                              <span class="flex shrink-0 items-center gap-3">
-                                <span class="text-on-surface-secondary">{m.common_starting()}</span>
-                                <span class="flex items-center gap-1.5 font-medium text-brand">
-                                  <X aria-hidden="true" class="size-5" />
-                                  {m.common_cancel()}
-                                </span>
-                              </span>
-                            </Show>
-                          }
-                        >
-                          {/* No byte count to show, so the bar runs until the copy lands. */}
-                          <span
-                            role="progressbar"
-                            aria-label={m.common_downloading_name({ name: offer.name })}
-                            class="relative h-2 w-24 shrink-0 overflow-hidden rounded-full bg-surface-secondary"
-                          >
-                            <span class="absolute inset-y-0 w-1/3 animate-pulse rounded-full bg-brand" />
-                          </span>
-                        </Show>
-                      </button>
-                    )
-                  }
-                >
-                  {(held) => (
-                    <button
-                      type="button"
-                      aria-current={shownLanguage() === held().key ? "true" : undefined}
-                      class="flex min-h-12 w-full cursor-pointer items-center gap-3 px-4 text-start text-small text-on-surface-primary transition-colors hover:bg-surface-secondary aria-[current]:bg-brand-light aria-[current]:font-semibold aria-[current]:text-brand"
-                      onClick={() => {
-                        const group = languageTabs().find((each) => each.key === held().key);
-                        const opening =
-                          group === undefined ? undefined : openingOf(group.entries, group.key);
-                        if (opening !== undefined) setChosen(opening.resource.id);
-                        else held().add();
-                        setManaging(false);
-                      }}
-                    >
-                      <span class="min-w-0 flex-1 truncate" title={held().name}>
-                        {held().name}
-                      </span>
-                      <Show when={shownLanguage() === held().key}>
-                        <Check aria-label={m.reference_active()} class="size-5 shrink-0" />
-                      </Show>
-                    </button>
-                  )}
-                </Show>
-              </li>
-            )}
-          </For>
-        </ul>
-      </Popover>
-      <Show when={shown()}>
-        {(held) => (
-          <div class="flex max-w-[50%] min-w-0 shrink-0 border-s border-surface-border">
-            <ResourcePicker resource={held().entry.resource} />
+          <div class="px-3 pb-2">
+            <Input
+              data-testid="reference-filter"
+              wrapperClass="w-full"
+              type="search"
+              value={filter()}
+              placeholder={m.reference_filter_languages()}
+              aria-label={m.reference_filter_languages()}
+              icon={<Search aria-hidden="true" />}
+              onInput={(event) => setFilter(event.currentTarget.value)}
+            />
           </div>
-        )}
-      </Show>
+          <h3 class={GROUP_HEAD}>{m.reference_installed_count({ count: heldShown().length })}</h3>
+          <ul>
+            <For each={heldShown()}>{(language) => <LanguageRow language={language} held />}</For>
+          </ul>
+          {/* The two groups read as two (Will, 2026-11-17): the panel's 2px rule between them. */}
+          <span aria-hidden="true" class="my-3 block h-0.5 shrink-0 bg-surface-border" />
+          <div class={GROUP_HEAD}>
+            <h3 class="min-w-0 flex-1">
+              {m.reference_available_count({ count: toGetShown().length })}
+            </h3>
+            {/* Sideloading a reference text has no flow yet; the place is held for it. */}
+            <button
+              type="button"
+              data-testid="reference-import"
+              disabled
+              title={m.reference_import_soon()}
+              class="font-medium text-brand underline disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {m.reference_import()}
+            </button>
+          </div>
+          <Show when={listing(bibles())}>
+            <p class="p-3 text-small text-on-surface-tertiary">{m.reference_list_loading()}</p>
+          </Show>
+          <ul>
+            <For each={toGetShown()}>
+              {(language) => <LanguageRow language={language} held={false} />}
+            </For>
+          </ul>
+        </div>
+      </Popover>
+      <FormatButton />
     </div>
   );
 

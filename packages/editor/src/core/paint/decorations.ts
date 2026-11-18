@@ -335,21 +335,31 @@ class CallerWidget extends WidgetType {
   readonly mark: string;
   readonly kind: string;
   readonly at: number;
-  constructor(mark: string, kind: string, at: number) {
+  /** The note's words, for the tooltip. */
+  readonly body: string;
+  constructor(mark: string, kind: string, at: number, body: string) {
     super();
     this.mark = mark;
     this.kind = kind;
     this.at = at;
+    this.body = body;
   }
   eq(other: CallerWidget) {
-    return other.mark === this.mark && other.kind === this.kind && other.at === this.at;
+    return (
+      other.mark === this.mark &&
+      other.kind === this.kind &&
+      other.at === this.at &&
+      other.body === this.body
+    );
   }
   toDOM(view: EditorView) {
     const span = document.createElement("span");
     span.className = `usfm-caller usfm-caller-${this.kind}`;
     span.dataset["noteAt"] = String(this.at);
     span.textContent = this.mark;
-    span.title = "click to read this note at the foot of the chapter";
+    // The note itself, then where a click takes the reader (Thomas, 2026-11-13).
+    const go = "Click to go to this note at the foot of the chapter";
+    span.title = this.body === "" ? go : `${this.body}\n\n${go}`;
     span.onmousedown = (e) => {
       e.preventDefault();
       toggleNote(view, this.at, "caller");
@@ -938,7 +948,12 @@ export function buildRegular(
         from: note.point.from,
         to: note.point.to,
         deco: Decoration.replace({
-          widget: new CallerWidget(note.mark, note.kind, note.from),
+          widget: new CallerWidget(
+            note.mark,
+            note.kind,
+            note.from,
+            noteApparatusText(doc, note, NOTE_PART.BODY),
+          ),
           ...UNIT,
         }),
       });
@@ -1115,7 +1130,7 @@ function nameChapters(
   add: Pending[],
   outside: (from: number, to: number) => boolean,
 ): void {
-  const { bookLabel, chapters } = chapterTitles(doc, structure);
+  const { bookLabel, bookLabels, chapters } = chapterTitles(doc, structure);
   const namedDeco =
     bookLabel === ""
       ? CHAPTER_NAMED
@@ -1129,6 +1144,11 @@ function nameChapters(
   // between them stays the text's.
   const hides: { from: number; to: number }[] = [];
   const titled: { at: number; to: number; own: string }[] = [];
+  // The book's label (`\\cl` before the first chapter) names every chapter
+  // above, so its own line is hidden too, wherever it stands in the header.
+  for (const label of bookLabels)
+    if (!outside(label.from, label.to) && doc.slice(label.contentFrom, label.to).trim() !== "")
+      hides.push({ from: Math.max(0, label.from - 1), to: label.to });
   for (const chapter of chapters) {
     const line = chapter.line;
     if (outside(line.from, Math.max(line.to, ...chapter.labels.map((label) => label.to)))) continue;

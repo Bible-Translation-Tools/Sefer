@@ -9,7 +9,7 @@ import { bookName } from "@wycliffeassociates/sefer-text/location/bookName";
 import { Data, Effect, FileSystem, Option } from "effect";
 
 import { joinPath } from "../fileSystem/path";
-import { DEFAULT_BRANCH, Git, type Author, type GitError } from "../git/git";
+import { DEFAULT_BRANCH, Git, REPLAYED_REF, type Author, type GitError } from "../git/git";
 import { intakeRepository, type IntakeResult } from "../git/intake";
 import type { Repositories } from "../git/repository";
 import { Observability } from "../observability";
@@ -160,6 +160,10 @@ const writeHistory = (fileSystem: FileSystem.FileSystem, root: string, replayed:
       `${replayed.head}\n`,
     );
     yield* fileSystem.writeFileString(joinPath(git, "HEAD"), `ref: refs/heads/${DEFAULT_BRANCH}\n`);
+    // The pack is the whole line up to this head and needs nothing else, so a
+    // first publish can send it as it is (`REPLAYED_REF`, the Web remote).
+    yield* fileSystem.makeDirectory(joinPath(git, "refs/sefer"), { recursive: true });
+    yield* fileSystem.writeFileString(joinPath(git, REPLAYED_REF), `${replayed.head}\n`);
   });
 
 /**

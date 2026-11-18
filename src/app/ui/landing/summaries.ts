@@ -11,7 +11,7 @@ import {
   repairProjectIndex,
   type ProjectRow,
 } from "#core/project/projectIndex";
-import { firstArrival, type ProjectOrigin } from "#core/project/provenance";
+import { arrivalLanguage, firstArrival, type ProjectOrigin } from "#core/project/provenance";
 import { remotesOf } from "#core/project/remotes";
 import { Remote } from "#core/remote/remote";
 
@@ -54,6 +54,7 @@ const summarize = (
     );
     const recorded = yield* Effect.map(admin.recordedName(root), Option.getOrUndefined);
     const from = yield* Effect.map(firstArrival(fileSystem, root), Option.getOrUndefined);
+    const arrived = yield* Effect.map(arrivalLanguage(fileSystem, root), Option.getOrUndefined);
     const remotes = yield* Effect.orElseSucceed(
       Effect.flatMap(Effect.all([Git, Remote]), ([git, remote]) =>
         Effect.flatMap(git.open(root), (repo) => remotesOf(remote, repo)),
@@ -63,12 +64,16 @@ const summarize = (
 
     const folder = lastSegment(root);
     const locale = host.locale();
+    // The catalogue's language stands in only where the manifest names none,
+    // or names the same code without a name; a manifest's own language wins.
+    const declaredTag = languageTag(metadata);
+    const catalogued = declaredTag === "" || declaredTag === arrived?.tag ? arrived : undefined;
     return {
       root,
       folder,
       name: recorded || projectDisplayName(metadata, locale) || folder,
-      language: languageName(metadata, locale),
-      languageTag: languageTag(metadata),
+      language: languageName(metadata, locale) || (catalogued?.name ?? ""),
+      languageTag: declaredTag || (catalogued?.tag ?? ""),
       books: entries.filter(isUsfm).length,
       lastOpened,
       from,

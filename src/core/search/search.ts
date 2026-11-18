@@ -22,6 +22,8 @@ export interface Query {
   readonly wholeWord?: boolean;
   readonly regex?: boolean;
   readonly unicode?: boolean;
+  /** Match `jesus` against `Jesús`: accent marks are ignored on both sides. */
+  readonly ignoreAccents?: boolean;
 }
 
 export interface Options {
@@ -156,8 +158,8 @@ const previewAt = (
   };
 };
 
-const matcherFor = (query: Query): Result.Result<RegExp, SearchError> => {
-  const source = query.regex ? query.text : escapeLiteral(query.text);
+const matcherFor = (query: Query, text: string): Result.Result<RegExp, SearchError> => {
+  const source = query.regex ? text : escapeLiteral(text);
   const flags = `g${query.caseSensitive === true ? "" : "i"}${query.unicode === true ? "u" : ""}`;
   try {
     return Result.succeed(new RegExp(source, flags));
@@ -176,25 +178,114 @@ const patternToRun = (
   query: Query,
   limit: number | undefined,
 ): Result.Result<RegExp | null, SearchError> => {
-  if (query.text === "") return Result.succeed(null);
-  const matcher = matcherFor(query);
+  // Checked after folding: a query of marks alone folds to nothing, which would match everywhere.
+  const text = patternText(query);
+  if (text === "") return Result.succeed(null);
+  const matcher = matcherFor(query, text);
   if (Result.isFailure(matcher)) return Result.fail(matcher.failure);
   if (limit !== undefined && limit <= 0) return Result.succeed(null);
   return Result.succeed(matcher.success);
 };
 
+/**
+ * The marks a search that ignores accents leaves out: the combining diacritics
+ * (Greek accents and breathings decompose into U+0300–036F, so they are here
+ * too), Hebrew points and cantillation, and Arabic harakat and Quranic marks.
+ *
+ * NOT every `\p{M}`. Vowel signs and viramas are marks too, and they are
+ * letters to the people who read them: without them Hindi किताब is कतब and Thai
+ * ที่ is ท. The Hebrew and Arabic blocks hold punctuation and signs among their
+ * marks — maqaf, paseq, sof pasuq, nun hafukha, the end of ayah — and those
+ * stay, so a search for בית־אל still needs its maqaf.
+ */
+const FOLDABLE =
+  /[\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f\u0591-\u05bd\u05bf\u05c1\u05c2\u05c4\u05c5\u05c7\u064b-\u065f\u0670\u06d6-\u06dc\u06df-\u06e4\u06e7\u06e8\u06ea-\u06ed]/gu;
+const ANY_FOLDABLE = new RegExp(FOLDABLE.source, "u");
+
+/** Below À nothing decomposes, so those characters skip normalisation. */
+const FIRST_DECOMPOSABLE = 0xc0;
+
+/**
+ * What one character becomes, or `null` when it stays as written. A character
+ * whose decomposition holds no foldable mark keeps its original form, so a
+ * Devanagari nukta letter or a Hangul syllable is never rewritten.
+ */
+const foldedChars = new Map<number, string | null>();
+
+const foldedChar = (point: number, char: string): string | null => {
+  const held = foldedChars.get(point);
+  if (held !== undefined) return held;
+  const decomposed = char.normalize("NFD");
+  const bare = decomposed.replace(FOLDABLE, "");
+  const folded = bare === decomposed ? null : bare;
+  foldedChars.set(point, folded);
+  return folded;
+};
+
+/** Whether folding could change `text` at all. A Hindi or Thai Bible cannot, nor plain ASCII. */
+const hasFoldable = (text: string): boolean => ANY_FOLDABLE.test(text.normalize("NFD"));
+
+/**
+ * `text` with its accent marks removed, and where each of its UTF-16 units
+ * came from in the original. `at[i]` is the original offset of the character
+ * that produced folded unit `i`; `at[folded.length]` is `text.length`. A match
+ * `[from, to)` in the folded text is `[at[from], at[to])` in the original, so a
+ * mark left after the last letter (`e` + U+0301) stays inside the match and a
+ * Replace overwrites the whole accented letter.
+ */
+export const foldAccents = (text: string): { readonly folded: string; readonly at: Int32Array } => {
+  let at = new Int32Array(text.length + 1);
+  const parts: string[] = [];
+  let run = 0;
+  let out = 0;
+  let index = 0;
+  while (index < text.length) {
+    if (text.charCodeAt(index) < FIRST_DECOMPOSABLE) {
+      at[out++] = index++;
+      continue;
+    }
+    // SAFETY: `index` is inside `text`.
+    const point = text.codePointAt(index)!;
+    const width = point > 0xffff ? 2 : 1;
+    const folded = foldedChar(point, text.slice(index, index + width));
+    if (folded === null) {
+      for (let unit = 0; unit < width; unit += 1) at[out++] = index;
+    } else {
+      if (out + folded.length >= at.length) {
+        const grown = new Int32Array(Math.max(at.length * 2, out + folded.length + 1));
+        grown.set(at);
+        at = grown;
+      }
+      parts.push(text.slice(run, index), folded);
+      for (let unit = 0; unit < folded.length; unit += 1) at[out++] = index;
+      run = index + width;
+    }
+    index += width;
+  }
+  parts.push(text.slice(run));
+  at[out] = text.length;
+  return { folded: parts.join(""), at: at.subarray(0, out + 1) };
+};
+
+const patternText = (query: Query): string =>
+  query.ignoreAccents === true ? foldAccents(query.text).folded : query.text;
+
 function* matchesIn(
   pattern: RegExp,
-  text: string,
+  original: string,
   wholeWord: boolean,
+  ignoreAccents = false,
 ): Generator<{ readonly from: number; readonly to: number }> {
+  const fold = ignoreAccents && hasFoldable(original) ? foldAccents(original) : undefined;
+  const text = fold?.folded ?? original;
   pattern.lastIndex = 0;
   for (let match = pattern.exec(text); match !== null; match = pattern.exec(text)) {
     const from = match.index;
     const to = from + match[0].length;
     if (to === from) pattern.lastIndex = from + 1;
     if (wholeWord && (isWordChar(text, from - 1) || isWordChar(text, to))) continue;
-    yield { from, to };
+    // SAFETY: `from` and `to` are offsets into `text`, and `at` has one entry past its end.
+    yield fold === undefined ? { from, to } : { from: fold.at[from]!, to: fold.at[to]! };
   }
 }
 
@@ -216,7 +307,12 @@ export const find = (
     const { text, stamp } = book.source();
     const addressOf = lazily(() => addressesOf(options?.analysisOf, book.id, book.id, text));
 
-    for (const { from, to } of matchesIn(pattern, text, query.wholeWord === true)) {
+    for (const { from, to } of matchesIn(
+      pattern,
+      text,
+      query.wholeWord === true,
+      query.ignoreAccents === true,
+    )) {
       hits.push({
         bookId: book.id,
         stamp,
@@ -254,7 +350,12 @@ export const findInReading = (
     const text = reading.text;
     const addressOf = lazily(() => addressesOf(options?.analysisOf, book.id, book.id, source.text));
 
-    for (const { from, to } of matchesIn(pattern, text, query.wholeWord === true)) {
+    for (const { from, to } of matchesIn(
+      pattern,
+      text,
+      query.wholeWord === true,
+      query.ignoreAccents === true,
+    )) {
       const pieces = reading.pieces(from, to);
       const first = pieces[0];
       if (first === undefined) continue;
@@ -356,7 +457,12 @@ export const findInReferences = (
       addressesOf(options?.analysisOf, reference.id, bookId, reference.text),
     );
 
-    for (const { from, to } of matchesIn(pattern, text, query.wholeWord === true)) {
+    for (const { from, to } of matchesIn(
+      pattern,
+      text,
+      query.wholeWord === true,
+      query.ignoreAccents === true,
+    )) {
       const first = reading.pieces(from, to)[0];
       if (first === undefined) continue;
       hits.push({
@@ -396,7 +502,12 @@ export const findInDocuments = (
   const hits: DocumentHit[] = [];
   for (const document of documents) {
     const { text } = document;
-    for (const { from, to } of matchesIn(pattern, text, query.wholeWord === true)) {
+    for (const { from, to } of matchesIn(
+      pattern,
+      text,
+      query.wholeWord === true,
+      query.ignoreAccents === true,
+    )) {
       hits.push({
         document: document.id,
         addresses: document.addresses,

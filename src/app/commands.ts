@@ -11,7 +11,13 @@ import { makeMultiBook } from "#core/multibook/multibook";
 import { Observability, type ObservabilityService } from "#core/observability";
 import type { Project } from "#core/project/project";
 import { headerChanges, headerOf, isHeaderEdit } from "#core/rules/bookNames";
-import { chapterLabelsOf, standardize } from "#core/rules/chapterLabels";
+import {
+  chapterLabelsOf,
+  keptAsWritten,
+  removed,
+  renumbered,
+  standardize,
+} from "#core/rules/chapterLabels";
 
 import { personAuthor } from "./author";
 import { contentHostFor } from "./endpoints";
@@ -25,6 +31,7 @@ import { sendAfterSave, sendNow } from "./syncActions";
 import { syncPreferences } from "./syncSettings";
 import { syncWatch } from "./syncWatch";
 import { sendOutcomeCopy } from "./ui/cloud/copy";
+import { openFind } from "./ui/find/findState";
 import { bookName } from "./ui/workspace/books";
 
 export type CommandResult =
@@ -79,7 +86,9 @@ const [registry, setRegistry] = createSignal<readonly Command[]>([], {
 export const availableCommands = (): readonly Command[] =>
   registry().filter((command) => command.available());
 
-let runner: ((effect: Effect.Effect<unknown, unknown, Domain | Scope.Scope>) => void) | undefined;
+let runner:
+  | ((effect: Effect.Effect<unknown, unknown, Domain | Scope.Scope>) => Promise<void>)
+  | undefined;
 
 let narrator: ObservabilityService | undefined;
 
@@ -88,7 +97,7 @@ const setCommandObservability = (observability: ObservabilityService): void => {
 };
 
 const setCommandRunner = (
-  run: (effect: Effect.Effect<unknown, unknown, Domain | Scope.Scope>) => void,
+  run: (effect: Effect.Effect<unknown, unknown, Domain | Scope.Scope>) => Promise<void>,
 ): void => {
   runner = run;
 };
@@ -104,21 +113,26 @@ export const registerCommand = (spec: CommandSpec): (() => void) => {
 export const findCommand = (id: string): Command | undefined =>
   registry().find((command) => command.id === id);
 
-export const runCommand = (id: string, argument?: unknown): void => {
+/**
+ * Runs a command and settles when it has finished, for a control that shows
+ * it working (the reference panel's ¶ spinner). Failures are reported by the
+ * runner, so this never rejects.
+ */
+export const runCommandAndWait = (id: string, argument?: unknown): Promise<void> => {
   const command = findCommand(id);
-  if (command === undefined || !command.available()) return;
+  if (command === undefined || !command.available()) return Promise.resolve();
   const gesture = narrator?.operation(`command.${id}`);
   const outcome = command.run(argument);
   if (outcome === undefined) {
     gesture?.end("ready");
-    return;
+    return Promise.resolve();
   }
   if (Effect.isEffect(outcome)) {
     if (runner === undefined) {
       gesture?.end("failed");
       throw new Error(`command ${id} returned an Effect before a command runner was installed`);
     }
-    runner(
+    return runner(
       Effect.onExit(
         gesture === undefined ? outcome : Effect.provideService(outcome, Observability, gesture),
         (exit) =>
@@ -127,10 +141,16 @@ export const runCommand = (id: string, argument?: unknown): void => {
           }),
       ),
     );
-    return;
   }
   gesture?.end("ready");
-  void outcome;
+  return Promise.resolve(outcome).then(
+    () => undefined,
+    () => undefined,
+  );
+};
+
+export const runCommand = (id: string, argument?: unknown): void => {
+  void runCommandAndWait(id, argument);
 };
 
 const MOD = (event: KeyboardEvent): boolean => (event.metaKey ? true : event.ctrlKey);
@@ -412,8 +432,21 @@ const importCommands = (bridge: ShellBridge, h: Helpers) => {
 };
 
 const searchCommands = (bridge: ShellBridge, h: Helpers) => {
-  const { hasProject } = h;
+  const { hasProject, hasBook } = h;
   return [
+    registerCommand({
+      id: "find.box",
+      title: m.find_box_title,
+      keys: "Mod-f",
+      when: hasBook,
+      run: () => {
+        const book = bridge.focused();
+        if (book === undefined) return;
+        const range = book.selection() ?? { from: 0, to: 0 };
+        const picked = book.source().text.slice(range.from, range.to);
+        openFind(/\\|\n/.test(picked) ? "" : picked, { bookId: book.id, offset: range.from });
+      },
+    }),
     registerCommand({
       id: "search.open",
       title: m.common_find_in_project,
@@ -836,11 +869,27 @@ const overlayFocused = (bridge: ShellBridge, scope: "chapter" | "book") =>
     );
   });
 
-const overlayProject = (bridge: ShellBridge, multibook: Helpers["multibook"]) =>
+/**
+ * The text to match formatting to: the one the reference pane shows when it
+ * names one (Will, 2026-11-17: any two texts, not only the manifest's
+ * source), else the project's bound source (the command palette).
+ */
+const overlaySource = (bridge: ShellBridge, projectRoot: string, resourceId: string | undefined) =>
+  resourceId === undefined
+    ? boundSource(bridge, projectRoot)
+    : Effect.map(bridge.services.library.resources(), (held) =>
+        held.find((resource) => resource.id === resourceId),
+      );
+
+const overlayProject = (
+  bridge: ShellBridge,
+  multibook: Helpers["multibook"],
+  resourceId?: string,
+) =>
   Effect.gen(function* () {
     const project = bridge.project();
     if (project === undefined) return;
-    const source = yield* boundSource(bridge, project.root);
+    const source = yield* overlaySource(bridge, project.root, resourceId);
     if (source === undefined) {
       bridge.report(m.command_no_source_text_is_bound());
       return;
@@ -919,6 +968,98 @@ const chapterLabelCommands = (bridge: ShellBridge, h: Helpers) => [
       bridge.report(m.chapter_labels_done({ count: operation.books.length }));
     },
   }),
+  /**
+   * One label whose number is not its chapter's, repaired from the dialog:
+   * `{ book, from, action }`, `action` "renumber" (its chapter's number, in
+   * its own digits) or "remove"; a label written its own way ("Icipande34")
+   * can be removed too, and the book's label then names the chapter. Found again in the held parse by where it
+   * starts, and refused when the book changed or that label is no longer one.
+   */
+  registerCommand({
+    id: "chapterLabels.fix",
+    title: m.command_fix_chapter_label,
+    when: h.hasProject,
+    run: (argument) => {
+      if (typeof argument !== "object" || argument === null) return;
+      const id: unknown = Reflect.get(argument, "book");
+      const from: unknown = Reflect.get(argument, "from");
+      const action: unknown = Reflect.get(argument, "action");
+      if (typeof id !== "string" || typeof from !== "number") return;
+      if (action !== "renumber" && action !== "remove") return;
+      const analyses = bridge.services.projectAnalysis;
+      let stale = false;
+      const operation = h.multibook.runAcrossBooks("chapterLabels", (book) => {
+        if (book.id !== id) return null;
+        const held = analyses.analysis(book.id);
+        if (Option.isNone(held) || !analyses.fresh(book.id, book.source().stamp)) {
+          stale = true;
+          return null;
+        }
+        const label = chapterLabelsOf(held.value.analysis).labels.find(
+          (each) =>
+            each.from === from &&
+            (each.mismatched ||
+              (action === "remove" && each.scope === "chapter" && each.shape === "other")),
+        );
+        if (label === undefined) {
+          stale = true;
+          return null;
+        }
+        const change = action === "remove" ? removed(label) : renumbered(label);
+        return change === undefined ? null : [change];
+      });
+      if (operation === null) {
+        bridge.report(stale ? m.chapter_labels_stale() : m.chapter_labels_nothing());
+        return;
+      }
+      bridge.changed({ kind: "book.apply", books: operation.books });
+      bridge.report(
+        action === "remove" ? m.chapter_labels_removed() : m.chapter_labels_renumbered(),
+      );
+    },
+  }),
+  /**
+   * Every chapter label written its own way taken out, in the books given
+   * (`{ books }`) or in every book: most translations name every chapter the
+   * same way, so a `\cl` after `\c` that is not the book's word is noise.
+   * The book's label, or the bare number, then names each chapter. One Undo.
+   */
+  registerCommand({
+    id: "chapterLabels.removeKept",
+    title: m.command_remove_kept_chapter_labels,
+    when: h.hasProject,
+    run: (argument) => {
+      const given: unknown =
+        typeof argument === "object" && argument !== null
+          ? Reflect.get(argument, "books")
+          : undefined;
+      const only = Array.isArray(given)
+        ? new Set(given.filter((id): id is string => typeof id === "string"))
+        : undefined;
+      const analyses = bridge.services.projectAnalysis;
+      let stale = false;
+      let count = 0;
+      const operation = h.multibook.runAcrossBooks("chapterLabels", (book) => {
+        if (only !== undefined && !only.has(book.id)) return null;
+        const held = analyses.analysis(book.id);
+        if (Option.isNone(held)) return null;
+        const kept = keptAsWritten(chapterLabelsOf(held.value.analysis));
+        if (kept.length === 0) return null;
+        if (!analyses.fresh(book.id, book.source().stamp)) {
+          stale = true;
+          return null;
+        }
+        count += kept.length;
+        return kept.map(removed);
+      });
+      if (operation === null) {
+        bridge.report(stale ? m.chapter_labels_stale() : m.chapter_labels_nothing());
+        return;
+      }
+      bridge.changed({ kind: "book.apply", books: operation.books });
+      bridge.report(m.chapter_labels_removed_kept({ count }));
+    },
+  }),
 ];
 
 /**
@@ -985,7 +1126,8 @@ const overlayCommands = (bridge: ShellBridge, h: Helpers) => {
       id: "overlay.project",
       title: m.command_match_formatting_from_source_every,
       when: hasProject,
-      run: () => overlayProject(bridge, h.multibook),
+      run: (argument) =>
+        overlayProject(bridge, h.multibook, typeof argument === "string" ? argument : undefined),
     }),
   ];
 };
@@ -993,11 +1135,14 @@ const overlayCommands = (bridge: ShellBridge, h: Helpers) => {
 export const registerShellCommands = (bridge: ShellBridge): (() => void) => {
   const { services } = bridge;
   setCommandObservability(services.composition.observability);
-  setCommandRunner((effect) => {
-    void services.run(effect).catch((cause: unknown) => {
-      bridge.report(m.command_failed_cause({ cause: String(cause) }));
-    });
-  });
+  setCommandRunner((effect) =>
+    services.run(effect).then(
+      () => undefined,
+      (cause: unknown) => {
+        bridge.report(m.command_failed_cause({ cause: String(cause) }));
+      },
+    ),
+  );
   const h = shellHelpers(bridge);
   const registrations = [
     ...paletteCommands(bridge),

@@ -354,8 +354,8 @@ const lineByLineClass = EditorView.editorAttributes.of((view) => {
  * chapter rows), never "the line after `\\c`": with `\\c 2`, `\\s Heading`,
  * `\\cl Sura 2` the heading stays where it is and "Sura 2" names the chapter.
  * Only the `\\c` line and the label lines are hidden; the title is drawn on the
- * `\\c` line. A chapter with no label of its own is "Chapter 2", or the book's
- * label (`\\cl Psalm` before the first chapter) and the number.
+ * `\\c` line. A chapter with no label of its own is the book's label
+ * (`\\cl Psalm` before the first chapter) and the number, or the number alone.
  */
 export interface ChapterTitle {
   /** The `\\c` line. */
@@ -369,6 +369,8 @@ export interface ChapterTitle {
 
 export interface ChapterTitles {
   readonly bookLabel: string;
+  /** Every `\\cl` line before the first chapter: the book's label, never text. */
+  readonly bookLabels: readonly DocLine[];
   readonly chapters: readonly ChapterTitle[];
 }
 
@@ -398,6 +400,7 @@ const scanChapterTitles = (doc: string, structure: DocStructure): ChapterTitles 
   const rows = structure.chapters.filter((row) => row.label !== "");
   const lines = structure.lines;
   let bookLabel = "";
+  const bookLabels: DocLine[] = [];
   const chapters: { line: DocLine; number: string; own?: string; labels: DocLine[] }[] = rows.map(
     (row) => ({ line: lines.at(lines.indexAt(row.from)), number: row.label, labels: [] }),
   );
@@ -408,6 +411,7 @@ const scanChapterTitles = (doc: string, structure: DocStructure): ChapterTitles 
     if (line.marker !== "cl") continue;
     const words = labelWords(doc, line);
     if (k < 0) {
+      bookLabels.push(line);
       if (bookLabel === "") bookLabel = words;
       continue;
     }
@@ -415,7 +419,7 @@ const scanChapterTitles = (doc: string, structure: DocStructure): ChapterTitles 
     chapter.labels.push(line);
     if (chapter.own === undefined && words !== "") chapter.own = words;
   }
-  return { bookLabel, chapters };
+  return { bookLabel, bookLabels, chapters };
 };
 
 /**

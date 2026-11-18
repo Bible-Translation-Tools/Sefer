@@ -3,7 +3,8 @@ import git from "isomorphic-git";
 import http from "isomorphic-git/http/web";
 
 import { nodeFsView, type IsomorphicFs } from "#core/fileSystem/nodeView";
-import { DEFAULT_BRANCH, type Repo } from "#core/git/git";
+import { joinPath } from "#core/fileSystem/path";
+import { DEFAULT_BRANCH, REPLAYED_REF, type Repo } from "#core/git/git";
 import { Credentials, type CredentialsService } from "#core/host/credentials";
 import { Gitea, type GiteaService } from "#core/remote/gitea";
 import { createOnGitea, hostOf } from "#core/remote/onGitea";
@@ -49,6 +50,72 @@ const UNSHALLOW = 2_147_483_647;
 
 const STALL_MS = 60_000;
 
+/**
+ * The slowest upload a request is given time for before it counts as stalled
+ * (16 KB/s): the server says nothing until a pushed pack is all in, so a body
+ * gets its own allowance on top of `STALL_MS`.
+ */
+const UPLOAD_BYTES_PER_MS = 16;
+
+const collect = async (body: AsyncIterable<Uint8Array> | Iterable<Uint8Array>) => {
+  const chunks: Uint8Array[] = [];
+  let bytes = 0;
+  for await (const chunk of body) {
+    chunks.push(chunk);
+    bytes += chunk.byteLength;
+  }
+  return { chunks, bytes };
+};
+
+/** Chunks already in hand, as the async body isomorphic-git's http clients take. */
+async function* streamOf(chunks: readonly Uint8Array[]): AsyncIterableIterator<Uint8Array> {
+  yield* chunks;
+}
+
+/** The chunks as one array. */
+const joined = (chunks: readonly Uint8Array[]): Uint8Array => {
+  const out = new Uint8Array(chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0));
+  let at = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, at);
+    at += chunk.byteLength;
+  }
+  return out;
+};
+
+/** One pkt-line: four hex digits of length (its own four included), then the line. */
+const pktLine = (line: string): Uint8Array => {
+  const bytes = new TextEncoder().encode(line);
+  const out = new Uint8Array(bytes.length + 4);
+  out.set(new TextEncoder().encode((bytes.length + 4).toString(16).padStart(4, "0")));
+  out.set(bytes, 4);
+  return out;
+};
+
+/** Whether a pack index (v2) lists `oid`: a binary search of its sorted names. */
+const indexHolds = (idx: Uint8Array, oid: string): boolean => {
+  if (idx.length < 8 + 1024 || idx[0] !== 0xff || idx[1] !== 0x74 || idx[2] !== 0x4f) return false;
+  const view = new DataView(idx.buffer, idx.byteOffset, idx.byteLength);
+  const count = view.getUint32(8 + 255 * 4);
+  const names = 8 + 1024;
+  if (idx.length < names + count * 20) return false;
+  const hexAt = (i: number): string => {
+    let hex = "";
+    for (let b = 0; b < 20; b++) hex += idx[names + i * 20 + b].toString(16).padStart(2, "0");
+    return hex;
+  };
+  let lo = 0;
+  let hi = count - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const at = hexAt(mid);
+    if (at === oid) return true;
+    if (at < oid) lo = mid + 1;
+    else hi = mid - 1;
+  }
+  return false;
+};
+
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
@@ -91,17 +158,19 @@ const makeWebRemote = (
       request: async (request) => {
         const controller = new AbortController();
         let timer: ReturnType<typeof setTimeout> | undefined;
-        const restart = (): void => {
+        const restart = (wait = STALL_MS): void => {
           if (timer !== undefined) clearTimeout(timer);
           timer = setTimeout(
-            () => controller.abort(new Error(`stalled: nothing for ${STALL_MS / 1000} s`)),
-            STALL_MS,
+            () => controller.abort(new Error(`stalled: nothing for ${wait / 1000} s`)),
+            wait,
           );
         };
-        restart();
+        const sent = request.body === undefined ? undefined : await collect(request.body);
+        restart(STALL_MS + Math.ceil((sent?.bytes ?? 0) / UPLOAD_BYTES_PER_MS));
         try {
           const response = await http.request({
             ...request,
+            ...(sent === undefined ? {} : { body: streamOf(sent.chunks) }),
             url: through(options.transport, request.url),
             signal: controller.signal,
           });
@@ -218,6 +287,100 @@ const makeWebRemote = (
             PubSub.publishUnsafe(events, progress);
           },
         };
+      });
+
+    /**
+     * A first publish of a migrated project: an empty repository is sent the
+     * migration's own pack (`REPLAYED_REF`) in one receive-pack request.
+     * isomorphic-git's push would walk every object and repack them without
+     * deltas — for a Bible's Writer history 28,408 commits went from a 31 MB
+     * pack to an 823 MB upload built whole in memory. The push after this one
+     * sends only what came since. Anything unexpected leaves it to that push.
+     */
+    const seedFromReplay = (repo: Repo): Effect.Effect<void, RemoteError> =>
+      Effect.gen(function* () {
+        const head = yield* Effect.orElseSucceed(
+          attempt(() => git.resolveRef({ fs, dir: repo.root, ref: REPLAYED_REF })),
+          () => undefined,
+        );
+        if (head === undefined) return;
+        const packs = joinPath(repo.root, ".git/objects/pack");
+        const names = yield* Effect.orElseSucceed(fileSystem.readDirectory(packs), () => []);
+        let pack: Uint8Array | undefined;
+        for (const name of names.filter((each) => each.endsWith(".idx"))) {
+          const idx = yield* Effect.orElseSucceed(
+            fileSystem.readFile(joinPath(packs, name)),
+            () => new Uint8Array(),
+          );
+          if (!indexHolds(idx, head)) continue;
+          pack = yield* Effect.orElseSucceed(
+            fileSystem.readFile(joinPath(packs, name.replace(/\.idx$/u, ".pack"))),
+            () => undefined,
+          );
+          break;
+        }
+        if (pack === undefined) return;
+        const last = { current: { phase: "done", loaded: 0 } satisfies Progress };
+        const wire = yield* wireFor(repo, last, "required");
+        const url = yield* urlNamed(repo);
+        const info = yield* attempt(() =>
+          git.getRemoteInfo2({
+            http: wire.http,
+            url,
+            headers: wire.headers,
+            ...(wire.onAuth === undefined ? {} : { onAuth: wire.onAuth }),
+            forPush: true,
+            protocolVersion: 1,
+          }),
+        );
+        if ((info.refs ?? []).some((entry) => entry.ref.startsWith("refs/heads/"))) return;
+        const branch = yield* branchOf(repo);
+        const credential = wire.onAuth?.();
+        const update = `${"0".repeat(40)} ${head} refs/heads/${branch}\0report-status\n`;
+        const total = pack.byteLength;
+        PubSub.publishUnsafe(events, { phase: "Sending history", loaded: 0, total, unit: "bytes" });
+        const response = yield* attempt(() =>
+          transported.request({
+            url: `${url.replace(/\/+$/u, "")}/git-receive-pack`,
+            method: "POST",
+            headers: {
+              ...wire.headers,
+              "Content-Type": "application/x-git-receive-pack-request",
+              Accept: "application/x-git-receive-pack-result",
+              ...(credential === undefined
+                ? {}
+                : {
+                    Authorization: `Basic ${btoa(`${credential.username}:${credential.password}`)}`,
+                  }),
+            },
+            body: streamOf([pktLine(update), new TextEncoder().encode("0000"), pack]),
+          }),
+        );
+        const reply = new TextDecoder().decode(
+          joined((yield* attempt(() => collect(response.body ?? []))).chunks),
+        );
+        if (
+          response.statusCode !== 200 ||
+          !reply.includes("unpack ok") ||
+          !reply.includes(`ok refs/heads/${branch}`)
+        )
+          return yield* Effect.fail(
+            fail(
+              response.statusCode === 401 || response.statusCode === 403
+                ? "Unauthorized"
+                : "Rejected",
+              `the history was not taken (${response.statusCode}): ${reply.replace(/[^\x20-\x7e]+/gu, " ").trim()}`,
+            ),
+          );
+        PubSub.publishUnsafe(events, {
+          phase: "Sending history",
+          loaded: total,
+          total,
+          unit: "bytes",
+        });
+        yield* Effect.ignore(
+          attempt(() => git.deleteRef({ fs, dir: repo.root, ref: REPLAYED_REF })),
+        );
       });
 
     const transfer = (
@@ -378,6 +541,7 @@ const makeWebRemote = (
                 "this build has no WACS server: set one in Settings",
               );
           yield* attach(repo, url);
+          yield* seedFromReplay(repo);
           yield* transfer(repo, "required", (wire, branch) =>
             git.push({ ...wire, ref: branch, remoteRef: branch }),
           );

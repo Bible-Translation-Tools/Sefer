@@ -5,6 +5,13 @@ import { escapesRoot, normalisePath } from "../fileSystem/path";
 
 export const DEFAULT_BRANCH = "master";
 
+/**
+ * Set by a Writer migration to the head of the pack it wrote: that pack is the
+ * whole line to there and needs no other object, so a first publish into an
+ * empty repository can send it as it is. Gone once that publish lands.
+ */
+export const REPLAYED_REF = "refs/sefer/replayed";
+
 export type CommitId = string;
 
 export interface Repo {

@@ -32,13 +32,15 @@ import type { Resource, Role } from "#core/resources/library";
 
 import { useShell } from "../../ProjectContext";
 import { shellKeys } from "../../settings";
+import { addFindSource } from "../find/findState";
 import { IconButton } from "../primitives";
 import { useAlignedGroup } from "./aligned";
 import { bookName } from "./books";
 import { lastVerses, supplyExpectedVerses } from "./expectedVerses";
-import { FollowToggle } from "./FollowToggle";
 
 import "@wycliffeassociates/sefer-editor/editor.css";
+
+import { FollowToggle } from "./FollowToggle";
 
 export interface ReferencePaneProps {
   readonly resource: Resource;
@@ -250,8 +252,17 @@ export function ReferencePane(props: ReferencePaneProps) {
         onPlace: (offset) => showInBook(offset),
       });
       setMounted(view);
+      // Find searches the open source text too (findState.ts).
+      const unlist = addFindSource({
+        resourceId,
+        bookId,
+        text: text.text,
+        language: untrack(() => props.resource.language),
+        mount: view,
+      });
       // Returned, not onCleanup: a Solid 2 effect's callback has no owner (NO_OWNER_CLEANUP).
       return () => {
+        unlist();
         setMounted(undefined);
         view.destroy();
       };
