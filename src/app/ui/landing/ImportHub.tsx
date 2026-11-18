@@ -9,6 +9,7 @@ import { For, Show, createSignal, onCleanup, untrack } from "solid-js";
 import { registerCommand } from "../../commands";
 import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
+import { shellKeys } from "../../settings";
 import { Button, Dialog, cx, toasts } from "../primitives";
 import {
   STEPS,
@@ -24,19 +25,28 @@ type Picker = (source: "zip" | "folder") => void;
 
 type Dropper = (transfer: DataTransfer) => void;
 
-/** The drop hint split round its three links, so a translation can put them anywhere in it. */
-const hintParts = (): readonly string[] =>
-  m
-    .landing_drop_hint({
-      zip: "\u0000zip\u0000",
-      folder: "\u0000folder\u0000",
-      writer: "\u0000writer\u0000",
-    })
+/**
+ * The drop hint split round its links, so a translation can put them anywhere
+ * in it. The Writer link is only there in tech and project manager mode.
+ */
+const hintParts = (writer: boolean): readonly string[] =>
+  (writer
+    ? m.landing_drop_hint({
+        zip: "\u0000zip\u0000",
+        folder: "\u0000folder\u0000",
+        writer: "\u0000writer\u0000",
+      })
+    : m.landing_drop_hint_no_writer({ zip: "\u0000zip\u0000", folder: "\u0000folder\u0000" })
+  )
     .split("\u0000")
     .filter((part) => part !== "");
 
+const techModeOn = (shell: ReturnType<typeof useShell>): boolean =>
+  shell.services.settings.get(shellKeys(shell.services.settings).techMode);
+
 const DropZone = (props: { readonly pick: Picker; readonly drop: Dropper }) => {
   const navigate = useNavigate();
+  const shell = useShell();
   const [over, setOver] = createSignal(false, { name: "importDropOver" });
   return (
     <div
@@ -63,7 +73,7 @@ const DropZone = (props: { readonly pick: Picker; readonly drop: Dropper }) => {
     >
       <Upload size={20} aria-hidden="true" class="text-on-surface-secondary" />
       <p class="text-small text-on-surface-secondary">
-        <For each={hintParts()}>
+        <For each={hintParts(techModeOn(shell))}>
           {(part) => {
             const link = (testid: string, label: string, onClick: () => void) => (
               <Button variant="link" size="flush" data-testid={testid} onClick={onClick}>
@@ -92,6 +102,7 @@ const DropZone = (props: { readonly pick: Picker; readonly drop: Dropper }) => {
 
 const ImportButtons = (props: { readonly pick: Picker }) => {
   const navigate = useNavigate();
+  const writer = techModeOn(useShell());
   return (
     <div class="flex flex-wrap items-center justify-center gap-4">
       <Button
@@ -112,15 +123,17 @@ const ImportButtons = (props: { readonly pick: Picker }) => {
       >
         {m.landing_import_folder()}
       </Button>
-      <Button
-        variant="accent"
-        size="lg"
-        data-testid="import-writer"
-        icon={<BookCopy size={24} aria-hidden="true" />}
-        onClick={() => void navigate({ to: "/migrate" })}
-      >
-        {m.common_migrate_from_writer()}
-      </Button>
+      <Show when={writer}>
+        <Button
+          variant="accent"
+          size="lg"
+          data-testid="import-writer"
+          icon={<BookCopy size={24} aria-hidden="true" />}
+          onClick={() => void navigate({ to: "/migrate" })}
+        >
+          {m.common_migrate_from_writer()}
+        </Button>
+      </Show>
     </div>
   );
 };

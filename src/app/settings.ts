@@ -118,6 +118,8 @@ export interface ShellKeys {
   /** Enables the destructive multi-match action in Find. */
   readonly enableReplaceAll: SettingKey<boolean>;
   readonly showGatewayProjects: SettingKey<boolean>;
+  /** Tech and project manager mode: the Writer migration screens, which are slow and confusing for a translator. */
+  readonly techMode: SettingKey<boolean>;
   /** Ask about unsaved work found when a project opens. Backups are written either way. */
   readonly offerRecovery: SettingKey<boolean>;
   readonly excerptContext: SettingKey<number>;
@@ -197,6 +199,7 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
     ),
     enableReplaceAll: settings.register("find.enableReplaceAll", Schema.Boolean, false),
     showGatewayProjects: settings.register("projects.showGateways", Schema.Boolean, false),
+    techMode: settings.register("shell.techMode", Schema.Boolean, false),
     offerRecovery: settings.register("recovery.offerOnOpen", Schema.Boolean, true),
     excerptContext: settings.register("excerpts.context", Schema.Number, 0),
     reviewLayout: settings.register("review.layout", Schema.String, "auto"),
@@ -289,6 +292,13 @@ const appearanceRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
     max: 200,
     step: 10,
     unit: "%",
+  },
+  {
+    key: keys.techMode,
+    label: m.settings_tech_mode(),
+    description: m.settings_tech_mode_description(),
+    kind: "boolean",
+    group: "appearance",
   },
 ];
 
