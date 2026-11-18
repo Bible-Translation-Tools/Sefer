@@ -18,8 +18,6 @@ The page is two columns from `lg` up: the loaded projects stack vertically on th
 
 The only state on the landing page is `reload`: a counter the import hub raises and `YourProjects` reads. That is the whole subscription between them — an import that finished shows up in the list without either component knowing what the other is. `YourProjects` keeps a second counter of its own for the writes it makes itself (a rename, a delete), read in the same effect.
 
-Above the list sits the [recovery](recovery.md) banner, rendered only when a project is open and only when that project has work in the journal that never reached disk.
-
 ## No reference material here
 
 The projects page lists projects only. Translation Notes are not on it (Will, 2026-10-15): they are chosen, and downloaded the first time, in a book's reference column, under **Reference material** ([resources](resources.md), "Translation Notes"). The Notes section that stood between "Projects Loaded into Sefer" and the WACS table, with its search box and **Remove**, is gone; **Remove** now sits beside each held copy in that same menu section.

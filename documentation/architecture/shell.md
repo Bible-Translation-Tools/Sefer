@@ -9,7 +9,7 @@ The shell is the Solid layer above every module: it composes their Layers once, 
 Wiring facts that carry meaning, not taste:
 
 - `run` provides the **application** scope (`runtime.scope`). `openProject` and `ProjectAnalysis.attach` require `Scope`; a per-call `Effect.scoped` would close the project the instant the call returned.
-- `RecoveryLive` is provided **to** `SaveCoordinatorLive` (`Layer.provideMerge`). Save reads Recovery through `serviceOption`, so it only journals when Recovery is in its own context.
+- `AutosaveLive` sits over `SaveCoordinatorLive` (`Layer.provideMerge`) and writes through it. Sync, recording a version and finishing a transfer stand it aside with `Autosave.hold` (core code through `standingAside`, which does nothing when no Autosave is provided).
 - The Save hasher is built with `Layer.unwrap` over `Galley`: the book hash is the engine's, and the hasher is a function that needs the built engine.
 - `Observability` is merged back over the modules (`provideMerge`, not `provide`) because `run` may ask for the ring itself.
 - The `seat` (`src/app/services.ts`) is how a plain Book becomes an `EditorBook`. It records each one it makes, which is how the shell reaches an `EditorBook` from a `Book` port with no type assertion. It gives each book a fresh `galley.memoize()`, and adds the **mountable** half of the editor (`commandsLayer`, `viewLayer()`, `usfmLinter()`, `lintHoverGrace()`, `findingMarks()`, `noteEditing()`) so a view can be constructed straight over `book.state`.
@@ -154,10 +154,6 @@ search dialog closes on it), and a full-page screen closes only through its X bu
 `installCommandKeys` skips a binding with no modifier while the reader is typing into an input, a
 text area or a contenteditable — which is what `.cm-content` is, so the editor and the palette's own
 search box are covered by one rule. Every other binding holds Mod, so the rule costs them nothing.
-
-The recovery banner is mounted on the book route as well as the project route, for the same reason:
-unsaved work found on open is the first thing to answer, and the project page is not where an open
-lands.
 
 ## The workspace chrome
 

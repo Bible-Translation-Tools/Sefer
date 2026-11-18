@@ -326,6 +326,10 @@ nobody had ruled on.
 Web, `git_abort_merge` over git2 on desktop — puts the work tree back to HEAD and clears the merge
 state. It REFUSES when nothing is in progress, deliberately: it is a hard reset underneath, and on a
 clean repository that would discard a translator's unsaved morning instead of undoing a transfer.
+Since autosave (2026-11-18) the morning is in the files, so the resolve action (`quick.ts`) also
+refuses while any changed file is one the merge (`HEAD..MERGE_HEAD`) did not bring, and runs
+inside `Autosave.hold` so it sees every edit. Sefer never leaves a merge in progress itself;
+this is the folder something outside Sefer left mid-merge.
 
 ## Checking on open, and sending on save
 
