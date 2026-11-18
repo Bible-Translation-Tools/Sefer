@@ -7,13 +7,15 @@ import {
   chapterLabelsOf,
   keptAsWritten,
   renumbered,
+  standardize as standardizeBook,
   wordsOf,
+  type BookLabels,
   type ChapterLabel,
 } from "#core/rules/chapterLabels";
 
 import { runCommand } from "../../commands";
 import { useShell } from "../../ProjectContext";
-import { Button, Dialog, Input, Select } from "../primitives";
+import { Badge, Button, Dialog, Input, Select } from "../primitives";
 import { bookName } from "../workspace/books";
 import { metadataOf } from "../workspace/project";
 
@@ -27,7 +29,35 @@ interface Row {
   readonly kept: readonly ChapterLabel[];
   /** Whether the book has any chapter label: one without is listed only while adding a word. */
   readonly labeled: boolean;
+  readonly labels: BookLabels;
 }
+
+/**
+ * Why a book is not yet standard, against the project's word; `undefined`
+ * when Standardize with that word would change nothing and no number is off.
+ */
+type Difference = "number" | "mixed" | "word" | "perChapter";
+
+const differenceOf = (row: Row, projectWord: string | undefined): Difference | undefined => {
+  if (row.kept.some((label) => label.mismatched)) return "number";
+  if (row.words.length > 1) return "mixed";
+  if (projectWord === undefined) return undefined;
+  if (row.words[0]?.[0] !== projectWord) return "word";
+  return standardizeBook(row.labels, projectWord).length > 0 ? "perChapter" : undefined;
+};
+
+const differenceText = (difference: Difference, row: Row, projectWord: string): string => {
+  switch (difference) {
+    case "number":
+      return m.chapter_labels_differs_number();
+    case "mixed":
+      return m.chapter_labels_differs_mixed({ count: row.words.length });
+    case "word":
+      return m.chapter_labels_differs_word({ word: projectWord });
+    case "perChapter":
+      return m.chapter_labels_differs_per_chapter();
+  }
+};
 
 /** The select's two values that are not a word. */
 const LEAVE = "";
@@ -73,6 +103,7 @@ export function ChapterLabelsDialog(props: {
           ...(labels.book === undefined ? {} : { bookWord: labels.book.text }),
           kept: keptAsWritten(labels),
           labeled: labels.labels.some((label) => label.text !== ""),
+          labels,
         },
       ];
     });
@@ -113,6 +144,12 @@ export function ChapterLabelsDialog(props: {
       if (best === undefined || count > best.count) best = { word, count };
     return best;
   });
+
+  const difference = (row: Row): Difference | undefined =>
+    row.labeled ? differenceOf(row, mostUsed()?.word) : undefined;
+  const standardCount = createMemo(
+    () => rows().filter((row) => row.labeled && difference(row) === undefined).length,
+  );
 
   const useEverywhere = (given?: string): void => {
     const word = (given ?? everyWord()).trim();
@@ -207,6 +244,20 @@ export function ChapterLabelsDialog(props: {
             </div>
           )}
         </Show>
+        <Show when={mostUsed()}>
+          {(most) => (
+            <p
+              class="pb-3 text-small text-on-surface-secondary"
+              data-testid="chapter-labels-standard-count"
+            >
+              {m.chapter_labels_standard_count({
+                standard: standardCount(),
+                books: rows().filter((row) => row.labeled).length,
+                word: most().word,
+              })}
+            </p>
+          )}
+        </Show>
         <Show when={!adding() && unlabeled() > 0}>
           <div class="pb-3">
             <Button variant="tertiary" onClick={() => setAdding(true)}>
@@ -222,8 +273,33 @@ export function ChapterLabelsDialog(props: {
                 data-chapter-labels-book={row.id}
               >
                 <div class="flex items-center justify-between gap-controls">
-                  <span class="font-semibold">{row.name}</span>
+                  <div class="flex min-w-0 flex-wrap items-center gap-2">
+                    <span
+                      class={
+                        row.labeled && difference(row) === undefined
+                          ? "text-on-surface-secondary"
+                          : "font-semibold"
+                      }
+                    >
+                      {row.name}
+                    </span>
+                    <Show
+                      when={difference(row)}
+                      fallback={
+                        <Show when={row.labeled}>
+                          <Badge tone="muted">{m.chapter_labels_standard()}</Badge>
+                        </Show>
+                      }
+                    >
+                      {(differs) => (
+                        <Badge tone="warning">
+                          {differenceText(differs(), row, mostUsed()?.word ?? "")}
+                        </Badge>
+                      )}
+                    </Show>
+                  </div>
                   <Select
+                    wrapperClass="w-60 shrink-0"
                     aria-label={row.name}
                     value={choiceOf(row)}
                     onChange={(event) => choose(row.id, event.currentTarget.value)}
