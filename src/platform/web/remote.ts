@@ -57,6 +57,14 @@ const STALL_MS = 60_000;
  */
 const UPLOAD_BYTES_PER_MS = 16;
 
+/**
+ * Cloudflare, in front of the WACS proxy, refuses a request body over 100 MB
+ * at its edge; the browser only sees "Failed to fetch", minutes later. A push
+ * that big is refused here first, with the reason (2026-11-18, a full push of
+ * a Bemba New Testament). Desktop pushes straight to WACS, with no such limit.
+ */
+const PROXY_UPLOAD_LIMIT = 100_000_000;
+
 const collect = async (body: AsyncIterable<Uint8Array> | Iterable<Uint8Array>) => {
   const chunks: Uint8Array[] = [];
   let bytes = 0;
@@ -166,12 +174,22 @@ const makeWebRemote = (
           );
         };
         const sent = request.body === undefined ? undefined : await collect(request.body);
+        const target = through(options.transport, request.url);
+        if (
+          sent !== undefined &&
+          sent.bytes > PROXY_UPLOAD_LIMIT &&
+          target !== request.url &&
+          request.url.endsWith("/git-receive-pack")
+        )
+          throw new Error(
+            `the upload is ${Math.round(sent.bytes / 1_000_000)} MB, and the WACS proxy takes at most ${PROXY_UPLOAD_LIMIT / 1_000_000} MB in one request; publish it from the desktop app`,
+          );
         restart(STALL_MS + Math.ceil((sent?.bytes ?? 0) / UPLOAD_BYTES_PER_MS));
         try {
           const response = await http.request({
             ...request,
             ...(sent === undefined ? {} : { body: streamOf(sent.chunks) }),
-            url: through(options.transport, request.url),
+            url: target,
             signal: controller.signal,
           });
           const chunks = response.body;

@@ -1856,6 +1856,7 @@
   "wacs_submitted": "Your changes were sent to the project's owner to review",
   "wacs_waiting_owner": "Your changes are waiting for the owner to review them.",
   "wacs_uploading": "Uploading…",
+  "wacs_uploading_hint": "A big project can take several minutes, more on a slow connection. Keep this tab open until it finishes.",
   "wacs_submitting": "Submitting changes…",
   "wacs_checking": "Checking for updates…",
   "wacs_retry_upload": "Retry upload",

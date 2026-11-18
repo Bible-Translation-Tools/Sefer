@@ -270,9 +270,12 @@ const ownerOf = (link: string): string | undefined => {
 };
 
 /** While something runs, the buttons give way to a bar saying what. */
-const Working = (props: { readonly label: string }) => (
+const Working = (props: { readonly label: string; readonly hint?: string | undefined }) => (
   <div class="space-y-2" role="status" data-sync-working>
     <p class="text-small text-on-surface-secondary">{props.label}</p>
+    <Show when={props.hint}>
+      {(hint) => <p class="text-smallest text-on-surface-tertiary">{hint()}</p>}
+    </Show>
     <div class="h-2 overflow-hidden rounded-full bg-surface-secondary">
       <div class="h-full w-1/3 animate-pulse rounded-full bg-brand" />
     </div>
@@ -528,6 +531,12 @@ const WacsBody = (props: {
     quick.run(action);
   };
 
+  /** Under "Uploading…": the first upload of a migrated Bible is its whole Writer history. */
+  const uploadHint = (): string | undefined =>
+    working() === "publish" || working() === "upload" || quick.busy() === "send"
+      ? m.wacs_uploading_hint()
+      : undefined;
+
   const busyLabel = (): string | undefined => {
     if (working() === "publish" || working() === "upload" || quick.busy() === "send")
       return m.wacs_uploading();
@@ -688,7 +697,7 @@ const WacsBody = (props: {
               </Button>
             }
           >
-            {(label) => <Working label={label()} />}
+            {(label) => <Working label={label()} hint={uploadHint()} />}
           </Show>
           <Show when={problem()}>
             {(said) => (
@@ -776,7 +785,7 @@ const WacsBody = (props: {
             </Button>
           }
         >
-          {(label) => <Working label={label()} />}
+          {(label) => <Working label={label()} hint={uploadHint()} />}
         </Show>
         <Show
           when={problem()}
