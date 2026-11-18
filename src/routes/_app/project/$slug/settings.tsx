@@ -37,6 +37,7 @@ import {
 } from "#app/ui/theme";
 import { UpdatePanel } from "#app/ui/UpdatePanel";
 import type { SettingKey } from "#core/host/settings";
+import { CHANNEL_ENDPOINTS, WEB_TRANSPORT_SPEC } from "#core/remote/channels";
 import { parseTransport } from "#core/remote/transport";
 
 import "@wycliffeassociates/sefer-editor/editor.css";
@@ -329,6 +330,87 @@ const widget = (descriptor: AnyDescriptor, model: SettingsModel): JSX.Element =>
   }
 };
 
+type ServerChoice = "build" | "dev" | "production";
+
+/**
+ * The quick flip between the dev and production servers: writes the content
+ * host, the catalogue and the browser's proxies together (or clears them back
+ * to the build's), then reloads, since transfers and the catalogue are wired at boot. The fields
+ * below stay for anything else, such as a localhost.
+ */
+function ServerPreset(props: { readonly model: SettingsModel }) {
+  const { services } = useShell();
+  const keys = shellKeys(services.settings);
+  const choice = (): ServerChoice | undefined => {
+    const contentHost = props.model.read(keys.contentHost).trim();
+    const catalogueUrl = props.model.read(keys.catalogueUrl).trim();
+    if (contentHost === "" && catalogueUrl === "") return "build";
+    const resolved = {
+      contentHost: contentHost || BUILD_ENDPOINTS.contentHost,
+      catalogueUrl: catalogueUrl || BUILD_ENDPOINTS.catalogueUrl,
+    };
+    for (const channel of ["dev", "production"] as const) {
+      const preset = CHANNEL_ENDPOINTS[channel];
+      if (
+        resolved.contentHost === preset.contentHost &&
+        resolved.catalogueUrl === preset.catalogueUrl
+      )
+        return channel;
+    }
+    return undefined;
+  };
+  const pick = (next: ServerChoice): void => {
+    if (next === choice()) return;
+    const preset = next === "build" ? undefined : CHANNEL_ENDPOINTS[next];
+    const value = (wanted: string | undefined, built: string | null): string =>
+      wanted === undefined || wanted === built ? "" : wanted;
+    void services
+      .run(
+        Effect.all([
+          services.settings.set(
+            keys.contentHost,
+            value(preset?.contentHost, BUILD_ENDPOINTS.contentHost),
+          ),
+          services.settings.set(
+            keys.catalogueUrl,
+            value(preset?.catalogueUrl, BUILD_ENDPOINTS.catalogueUrl),
+          ),
+          // A build made without servers (a laptop with no .env) has no
+          // proxies either, and the browser cannot reach WACS without them.
+          services.settings.set(
+            keys.webTransport,
+            value(
+              preset === undefined ? undefined : WEB_TRANSPORT_SPEC,
+              BUILD_ENDPOINTS.webTransport,
+            ),
+          ),
+        ]),
+      )
+      .then(() => globalThis.location.reload());
+  };
+  return (
+    <div class="flex items-center gap-6 py-3" data-setting="network.servers">
+      <div class="min-w-0 flex-1">
+        <span class="block text-small text-on-surface-primary">{m.settings_servers()}</span>
+        <span class="block text-smallest text-on-surface-tertiary">
+          {choice() === undefined ? m.settings_servers_custom() : m.settings_servers_description()}
+        </span>
+      </div>
+      <SegmentedControl
+        size="sm"
+        label={m.settings_servers()}
+        value={choice()}
+        onChange={pick}
+        items={[
+          { value: "build", label: m.settings_servers_build() },
+          { value: "dev", label: m.settings_servers_dev() },
+          { value: "production", label: m.settings_servers_production() },
+        ]}
+      />
+    </div>
+  );
+}
+
 function SettingRow(props: { readonly descriptor: AnyDescriptor; readonly model: SettingsModel }) {
   return (
     <div class="flex items-center gap-6 py-3" data-setting={props.descriptor.key.name}>
@@ -370,6 +452,9 @@ function SettingsGroup(props: {
       <Card class="space-y-1" data-settings-group={props.group.id}>
         <PanelHeader level={3} title={props.group.title()} subtitle={props.group.subtitle()} />
         <div class="divide-y divide-surface-border">
+          <Show when={props.group.id === "network"}>
+            <ServerPreset model={props.model} />
+          </Show>
           <For each={rows()}>
             {(descriptor) =>
               descriptor.group === "network" && descriptor.kind === "string" ? (
