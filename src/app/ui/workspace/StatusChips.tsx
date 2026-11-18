@@ -13,7 +13,6 @@ import { chooseWorkOffline } from "../../network";
 import { m } from "../../paraglide/messages";
 import { useShell, type Shell } from "../../ProjectContext";
 import { syncStatus } from "../../syncStatus";
-import { syncWatch } from "../../syncWatch";
 import { Button, Popover, SegmentedControl, Tooltip, cx, toasts } from "../primitives";
 import { bookName } from "./books";
 
@@ -60,13 +59,9 @@ export function SaveButton() {
     if (failed()) return m.status_save();
     return saving() ? m.status_saving() : m.status_saved();
   };
-  // Recorded versions WACS does not have yet, as of the last sync reading.
-  const unsent = (): boolean =>
-    (syncWatch.sync(shell.project()?.root)?.reading.ahead.length ?? 0) > 0;
   const explained = (): string => {
     if (failed()) return m.status_backup_failed_body();
-    if (unsaved()) return m.status_unsaved_tooltip();
-    return unsent() ? m.status_not_in_the_cloud_tooltip() : m.status_saved_tooltip();
+    return unsaved() ? m.status_unsaved_tooltip() : m.status_saved_tooltip();
   };
   createEffect(
     () => shell.backup().kind,
