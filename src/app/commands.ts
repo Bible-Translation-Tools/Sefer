@@ -965,7 +965,8 @@ const chapterLabelCommands = (bridge: ShellBridge, h: Helpers) => [
   /**
    * One label whose number is not its chapter's, repaired from the dialog:
    * `{ book, from, action }`, `action` "renumber" (its chapter's number, in
-   * its own digits) or "remove". Found again in the held parse by where it
+   * its own digits) or "remove"; a label written its own way ("Icipande34")
+   * can be removed too, and the book's label then names the chapter. Found again in the held parse by where it
    * starts, and refused when the book changed or that label is no longer one.
    */
   registerCommand({
@@ -989,7 +990,10 @@ const chapterLabelCommands = (bridge: ShellBridge, h: Helpers) => [
           return null;
         }
         const label = chapterLabelsOf(held.value.analysis).labels.find(
-          (each) => each.from === from && each.mismatched,
+          (each) =>
+            each.from === from &&
+            (each.mismatched ||
+              (action === "remove" && each.scope === "chapter" && each.shape === "other")),
         );
         if (label === undefined) {
           stale = true;

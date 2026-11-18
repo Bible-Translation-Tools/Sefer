@@ -1,3 +1,4 @@
+import { useNavigate } from "@tanstack/solid-router";
 import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import { Option } from "effect";
 import { For, Show, createMemo, createSignal } from "solid-js";
@@ -36,11 +37,13 @@ interface Row {
  * Why a book is not yet standard, against the project's word; `undefined`
  * when Standardize with that word would change nothing and no number is off.
  */
-type Difference = "number" | "mixed" | "word" | "perChapter";
+type Difference = "number" | "mixed" | "word" | "perChapter" | "kept";
 
 const differenceOf = (row: Row, projectWord: string | undefined): Difference | undefined => {
   if (row.kept.some((label) => label.mismatched)) return "number";
   if (row.words.length > 1) return "mixed";
+  // Only labels written their own way: no word to judge, but each can be fixed.
+  if (row.words.length === 0) return row.kept.length > 0 ? "kept" : undefined;
   if (projectWord === undefined) return undefined;
   if (row.words[0]?.[0] !== projectWord) return "word";
   return standardizeBook(row.labels, projectWord).length > 0 ? "perChapter" : undefined;
@@ -56,6 +59,8 @@ const differenceText = (difference: Difference, row: Row, projectWord: string): 
       return m.chapter_labels_differs_word({ word: projectWord });
     case "perChapter":
       return m.chapter_labels_differs_per_chapter();
+    case "kept":
+      return m.chapter_labels_differs_kept({ count: row.kept.length });
   }
 };
 
@@ -110,6 +115,16 @@ export function ChapterLabelsDialog(props: {
   });
   const rows = createMemo(() => books().filter((row) => row.labeled || adding()));
   const unlabeled = createMemo(() => books().filter((row) => !row.labeled).length);
+  const navigate = useNavigate();
+  /** Into the book at the label, as Search opens a hit; the dialog closes. */
+  const goTo = (row: Row, label: ChapterLabel): void => {
+    shell.aim(row.id, label.textFrom, label.textTo, "centre");
+    openChange(false);
+    void navigate({
+      to: "/project/$slug/book/$book",
+      params: { slug: shell.slug(), book: encodeURIComponent(row.id) },
+    });
+  };
   const fix = (row: Row, label: ChapterLabel, action: "renumber" | "remove"): void => {
     runCommand("chapterLabels.fix", { book: row.id, from: label.from, action });
   };
@@ -235,7 +250,7 @@ export function ChapterLabelsDialog(props: {
       <Show when={row.kept.length > 0}>
         <details
           class="text-on-surface-secondary"
-          open={row.kept.some((label) => label.mismatched)}
+          open={row.kept.some((label) => label.mismatched) || difference(row) === "kept"}
         >
           <summary class="cursor-pointer">
             {m.chapter_labels_kept({ count: row.kept.length })}
@@ -257,24 +272,32 @@ export function ChapterLabelsDialog(props: {
                   </span>
                   <Show when={label.mismatched ? renumbered(label) : undefined}>
                     {(change) => (
-                      <>
-                        <Button
-                          variant="secondary"
-                          data-testid="chapter-labels-renumber"
-                          onClick={() => fix(row, label, "renumber")}
-                        >
-                          {m.chapter_labels_renumber({ number: change().insert })}
-                        </Button>
-                        <Button
-                          variant="tertiary"
-                          data-testid="chapter-labels-remove"
-                          onClick={() => fix(row, label, "remove")}
-                        >
-                          {m.chapter_labels_remove()}
-                        </Button>
-                      </>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        data-testid="chapter-labels-renumber"
+                        onClick={() => fix(row, label, "renumber")}
+                      >
+                        {m.chapter_labels_renumber({ number: change().insert })}
+                      </Button>
                     )}
                   </Show>
+                  <Button
+                    size="sm"
+                    variant="tertiary"
+                    data-testid="chapter-labels-remove"
+                    onClick={() => fix(row, label, "remove")}
+                  >
+                    {m.chapter_labels_remove()}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="tertiary"
+                    data-testid="chapter-labels-go"
+                    onClick={() => goTo(row, label)}
+                  >
+                    {m.chapter_labels_go()}
+                  </Button>
                 </li>
               )}
             </For>
