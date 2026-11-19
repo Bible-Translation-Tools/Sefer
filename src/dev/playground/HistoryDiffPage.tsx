@@ -8,12 +8,12 @@ import { Badge, Card, Select } from "#app/ui/primitives";
 import { ReviewReader, type ReviewBook } from "#app/ui/review/ReviewReader";
 import { ShellGate } from "#app/ui/ShellGate";
 import { nodeFsView } from "#core/fileSystem/nodeView";
+import { objectCache, type ObjectCache } from "#core/fileSystem/objectCache";
 import { joinPath, lastSegment } from "#core/fileSystem/path";
 import { unitReference, type DecisionUnit } from "#core/galley/diff";
 import { repositoryPath, type Repo } from "#core/git/git";
 import { deriveDeltaScope, type ChapterChangeScope } from "#core/history/delta";
 import { BoundedLru } from "#core/history/window";
-import { packView, type PackView } from "#platform/web/history/packView";
 
 import { pathHistory, readBlobById, type PathCommit, type PathHistoryEnd } from "./bookHistory";
 import type { Bench } from "./experiment";
@@ -149,7 +149,7 @@ function ReadyHistoryDiffPage() {
   const search = Route.useSearch();
   const observability = services.composition.observability;
   const baseFs = nodeFsView(services.fileSystem, Effect.runPromise);
-  let pack: PackView = packView(baseFs, "");
+  let pack: ObjectCache = objectCache(baseFs, { holdPack: true });
   const texts = new BoundedLru<string, string>(
     TEXT_CACHE_LIMIT,
     (text) => text.length,
@@ -319,7 +319,7 @@ function ReadyHistoryDiffPage() {
     setIndexState("");
     merges.clear();
     if (root === "") return;
-    pack = packView(baseFs, root);
+    pack = objectCache(baseFs, { holdPack: true });
     setProjectBusy(true);
     const indexing = ensureIndex({
       fs: pack.fs,

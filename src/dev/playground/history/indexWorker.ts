@@ -1,8 +1,8 @@
 import { Effect, FileSystem } from "effect";
 
 import { nodeFsView } from "#core/fileSystem/nodeView";
+import { objectCache } from "#core/fileSystem/objectCache";
 import { OpfsFileSystemLive } from "#platform/web/fileSystem";
-import { packView } from "#platform/web/history/packView";
 
 import { buildBookIndex, type BookIndex, type BuildReport } from "./bookIndex";
 
@@ -22,7 +22,6 @@ export type WorkerMessage =
         readonly lockWaitMs: number;
         readonly packLoadMs: number;
         readonly packBytes: number;
-        readonly passedThrough: number;
         readonly calls: Readonly<Record<string, number>>;
         readonly walkMs: number;
       };
@@ -44,7 +43,7 @@ const build = async (request: BuildRequest): Promise<void> => {
       OpfsFileSystemLive,
     ),
   );
-  const view = packView(nodeFsView(fileSystem, Effect.runPromise), request.root);
+  const view = objectCache(nodeFsView(fileSystem, Effect.runPromise), { holdPack: true });
   const asked = performance.now();
   await navigator.locks.request(lockName(request.root), { mode: "shared" }, async () => {
     const lockWaitMs = performance.now() - asked;
@@ -64,7 +63,6 @@ const build = async (request: BuildRequest): Promise<void> => {
         lockWaitMs,
         packLoadMs,
         packBytes: view.stats().packBytes,
-        passedThrough: view.stats().passedThrough,
         calls: view.stats().calls,
         walkMs: performance.now() - walkStart,
       },

@@ -59,3 +59,9 @@ peerDependencyRules:
     "@corvu-next/tooltip>solid-js": "2.0.0-rc.6"
     "@corvu-next/tooltip>@solidjs/web": "2.0.0-rc.6"
     "lucide-solid>solid-js": "2.0.0-rc.6"
+
+# isomorphic-git's merge-base walk ran on to the root once two tips met, so a
+# push of one commit read a migrated Bible's ~28,000 commits; the patch stops
+# walkers below a common commit. Upstreamable; drop it when a release has it.
+patchedDependencies:
+  isomorphic-git@1.42.2: patches/isomorphic-git@1.42.2.patch
