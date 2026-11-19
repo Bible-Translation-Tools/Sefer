@@ -342,6 +342,11 @@ const makeShell = (services: Services, navigate: Navigate): Shell => {
     live: liveProject,
     report,
     lastLocation: reader.lastLocation,
+    startInDefaultMode: () => {
+      const start = services.settings.get(keys.startMode);
+      setMode(start === "usfm" ? "usfm" : "default");
+      if (start !== "usfm") setLineByLine(start === "form");
+    },
   });
 
   const { finding, stepFinding, applyFix } = createFindingsNav({

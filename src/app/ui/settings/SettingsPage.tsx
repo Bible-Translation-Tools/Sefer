@@ -465,7 +465,7 @@ function SettingsGroup(props: {
   return (
     <Show when={rows().length > 0}>
       <Card class="space-y-1" data-settings-group={props.group.id}>
-        <PanelHeader level={3} title={props.group.title()} subtitle={props.group.subtitle()} />
+        <PanelHeader level={3} title={props.group.title()} subtitle={props.group.subtitle?.()} />
         <div class="divide-y divide-surface-border">
           <Show when={props.group.id === "network"}>
             <ServerPreset model={props.model} />
@@ -500,11 +500,7 @@ function DiagnosticsCard() {
   const { services } = shell;
   return (
     <Card class="space-y-1" data-settings-group="diagnostics">
-      <PanelHeader
-        level={3}
-        title={m.settings_diagnostics()}
-        subtitle={m.settings_what_sefer_recorded_on_this()}
-      />
+      <PanelHeader level={3} title={m.settings_diagnostics()} />
       <div class="flex items-center gap-6 py-3">
         <p class="min-w-0 flex-1 text-smallest text-on-surface-tertiary">
           {m.settings_kept_for_seven_days_at({ size: 5 })}

@@ -159,11 +159,7 @@ export function DesktopDownloadCard() {
       data-settings-group="desktop-download"
     >
       <div class="px-4 py-3">
-        <PanelHeader
-          level={3}
-          title={m.desktop_download_title()}
-          subtitle={m.desktop_download_description()}
-        />
+        <PanelHeader level={3} title={m.desktop_download_title()} />
         <Show when={note()}>
           {(text) => (
             <p class="mt-1 text-smallest text-on-surface-tertiary" data-desktop-download-note>

@@ -40,6 +40,8 @@ export interface LifecycleDeps {
   readonly live: LiveProject;
   readonly report: (message: string) => void;
   readonly lastLocation: (root: string) => LastLocation | undefined;
+  /** Puts the view in the mode Settings names as the default, as a project opens. */
+  readonly startInDefaultMode: () => void;
 }
 
 type Gesture = ReturnType<Services["composition"]["observability"]["operation"]>;
@@ -147,6 +149,7 @@ export const createLifecycle = ({
   live,
   report,
   lastLocation,
+  startInDefaultMode,
 }: LifecycleDeps) => {
   const { changed } = stores;
 
@@ -260,6 +263,7 @@ export const createLifecycle = ({
         }),
       ),
     );
+    startInDefaultMode();
     setProject(ready);
     send({ kind: "opened", root });
     setCursor(0);
