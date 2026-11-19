@@ -72,6 +72,7 @@ policy fits in one ladder.
 | `checking`       | Asking the shared project what changed, right now.               | (waits)                 |
 | `offline`        | No network, or the last transfer failed on the way out.          | Check for changes       |
 | `unauthorized`   | No session for the shared project's host, or it was rejected.    | Sign in                 |
+| `elsewhere`      | The project's origin is on another server than Sefer is set to.  | Switch servers          |
 
 The public door is `sync(reading, contested)` (`src/core/sync/state.ts`), which answers the state, the two clocks and the one primary action as one value. Inside it, the private `syncStateOf` is a ladder, and **the order is the policy**:
 
@@ -79,13 +80,20 @@ The public door is `sync(reading, contested)` (`src/core/sync/state.ts`), which 
    person can settle with no network.
 2. `checking` — the answer is being asked for right now, and every clock below may be about to
    change. The check holds the repository's lane, so a send or a combine waits for it.
-3. `offline` — while the device cannot reach anything, "you are three versions ahead" is true but
+3. `elsewhere` — the project came from another server than the one Settings → Network names (a
+   project downloaded on dev, then Sefer switched to production). The project keeps its server: it
+   is not re-pointed. But sign-in, forks and suggestions all go to the server Sefer is set to, so
+   instead of half-working the project says where it lives and offers Switch servers. A send stops
+   before routing (`SendOutcome` `elsewhere`, since a route may make a copy on the wrong server),
+   and suggestions read nothing (`where` in `app/suggestions.ts`). `elsewhereOf` in
+   `core/remote/onGitea.ts` is the one comparison.
+4. `offline` — while the device cannot reach anything, "you are three versions ahead" is true but
    not actionable. The clocks still say it.
-4. `unauthorized` — reachable but not allowed in. Kept apart from offline because only one of the
+5. `unauthorized` — reachable but not allowed in. Kept apart from offline because only one of the
    two is worth retrying unchanged.
-5. `detached` — nothing to be ahead OF.
-6. `unpublished` — attached to a repository the branch has never reached.
-7. the clocks — diverged, ahead, behind, clean.
+6. `detached` — nothing to be ahead OF.
+7. `unpublished` — attached to a repository the branch has never reached.
+8. the clocks — diverged, ahead, behind, clean.
 
 `conflicted` can only come from another tool now: Sefer never starts a merge — a receive only
 fast-forwards and Combine writes a decision commit — so the state exists for a repository someone

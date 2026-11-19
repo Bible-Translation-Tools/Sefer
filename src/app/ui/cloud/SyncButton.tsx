@@ -6,6 +6,7 @@ import Copy from "lucide-solid/icons/copy";
 import GitCompare from "lucide-solid/icons/git-compare";
 import Link2 from "lucide-solid/icons/link-2";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
+import Settings from "lucide-solid/icons/settings";
 import UserIcon from "lucide-solid/icons/user";
 import { Show, createEffect, createSignal, onCleanup, untrack } from "solid-js";
 
@@ -16,6 +17,7 @@ import { emptyReading, sync as syncOf, type Sync, type SyncReading } from "#core
 
 import { collaboration } from "../../collaboration";
 import { describe } from "../../describe";
+import { contentHostFor } from "../../endpoints";
 import { m } from "../../paraglide/messages";
 import { useShell, type Shell } from "../../ProjectContext";
 import { suggestMyChanges } from "../../suggestions";
@@ -27,7 +29,7 @@ import { bookName } from "../workspace/books";
 import { NetworkChip } from "../workspace/StatusChips";
 import { createAccount, type Account } from "./account";
 import { CollabSection } from "./CollabSection";
-import { sendOutcomeCopy, stateCopy, type StateCopy } from "./copy";
+import { hostName, sendOutcomeCopy, stateCopy, type StateCopy } from "./copy";
 import { putOnline, suggestedName } from "./PublishSection";
 import { createQuickSync, shareableLink, type QuickAction, type QuickSync } from "./quick";
 
@@ -38,6 +40,7 @@ const copyOf = (held: Sync | undefined, inCopy: boolean): StateCopy | undefined 
         sendRefused: held.reading.sendRefused,
         signedIn: held.reading.signedIn,
         inCopy,
+        elsewhere: held.reading.elsewhere,
       });
 
 const copyToClipboard = (held: string): void => {
@@ -92,7 +95,13 @@ const createSyncPopover = (shell: Shell, quick: QuickSync, account: Account) => 
       }
     },
     run: (action: QuickAction): void => {
-      if (action === "see" || action === "open" || action === "sign-in") setOpen(false);
+      if (
+        action === "see" ||
+        action === "open" ||
+        action === "sign-in" ||
+        action === "switch-server"
+      )
+        setOpen(false);
       quick.run(action);
     },
     copyLink: (): void => {
@@ -433,7 +442,7 @@ const WacsBody = (props: {
   };
 
   const run = (action: QuickAction): void => {
-    if (action === "see" || action === "sign-in") props.onLeave();
+    if (action === "see" || action === "sign-in" || action === "switch-server") props.onLeave();
     quick.run(action);
   };
 
@@ -470,6 +479,7 @@ const WacsBody = (props: {
   const mode = ():
     | "offline"
     | "reading"
+    | "elsewhere"
     | "unreachable"
     | "signed-out"
     | "new"
@@ -479,6 +489,7 @@ const WacsBody = (props: {
     if (syncStatus.workOffline()) return "offline";
     const held = props.held;
     if (held === undefined) return "reading";
+    if (held.state === "elsewhere") return "elsewhere";
     if (held.state === "offline") return "unreachable";
     if ((user() === undefined && props.standIn !== true) || held.state === "unauthorized")
       return "signed-out";
@@ -501,6 +512,13 @@ const WacsBody = (props: {
         ];
       case "reading":
         return [m.cloud_reading_this_project()];
+      case "elsewhere":
+        return [
+          m.wacs_elsewhere({
+            host: hostName(props.held?.reading.elsewhere),
+            current: hostName(contentHostFor(shell.services.settings)),
+          }),
+        ];
       case "unreachable":
         return [m.wacs_unreachable()];
       case "signed-out":
@@ -534,6 +552,18 @@ const WacsBody = (props: {
         </Show>
         {sentences().join(" ")}
       </p>
+
+      <Show when={mode() === "elsewhere"}>
+        <Button
+          variant="primary"
+          class="w-full justify-center"
+          icon={<Settings size={20} />}
+          onClick={() => run("switch-server")}
+          data-testid="sync-switch-server"
+        >
+          {m.cloud_switch_servers()}
+        </Button>
+      </Show>
 
       <Show when={mode() === "unreachable"}>
         <Button
@@ -761,6 +791,7 @@ export function SyncChip() {
     const shown = held();
     const root = shell.project()?.root ?? "";
     if (shown === undefined || shown.reading.origin === undefined) return undefined;
+    if (shown.state === "elsewhere") return m.cloud_on_another_server();
     // WACS holds versions this device lacks: a review if something waits here too, and
     // otherwise still something to look at, which the popover says in amber.
     if (shown.reading.behind.length > 0)

@@ -11,7 +11,8 @@ export type SyncState =
   | "conflicted"
   | "checking"
   | "offline"
-  | "unauthorized";
+  | "unauthorized"
+  | "elsewhere";
 
 export interface Clock {
   readonly at: number | undefined;
@@ -26,6 +27,8 @@ export interface Clocks {
 
 export interface SyncReading {
   readonly origin: string | undefined;
+  /** The origin's server when Sefer is set to another one (`elsewhereOf`). */
+  readonly elsewhere: string | undefined;
   readonly branch: string | undefined;
   readonly signedIn: boolean;
   readonly online: boolean;
@@ -45,6 +48,7 @@ export interface SyncReading {
 
 export const emptyReading: SyncReading = {
   origin: undefined,
+  elsewhere: undefined,
   branch: undefined,
   signedIn: false,
   online: true,
@@ -64,6 +68,7 @@ export const emptyReading: SyncReading = {
 const syncStateOf = (reading: SyncReading): SyncState => {
   if (reading.mergeInProgress) return "conflicted";
   if (reading.checking) return "checking";
+  if (reading.elsewhere !== undefined) return "elsewhere";
   if (!reading.online || reading.lastFailure === "Network") return "offline";
   if (!reading.signedIn || reading.lastFailure === "Unauthorized") return "unauthorized";
   if (reading.origin === undefined) return "detached";
@@ -89,6 +94,7 @@ const clocksOf = (reading: SyncReading): Clocks => ({
 
 export type SyncActionId =
   | "sign-in"
+  | "switch-server"
   | "attach"
   | "publish"
   | "pull"
@@ -107,6 +113,8 @@ const primaryActionOf = (state: SyncState, contested = false): SyncActionId => {
       return "retry";
     case "unauthorized":
       return "sign-in";
+    case "elsewhere":
+      return "switch-server";
     case "detached":
       return "attach";
     case "unpublished":

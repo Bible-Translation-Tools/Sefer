@@ -9,13 +9,21 @@ import type { Sync } from "#core/sync";
 
 import { describe } from "../../describe";
 import type { Shell } from "../../ProjectContext";
+import { shellKeys } from "../../settings";
 import { checkForChanges, sendNow } from "../../syncActions";
 import { syncWatch } from "../../syncWatch";
 import { toasts } from "../primitives";
 import { createAccount } from "./account";
 import { sendOutcomeCopy } from "./copy";
 
-export type QuickAction = "see" | "send" | "check" | "resolve" | "sign-in" | "open";
+export type QuickAction =
+  | "see"
+  | "send"
+  | "check"
+  | "resolve"
+  | "sign-in"
+  | "open"
+  | "switch-server";
 
 export const quickActionOf = (sync: Sync): QuickAction => {
   switch (sync.primary) {
@@ -31,6 +39,8 @@ export const quickActionOf = (sync: Sync): QuickAction => {
       return "resolve";
     case "sign-in":
       return "sign-in";
+    case "switch-server":
+      return "switch-server";
     case "attach":
     case "publish":
       return "open";
@@ -51,6 +61,8 @@ export const quickLabel = (action: QuickAction): string => {
       return m.common_sign_in();
     case "open":
       return m.common_set_up_sharing();
+    case "switch-server":
+      return m.cloud_switch_servers();
   }
 };
 
@@ -61,6 +73,7 @@ export const attentionOf = (sync: Sync | undefined): "none" | "tint" | "alert" =
     case "diverged":
     case "conflicted":
     case "unauthorized":
+    case "elsewhere":
       return "alert";
     case "ahead":
       return sync.reading.sendRefused ? "alert" : "tint";
@@ -78,6 +91,13 @@ export const shareableLink = (origin: string): string => {
   } catch {
     return origin;
   }
+};
+
+/** Scroll Settings to its Network card once the page has drawn it. */
+const revealNetwork = (tries = 20): void => {
+  const card = document.querySelector('[data-settings-group="network"]');
+  if (card !== null) card.scrollIntoView({ block: "start" });
+  else if (tries > 0) setTimeout(() => revealNetwork(tries - 1), 50);
 };
 
 export interface QuickSync {
@@ -161,6 +181,13 @@ export const createQuickSync = (shell: Shell, onSee?: () => void): QuickSync => 
         return;
       case "open":
         void navigate({ to: "/project/$slug/settings", params: { slug: shell.slug() } });
+        return;
+      case "switch-server":
+        // The server choice sits with the advanced settings: show them, then go to it.
+        void services
+          .run(services.settings.set(shellKeys(services.settings).showAdvancedSettings, true))
+          .then(() => navigate({ to: "/project/$slug/settings", params: { slug: shell.slug() } }))
+          .then(() => revealNetwork());
         return;
       case "resolve":
         setBusy("resolve");

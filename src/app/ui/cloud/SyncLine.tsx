@@ -45,6 +45,8 @@ const sharedWords = (sync: Sync, plan: IncomingPlan | undefined): string => {
       return m.cloud_offline_your_saved_changes_stay();
     case "unauthorized":
       return m.cloud_sign_in_to_send_your();
+    case "elsewhere":
+      return m.cloud_on_another_server();
     case "checking":
       return m.cloud_checking();
     case "conflicted":

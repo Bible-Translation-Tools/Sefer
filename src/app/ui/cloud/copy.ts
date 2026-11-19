@@ -15,7 +15,18 @@ export interface StateContext {
   readonly sendRefused?: boolean | undefined;
   readonly signedIn?: boolean | undefined;
   readonly inCopy?: boolean;
+  readonly elsewhere?: string | undefined;
 }
+
+/** `https://content.wacsdev.org` → `content.wacsdev.org`. */
+export const hostName = (base: string | null | undefined): string => {
+  if (base === undefined || base === null) return "";
+  try {
+    return new URL(base).host;
+  } catch {
+    return base;
+  }
+};
 
 type QuietState = "checking" | "detached" | "unpublished" | "attached-clean" | "ahead";
 
@@ -65,6 +76,13 @@ const troubleCopy = (state: Exclude<SyncState, QuietState>, context: StateContex
         chip: m.cloud_needs_review(),
         headline: m.cloud_both_sides_have_moved(),
         detail: m.cloud_you_and_the_shared_project(),
+        tone: "warning",
+      };
+    case "elsewhere":
+      return {
+        chip: m.cloud_on_another_server(),
+        headline: m.cloud_this_project_is_on_host({ host: hostName(context.elsewhere) }),
+        detail: m.cloud_sefer_is_set_to_another_server(),
         tone: "warning",
       };
     case "conflicted":
@@ -278,6 +296,12 @@ export const sendOutcomeCopy = (
         tone: "muted",
         title: m.cloud_kept_on_this_device_not(),
         detail: m.cloud_this_project_does_not_send(),
+      };
+    case "elsewhere":
+      return {
+        tone: "warning",
+        title: m.cloud_kept_on_this_device_not(),
+        detail: m.cloud_this_project_is_on_host({ host: hostName(outcome.host) }),
       };
     case "refused":
       return refusedCopy(outcome, state);

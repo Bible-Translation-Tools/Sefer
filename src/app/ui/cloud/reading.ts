@@ -12,6 +12,7 @@ import {
 } from "#core/git/git";
 import type { Project } from "#core/project/project";
 import { Gitea } from "#core/remote/gitea";
+import { elsewhereOf } from "#core/remote/onGitea";
 import { Remote } from "#core/remote/remote";
 import {
   emptyReading,
@@ -157,6 +158,7 @@ const surveyRepo = (
     const reading: SyncReading = {
       ...base,
       origin,
+      elsewhere: elsewhereOf(origin, options.host),
       branch,
       remoteKnown,
       localHead: localLog[0],
