@@ -11,7 +11,6 @@ import { REFERENCE_WIDTH } from "#app/settings";
 import { BookEditor } from "#app/ui/BookEditor";
 import { openFind } from "#app/ui/find/findState";
 import { Button, DelayedSpinner, Resizable, cx } from "#app/ui/primitives";
-import { RecoveryBanner } from "#app/ui/recovery/RecoveryBanner";
 import { AlignedProvider } from "#app/ui/workspace/aligned";
 import { ReferenceColumn } from "#app/ui/workspace/ReferenceColumn";
 import { BookTitle, BookTools } from "#app/ui/workspace/Toolbar";
@@ -166,9 +165,8 @@ function BookPage(props: { readonly root: string; readonly bookId: string }) {
 
   return (
     <main class="flex h-full min-h-0 min-w-0 flex-col gap-3 bg-surface-canvas p-6">
-      <RecoveryBanner />
       <Show
-        when={shell.recoveryOffer() !== undefined ? shell.focused() : undefined}
+        when={shell.focused()}
         fallback={
           <div class="h-full" data-opening={props.bookId}>
             <DelayedSpinner />

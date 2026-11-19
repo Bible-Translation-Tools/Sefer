@@ -3,7 +3,7 @@ import { createSignal, onCleanup } from "solid-js";
 
 import type { SettingKey } from "#core/host/settings";
 import type { Project } from "#core/project/project";
-import { DEFAULT_JOURNAL_POLICY } from "#core/recovery/recovery";
+import { DEFAULT_AUTOSAVE_POLICY } from "#core/save/autosave";
 
 import type { Services } from "../services";
 import { PROJECTS_WIDTH, REFERENCE_WIDTH, SIDEBAR_WIDTH, type shellKeys } from "../settings";
@@ -46,9 +46,9 @@ export const createPreferences = ({ services, keys, changed, live }: Preferences
   });
 
   const retime = (idleMs: number): Effect.Effect<void> =>
-    services.recovery.setPolicy({
+    services.autosave.setPolicy({
       idleMs,
-      maxIntervalMs: Math.max(idleMs * 10, DEFAULT_JOURNAL_POLICY.maxIntervalMs),
+      maxIntervalMs: Math.max(idleMs * 3, DEFAULT_AUTOSAVE_POLICY.maxIntervalMs),
     });
   const backing = services.runtime.runFork(
     Effect.flatMap(retime(services.settings.get(keys.backupIdleMs)), () =>

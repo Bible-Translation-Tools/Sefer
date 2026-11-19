@@ -1,7 +1,15 @@
 import { Effect, FileSystem, Option, Result } from "effect";
 
+import { MANIFEST_FILES } from "#core/admin/projectAdmin";
 import type { Galley } from "#core/galley";
-import { DEFAULT_BRANCH, Git, type Commit, type LogStop, type Repo } from "#core/git/git";
+import {
+  DEFAULT_BRANCH,
+  Git,
+  repositoryPath,
+  type Commit,
+  type LogStop,
+  type Repo,
+} from "#core/git/git";
 import type { Project } from "#core/project/project";
 import { Gitea } from "#core/remote/gitea";
 import { Remote } from "#core/remote/remote";
@@ -137,6 +145,14 @@ const surveyRepo = (
     const ahead = notIn(localLog, sentLog);
     const behind = notIn(remoteLog, localLog);
     const status = yield* orEmpty(git.status(repo), { changed: [] });
+    // The project's own files only: its books (autosave keeps the person's edits in them) and
+    // its metadata and manifest. A stray file must not keep a project "ahead" for good.
+    const ownPaths = new Set(
+      [
+        ...MANIFEST_FILES.map((name) => `${options.project.root}/${name}`),
+        ...options.project.books.map((book) => book.path),
+      ].flatMap((path) => Option.toArray(repositoryPath(options.root, path))),
+    );
 
     const reading: SyncReading = {
       ...base,
@@ -147,7 +163,7 @@ const surveyRepo = (
       remoteHead: remoteLog[0],
       ahead,
       behind,
-      uncommitted: status.changed.length,
+      uncommitted: status.changed.filter((entry) => ownPaths.has(entry.path)).length,
       mergeInProgress: yield* mergeInProgress(fileSystem, options.root),
     };
 

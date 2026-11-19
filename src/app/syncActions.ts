@@ -406,9 +406,17 @@ const settle = async (
   // An upload was refused because the shared project had moved, and this review is what it
   // was waiting for: it goes once the review is saved, whatever send-on-save says.
   const uploadWaits = syncPhase.now(project.root).refused === "Rejected";
-  const received = await services.run(
-    Effect.result(receive({ project, settled, ...optionalTheirs(overrides.theirs) })),
-  );
+  const receiving = () =>
+    services.run(Effect.result(receive({ project, settled, ...optionalTheirs(overrides.theirs) })));
+  let received = await receiving();
+  // Autosave keeps the person's edits in the files: an arriving book they changed refuses as
+  // "unrecorded". This review is the moment to keep them, so they become a version first and
+  // the transfer goes again, now as both sides having moved (combine).
+  if (received._tag === "Failure" && received.failure.refusal === "unrecorded") {
+    const mine = project.books.filter((book) => services.save.dirty(book));
+    const kept = await recordVersion(services, project, mine, message, author);
+    if (kept.kind === "recorded") received = await receiving();
+  }
   if (received._tag === "Success") {
     await rereadManifest(services, project);
     const dirty = project.books.filter((book) => services.save.dirty(book));

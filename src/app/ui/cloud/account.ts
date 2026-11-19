@@ -8,10 +8,14 @@ import { describe, reasonOf } from "../../describe";
 import { contentHostFor } from "../../endpoints";
 import { m } from "../../paraglide/messages";
 import type { Shell } from "../../ProjectContext";
+import { syncStatus } from "../../syncStatus";
+import { syncWatch } from "../../syncWatch";
 
 const reask = (shell: Shell): void => {
   const project = shell.project();
-  if (project !== undefined) void collaboration.refresh(shell.services, project);
+  if (project === undefined) return;
+  void collaboration.refresh(shell.services, project);
+  void syncWatch.refresh(shell.services, project).catch(() => undefined);
 };
 
 type Services = Shell["services"];
@@ -126,6 +130,9 @@ const makeAccount = (shell: Shell): Account => {
       if (base === null) return;
       attempt(async () => {
         const held = await login(services, base, fields);
+        // A refusal from before signing in is about the old credentials, and the sync
+        // state reads it as "signed out" until something clears it.
+        syncStatus.clearUnauthorized();
         setSession(held);
         setOtpWanted(false);
         reask(shell);

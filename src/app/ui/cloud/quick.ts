@@ -86,11 +86,29 @@ export interface QuickSync {
   readonly run: (action: QuickAction) => void;
 }
 
+/**
+ * Abort a merge something outside Sefer left half done. It is a hard reset of
+ * the folder, and autosave keeps the person's edits in the files, so it
+ * refuses while any file the merge did not bring has changes no version holds.
+ */
 const abortTransfer = (root: string) =>
   Effect.gen(function* () {
     const git = yield* Git;
     const remote = yield* Remote;
-    return yield* remote.abortMerge(yield* git.open(root));
+    const repo = yield* git.open(root);
+    const status = yield* git.status(repo);
+    // Unreadable MERGE_HEAD: nothing counts as the merge's, so any change refuses.
+    const merging = yield* Effect.orElseSucceed(
+      git.changedPathsBetween(repo, "HEAD", "MERGE_HEAD"),
+      () => [],
+    );
+    const theirs = new Set(merging.map((entry) => entry.path));
+    const mine = status.changed.map((entry) => entry.path).filter((path) => !theirs.has(path));
+    if (mine.length > 0)
+      return yield* Effect.fail(
+        new Error(m.cloud_finishing_would_discard_changes({ paths: mine.join(", ") })),
+      );
+    return yield* remote.abortMerge(repo);
   });
 
 const announceSend = (
@@ -147,7 +165,7 @@ export const createQuickSync = (shell: Shell, onSee?: () => void): QuickSync => 
       case "resolve":
         setBusy("resolve");
         void services
-          .run(abortTransfer(project.root))
+          .run(services.autosave.hold(abortTransfer(project.root)))
           .catch((cause: unknown) =>
             toasts.error({
               title: m.cloud_could_not_finish_the_transfer(),
@@ -164,6 +182,15 @@ export const createQuickSync = (shell: Shell, onSee?: () => void): QuickSync => 
         void checkForChanges(services, project).finally(() => setBusy(""));
         return;
       case "send":
+        // Books no version holds go through Review first; its save records and uploads.
+        if ((sync()?.reading.uncommitted ?? 0) > 0) {
+          void navigate({
+            to: "/project/$slug/review",
+            params: { slug: shell.slug() },
+            search: { upload: 1 },
+          });
+          return;
+        }
         setBusy("send");
         void sendNow(services, project)
           .then((outcome) => announceSend(outcome, syncWatch.sync(project.root)?.state))

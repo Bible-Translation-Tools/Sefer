@@ -32,6 +32,8 @@ export interface SyncStatus {
   readonly lastFailure: Accessor<RemoteFailureReason | undefined>;
   readonly noteFailure: (reason: RemoteFailureReason) => void;
   readonly noteSuccess: () => void;
+  /** Signing in answers an earlier `Unauthorized`; any other failure stands. */
+  readonly clearUnauthorized: () => void;
 }
 
 export const syncStatus: SyncStatus = {
@@ -42,4 +44,7 @@ export const syncStatus: SyncStatus = {
   lastFailure,
   noteFailure: (reason) => setLastFailure(reason),
   noteSuccess: () => setLastFailure(undefined),
+  clearUnauthorized: () => {
+    if (lastFailure() === "Unauthorized") setLastFailure(undefined);
+  },
 };

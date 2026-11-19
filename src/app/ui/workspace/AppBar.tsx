@@ -175,7 +175,7 @@ function MainMenu() {
       />
       <MenuSeparator />
       <CommandItem
-        id="book.save"
+        id="book.review"
         testId="menu-save"
         label={m.menu_save_changes()}
         icon={<Save />}

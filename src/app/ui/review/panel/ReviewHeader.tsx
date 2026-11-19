@@ -4,7 +4,6 @@ import { Show } from "solid-js";
 
 import { m } from "#app/paraglide/messages";
 
-import { ago } from "../../panels/format";
 import { Badge, Button, Popover } from "../../primitives";
 import { BackToEditor } from "../../workspace/BackToEditor";
 import type { Compare } from "./createCompare";
@@ -23,7 +22,6 @@ interface ReviewHeaderProps {
   readonly sourcesLabel: string;
   readonly busy: string;
   readonly note: string;
-  readonly lastBackup: number | undefined;
 }
 
 function SidePicker(props: { readonly sides: Sides; readonly side: "left" | "right" }) {
@@ -117,13 +115,7 @@ function HeaderActions(props: { readonly header: ReviewHeaderProps }) {
             !props.header.form.namesQueued() &&
             !props.header.sides.againstShared()
           }
-          title={
-            props.header.lastBackup === undefined
-              ? m.review_write_and_keep_a_version()
-              : m.review_write_and_keep_a_version_your({
-                  when: ago(props.header.lastBackup ?? 0),
-                })
-          }
+          title={m.review_write_and_keep_a_version()}
           onClick={props.header.form.openRecord}
         >
           {m.common_save()}

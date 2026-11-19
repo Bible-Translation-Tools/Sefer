@@ -185,7 +185,7 @@ const snapshotOf = async (
       branch: UNKNOWN,
       head: UNKNOWN,
       unsavedBooks: UNKNOWN,
-      journalPending: UNKNOWN,
+      unwrittenBooks: UNKNOWN,
       sync,
     };
   const local = await services
@@ -209,17 +209,6 @@ const snapshotOf = async (
       branch: UNKNOWN,
       remote: UNKNOWN,
     }));
-  const pending = await services
-    .run(
-      services.recovery.pending((bookId) => {
-        const book = project.books.find((one) => one.id === bookId);
-        return book === undefined ? Option.none() : services.save.baseline(book);
-      }),
-    )
-    .then(
-      (found): boolean | typeof UNKNOWN => found.length > 0,
-      (): boolean | typeof UNKNOWN => UNKNOWN,
-    );
   return {
     open: true,
     project: project.root.slice(project.root.lastIndexOf("/") + 1),
@@ -227,7 +216,9 @@ const snapshotOf = async (
     unsavedBooks: project.books.filter(
       (book) => Option.isSome(services.save.baseline(book)) && services.save.dirty(book),
     ).length,
-    journalPending: pending,
+    unwrittenBooks: project.books.filter(
+      (book) => Option.isSome(services.save.written(book)) && services.save.unwritten(book),
+    ).length,
     sync,
   };
 };

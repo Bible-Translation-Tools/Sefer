@@ -35,12 +35,12 @@ import { Observability } from "#core/observability";
 import { METADATA_FILE } from "#core/project/discovery";
 import type { Seat } from "#core/project/project";
 import { indexingRemotes } from "#core/project/remotes";
-import { Recovery, RecoveryLive, type RecoveryService } from "#core/recovery/recovery";
 import { Gitea, GiteaLive, type GiteaService, type HttpFetch } from "#core/remote/gitea";
 import { Remote, type RemoteService } from "#core/remote/remote";
 import { Suggestions, SuggestionsLive } from "#core/remote/suggestions";
 import { parseTransport, through } from "#core/remote/transport";
 import { Library, LibraryLive, type LibraryService } from "#core/resources/library";
+import { Autosave, AutosaveLive, type AutosaveService } from "#core/save/autosave";
 import {
   SaveCoordinator,
   SaveCoordinatorLive,
@@ -93,7 +93,7 @@ export type Domain =
   | Dialogs
   | Updater
   | SaveCoordinator
-  | Recovery
+  | Autosave
   | ProjectAnalysis
   | Library
   | Git
@@ -117,7 +117,7 @@ export interface Services {
   readonly dialogs: DialogsService;
   readonly updater: UpdaterService;
   readonly save: SaveCoordinatorService;
-  readonly recovery: RecoveryService;
+  readonly autosave: AutosaveService;
   readonly projectAnalysis: ProjectAnalysisService;
   readonly library: LibraryService;
   readonly git: GitService;
@@ -211,22 +211,10 @@ const accountLayer = (build: string, tauri: TauriHost | undefined) => {
   );
 };
 
-const saveAndRecoveryLayer = (paths: HostPaths) =>
-  Layer.provideMerge(
-    saveLayer,
-    Layer.merge(
-      Layer.unwrap(
-        Effect.map(Galley, (galley) =>
-          RecoveryLive({
-            journalRoot: `${paths.appData}/journals`,
-            cause: gestureTrace,
-            hasher: hashOf(galley),
-          }),
-        ),
-      ),
-      ProjectAdminLive,
-    ),
-  );
+const saveAndAutosaveLayer = Layer.provideMerge(
+  AutosaveLive({ cause: gestureTrace }),
+  Layer.provideMerge(saveLayer, ProjectAdminLive),
+);
 
 const modulesLayer = (build: string, paths: HostPaths, tauri: TauriHost | undefined) =>
   Layer.provideMerge(
@@ -247,7 +235,7 @@ const modulesLayer = (build: string, paths: HostPaths, tauri: TauriHost | undefi
                 })
               : tauri.TauriRemoteLive({ endpoint: endpoints.contentHost }),
           ),
-          saveAndRecoveryLayer(paths),
+          saveAndAutosaveLayer,
         );
       }),
     ),
@@ -361,7 +349,7 @@ const resolveDomain = () =>
     const dialogs = yield* Dialogs;
     const updater = gatedUpdater(network, yield* Updater);
     const save = yield* SaveCoordinator;
-    const recovery = yield* Recovery;
+    const autosave = yield* Autosave;
     const projectAnalysis = yield* ProjectAnalysis;
     const library = yield* Library;
     const git = yield* Git;
@@ -377,7 +365,7 @@ const resolveDomain = () =>
       dialogs,
       updater,
       save,
-      recovery,
+      autosave,
       projectAnalysis,
       library,
       git,
@@ -428,6 +416,17 @@ export const composeServices = async (
     hostFacts,
     storage: storageKind,
   });
+
+  // Autosave waits a moment after typing; leaving the window or the app does not wait for it.
+  const flushAutosave = (): Promise<void> => run(resolved.autosave.flush);
+  if (tauri !== undefined) tauri.beforeWindowClose(flushAutosave);
+  if (typeof window === "object") {
+    window.addEventListener("blur", () => void flushAutosave());
+    window.addEventListener("pagehide", () => void flushAutosave());
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") void flushAutosave();
+    });
+  }
 
   return {
     composition,

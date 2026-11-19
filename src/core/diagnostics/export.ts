@@ -117,8 +117,10 @@ export interface ProjectSnapshot {
   readonly remote: boolean | typeof UNKNOWN;
   readonly branch: string;
   readonly head: string;
+  /** Books with changes no recorded version holds. */
   readonly unsavedBooks: number | typeof UNKNOWN;
-  readonly journalPending: boolean | typeof UNKNOWN;
+  /** Books with edits autosave has not written to their file yet. */
+  readonly unwrittenBooks: number | typeof UNKNOWN;
   readonly sync:
     | {
         readonly state: string;
