@@ -104,6 +104,10 @@ The web host prefers the File System Access picker, which is a native dialog no 
 
 **4. Prefer the longest task to the wall clock.** CDP `Tracing` with `devtools.timeline`, `performance.mark` either side of the interaction, then the top-level tasks in the window. A single 69ms task and two 34ms tasks take the same total time and do not feel the same; the second is the one that keeps typing responsive. A sampling profile (`Profiler.*`) correlated to a task's window by timestamp is what names the functions inside it — the timeline alone will only say `EventDispatch`.
 
+## Driving against a local WACS
+
+When a claim needs a server — publish, fork, a suggestion, sync, sign-in, a 401 — do not stop at "cannot prove without WACS access". `pnpm wacs:up` starts Forgejo and the browser git proxy in Docker with seeded accounts (`alice`, `bob`) and repos; `pnpm wacs:check` proves it whole; `pnpm dev:wacs` (or Settings → Network → Local WACS on a dev server) points the app at it. Desktop reaches the same Forgejo directly. What it cannot show is Cloudflare: production's challenges and 100 MB request limit. [`tools/wacs/README.md`](../../tools/wacs/README.md) has the accounts and repos.
+
 ## Driving the desktop app
 
 The real Tauri app, driven over WebDriver the way the rig above drives Chrome. Proved on 2026-10-12 by importing a folder, editing, Undo, Translation Notes, a Writer migration with its history, a tutorial and a share link, all in the desktop app ([desktop](../architecture/desktop.md), "Driving the app", says what the server is and why it cannot reach a release).

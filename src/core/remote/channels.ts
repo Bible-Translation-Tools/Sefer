@@ -26,12 +26,25 @@ export const CHANNEL_ENDPOINTS: Readonly<Record<Channel, ChannelEndpoints>> = {
 };
 
 /**
+ * The local WACS `pnpm wacs:up` runs (`tools/wacs/`): Forgejo and the browser
+ * git proxy in Docker, seeded with a few repos to drive against. Not a
+ * channel; the dev server offers it in Settings → Network, and
+ * `pnpm dev:wacs` starts the app on it. The language catalogue stays dev's.
+ */
+export const LOCAL_WACS: ChannelEndpoints & { readonly proxy: string } = {
+  contentHost: "http://127.0.0.1:3410",
+  catalogueUrl: CHANNEL_ENDPOINTS.dev.catalogueUrl,
+  proxy: "http://127.0.0.1:8790",
+};
+
+/**
  * How a browser reaches each content host: through its CORS proxy. One spec
  * serves every channel, so a build can be flipped between them.
  */
 const WEB_TRANSPORT: Readonly<Record<string, string>> = {
   "https://content.bibletranslationtools.org": "https://wacs-proxy.bibletranslationtools.org",
   "https://content.wacsdev.org": "https://wacs-proxy.bttdev.org",
+  [LOCAL_WACS.contentHost]: LOCAL_WACS.proxy,
 };
 
 /** `host=proxy` pairs, comma separated, as `VITE_SEFER_WEB_TRANSPORT` and the setting read them. */

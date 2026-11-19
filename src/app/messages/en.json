@@ -1448,6 +1448,7 @@
   "settings_servers_build": "This build",
   "settings_servers_dev": "Dev",
   "settings_servers_production": "Production",
+  "settings_servers_local": "Local WACS",
   "settings_servers_custom": "Custom addresses are set below.",
   "settings_which_servers_this_build_talks": "Which servers this build talks to. Changing one needs a reload.",
   "settings_timings_and_machinery": "Timings and technical options.",

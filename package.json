@@ -18,6 +18,7 @@
     "design:scaffolding": "node tools/design/scaffolding.ts",
     "icons": "node tools/icons/generate.ts",
     "dev": "vite",
+    "dev:wacs": "node tools/wacs/dev.ts",
     "editor:bench": "vite --config packages/editor/bench/vite.config.ts",
     "dev:tauri": "node tools/tauri/run.ts dev",
     "format": "oxfmt . '!**/*.gen.*' '!documentation/lint-results.md' '!**/*.yaml' '!**/*.yml' '!vendor/**' '!planning/**' '!src/app/messages/**/*.json'",
@@ -41,7 +42,10 @@
     "verify:design": "node tools/verify/designBundle.ts",
     "verify:desktop": "node tools/verify/desktop.ts",
     "verify:launch": "node tools/verify/launch.ts",
-    "verify:perf": "node tools/verify/perf.ts"
+    "verify:perf": "node tools/verify/perf.ts",
+    "wacs:up": "node tools/wacs/up.ts",
+    "wacs:check": "vitest run --project wacs",
+    "wacs:down": "docker compose -f tools/wacs/compose.yml down"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.1",

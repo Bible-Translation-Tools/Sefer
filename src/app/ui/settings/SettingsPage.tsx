@@ -36,7 +36,7 @@ import {
 } from "#app/ui/theme";
 import { UpdatePanel } from "#app/ui/UpdatePanel";
 import type { SettingKey } from "#core/host/settings";
-import { CHANNEL_ENDPOINTS, WEB_TRANSPORT_SPEC } from "#core/remote/channels";
+import { CHANNEL_ENDPOINTS, LOCAL_WACS, WEB_TRANSPORT_SPEC } from "#core/remote/channels";
 import { parseTransport } from "#core/remote/transport";
 
 import "@wycliffeassociates/sefer-editor/editor.css";
@@ -331,7 +331,18 @@ const widget = (descriptor: AnyDescriptor, model: SettingsModel): JSX.Element =>
   }
 };
 
-type ServerChoice = "build" | "dev" | "production";
+type ServerChoice = "build" | "dev" | "production" | "local";
+
+/** The presets a choice writes; `local` is the dev server's own (`pnpm wacs:up`). */
+const SERVER_PRESETS = {
+  dev: CHANNEL_ENDPOINTS.dev,
+  production: CHANNEL_ENDPOINTS.production,
+  local: LOCAL_WACS,
+} as const;
+
+const SERVER_CHOICES = import.meta.env.DEV
+  ? (["dev", "production", "local"] as const)
+  : (["dev", "production"] as const);
 
 /**
  * The quick flip between the dev and production servers: writes the content
@@ -350,8 +361,8 @@ function ServerPreset(props: { readonly model: SettingsModel }) {
       contentHost: contentHost || BUILD_ENDPOINTS.contentHost,
       catalogueUrl: catalogueUrl || BUILD_ENDPOINTS.catalogueUrl,
     };
-    for (const channel of ["dev", "production"] as const) {
-      const preset = CHANNEL_ENDPOINTS[channel];
+    for (const channel of SERVER_CHOICES) {
+      const preset = SERVER_PRESETS[channel];
       if (
         resolved.contentHost === preset.contentHost &&
         resolved.catalogueUrl === preset.catalogueUrl
@@ -362,7 +373,7 @@ function ServerPreset(props: { readonly model: SettingsModel }) {
   };
   const pick = (next: ServerChoice): void => {
     if (next === choice()) return;
-    const preset = next === "build" ? undefined : CHANNEL_ENDPOINTS[next];
+    const preset = next === "build" ? undefined : SERVER_PRESETS[next];
     const value = (wanted: string | undefined, built: string | null): string =>
       wanted === undefined || wanted === built ? "" : wanted;
     void services
@@ -406,6 +417,9 @@ function ServerPreset(props: { readonly model: SettingsModel }) {
           { value: "build", label: m.settings_servers_build() },
           { value: "dev", label: m.settings_servers_dev() },
           { value: "production", label: m.settings_servers_production() },
+          ...(import.meta.env.DEV
+            ? [{ value: "local" as const, label: m.settings_servers_local() }]
+            : []),
         ]}
       />
     </div>

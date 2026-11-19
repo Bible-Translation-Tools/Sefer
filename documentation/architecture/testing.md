@@ -11,6 +11,7 @@ The manifest and Vite/Vitest configuration define these commands:
 - `pnpm test:browser`: runs Chromium Browser Mode tests through the Playwright provider, headless. `headless: true` is stated in `vite.config.ts` rather than left to the default, which is headless in CI and HEADED on a laptop — which would raise a window over whatever the person at the machine was doing, and on macOS take the keyboard with it.
 - `pnpm test:e2e`: builds the app, serves `dist/client` through `vite preview`, and drives it with Playwright (`e2e/`). Three smoke assertions and deliberately nothing about how a screen looks.
 - `pnpm test:desktop`: builds the driven debug desktop binary, starts a Vite dev server, and runs `e2e-desktop/` through WebdriverIO against the real Tauri app (below, "Desktop: `e2e-desktop/`"). Not in CI and not in `pnpm check`.
+- `pnpm wacs:check`: proves the local WACS (`pnpm wacs:up`: Forgejo and the browser git proxy in Docker, seeded) is whole, through Sefer's own Web remote code: sign-in, suggestions, clone, push, publish. Its own `wacs` Vitest project, defined only when this script runs; never in `pnpm check` or CI. [`tools/wacs/README.md`](../../tools/wacs/README.md).
 - `pnpm check`: runs typecheck, lint, format check, `pnpm boundaries`, Node tests, and the Web build. Lefthook's `pre-commit` runs all of it except the build (plus `pnpm lint:results`).
 
 CI: `.github/workflows/check.yml` runs `pnpm check` on every branch except master, with `pnpm test:browser` in a second job. Master's gate is `release.yml`'s `verify` job — `pnpm check`, `pnpm deadcode` and `pnpm test:browser` — and preview and production add `pnpm test:e2e` and `pnpm verify:design`.
@@ -120,6 +121,7 @@ Each test sits at the smallest seam that owns its risk:
 - **Browser Mode:** a real browser API (OPFS, Web Locks, isomorphic-git) at module level.
 - **Playwright:** the built artifact.
 - **cargo:** git2.
+- **The local WACS** (`tools/wacs/`): a real Forgejo and the real proxy, for a claim about the network and git topology together (a fork, a suggestion, a publish). A test lands there when a bug does; `pnpm wacs:check` is its smoke check.
 
 None of them asserts how a screen looks.
 
