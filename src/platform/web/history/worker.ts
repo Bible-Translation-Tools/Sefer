@@ -1,10 +1,10 @@
 import { Effect, FileSystem } from "effect";
 
 import { nodeFsView } from "#core/fileSystem/nodeView";
+import { objectCache } from "#core/fileSystem/objectCache";
 import { buildBookIndex, type BookIndex, type BuildReport } from "#core/history/bookIndex";
 
 import { OpfsFileSystemLive } from "../fileSystem";
-import { packView } from "./packView";
 import { objectReader } from "./reader";
 
 export interface BuildRequest {
@@ -25,7 +25,7 @@ const build = async (request: BuildRequest): Promise<WorkerMessage> => {
       OpfsFileSystemLive,
     ),
   );
-  const view = packView(nodeFsView(fileSystem, Effect.runPromise), request.root);
+  const view = objectCache(nodeFsView(fileSystem, Effect.runPromise), { holdPack: true });
   const { index, report } = await buildBookIndex(objectReader(view.fs, request.root), {
     previous: request.previous,
   });

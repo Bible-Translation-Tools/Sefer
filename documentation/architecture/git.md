@@ -80,8 +80,9 @@ too.
 
 - **Core is pure.** The walk, the simplification and the stored format are one module over an
   `ObjectReader` of four reads (resolve, commit, raw tree, shallow set); core names no Git library.
-- **The Web answers it** with isomorphic-git (`src/platform/web/history/reader.ts`) through the pack
-  view (`packView.ts`, which answers isomorphic-git's per-object filesystem probes from memory), in a
+- **The Web answers it** with isomorphic-git (`src/platform/web/history/reader.ts`) through the object
+  cache (`objectCache(fs, { holdPack: true })`, which answers isomorphic-git's per-object filesystem
+  probes from memory and holds the pack's bytes), in a
   worker (`worker.ts`) so a build never stalls the page, and in the page where no worker can start.
 - **It is derived, and current with HEAD.** Stored at `/sefer/history/<root>.json` in the app's own
   storage — never in the project or `.git` — and held in memory per root. A stale one is extended,

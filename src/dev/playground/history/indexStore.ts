@@ -76,7 +76,6 @@ export const ensureIndex = async (options: {
       "worker.lock_wait_ms": Math.round(built.timings.lockWaitMs),
       "worker.pack_load_ms": Math.round(built.timings.packLoadMs),
       "worker.pack_bytes": built.timings.packBytes,
-      "worker.fs_passed_through": built.timings.passedThrough,
       "worker.fs_calls": JSON.stringify(built.timings.calls),
       "worker.walk_ms": Math.round(built.timings.walkMs),
     });
