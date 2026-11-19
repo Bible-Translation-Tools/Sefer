@@ -353,7 +353,6 @@ export function BookPane(props: {
             decision={() => undefined}
             decide={() => {}}
             decidable={false}
-            claimSidebar={false}
             usfm={usfm()}
             onUsfm={setUsfm}
             currentLabel={labelOf(props.picked)}

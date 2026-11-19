@@ -11,7 +11,7 @@ import { Show, createEffect, createSignal, onCleanup, untrack } from "solid-js";
 import { Git, repositoryPath } from "#core/git/git";
 import { Gitea } from "#core/remote/gitea";
 import { Remote } from "#core/remote/remote";
-import { emptyReading, sync as syncOf, type Sync, type SyncReading } from "#core/sync";
+import type { Sync } from "#core/sync";
 
 import { collaboration } from "../../collaboration";
 import { describe } from "../../describe";
@@ -110,128 +110,6 @@ const createSync = (shell: Shell) => {
 };
 
 type SyncHandle = ReturnType<typeof createSync>;
-
-const DAY = 86_400_000;
-const commit = (id: string, at: number) => ({
-  id,
-  message: "",
-  author: { name: "teammate", email: "" },
-  at,
-});
-const ORIGIN = "https://content.bibletranslationtools.org/team/project";
-
-/** Stand-in readings for the chip's design tweak; "live" is the real one. */
-const PREVIEWS: Readonly<Record<string, Partial<SyncReading>>> = {
-  "not uploaded": { signedIn: true },
-  "uploaded today": {
-    signedIn: true,
-    origin: ORIGIN,
-    remoteKnown: true,
-    remoteHead: commit("a", Date.now() - 2 * 3_600_000),
-  },
-  "3 saves waiting": {
-    signedIn: true,
-    origin: ORIGIN,
-    remoteKnown: true,
-    remoteHead: commit("a", Date.now() - 3 * DAY),
-    ahead: [commit("b", Date.now()), commit("c", Date.now()), commit("d", Date.now())],
-  },
-  "updates on WACS": {
-    signedIn: true,
-    origin: ORIGIN,
-    remoteKnown: true,
-    remoteHead: commit("e", Date.now() - DAY),
-    behind: [commit("e", Date.now() - DAY)],
-  },
-  diverged: {
-    signedIn: true,
-    origin: ORIGIN,
-    remoteKnown: true,
-    remoteHead: commit("e", Date.now() - 9 * DAY),
-    ahead: [commit("b", Date.now())],
-    behind: [commit("e", Date.now() - 9 * DAY)],
-  },
-  "review before upload": {
-    signedIn: true,
-    origin: ORIGIN,
-    remoteKnown: true,
-    remoteHead: commit("e", Date.now() - DAY),
-    ahead: [commit("b", Date.now()), commit("c", Date.now())],
-    behind: [commit("e", Date.now() - DAY)],
-    sendRefused: true,
-  },
-  "WACS unreachable": { signedIn: true, origin: ORIGIN, remoteKnown: true, online: false },
-  "upload refused": {
-    signedIn: true,
-    origin: ORIGIN,
-    remoteKnown: true,
-    remoteHead: commit("a", Date.now() - 3 * DAY),
-    ahead: [commit("b", Date.now())],
-    sendRefused: true,
-  },
-  "no permission": {
-    signedIn: true,
-    origin: "https://content.bibletranslationtools.org/other_teaboogey/en_ulb",
-    remoteKnown: true,
-    remoteHead: commit("a", Date.now() - 3 * DAY),
-    ahead: [commit("b", Date.now()), commit("c", Date.now())],
-  },
-  "signed out": { origin: ORIGIN, remoteKnown: true, remoteHead: commit("a", Date.now() - DAY) },
-};
-
-/**
- * Design scaffolding: a "Sync state" tweak on the chip, so each state can be
- * seen without a WACS account. The design surface loads lazily and installs
- * its handle after the app bar has mounted, so wait for it.
- */
-function useStateTweak(choose: (state: string) => void): void {
-  let release: (() => void) | undefined;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let tries = 0;
-  const attempt = (): void => {
-    // SAFETY: under `__SEFER_DESIGN__` the design surface installs this handle
-    // (`src/dev/designSurface.ts`) with `register` of this shape; `unknown` in
-    // the global's type only because platform may not import a dev tool.
-    const design = globalThis.__sefer?.design as
-      | {
-          readonly register?: (registration: {
-            readonly namespace: string;
-            readonly tweaks: readonly {
-              readonly key: string;
-              readonly label: string;
-              readonly kind: "choice";
-              readonly options: readonly string[];
-            }[];
-            readonly onChange: (values: Readonly<Record<string, string>>) => void;
-          }) => () => void;
-        }
-      | undefined;
-    if (design?.register === undefined) {
-      // The design surface can arrive well after the app bar (a slow first
-      // load, a lazy chunk), so keep waiting, more slowly after a while.
-      tries += 1;
-      timer = setTimeout(attempt, tries < 100 ? 50 : 500);
-      return;
-    }
-    release = design.register({
-      namespace: "syncChip",
-      tweaks: [
-        {
-          key: "state",
-          label: "Sync state",
-          kind: "choice",
-          options: ["live", ...Object.keys(PREVIEWS)],
-        },
-      ],
-      onChange: (values) => choose(values["syncChip.state"] ?? "live"),
-    });
-  };
-  attempt();
-  onCleanup(() => {
-    if (timer !== undefined) clearTimeout(timer);
-    release?.();
-  });
-}
 
 /**
  * A failure in a few words for the line under the button: a name WACS
@@ -358,7 +236,6 @@ const WacsBody = (props: {
   readonly sync: SyncHandle;
   readonly held: Sync | undefined;
   /** A design stand-in: show its state even when this browser isn't signed in. */
-  readonly standIn?: boolean;
   readonly noWrite: boolean | undefined;
   readonly onLeave: () => void;
 }) => {
@@ -565,8 +442,7 @@ const WacsBody = (props: {
     const held = props.held;
     if (held === undefined) return "reading";
     if (held.state === "offline") return "unreachable";
-    if ((user() === undefined && props.standIn !== true) || held.state === "unauthorized")
-      return "signed-out";
+    if (user() === undefined || held.state === "unauthorized") return "signed-out";
     if (held.reading.origin === undefined) return "new";
     // Both sides moved: the upload waits until the person has reviewed what
     // came in from WACS, so the review is the next step, not a retry.
@@ -802,9 +678,6 @@ const WacsBody = (props: {
   );
 };
 
-/** Stand-ins for the design tweak that also need the person to have no permission. */
-const NO_WRITE_PREVIEWS = new Set(["no permission"]);
-
 /**
  * The app bar's connection chip (SEFER-92, SEFER-83): Online or Offline, which
  * the person can switch. Its popover says where the work stands with WACS and
@@ -813,12 +686,7 @@ const NO_WRITE_PREVIEWS = new Set(["no permission"]);
 export function SyncChip() {
   const shell = useShell();
   const sync = createSync(shell);
-  const [preview, setPreview] = createSignal("live", { name: "syncChipPreview", ownedWrite: true });
-  if (__SEFER_DESIGN__) useStateTweak(setPreview);
-  const held = (): Sync | undefined => {
-    const stand = PREVIEWS[preview()];
-    return stand === undefined ? sync.quick.sync() : syncOf({ ...emptyReading, ...stand });
-  };
+  const held = (): Sync | undefined => sync.quick.sync();
   // What the pill says in amber until the person opens the popover: updates on WACS, a
   // refused upload they have not seen yet, WACS out of reach, or a sign-in WACS refused.
   const warning = (): string | undefined => {
@@ -843,15 +711,7 @@ export function SyncChip() {
       onOpenChange={(open) => {
         if (open) sync.pop.openChanged(true);
       }}
-      body={(close) => (
-        <WacsBody
-          sync={sync}
-          held={held()}
-          standIn={preview() !== "live" && PREVIEWS[preview()]?.signedIn === true}
-          noWrite={NO_WRITE_PREVIEWS.has(preview()) ? true : undefined}
-          onLeave={close}
-        />
-      )}
+      body={(close) => <WacsBody sync={sync} held={held()} noWrite={undefined} onLeave={close} />}
     />
   );
 }

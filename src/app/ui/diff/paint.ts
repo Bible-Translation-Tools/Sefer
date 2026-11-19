@@ -170,12 +170,92 @@ export const sidePaint = (
   return { lines, marks, controls: buttons };
 };
 
+type TextRun = NonNullable<DecisionUnit["text"]>["current"][number];
+
+/**
+ * A side's runs cut into stretches at its unchanged words. A space alone
+ * between two changed words is not a break: "Let me tell of" → "I will
+ * proclaim" is one stretch, not four, so it reads as one tracked change
+ * ("~~Let me tell of~~ I will proclaim") rather than alternating word by word.
+ * Both sides' unchanged runs come in the same order, so stretch k on one side
+ * pairs with stretch k on the other.
+ */
+interface Stretch {
+  /** The first and last changed run of the stretch, if it has any. */
+  readonly first?: TextRun;
+  readonly last?: TextRun;
+  /** Where the stretch begins when it changed nothing: just after the last unchanged word. */
+  readonly at: number;
+}
+const stretchesOf = (runs: readonly TextRun[], usfm: boolean, start: number): Stretch[] => {
+  const out: Stretch[] = [];
+  let first: TextRun | undefined;
+  let last: TextRun | undefined;
+  let at = start;
+  const close = (): void => {
+    out.push({ first, last, at });
+    first = undefined;
+    last = undefined;
+  };
+  for (const run of runs) {
+    if (run.kind === "unchanged") {
+      if (run.text.trim() === "" && first !== undefined) continue;
+      close();
+      at = run.to;
+      continue;
+    }
+    if (!visibleRun(run.what, usfm)) continue;
+    first ??= run;
+    last = run;
+  }
+  close();
+  return out;
+};
+
+/**
+ * Where each stretch's removed words stand in the current text: just before
+ * the words that replaced them, as a tracked change reads ("~~At~~ About").
+ */
+const ghostsOf = (unit: DecisionUnit, usfm: boolean): { at: number; text: string }[] => {
+  const baseline = unit.text?.baseline ?? [];
+  const current = stretchesOf(
+    unit.text?.current ?? [],
+    usfm,
+    unit.current?.from ?? unit.place.current,
+  );
+  const was = stretchesOf(baseline, usfm, 0);
+  const out: { at: number; text: string }[] = [];
+  was.forEach((stretch, index) => {
+    if (stretch.first === undefined || stretch.last === undefined) return;
+    const text = baseline
+      .slice(baseline.indexOf(stretch.first), baseline.indexOf(stretch.last) + 1)
+      .filter((run) => run.kind === "unchanged" || visibleRun(run.what, usfm))
+      .map((run) => run.text)
+      .join("");
+    const now = current[index];
+    out.push({ at: now?.first?.from ?? now?.at ?? 0, text });
+  });
+  return out;
+};
+
+/** One mark per stretch of added words, spaces between them included. */
+const addedMarks = (unit: DecisionUnit, usfm: boolean): { from: number; to: number }[] =>
+  stretchesOf(unit.text?.current ?? [], usfm, 0).flatMap((stretch) =>
+    stretch.first === undefined || stretch.last === undefined
+      ? []
+      : [{ from: stretch.first.from, to: stretch.last.to }],
+  );
+
 export const hunkPaint = (
   units: readonly DecisionUnit[],
   usfm: boolean,
   controls: Controls | undefined,
   was: (unit: DecisionUnit) => HTMLElement,
   analysis: Analysis,
+  inlineRemoved = false,
+  active: string | undefined = undefined,
+  /** A decided change reads as the text it settled on: no marks, unless it is the active one. */
+  settled: (unit: DecisionUnit) => boolean = () => false,
 ): DiffPaint => {
   const base = sidePaint(units, "current", usfm, controls, analysis);
   const hunks: DiffHunk[] = [];
@@ -183,7 +263,14 @@ export const hunkPaint = (
     const span = unit.current;
     const decision = controls?.decision(unit);
     if (!changed(unit) && decision === undefined) continue;
+    const quiet = unit.id !== active && settled(unit);
     if (span === undefined) {
+      // Inline, a whole removed unit reads where it stood, struck through, as
+      // removed words do; otherwise it waits behind its bar.
+      const gone =
+        inlineRemoved && !quiet
+          ? (was(unit).textContent ?? "").trim().replace(/^(\d+)(?=\S)/u, "$1 ")
+          : "";
       hunks.push({
         key: unit.id,
         kind: "deleted",
@@ -193,24 +280,43 @@ export const hunkPaint = (
         marks: [],
         old: () => was(unit),
         label: `Removed ${unitReference(unit)}`,
+        ghosts: gone === "" ? undefined : [{ at: unit.place.current, text: `${gone} ` }],
       });
       continue;
     }
     const end = usfm ? span.to : readingEnd(analysis, span.from, span.to);
-    const runs = unit.status === "modified" ? (unit.text?.current ?? []) : [];
+    const markClass = unit.id === active ? "cm-diff-added cm-diff-active" : "cm-diff-added";
+    // Inline, a whole added unit is one mark, as added words are.
+    const whole =
+      inlineRemoved && unit.status === "added" && !quiet
+        ? [{ from: span.from, to: Math.max(span.from + 1, end) }]
+        : [];
+    // Settled, inline: a dotted underline over what the decision left, so it can be found again.
+    const settledWords = inlineRemoved && quiet ? addedMarks(unit, usfm) : [];
+    const settledMarks = (
+      settledWords.length > 0
+        ? settledWords
+        : inlineRemoved && quiet
+          ? [{ from: span.from, to: Math.max(span.from + 1, end) }]
+          : []
+    ).map((mark) => ({ ...mark, class: "cm-diff-settled" }));
     hunks.push({
       key: unit.id,
       kind: hunkKind(unit),
       from: span.from,
       to: Math.max(span.from + 1, end),
-      tint: changed(unit)
-        ? "cm-diff-now"
-        : tint(unit, decision, controls?.live === true, true, false),
-      marks: runs
-        .filter((run) => run.kind !== "unchanged" && visibleRun(run.what, usfm))
-        .map((run) => ({ from: run.from, to: run.to, class: "cm-diff-added" })),
+      tint: quiet
+        ? ""
+        : changed(unit)
+          ? "cm-diff-now"
+          : tint(unit, decision, controls?.live === true, true, false),
+      marks: [...(unit.status === "modified" && !quiet ? addedMarks(unit, usfm) : []), ...whole]
+        .map((mark) => ({ ...mark, class: markClass }))
+        .concat(settledMarks),
       old: unit.baseline === undefined || !changed(unit) ? undefined : () => was(unit),
       label: `${hunkVerb(unit)} ${unitReference(unit)}`,
+      ghosts:
+        inlineRemoved && unit.status === "modified" && !quiet ? ghostsOf(unit, usfm) : undefined,
     });
   }
   return { lines: [], marks: [], controls: base.controls, hunks };

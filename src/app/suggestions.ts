@@ -9,6 +9,7 @@ import { COPY_REMOTE, Remote } from "#core/remote/remote";
 import { BROUGHT_IN, Suggestions, type Suggestion } from "#core/remote/suggestions";
 import { notIn, trackingRef } from "#core/sync";
 
+import { designStandIn } from "./designStandIn";
 import { resolveEndpoints } from "./endpoints";
 import type { Services } from "./services";
 import { chosenMode, setChosenMode, type CollabMode } from "./syncSettings";
@@ -544,22 +545,24 @@ export const suggestionDetails = (
   project: Project,
   number: number,
 ): Promise<SuggestionDetails | undefined> =>
-  services.run(
-    Effect.orElseSucceed(
-      Effect.gen(function* () {
-        const at = yield* where(project);
-        if (at === undefined) return undefined;
-        const suggestion = yield* (yield* Suggestions).one(at.host, at.owner, at.name, number);
-        if (suggestion === undefined) return undefined;
-        const git = yield* Git;
-        const repo = yield* git.open(project.root);
-        const theirs = yield* Effect.orElseSucceed(
-          git.logFrom(repo, suggestionRef(number)),
-          (): readonly Commit[] => [],
-        );
-        const here = yield* Effect.orElseSucceed(git.log(repo), (): readonly Commit[] => []);
-        return { suggestion, versions: notIn(theirs, here) };
-      }),
-      () => undefined,
-    ),
-  );
+  __SEFER_DESIGN__ && designStandIn().suggestion !== undefined
+    ? Promise.resolve(designStandIn().suggestion)
+    : services.run(
+        Effect.orElseSucceed(
+          Effect.gen(function* () {
+            const at = yield* where(project);
+            if (at === undefined) return undefined;
+            const suggestion = yield* (yield* Suggestions).one(at.host, at.owner, at.name, number);
+            if (suggestion === undefined) return undefined;
+            const git = yield* Git;
+            const repo = yield* git.open(project.root);
+            const theirs = yield* Effect.orElseSucceed(
+              git.logFrom(repo, suggestionRef(number)),
+              (): readonly Commit[] => [],
+            );
+            const here = yield* Effect.orElseSucceed(git.log(repo), (): readonly Commit[] => []);
+            return { suggestion, versions: notIn(theirs, here) };
+          }),
+          () => undefined,
+        ),
+      );

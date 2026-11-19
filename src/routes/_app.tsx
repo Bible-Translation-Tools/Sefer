@@ -51,7 +51,8 @@ function Workspace() {
     path() !== "/projects" &&
     path() !== "/" &&
     path() !== "/migrate" &&
-    !path().endsWith("/settings");
+    !path().endsWith("/settings") &&
+    !path().endsWith("/review");
   const showing = (): boolean => shell.sidebarShowing() && here();
   // The panel's show/hide is the top of the panel itself, and hidden, the
   // panel folds to a rail that still holds it — no border, as wide as the

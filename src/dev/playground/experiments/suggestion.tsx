@@ -147,7 +147,6 @@ function SuggestionReview(props: ExperimentProps) {
                 onSelect={() => {}}
                 seat={() => Promise.resolve(undefined)}
                 onEdited={() => {}}
-                claimSidebar={false}
               />
             </div>
           </div>

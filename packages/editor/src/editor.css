@@ -478,6 +478,13 @@
   padding: 0;
   height: 0;
 }
+/* A diff can anchor a removed line's struck-through words at the stanza break
+   after it. A zero-height break would let them spill over the next verse, so
+   one holding them is a line again, at the first poetry indent. */
+.cm-mode-regular .usfm-b:has(.cm-diff-ghost) {
+  height: auto;
+  padding-inline-start: calc(var(--usfm-indent) * 1em);
+}
 
 .cm-mode-regular .usfm-verse {
   font: 700 0.66em/1 var(--font-ui);
@@ -2313,4 +2320,17 @@
 .cm-typed-usfm-wrong {
   color: #c62828;
   text-decoration: wavy underline;
+}
+
+/* A row between lines that is not text: a chapter the book lacks. */
+.cm-diff-note {
+  margin-block: 1.5em;
+  padding: 0.75em 1em;
+  border-radius: 0.75rem;
+  background: var(--surface-secondary);
+  color: var(--on-surface-secondary);
+  font-family: var(--font-sans, inherit);
+  font-size: 0.8em;
+  text-align: center;
+  user-select: none;
 }

@@ -403,14 +403,17 @@
 }
 
 /* A scrollbar that stays out of the way: no track, a thin light-gray thumb.
-   Tokens, so the dark swap reaches it. */
+   Every scroller already draws this (the base layer below); the utility only
+   keeps the standard properties for engines without `::-webkit-scrollbar`. */
 @utility scrollbar-subtle {
-  scrollbar-width: thin;
-  scrollbar-color: var(--surface-tertiary) transparent;
+  @supports not selector(::-webkit-scrollbar) {
+    scrollbar-width: thin;
+    scrollbar-color: var(--surface-tertiary) transparent;
+  }
 }
 
-/* A scrollbar that IS the container's right padding: a 16px track, always
-   reserved, with a 6px thumb centred in it — clear of the panel edge beside
+/* A scrollbar that IS the container's right padding: a 20px track, always
+   reserved, with an 8px thumb centred in it — clear of the panel edge beside
    it, which is a resize handle. No `scrollbar-width` here: Chrome ignores the
    `::-webkit-scrollbar` rules on an element that sets it, so the standard
    properties are only the fallback for engines without them (Firefox).
@@ -418,7 +421,7 @@
 @utility scrollbar-padded {
   scrollbar-gutter: stable;
   &::-webkit-scrollbar {
-    width: 16px;
+    width: 20px;
     background: transparent;
   }
   &::-webkit-scrollbar-track {
@@ -428,7 +431,7 @@
   &::-webkit-scrollbar-thumb {
     background-color: var(--scrollbar-thumb, var(--surface-tertiary));
     background-clip: padding-box;
-    border: 5px solid transparent;
+    border: 6px solid transparent;
     border-radius: 9999px;
   }
   &::-webkit-scrollbar-thumb:hover {
@@ -475,6 +478,42 @@
   }
   :root[data-theme="dark"] {
     color-scheme: dark;
+  }
+
+  /* Every scrollbar: no track, no border, and a thumb that is always drawn —
+     styling the pseudo-elements turns off macOS's overlay bars that fade out
+     when the pointer stops. The thumb sits inside a transparent border so it
+     reads thin without being hard to grab. `scrollbar-padded` widens this for
+     the panels whose scrollbar is their padding. Firefox takes the standard
+     properties instead, and has no always-visible switch. */
+  ::-webkit-scrollbar {
+    width: 20px;
+    height: 20px;
+    background: transparent;
+  }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+    border: 0;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--scrollbar-thumb, var(--surface-tertiary));
+    background-clip: padding-box;
+    border: 6px solid transparent;
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(
+      in srgb,
+      var(--scrollbar-thumb, var(--surface-tertiary)),
+      var(--on-surface-primary) 25%
+    );
+  }
+  @supports not selector(::-webkit-scrollbar) {
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: var(--scrollbar-thumb, var(--surface-tertiary)) transparent;
+    }
   }
 
   body {
@@ -592,7 +631,7 @@
     box-shadow 150ms ease-in-out;
 }
 /* Hovered: both ends the darker blue, no shadow. */
-.button-primary:hover:not(:disabled):not([aria-pressed="true"]) {
+.button-primary:hover:not(:disabled):not([aria-disabled="true"]):not([aria-pressed="true"]) {
   --button-primary-from: var(--button-primary-bottom);
   box-shadow: none;
 }

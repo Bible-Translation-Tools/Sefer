@@ -18,8 +18,6 @@ export const useScreen = (): Screen => {
     leaf() === "/_app/project/$slug/book/$book" || leaf() === "/_app/project/$slug/";
   const versionsTab = (): VersionsTab | undefined => {
     switch (leaf()) {
-      case "/_app/project/$slug/review":
-        return "changes";
       case "/_app/project/$slug/history":
         return "history";
       case "/_app/project/$slug/suggestions":
