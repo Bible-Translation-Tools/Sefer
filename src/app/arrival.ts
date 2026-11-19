@@ -16,7 +16,7 @@
  * was cloned from, and a held copy is used, not cloned again.
  */
 
-import { Data, Effect, FileSystem, Option, Stream, type Scope } from "effect";
+import { Data, Effect, FileSystem, Option, Semaphore, Stream, type Scope } from "effect";
 import { createSignal } from "solid-js";
 
 import { m } from "#app/paraglide/messages";
@@ -113,26 +113,78 @@ export const cloneArrival = (
           }),
         );
     }
+    if (kind === "sourceText")
+      return yield* oneAtATime(named, sourceTextArrival(services, named, url, options));
     // A project goes into a folder of its own even when another project has
-    // the name (two owners' en_ulb); a source text's folder is its owner's.
-    const into = kind === "project" ? yield* freeRoot(services, named) : named;
+    // the name (two owners' en_ulb).
+    const into = yield* freeRoot(services, named);
     const cloned = yield* Effect.tapError(
-      cloneRepository(
-        url,
-        into,
-        options?.catalogue,
-        kind === "sourceText" ? { history: "latest" } : options?.clone,
-      ),
+      cloneRepository(url, into, options?.catalogue, options?.clone),
       // The folder is new, so a failed clone leaves nothing behind to make the retry fail too.
       () => Effect.ignore(services.fileSystem.remove(into, { recursive: true })),
     );
-    if (kind === "project") {
-      yield* rememberProject(services.projectsRoot, into, undefined);
-      return { root: into, progress: cloned.progress };
+    yield* rememberProject(services.projectsRoot, into, undefined);
+    return { root: into, progress: cloned.progress };
+  });
+
+const sourceTextQueues = new Map<string, Semaphore.Semaphore>();
+
+/**
+ * Two screens can ask for the same source text at once (a project's arrival
+ * pulls its source texts while the Reference column's Download is pressed),
+ * and both would clone into its one folder. They take turns instead.
+ */
+const oneAtATime = <A, E, R>(
+  root: string,
+  effect: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> => {
+  const existing = sourceTextQueues.get(root);
+  const queue = existing ?? Semaphore.makeUnsafe(1);
+  if (existing === undefined) sourceTextQueues.set(root, queue);
+  return Semaphore.withPermit(queue, effect);
+};
+
+/**
+ * A source text's folder is its owner's and repo's, `libraryRoot/<owner>/<repo>`,
+ * with no host in it, while the Library knows a copy by the URL it came from.
+ * So a copy from another server (dev before production), or one the Library
+ * no longer lists, sits where this clone goes. Source texts are WA's copies,
+ * never edited here, so that folder is replaced; the Library entry keeps its
+ * id (the folder), so every project's pick of it still holds.
+ */
+const sourceTextArrival = (
+  services: Services,
+  into: string,
+  url: string,
+  options: { readonly catalogue?: Pick<RemoteArrival, "catalogueId" | "language"> } | undefined,
+): Effect.Effect<
+  { readonly root: string; readonly progress: Progress; readonly resource?: Resource },
+  unknown,
+  Domain
+> =>
+  Effect.gen(function* () {
+    const library = yield* Library;
+    // Whoever held the turn before may have just brought this very copy.
+    const held = yield* library.cloned(url);
+    if (Option.isSome(held))
+      return {
+        root: held.value.root,
+        progress: { phase: "held", loaded: 0 },
+        resource: held.value,
+      };
+    const fileSystem = services.fileSystem;
+    if (yield* Effect.orElseSucceed(fileSystem.exists(into), () => false)) {
+      const operation = Option.getOrUndefined(yield* Effect.serviceOption(Observability));
+      operation?.note("sources.replace", "passed", undefined, { "sources.root": into });
+      yield* fileSystem.remove(into, { recursive: true });
     }
+    const cloned = yield* Effect.tapError(
+      cloneRepository(url, into, options?.catalogue, { history: "latest" }),
+      // The folder is new and the turn is ours, so nothing else is in it.
+      () => Effect.ignore(fileSystem.remove(into, { recursive: true })),
+    );
     const git = yield* Git;
     const head = Option.getOrUndefined(yield* git.resolve(cloned.repo, "HEAD"));
-    const library = yield* Library;
     const resource = yield* library.add(
       into,
       head === undefined ? undefined : { url, commit: head },
