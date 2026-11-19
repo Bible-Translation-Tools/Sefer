@@ -1,23 +1,25 @@
 # Edit and save
 
-A person opens a project, changes a verse, and keeps the change. Save never
-writes straight away: ⌘S (Ctrl+S) opens Review, showing every change about to
-be kept, and the file is written only when they press Save there. The kept
-change is a version in History, under their name and message.
+A person opens a project, changes a verse, and keeps the change. Autosave
+writes the edit to the book's file a moment after typing stops (about 1.5 s,
+at most 5 s); nothing is recorded. ⌘S (Ctrl+S) writes at once and opens
+nothing. The app bar's Save button opens Review, where Save records a version:
+a commit in History under their name and message.
 
 ## Sub-features
 
 - `open` opens a project from the projects page into its first book.
-- `edit` changes text in the editor; the book shows as unsaved.
-- `review` ⌘S lists the change, verse by verse, before anything is written.
-- `record` Save with a name and a message writes the file and records a version.
+- `edit` changes text in the editor; autosave writes it to the file.
+- `review` the Save button lists the changes no version holds yet, verse by verse.
+- `record` Save with a name and a message records a version.
 - `history` the version appears in History with that message and name.
 
 ## How to get to it (user POV)
 
 - Projects page → a project's **Open Project**.
 - In a book, type in the editor.
-- ⌘S / Ctrl+S, or the app bar's More menu → Save & Review.
+- The app bar's Save button (it reads "Saved" once autosave has written), or
+  the More menu → Save & Review. ⌘S only writes.
 - In Review, **Save**, then the two lines (name, what changed), then **Save**.
 - History: the sidebar's History, or `/project/<slug>/history`.
 
@@ -39,7 +41,12 @@ Preconditions:
   `mouse move <x> <y>`, `mouse down`, `mouse up`.
 - **Edit.** Run `agent-browser --session verify keyboard type " VERIFY"`. The
   editor now reads "Blessed is the man VERIFY".
-- **Review.** Run `agent-browser --session verify press Meta+s`. The path is
+- **Autosaved.** Wait 3 s, then read the file in `eval`: OPFS
+  `navigator.storage.getDirectory()` → `sefer/projects/<folder>/19-PSA.usfm`
+  contains "VERIFY". With a WACS remote (`pnpm wacs:up`, `tools/wacs/`), the
+  Online panel says the book's changes are on this device but not in the
+  cloud yet.
+- **Review.** Click the app bar's Save button. The path is
   `/project/small-nt/review`, `[data-review-units]` shows "Psalms 1:1" with the
   old and new text, and `[data-review-record]` is present.
 - **Record.** Click `[data-review-record]`. `snapshot -i` then shows the two
