@@ -494,10 +494,19 @@ const sampleCatalogue = (): CatalogueService => ({
 
 const LANGUAGE_API = "https://api.bibleineverylanguage.org/v1/graphql";
 
+/**
+ * WA-Catalog's list is read from production's catalogue whatever server this
+ * build talks to, since dev's flags no gateway language. Its copies are on
+ * every WACS, though, so each one is fetched from `contentHost`, the server a
+ * project's own source texts come from (`catalogueUrl`). Kept to the address
+ * the catalogue gave, a dev build's copy and the copy its projects pull would
+ * be two URLs for one Library folder.
+ */
 const listed = async (
   type: string,
   gatewaysOnly: boolean,
   titleOf: (repo: string) => string,
+  contentHost: string | null,
 ): Promise<readonly ListedText[]> => {
   const decoded = decodeListed(await graphql(LANGUAGE_API, listedQuery(type, gatewaysOnly)));
   if (Result.isFailure(decoded))
@@ -517,7 +526,10 @@ const listed = async (
         nationalName: national,
         direction: row.language.direction === "rtl" ? "rtl" : "ltr",
         repository: `${row.git_repo.username}/${row.git_repo.repo_name}`,
-        url: row.git_repo.repo_url,
+        url:
+          contentHost === null
+            ? row.git_repo.repo_url
+            : `${contentHost.replace(/\/+$/u, "")}/${row.git_repo.username}/${row.git_repo.repo_name}`,
       },
     ];
   });
@@ -526,15 +538,18 @@ const listed = async (
   );
 };
 
-export const listTranslationNotes = (): Promise<readonly ListedText[]> =>
-  listed("tn", false, () => "Translation Notes");
+export const listTranslationNotes = (
+  contentHost: string | null = null,
+): Promise<readonly ListedText[]> => listed("tn", false, () => "Translation Notes", contentHost);
 
 /**
  * The gateway languages' Bibles in WA's catalogue, titled by the repository's
  * last part: "ULB" mostly, "OPV" and "NMV" for Persian, which has no ULB.
  */
-export const listSourceTexts = (): Promise<readonly ListedText[]> =>
-  listed("ulb", true, (repo) => (/_([^_]+)$/u.exec(repo)?.[1] ?? repo).toUpperCase());
+export const listSourceTexts = (
+  contentHost: string | null = null,
+): Promise<readonly ListedText[]> =>
+  listed("ulb", true, (repo) => (/_([^_]+)$/u.exec(repo)?.[1] ?? repo).toUpperCase(), contentHost);
 
 export const catalogueFor = (settings: SettingsService): CatalogueService => {
   const url = catalogueUrlFor(settings);

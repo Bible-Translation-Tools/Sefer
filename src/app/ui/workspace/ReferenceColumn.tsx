@@ -68,6 +68,7 @@ import { listSourceTexts, listTranslationNotes, type ListedText } from "../../ca
 import { findCommand, runCommandAndWait } from "../../commands";
 import { describe, remoteReasonOf } from "../../describe";
 import { downloadRuns } from "../../downloadRuns";
+import { contentHostFor } from "../../endpoints";
 import { downloadHelp, helpDownloads, removeHelp } from "../../kinds/download";
 import { KIND_ROLES, roleFor } from "../../kinds/table";
 import { uiLocale } from "../../locale";
@@ -238,8 +239,9 @@ export function ReferenceColumn() {
 
   const offer = (): void => {
     if (projects() === undefined) void readProjects().then(setProjects);
-    list(notes, setNotes, listTranslationNotes);
-    list(bibles, setBibles, listSourceTexts);
+    const host = contentHostFor(services.settings);
+    list(notes, setNotes, () => listTranslationNotes(host));
+    list(bibles, setBibles, () => listSourceTexts(host));
   };
 
   const installed = (): readonly Resource[] => {
