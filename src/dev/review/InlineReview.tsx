@@ -14,6 +14,7 @@ import { designStandIn } from "#app/designStandIn";
 import { BookDiff, changed, replacements, type BookDiffApi } from "#app/ui/diff";
 import { createCardViews } from "#app/ui/multibuffer/cardViews";
 import { Button, EmptyState, cx } from "#app/ui/primitives";
+import { keyOf } from "#app/ui/review/panel/helpers";
 import { createPrepared } from "#app/ui/review/reader/createPrepared";
 import { createSeats } from "#app/ui/review/reader/createSeats";
 import type { ReviewBook } from "#app/ui/review/reader/types";
@@ -251,7 +252,8 @@ const editorWhat = (
   return { verb: "Formatting", removed, added, parts, markers };
 };
 
-function createItems(panel: PanelModel) {
+/** `remembered`: a card whose decision Undo took back stays listed, so Redo can find it. */
+function createItems(panel: PanelModel, remembered: (key: string) => boolean) {
   const described = new Map<string, { readonly editor: What; readonly usfmOnly: boolean }>();
   const describe = (
     key: string,
@@ -276,7 +278,8 @@ function createItems(panel: PanelModel) {
         for (const unit of book.skeleton.units) {
           if (book.hidden?.has(unit.id) === true) continue;
           const decided = untrack(() => panel.decisions.decisionFor(book.bookId, unit.id));
-          if (!changed(unit) && decided === undefined) continue;
+          if (!changed(unit) && decided === undefined && !remembered(`${book.bookId} ${unit.id}`))
+            continue;
           const reference = referenceOf(book, unit);
           const origin = panel.units.originOf(book.bookId, [unit]);
           const key = `${book.bookId} ${unit.id}`;
@@ -918,7 +921,11 @@ function onScreen(host: HTMLElement | undefined): boolean {
 
 export function InlineReview(props: { readonly panel: PanelModel }): JSX.Element {
   const panel = untrack(() => props.panel);
-  const items = createItems(panel);
+  /** A verse's text just before its decision: Undo bringing it back takes the decision back. */
+  const beforeDecision = new Map<string, string>();
+  /** Decisions Undo took back, with the text they left: Redo bringing it back makes them again. */
+  const undone = new Map<string, { readonly side: MergeSide; readonly verse: string }>();
+  const items = createItems(panel, (key) => undone.has(key));
   // Drawn inline, a deleted word must turn into its ghost as it goes: this
   // screen asks for a one-book diff on every edit, not the typing pause.
   panel.compare.patchWhileTyping(true);
@@ -947,9 +954,39 @@ export function InlineReview(props: { readonly panel: PanelModel }): JSX.Element
     () => items().map((item) => ({ item, decided: outcomeOf(item) !== undefined })),
     (seen) => {
       for (const { item, decided } of seen) {
-        if (!decided) settledAs.delete(item.key);
-        else if (!settledAs.has(item.key))
-          settledAs.set(item.key, { verse: verseOf(item), book: item.book.currentText });
+        const { bookId } = item.book;
+        const verse = verseOf(item);
+        if (!decided) {
+          settledAs.delete(item.key);
+          // Redo put the decided text back: the decision comes back with it.
+          const was = undone.get(item.key);
+          if (was !== undefined && verse === was.verse) {
+            undone.delete(item.key);
+            panel.decisions.held.delete(keyOf(bookId, item.unit.id));
+            panel.decisions.decide(bookId, [item.unit], was.side);
+          }
+          continue;
+        }
+        const held = settledAs.get(item.key);
+        if (held === undefined) {
+          settledAs.set(item.key, { verse, book: item.book.currentText });
+          continue;
+        }
+        // Undo in the text took the decision's own write back: the card goes
+        // back to undecided rather than reading the old text as a custom edit.
+        const before = beforeDecision.get(item.key);
+        const side = panel.decisions.decisionFor(bookId, item.unit.id);
+        if (
+          before !== undefined &&
+          before !== held.verse &&
+          verse === before &&
+          side !== undefined
+        ) {
+          undone.set(item.key, { side, verse: held.verse });
+          panel.decisions.held.add(keyOf(bookId, item.unit.id));
+          settledAs.delete(item.key);
+          panel.decisions.decide(bookId, [item.unit], undefined);
+        }
       }
     },
   );
@@ -1098,6 +1135,10 @@ export function InlineReview(props: { readonly panel: PanelModel }): JSX.Element
   const decide = (item: Item, outcome: "accepted" | "rejected" | undefined, stay = false): void => {
     const side =
       outcome === undefined ? undefined : outcome === "accepted" ? item.accept : other(item.accept);
+    undone.delete(item.key);
+    panel.decisions.held.delete(keyOf(item.book.bookId, item.unit.id));
+    if (outcome === undefined) beforeDecision.delete(item.key);
+    else beforeDecision.set(item.key, verseOf(item));
     // The next undecided card in this book becomes the active one, as a
     // suggestion list moves on; another book waits for "Next book".
     const after = pending().filter((each) => each.book.bookId === item.book.bookId);

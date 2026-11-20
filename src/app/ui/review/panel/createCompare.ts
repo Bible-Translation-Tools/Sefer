@@ -32,17 +32,20 @@ type Computed = {
   readonly skeletons: ReadonlyMap<BookId, SkeletonResult>;
 };
 
-const decidedIn = (decisions: Decisions["decisions"], bookId: BookId): boolean => {
-  for (const key of untrack(decisions).keys()) if (key.startsWith(`${bookId}\0`)) return true;
+/** A book with a decision, or a decision Undo took back, lists its unchanged units too. */
+const decidedIn = (decisions: Decisions, bookId: BookId): boolean => {
+  const prefix = `${bookId}\0`;
+  for (const key of untrack(decisions.decisions).keys()) if (key.startsWith(prefix)) return true;
+  for (const key of decisions.held) if (key.startsWith(prefix)) return true;
   return false;
 };
 
-const inReview = (decisions: Decisions["decisions"], book: BookComparison): boolean =>
+const inReview = (decisions: Decisions, book: BookComparison): boolean =>
   !book.identical || decidedIn(decisions, book.bookId);
 
 const skeletonsOf = (
   services: Services,
-  decisions: Decisions["decisions"],
+  decisions: Decisions,
   found: CompareResult,
 ): ReadonlyMap<BookId, SkeletonResult> => {
   const held = new Map<BookId, SkeletonResult>();
@@ -104,7 +107,7 @@ interface CompareSetters {
 
 function createCompareRun(inputs: CompareInputs, setters: CompareSetters) {
   const { services, setNote } = inputs;
-  const { decisions } = inputs.decisions;
+  const decisions = inputs.decisions;
   const { leftId, rightId, live, left, right, waitingFor } = inputs.sides;
   const { setResult, setSelected, setComparing } = setters;
   const state: { running: boolean; again: boolean; computed: Computed | undefined } = {
@@ -272,7 +275,7 @@ function createSkeletons(
   computed: () => Computed | undefined,
 ) {
   const { services } = inputs;
-  const { decisions } = inputs.decisions;
+  const decisions = inputs.decisions;
   const current = (): BookComparison | undefined => {
     const found = result();
     const bookId = selected();
@@ -314,7 +317,7 @@ function createSkeletons(
 
 export function createCompare(inputs: CompareInputs) {
   const { shell } = inputs;
-  const { decisions } = inputs.decisions;
+  const decisions = inputs.decisions;
   const [result, setResult] = createSignal<CompareResult | undefined>(undefined, {
     name: "reviewResult",
   });
@@ -340,7 +343,7 @@ export function createCompare(inputs: CompareInputs) {
   watchSides(inputs, revisions, runCompare, patchTyped);
 
   const changed = (): readonly BookComparison[] => {
-    decisions();
+    decisions.decisions();
     return result()?.books.filter((book) => inReview(decisions, book)) ?? [];
   };
 

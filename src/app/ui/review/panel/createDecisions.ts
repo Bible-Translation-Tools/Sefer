@@ -12,10 +12,17 @@ export function createDecisions() {
   const [receipt, setReceipt] = createSignal("", { name: "reviewReceipt" });
   const [showChoices, setShowChoices] = createSignal(true, { name: "reviewShowChoices" });
   const originals = new Map<BookId, string>();
+  /**
+   * Units whose decision Undo took back, by `keyOf`: their book keeps listing
+   * unchanged units, so Redo bringing the decided text back finds the unit to
+   * decide again.
+   */
+  const held = new Set<string>();
 
   const startOver = (): void => {
     setDecisions(new Map());
     originals.clear();
+    held.clear();
     setReceipt("");
     setShowChoices(true);
   };
@@ -45,6 +52,7 @@ export function createDecisions() {
     showChoices,
     setShowChoices,
     originals,
+    held,
     startOver,
     decisionFor,
     decide,
