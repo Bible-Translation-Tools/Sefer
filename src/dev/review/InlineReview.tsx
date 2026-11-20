@@ -8,7 +8,7 @@ import X from "lucide-solid/icons/x";
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 
 import { designStandIn } from "#app/designStandIn";
-import { BookDiff, changed, type BookDiffApi } from "#app/ui/diff";
+import { BookDiff, changed, replacements, type BookDiffApi } from "#app/ui/diff";
 import { createCardViews } from "#app/ui/multibuffer/cardViews";
 import { Button, EmptyState, cx } from "#app/ui/primitives";
 import { createPrepared } from "#app/ui/review/reader/createPrepared";
@@ -36,6 +36,16 @@ interface Item {
   readonly accept: MergeSide;
   /** Who made the change: this editor's person, or the other side's. */
   readonly from: string;
+  /** Both sides changed this verse: Accept takes theirs, Reject keeps the editor's. */
+  readonly both: boolean;
+  /**
+   * What the change does, read while it still differed. Deciding it can make the
+   * verse the same on both sides, and a description read then would say nothing
+   * changed ("Formatting").
+   */
+  readonly editor: What;
+  /** A change the normal view cannot show: only markup moved. */
+  readonly usfmOnly: boolean;
 }
 
 type Outcome = "accepted" | "rejected" | undefined;
@@ -82,21 +92,37 @@ const joined = (
   return out;
 };
 
-interface What {
-  readonly verb: "Add" | "Delete" | "Replace" | "Formatting";
+interface Part {
   readonly removed: string;
   readonly added: string;
 }
 
+interface What extends Part {
+  readonly verb: "Add" | "Delete" | "Replace" | "Formatting";
+  /** Each tracked change in the verse, in reading order: "love" → "dearly" pairs with itself, not with the verse's other words. */
+  readonly parts: readonly Part[];
+}
+
+const partVerb = (part: Part): "Add" | "Delete" | "Replace" =>
+  part.removed === "" ? "Add" : part.added === "" ? "Delete" : "Replace";
+
 /** Taking the other person's words turns the diff around: theirs come in, the editor's go. */
-const whatOf = (item: Item, usfm: boolean): What => {
-  const what = editorWhat(item, usfm);
+const whatOf = (item: Item): What => {
+  const what = item.editor;
   if (item.accept === "current") return what;
   const verb = what.verb === "Add" ? "Delete" : what.verb === "Delete" ? "Add" : what.verb;
-  return { verb, removed: what.added, added: what.removed };
+  return {
+    verb,
+    removed: what.added,
+    added: what.removed,
+    parts: what.parts.map((part) => ({ removed: part.added, added: part.removed })),
+  };
 };
 
-const editorWhat = (item: Item, usfm: boolean): What => {
+const editorWhat = (
+  item: { readonly book: ReviewBook; readonly unit: DecisionUnit },
+  usfm: boolean,
+): What => {
   const { unit, book } = item;
   const visible = (what: string): boolean => what === "text" || (what === "markup" && usfm);
   if (unit.status === "added" && unit.current !== undefined)
@@ -104,12 +130,14 @@ const editorWhat = (item: Item, usfm: boolean): What => {
       verb: "Add",
       removed: "",
       added: words(book.currentText.slice(unit.current.from, unit.current.to), usfm),
+      parts: [],
     };
   if (unit.status === "deleted" && unit.baseline !== undefined)
     return {
       verb: "Delete",
       removed: words(book.baselineText.slice(unit.baseline.from, unit.baseline.to), usfm),
       added: "",
+      parts: [],
     };
   const removed = words(
     joined(
@@ -127,16 +155,28 @@ const editorWhat = (item: Item, usfm: boolean): What => {
     ),
     usfm,
   );
-  if (removed !== "" && added !== "") return { verb: "Replace", removed, added };
-  if (removed !== "") return { verb: "Delete", removed, added };
-  if (added !== "") return { verb: "Add", removed, added };
-  return { verb: "Formatting", removed, added };
+  const parts = replacements(unit, usfm)
+    .map((part) => ({ removed: words(part.removed, usfm), added: words(part.added, usfm) }))
+    .filter((part) => part.removed !== "" || part.added !== "");
+  if (removed !== "" && added !== "") return { verb: "Replace", removed, added, parts };
+  if (removed !== "") return { verb: "Delete", removed, added, parts };
+  if (added !== "") return { verb: "Add", removed, added, parts };
+  return { verb: "Formatting", removed, added, parts };
 };
 
-/** A change the normal view cannot show: only markup moved, so its card opens the text as USFM. */
-const usfmOnly = (item: Item): boolean => editorWhat(item, false).verb === "Formatting";
-
 function createItems(panel: PanelModel) {
+  const described = new Map<string, { readonly editor: What; readonly usfmOnly: boolean }>();
+  const describe = (
+    key: string,
+    base: { readonly book: ReviewBook; readonly unit: DecisionUnit },
+  ): { readonly editor: What; readonly usfmOnly: boolean } => {
+    const held = described.get(key);
+    if (held !== undefined && !changed(base.unit)) return held;
+    const usfmOnly = editorWhat(base, false).verb === "Formatting";
+    const fresh = { editor: editorWhat(base, usfmOnly), usfmOnly };
+    described.set(key, fresh);
+    return fresh;
+  };
   return createMemo(
     (): readonly Item[] => {
       const out: Item[] = [];
@@ -149,34 +189,13 @@ function createItems(panel: PanelModel) {
           if (!changed(unit) && decided === undefined) continue;
           const reference = referenceOf(book, unit);
           const origin = panel.units.originOf(book.bookId, [unit]);
-          const base = { book, unit, reference };
-          if (origin === "both") {
-            out.push({
-              ...base,
-              key: `${book.bookId} ${unit.id} here`,
-              accept: "current",
-              from: mine,
-            });
-            out.push({
-              ...base,
-              key: `${book.bookId} ${unit.id} there`,
-              accept: "baseline",
-              from: theirs,
-            });
-          } else if (origin === "there")
-            out.push({
-              ...base,
-              key: `${book.bookId} ${unit.id}`,
-              accept: "baseline",
-              from: theirs,
-            });
-          else
-            out.push({
-              ...base,
-              key: `${book.bookId} ${unit.id}`,
-              accept: "current",
-              from: mine,
-            });
+          const key = `${book.bookId} ${unit.id}`;
+          const base = { book, unit, reference, key, ...describe(key, { book, unit }) };
+          // One card per verse, so one decision per card: a verse both sides
+          // changed is theirs to Accept, or the editor's to keep with Reject.
+          if (origin === "both" || origin === "there")
+            out.push({ ...base, accept: "baseline", from: theirs, both: origin === "both" });
+          else out.push({ ...base, accept: "current", from: mine, both: false });
         }
       }
       return out;
@@ -199,6 +218,38 @@ function Quoted(props: { readonly text: string; readonly tone: "removed" | "adde
 }
 
 function WhatHappened(props: { readonly what: What }) {
+  return (
+    <Show when={props.what.parts.length < 2} fallback={<PartsHappened parts={props.what.parts} />}>
+      <OneChange what={props.what} />
+    </Show>
+  );
+}
+
+/** A verse with several tracked changes: one line each, where they stand in the verse. */
+function PartsHappened(props: { readonly parts: readonly Part[] }) {
+  return (
+    <ul class="space-y-1 text-small text-on-surface-secondary" data-inline-parts>
+      <For each={props.parts}>
+        {(part) => (
+          <li>
+            <Show when={partVerb(part) === "Replace"}>
+              <Quoted text={part.removed} tone="removed" /> →{" "}
+              <Quoted text={part.added} tone="added" />
+            </Show>
+            <Show when={partVerb(part) === "Delete"}>
+              Delete <Quoted text={part.removed} tone="removed" />
+            </Show>
+            <Show when={partVerb(part) === "Add"}>
+              Add <Quoted text={part.added} tone="added" />
+            </Show>
+          </li>
+        )}
+      </For>
+    </ul>
+  );
+}
+
+function OneChange(props: { readonly what: What }) {
   return (
     <div class="space-y-1 text-small text-on-surface-secondary">
       <Show when={props.what.verb === "Replace"}>
@@ -226,7 +277,13 @@ function WhatHappened(props: { readonly what: What }) {
   );
 }
 
-function CardHead(props: { readonly item: Item; readonly end?: JSX.Element }) {
+function CardHead(props: {
+  readonly item: Item;
+  readonly end?: JSX.Element;
+  /** The text shows USFM now; the badge on a markup-only change turns it on and off. */
+  readonly usfm: boolean;
+  readonly onToggleUsfm: () => void;
+}) {
   return (
     <div class="flex min-w-0 items-center gap-2">
       <span
@@ -241,14 +298,21 @@ function CardHead(props: { readonly item: Item; readonly end?: JSX.Element }) {
       <span class="min-w-0 flex-1 truncate text-small text-on-surface-secondary">
         {props.item.reference}
       </span>
-      <Show when={usfmOnly(props.item)}>
-        <span
-          title="Only visible in USFM"
-          class="grid size-6 shrink-0 place-items-center rounded-md bg-surface-secondary text-on-surface-secondary"
+      <Show when={props.item.usfmOnly}>
+        <button
+          type="button"
+          title={props.usfm ? "Hide USFM" : "Only visible in USFM: show it"}
+          aria-label={props.usfm ? "Hide USFM" : "Show USFM"}
+          aria-pressed={props.usfm ? "true" : "false"}
+          class="grid size-6 shrink-0 cursor-pointer place-items-center rounded-md bg-surface-secondary text-on-surface-secondary hover:text-on-surface-primary aria-pressed:bg-surface-tertiary"
           data-inline-usfm
+          onClick={(event: MouseEvent) => {
+            event.stopPropagation();
+            props.onToggleUsfm();
+          }}
         >
           <Braces size={14} aria-hidden="true" />
-        </span>
+        </button>
       </Show>
       {props.end}
     </div>
@@ -265,6 +329,8 @@ function PendingCard(props: {
   /** A decided card in Completed: marked, with Undo in place of the choices. */
   readonly outcome?: Outcome;
   readonly onUndo?: () => void;
+  readonly usfm: boolean;
+  readonly onToggleUsfm: () => void;
 }) {
   const decided = (): boolean => props.outcome !== undefined;
   return (
@@ -284,6 +350,8 @@ function PendingCard(props: {
     >
       <CardHead
         item={props.item}
+        usfm={props.usfm}
+        onToggleUsfm={props.onToggleUsfm}
         end={
           <Show when={props.outcome}>
             {(outcome) => (
@@ -304,6 +372,11 @@ function PendingCard(props: {
         }
       />
       <WhatHappened what={props.what} />
+      <Show when={props.item.both}>
+        <p class="text-smallest text-on-surface-tertiary" data-inline-both>
+          You changed this verse too. Reject keeps your version.
+        </p>
+      </Show>
       <Show when={decided() && props.active && props.editable}>
         <Button
           size="md"
@@ -389,6 +462,8 @@ function Completed(props: {
   readonly editable: boolean;
   readonly onActivate: (item: Item) => void;
   readonly onUndo: (item: Item) => void;
+  readonly usfm: boolean;
+  readonly onToggleUsfm: () => void;
 }) {
   return (
     <div class="flex flex-col gap-3 empty:hidden" data-inline-completed>
@@ -397,7 +472,9 @@ function Completed(props: {
           {(item) => (
             <PendingCard
               item={item}
-              what={whatOf(item, usfmOnly(item))}
+              what={whatOf(item)}
+              usfm={props.usfm}
+              onToggleUsfm={props.onToggleUsfm}
               active={props.activeKey === item.key}
               editable={props.editable}
               outcome={props.outcomeOf(item)}
@@ -578,6 +655,11 @@ function TextPanel(props: {
                 props.book !== undefined &&
                 panel.decisions.decisionFor(props.book.bookId, unit.id) !== undefined
               }
+              incoming={(unit) => {
+                if (props.book === undefined) return false;
+                const origin = panel.units.originOf(props.book.bookId, [unit]);
+                return origin === "there" || origin === "both";
+              }}
               ref={(given) => {
                 api = given;
               }}
@@ -762,36 +844,54 @@ export function InlineReview(props: { readonly panel: PanelModel }): JSX.Element
   };
   /** `wait`: let a decided card fold shut first, so the next one is measured where it lands. */
   const pick = (key: string | undefined, wait = 0): void => {
+    const picked = items().find((item) => item.key === key);
+    if (picked !== undefined) setShownBook(picked.book.bookId);
     setActiveKey(key);
     setReveal((count) => count + 1);
     if (key !== undefined) showCard(key, wait);
   };
+  /** The book on show: it changes only when the person picks a card in another book or Next book. */
+  const [shownBook, setShownBook] = createSignal<BookId | undefined>(undefined, {
+    name: "inlineBook",
+  });
+  const bookId = (): BookId | undefined =>
+    shownBook() ?? pending()[0]?.book.bookId ?? panel.units.readerBooks()[0]?.bookId;
+  const pendingHere = (): readonly Item[] =>
+    pending().filter((item) => item.book.bookId === bookId());
   const active = (): Item | undefined => {
     const key = activeKey();
-    return items().find((item) => item.key === key) ?? pending()[0];
+    return items().find((item) => item.key === key) ?? pendingHere()[0];
   };
-  const book = (): ReviewBook | undefined => active()?.book ?? panel.units.readerBooks()[0];
+  const book = (): ReviewBook | undefined =>
+    panel.units.readerBooks().find((entry) => entry.bookId === bookId()) ?? active()?.book;
+  /** The first undecided card in the next book that has one, after this book in reading order. */
+  const nextBook = (): Item | undefined => {
+    const books = panel.units.readerBooks().map((entry) => entry.bookId);
+    const at = books.indexOf(bookId() ?? books[0]);
+    // This book's followers first, then round to the start.
+    const order = [...books.slice(at + 1), ...books.slice(0, Math.max(at, 0))];
+    for (const next of order) {
+      const found = pending().find((item) => item.book.bookId === next);
+      if (found !== undefined) return found;
+    }
+    return undefined;
+  };
 
-  // No USFM switch here: the text shows USFM only while the active card is a
-  // change the normal view cannot show, and leaving Review puts the mode back.
+  // The text stays in the mode the person chose: deciding never switches it. A
+  // markup-only card's badge shows USFM on request, and leaving Review puts the
+  // mode back as it was.
   const modeBefore = untrack(() => panel.shell.mode());
-  createEffect(
-    () => {
-      const item = active();
-      return item !== undefined && usfmOnly(item);
-    },
-    (wanted) => {
-      panel.shell.setMode(wanted ? "usfm" : "default");
-    },
-  );
+  const usfm = (): boolean => panel.shell.mode() === "usfm";
+  const toggleUsfm = (): void => panel.shell.setMode(usfm() ? "default" : "usfm");
   onCleanup(() => panel.shell.setMode(modeBefore));
 
   /** `stay`: decided from the text itself, so the text keeps its place; only the card list moves. */
   const decide = (item: Item, outcome: "accepted" | "rejected" | undefined, stay = false): void => {
     const side =
       outcome === undefined ? undefined : outcome === "accepted" ? item.accept : other(item.accept);
-    // The next undecided card becomes the active one, as a suggestion list moves on.
-    const after = pending();
+    // The next undecided card in this book becomes the active one, as a
+    // suggestion list moves on; another book waits for "Next book".
+    const after = pending().filter((each) => each.book.bookId === item.book.bookId);
     const at = after.findIndex((each) => each.key === item.key);
     setPopup(undefined);
     if (outcome !== undefined) {
@@ -952,6 +1052,8 @@ export function InlineReview(props: { readonly panel: PanelModel }): JSX.Element
               editable={panel.writes.editable()}
               onActivate={(item) => pick(item.key)}
               onUndo={(item) => decide(item, undefined)}
+              usfm={usfm()}
+              onToggleUsfm={toggleUsfm}
             />
             {/* Keyed by card, so a decision does not remake every card (and lose the list's place). */}
             <For each={listed()} keyed={(item: Item) => item.key}>
@@ -967,7 +1069,9 @@ export function InlineReview(props: { readonly panel: PanelModel }): JSX.Element
                   <div class={cx("min-h-0", folding().has(item().key) && "overflow-hidden")}>
                     <PendingCard
                       item={item()}
-                      what={whatOf(item(), usfmOnly(item()))}
+                      what={whatOf(item())}
+                      usfm={usfm()}
+                      onToggleUsfm={toggleUsfm}
                       active={!folding().has(item().key) && active()?.key === item().key}
                       editable={panel.writes.editable()}
                       onActivate={() => pick(item().key)}
@@ -977,6 +1081,28 @@ export function InlineReview(props: { readonly panel: PanelModel }): JSX.Element
                 </div>
               )}
             </For>
+            <Show
+              when={pendingHere().length === 0 && pending().length > 0 ? nextBook() : undefined}
+            >
+              {(next) => (
+                <div
+                  class="flex flex-col items-center gap-3 px-4 py-6 text-center"
+                  data-inline-book-done
+                >
+                  <p class="text-small text-on-surface-secondary">
+                    Every change in {book()?.name ?? ""} is decided.
+                  </p>
+                  <Button
+                    size="md"
+                    variant="primary"
+                    data-inline-next-book
+                    onClick={() => pick(next().key)}
+                  >
+                    Next book: {next().book.name}
+                  </Button>
+                </div>
+              )}
+            </Show>
             <Show when={pending().length === 0}>
               <p class="px-4 py-6 text-center text-small text-on-surface-secondary">
                 Every change is decided. Save to keep them as a version.
