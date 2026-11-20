@@ -1,16 +1,18 @@
+import ChevronDown from "lucide-solid/icons/chevron-down";
 import CircleHelp from "lucide-solid/icons/circle-help";
 import Save from "lucide-solid/icons/save";
 import { Match, Show, Switch, createSignal, onCleanup } from "solid-js";
 
 import { m } from "#app/paraglide/messages";
 
-import { Badge, Button, Tooltip } from "../../primitives";
+import { Badge, Button, Popover, Tooltip } from "../../primitives";
 import { useBackToEditor } from "../../workspace/BackToEditor";
 import { bookCount, changeCount } from "../reader/helpers";
 import type { Compare } from "./createCompare";
 import type { Decisions } from "./createDecisions";
 import type { SaveForm } from "./createSaveForm";
 import type { Sides } from "./createSides";
+import { SourcePicker } from "./SourcePicker";
 
 interface ReviewHeaderProps {
   readonly sides: Sides;
@@ -50,9 +52,69 @@ function why(reason: ReviewReason, changes: number, books: number): string {
   }
 }
 
+function SidePicker(props: { readonly sides: Sides; readonly side: "left" | "right" }) {
+  return (
+    <SourcePicker
+      side={props.side}
+      from={(props.side === "left") === props.sides.editorFirst()}
+      value={props.side === "left" ? props.sides.leftId() : props.sides.rightId()}
+      other={props.side === "left" ? props.sides.rightId() : props.sides.leftId()}
+      picked={props.side === "left" ? props.sides.leftPicked() : props.sides.rightPicked()}
+      choice={props.sides.choiceOf(
+        props.side === "left" ? props.sides.leftId() : props.sides.rightId(),
+      )}
+      choices={props.sides.choices()}
+      onPick={props.sides.pick}
+    />
+  );
+}
+
+/** What is compared, and the door to change it: another version from history, a zip, the shared project. */
+function SourcesPopover(props: { readonly sides: Sides }) {
+  const label = (): string =>
+    props.sides.editorFirst()
+      ? `${props.sides.leftLabel()} → ${props.sides.rightLabel()}`
+      : `${props.sides.rightLabel()} → ${props.sides.leftLabel()}`;
+  return (
+    <Popover
+      label={m.review_what_is_compared()}
+      align="start"
+      class="w-[min(35rem,90vw)]"
+      trigger={
+        <button
+          type="button"
+          data-review-sources
+          title={m.review_change_what_is_compared()}
+          class="-mx-1.5 inline-flex min-w-0 cursor-pointer items-center gap-1 rounded-md px-1.5 py-0.5 text-start text-smallest text-on-surface-secondary transition-colors hover:bg-button-tertiary-surface-hover"
+        >
+          <span class="min-w-0 truncate">{label()}</span>
+          <ChevronDown size={14} aria-hidden="true" class="shrink-0 text-on-surface-tertiary" />
+        </button>
+      }
+    >
+      <div class="space-y-3">
+        <div class="grid gap-3 sm:grid-cols-2">
+          {/* In the order the label reads: the editor first when what is arriving comes second. */}
+          <SidePicker sides={props.sides} side={props.sides.editorFirst() ? "left" : "right"} />
+          <SidePicker sides={props.sides} side={props.sides.editorFirst() ? "right" : "left"} />
+        </div>
+        <Show when={props.sides.leftId() === props.sides.rightId()}>
+          <p class="text-smallest text-on-surface-secondary">
+            {m.review_pick_two_different_sides_a()}
+          </p>
+        </Show>
+        <p class="text-smallest text-on-surface-tertiary">
+          {m.review_a_decision_per_difference_one()}
+        </p>
+      </div>
+    </Popover>
+  );
+}
+
 function HeaderNotices(props: { readonly header: ReviewHeaderProps }) {
   return (
     <>
+      <SourcesPopover sides={props.header.sides} />
       <Show
         when={
           props.header.sides.target() === undefined && props.header.compare.result() !== undefined
@@ -132,7 +194,7 @@ function HeaderActions(props: { readonly header: ReviewHeaderProps }) {
               class="absolute top-full left-0 z-20 mt-2 w-60 rounded-md bg-on-surface-primary px-3 py-2 text-smallest text-surface-primary shadow-medium"
               data-review-save-why
             >
-              Finish reviewing every change before you save.
+              {m.review_finish_every_change_before_save()}
             </span>
           </Show>
         </span>

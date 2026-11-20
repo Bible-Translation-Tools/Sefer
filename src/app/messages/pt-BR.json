@@ -1085,6 +1085,7 @@
   "review_why_incoming": "O projeto compartilhado e seu editor diferem em {changes} em {books}. Escolha o que trazer antes de enviar seu próprio trabalho.",
   "review_why_writer": "O trabalho do Writer traz {changes} em {books}. Escolha o que manter.",
   "review_why_other": "Os dois lados diferem em {changes} em {books}.",
+  "review_finish_every_change_before_save": "Termine de revisar cada alteração antes de salvar.",
   "review_what_is_compared": "O que é comparado",
   "review_change_what_is_compared": "Alterar o que é comparado",
   "review_sending_to_the_shared_project": "Enviando ao projeto compartilhado…",
