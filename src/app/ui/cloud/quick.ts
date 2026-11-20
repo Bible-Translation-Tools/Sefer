@@ -25,63 +25,6 @@ export type QuickAction =
   | "open"
   | "switch-server";
 
-export const quickActionOf = (sync: Sync): QuickAction => {
-  switch (sync.primary) {
-    case "pull":
-    case "combine":
-    case "compare":
-      return "see";
-    case "push":
-      return "send";
-    case "retry":
-      return "check";
-    case "resolve":
-      return "resolve";
-    case "sign-in":
-      return "sign-in";
-    case "switch-server":
-      return "switch-server";
-    case "attach":
-    case "publish":
-      return "open";
-  }
-};
-
-export const quickLabel = (action: QuickAction): string => {
-  switch (action) {
-    case "see":
-      return m.cloud_see_the_changes();
-    case "send":
-      return m.common_send_my_changes();
-    case "check":
-      return m.cloud_check_for_changes();
-    case "resolve":
-      return m.cloud_finish_the_transfer();
-    case "sign-in":
-      return m.common_sign_in();
-    case "open":
-      return m.common_set_up_sharing();
-    case "switch-server":
-      return m.cloud_switch_servers();
-  }
-};
-
-export const attentionOf = (sync: Sync | undefined): "none" | "tint" | "alert" => {
-  if (sync === undefined || sync.reading.origin === undefined) return "none";
-  switch (sync.state) {
-    case "behind":
-    case "diverged":
-    case "conflicted":
-    case "unauthorized":
-    case "elsewhere":
-      return "alert";
-    case "ahead":
-      return sync.reading.sendRefused ? "alert" : "tint";
-    default:
-      return "none";
-  }
-};
-
 export const shareableLink = (origin: string): string => {
   try {
     const url = new URL(origin);

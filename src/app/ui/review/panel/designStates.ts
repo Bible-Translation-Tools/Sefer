@@ -161,7 +161,7 @@ interface DesignStatesInputs {
   readonly setLayout: (layout: ReviewLayout) => void;
 }
 
-export const LAYOUTS = ["cards", "inline"] as const;
+const LAYOUTS = ["cards", "inline"] as const;
 export type ReviewLayout = (typeof LAYOUTS)[number];
 
 const recorded = (head: string, texts: ReadonlyMap<BookId, Source>): RecordedStandIn => ({

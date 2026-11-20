@@ -18,7 +18,7 @@ export interface RecordedStandIn {
   readonly texts: ReadonlyMap<BookId, Source>;
 }
 
-export interface DesignStandIn {
+interface DesignStandIn {
   readonly head?: RecordedStandIn;
   readonly shared?: RecordedStandIn;
   readonly base?: RecordedStandIn;
