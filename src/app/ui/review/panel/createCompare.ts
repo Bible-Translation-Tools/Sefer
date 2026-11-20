@@ -159,10 +159,82 @@ function createCompareRun(inputs: CompareInputs, setters: CompareSetters) {
       });
   };
 
-  return { runCompare, computed: () => state.computed };
+  /**
+   * Review just wrote `text` into the editor's book: diff that one book now, so
+   * the text repaints as the decision lands rather than after the typing pause
+   * and a whole compare. The compare that follows confirms it.
+   */
+  const patchLive = (bookId: BookId, text: string): void => {
+    const held = state.computed;
+    if (held === undefined || untrack(leftId) !== "project") return;
+    const books = held.result.books.map((book) =>
+      book.bookId === bookId
+        ? { ...book, leftText: text, identical: text === book.rightText }
+        : book,
+    );
+    const book = books.find((entry) => entry.bookId === bookId);
+    if (book?.rightText === undefined) return;
+    const result = {
+      ...held.result,
+      books,
+      changedBooks: books.filter((entry) => !entry.identical).length,
+    };
+    const skeletons = new Map(held.skeletons);
+    if (inReview(decisions, book)) {
+      const patching = services.composition.observability.operation("review.diff.patch", {
+        "review.book": bookId,
+        "review.chars": text.length,
+      });
+      skeletons.set(
+        bookId,
+        diffSkeleton(services.galley, bookId, book.rightText, text, {
+          unchanged: decidedIn(decisions, bookId),
+        }),
+      );
+      patching.end("passed");
+    }
+    state.computed = { result, skeletons };
+    setResult(result);
+  };
+
+  /**
+   * Typing in the editor's book: patch each book whose text moved on, so a
+   * deleted word turns into its struck-through ghost as it goes rather than
+   * vanishing until the typing pause's compare. A screen's choice
+   * (`patchWhileTyping`): where nothing is drawn inline, the pause's one
+   * compare is the cheaper answer.
+   */
+  let patching = false;
+  const patchWhileTyping = (on: boolean): void => {
+    patching = on;
+  };
+  const patchTyped = (): void => {
+    if (!patching) return;
+    const held = state.computed;
+    const project = inputs.shell.project();
+    if (held === undefined || project === undefined || untrack(leftId) !== "project") return;
+    for (const compared of held.result.books) {
+      const text = project.book(compared.bookId)?.source().text;
+      if (text !== undefined && compared.leftText !== undefined && text !== compared.leftText)
+        patchLive(compared.bookId, text);
+    }
+  };
+
+  return {
+    runCompare,
+    computed: () => state.computed,
+    patchLive,
+    patchTyped,
+    patchWhileTyping,
+  };
 }
 
-function watchSides(inputs: CompareInputs, revisions: () => string, runCompare: () => void): void {
+function watchSides(
+  inputs: CompareInputs,
+  revisions: () => string,
+  runCompare: () => void,
+  patchTyped: () => void,
+): void {
   const { leftId, rightId, leftPicked, rightPicked, version, shared, live } = inputs.sides;
   let lastSides: string | undefined;
   let typing: ReturnType<typeof setTimeout> | undefined;
@@ -184,6 +256,7 @@ function watchSides(inputs: CompareInputs, revisions: () => string, runCompare: 
         untrack(runCompare);
         return;
       }
+      untrack(patchTyped);
       typing = setTimeout(() => {
         typing = undefined;
         untrack(runCompare);
@@ -256,12 +329,15 @@ export function createCompare(inputs: CompareInputs) {
     return project.books.map((book) => shell.stampOf(book.id)?.revision ?? -1).join(",");
   };
 
-  const { runCompare, computed } = createCompareRun(inputs, {
-    setResult,
-    setSelected,
-    setComparing,
-  });
-  watchSides(inputs, revisions, runCompare);
+  const { runCompare, computed, patchLive, patchTyped, patchWhileTyping } = createCompareRun(
+    inputs,
+    {
+      setResult,
+      setSelected,
+      setComparing,
+    },
+  );
+  watchSides(inputs, revisions, runCompare, patchTyped);
 
   const changed = (): readonly BookComparison[] => {
     decisions();
@@ -270,7 +346,18 @@ export function createCompare(inputs: CompareInputs) {
 
   const { skeletons, diffRefusal } = createSkeletons(inputs, result, selected, computed);
 
-  return { result, selected, setSelected, comparing, revisions, changed, skeletons, diffRefusal };
+  return {
+    result,
+    selected,
+    setSelected,
+    comparing,
+    revisions,
+    changed,
+    skeletons,
+    diffRefusal,
+    patchLive,
+    patchWhileTyping,
+  };
 }
 
 export type Compare = ReturnType<typeof createCompare>;

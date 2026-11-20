@@ -56,6 +56,17 @@ export interface DiffHunk {
   readonly old?: () => HTMLElement;
   /** What the bar's tooltip says of it: "Changed 3:5". */
   readonly label?: string;
+  /**
+   * Removed words, drawn struck through where they stood — open or closed —
+   * so the one text reads as tracked changes. Not part of the document: the
+   * caret steps over them and typing never lands in them.
+   */
+  readonly ghosts?: readonly {
+    readonly at: number;
+    readonly text: string;
+    /** Words arriving rather than leaving: drawn as an addition, not struck through. */
+    readonly added?: boolean;
+  }[];
 }
 
 export interface DiffPaint {
@@ -64,6 +75,11 @@ export interface DiffPaint {
   readonly controls: readonly DiffControl[];
   /** Units drawn as Zed hunks (bars, opened on request), for a one-text view. */
   readonly hunks?: readonly DiffHunk[];
+  /**
+   * Notes drawn as rows of their own between lines, not part of the text: "Psalms
+   * 4–150 · No content available". `at` is a line start, or the text's end.
+   */
+  readonly notes?: readonly { readonly at: number; readonly text: string }[];
 }
 
 export interface DiffViewOptions {
@@ -108,6 +124,39 @@ class Built extends WidgetType {
   }
   override ignoreEvent(): boolean {
     return false;
+  }
+}
+
+class Note extends WidgetType {
+  constructor(readonly text: string) {
+    super();
+  }
+  override eq(other: Note): boolean {
+    return other.text === this.text;
+  }
+  toDOM(): HTMLElement {
+    const row = document.createElement("div");
+    row.className = "cm-diff-note";
+    row.textContent = this.text;
+    return row;
+  }
+}
+
+class Ghost extends WidgetType {
+  constructor(
+    readonly text: string,
+    readonly added: boolean,
+  ) {
+    super();
+  }
+  override eq(other: Ghost): boolean {
+    return other.text === this.text && other.added === this.added;
+  }
+  toDOM(): HTMLElement {
+    const span = document.createElement("span");
+    span.className = this.added ? "cm-diff-added cm-diff-ghost" : "cm-diff-removed cm-diff-ghost";
+    span.textContent = this.text;
+    return span;
   }
 }
 
@@ -157,6 +206,17 @@ const decorate = (state: EditorState, paint: DiffPaint): DecorationSet => {
   for (const mark of paint.marks)
     if (mark.to > mark.from && mark.to <= doc.length)
       ranges.push({ from: mark.from, to: mark.to, deco: Decoration.mark({ class: mark.class }) });
+  for (const note of paint.notes ?? [])
+    if (note.at <= doc.length)
+      ranges.push({
+        from: note.at,
+        to: note.at,
+        deco: Decoration.widget({
+          widget: new Note(note.text),
+          block: true,
+          side: note.at === doc.length ? 1 : -1,
+        }),
+      });
   return Decoration.set(
     ranges.map((range) => range.deco.range(range.from, range.to)),
     true,
@@ -199,6 +259,15 @@ const decorateHunks = (
     for (const mark of hunk.marks)
       if (mark.to > mark.from && mark.to <= doc)
         ranges.push(Decoration.mark({ class: mark.class }).range(mark.from, mark.to));
+  for (const hunk of hunks)
+    for (const ghost of hunk.ghosts ?? [])
+      if (ghost.at <= doc && ghost.text !== "")
+        ranges.push(
+          Decoration.widget({
+            widget: new Ghost(ghost.text, ghost.added === true),
+            side: -1,
+          }).range(ghost.at),
+        );
   return Decoration.set(ranges, true);
 };
 
@@ -241,7 +310,9 @@ const paintField = StateField.define<Painted>({
       touched.push({ from: fromB, to: toB }),
     );
     const keep = (from: number, to: number, value: Decoration): boolean =>
-      !WORD_MARKS.has(String(value.spec.class)) ||
+      !String(value.spec.class)
+        .split(" ")
+        .some((name) => WORD_MARKS.has(name)) ||
       !touched.some((range) => range.from <= to && range.to >= from);
     return {
       ...held,

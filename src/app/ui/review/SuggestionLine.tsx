@@ -5,6 +5,7 @@ import { m } from "#app/paraglide/messages";
 
 import { collaboration } from "../../collaboration";
 import { describe } from "../../describe";
+import { designStandIn } from "../../designStandIn";
 import { useShell, type Navigate, type Shell } from "../../ProjectContext";
 import { declineSuggestion, suggestionDetails, type SuggestionDetails } from "../../suggestions";
 import { ago } from "../panels/format";
@@ -90,7 +91,11 @@ export function SuggestionLine(props: { readonly number: number }) {
     name: "reviewSuggestion",
   });
   createEffect(
-    () => ({ project: shell.project(), number: props.number }),
+    () => ({
+      project: shell.project(),
+      number: props.number,
+      standIn: __SEFER_DESIGN__ ? designStandIn().suggestion : undefined,
+    }),
     ({ project, number }) => {
       if (project === undefined) return;
       void suggestionDetails(shell.services, project, number).then(setDetails);

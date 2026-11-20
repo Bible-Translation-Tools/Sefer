@@ -1,6 +1,4 @@
 import type { JSX } from "@solidjs/web";
-import ArrowDown from "lucide-solid/icons/arrow-down";
-import ArrowUp from "lucide-solid/icons/arrow-up";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import Columns2 from "lucide-solid/icons/columns-2";
 import { For, Show } from "solid-js";
@@ -9,7 +7,6 @@ import { m } from "#app/paraglide/messages";
 
 import {
   Button,
-  IconButton,
   Menu,
   MenuCheckbox,
   MenuLabel,
@@ -30,7 +27,6 @@ interface ReaderToolbarProps {
   readonly usfm: boolean;
   readonly onUsfm: (on: boolean) => void;
   readonly counter: string | undefined;
-  readonly onStep: (delta: 1 | -1) => void;
   readonly decideAll?: JSX.Element;
 }
 
@@ -118,18 +114,6 @@ function StepControls(props: { readonly toolbar: ReaderToolbarProps }) {
           {props.toolbar.counter}
         </span>
       </Show>
-      <IconButton
-        size="sm"
-        label={m.review_previous_change_alt_shift_f5()}
-        icon={<ArrowUp />}
-        onClick={() => props.toolbar.onStep(-1)}
-      />
-      <IconButton
-        size="sm"
-        label={m.review_next_change_alt_f5()}
-        icon={<ArrowDown />}
-        onClick={() => props.toolbar.onStep(1)}
-      />
     </div>
   );
 }

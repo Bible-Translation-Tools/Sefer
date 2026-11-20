@@ -8,6 +8,7 @@ import { Git, repositoryPath, type Repo } from "#core/git/git";
 import type { Project } from "#core/project/project";
 import { trackingRef } from "#core/sync";
 
+import { designStandIn } from "../../designStandIn";
 import type { Shell } from "../../ProjectContext";
 
 export interface Recorded {
@@ -137,5 +138,11 @@ export const createRecordedVersion = (
     },
   );
 
-  return { recorded, refresh: () => load(shell.project()) };
+  const standIn = (): Recorded | undefined => {
+    if (!__SEFER_DESIGN__) return undefined;
+    const held = designStandIn()[ref];
+    return held === undefined ? undefined : { head: held.head, texts: held.texts, read: true };
+  };
+
+  return { recorded: () => standIn() ?? recorded(), refresh: () => load(shell.project()) };
 };

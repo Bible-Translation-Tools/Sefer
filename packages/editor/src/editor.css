@@ -216,13 +216,13 @@
   margin: 0 auto;
   /* 3rem a side: the text's own 1.5rem, and the 1.5rem the panel no longer
      pads, so the scroller can run flush to the panel's edge. */
-  /* The end side gives up the scrollbar's 12px, which always sits there
+  /* The end side gives up the scrollbar's 20px (the app-wide one in tokens.css), which always sits there
      (`scrollbar-gutter`, below): the text is 3rem from the panel's edge on
      both sides (Thomas, 2026-11-16). */
-  padding: 56px calc(3rem - 12px) 30vh 3rem;
+  padding: 56px calc(3rem - 20px) 30vh 3rem;
   /* The measure is the TEXT's width: the padding either side is added to it. */
-  max-width: calc(var(--editor-measure) + 6rem - 12px);
-  min-width: calc(var(--editor-measure-min) + 6rem - 12px);
+  max-width: calc(var(--editor-measure) + 6rem - 20px);
+  min-width: calc(var(--editor-measure-min) + 6rem - 20px);
   font-family: var(--font-scripture);
   /* The reader's own size (`editor.fontSize`, written onto <html> by
      `src/app/ui/theme.ts`). The fallback is the value this was hardcoded to,
@@ -495,6 +495,14 @@
   padding: 0;
   height: 0;
 }
+/* A diff can anchor a removed line's struck-through words at the stanza break
+   after it. A zero-height break would let them spill over the next verse, so
+   one holding them is a line again, at the first poetry indent. */
+.cm-mode-regular .usfm-b:has(.cm-diff-ghost) {
+  height: auto;
+  padding-inline-start: calc(var(--usfm-indent) * 1em);
+}
+
 /* A \b is Shift-Enter's line break: the line before it keeps less than a
    paragraph's gap, so the break reads as a new line, not a new paragraph.
    Specific enough to win over the stanza's end, which a \b would otherwise be. */
@@ -2341,6 +2349,19 @@
   text-decoration: wavy underline;
 }
 
+/* A row between lines that is not text: a chapter the book lacks. */
+.cm-diff-note {
+  margin-block: 1.5em;
+  padding: 0.75em 1em;
+  border-radius: 0.75rem;
+  background: var(--surface-secondary);
+  color: var(--on-surface-secondary);
+  font-family: var(--font-sans, inherit);
+  font-size: 0.8em;
+  text-align: center;
+  user-select: none;
+}
+
 /* The floating Find box: every match outlined in yellow, the one the reader
    is on filled, and the text outside its verse greyed (Thomas, 2026-11-16). */
 .usfm-find {
@@ -2358,26 +2379,4 @@
 }
 .cm-host .cm-editor .usfm-find-dim .usfm-find {
   color: inherit;
-}
-
-/* The editor's and the reference's own scrollbars: no track, no border, a
-   thumb dark enough to find (Thomas, 2026-11-16). */
-.cm-host .cm-scroller::-webkit-scrollbar {
-  width: 12px;
-  height: 12px;
-  background: transparent;
-}
-.cm-host .cm-scroller::-webkit-scrollbar-track,
-.cm-host .cm-scroller::-webkit-scrollbar-corner {
-  background: transparent;
-  border: 0;
-}
-.cm-host .cm-scroller::-webkit-scrollbar-thumb {
-  background-color: var(--on-surface-tertiary);
-  background-clip: padding-box;
-  border: 3px solid transparent;
-  border-radius: 9999px;
-}
-.cm-host .cm-scroller::-webkit-scrollbar-thumb:hover {
-  background-color: var(--on-surface-secondary);
 }

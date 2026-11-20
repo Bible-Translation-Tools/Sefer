@@ -1,18 +1,17 @@
+import type { JSX } from "@solidjs/web";
 import { useNavigate } from "@tanstack/solid-router";
 import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import Scale from "lucide-solid/icons/scale";
-import { Show, createEffect, createSignal, onCleanup, untrack, type Accessor } from "solid-js";
+import { Show, createEffect, createSignal, untrack, type Accessor } from "solid-js";
 
 import type { BookComparison } from "#core/compare";
 
 import { m } from "../../paraglide/messages";
 import { useShell, type Navigate, type Shell } from "../../ProjectContext";
 import type { Services } from "../../services";
-import { EmptyState } from "../primitives";
+import { EmptyState, cx } from "../primitives";
 import { bookName } from "../workspace/books";
-import { ChangesHistorySidebar } from "../workspace/ChangesHistorySidebar";
 import { metadataOf } from "../workspace/project";
-import { claimSidebar } from "../workspace/sidebarSlot";
 import { createCompare, type Compare } from "./panel/createCompare";
 import { createDecisions, type Decisions } from "./panel/createDecisions";
 import { createReceipt, type Receipt } from "./panel/createReceipt";
@@ -22,11 +21,14 @@ import { createSaveForm, type SaveForm } from "./panel/createSaveForm";
 import { createSides, type Sides } from "./panel/createSides";
 import { createUnits, type Units } from "./panel/createUnits";
 import { createWrites, type Writes } from "./panel/createWrites";
+import { designReviewStates, type ReviewLayout } from "./panel/designStates";
 import { ReviewBody } from "./panel/ReviewBody";
-import { ReviewHeader } from "./panel/ReviewHeader";
+import { ReviewHeader, type ReviewReason } from "./panel/ReviewHeader";
 import { SaveDialog } from "./panel/SaveDialog";
 
-interface PanelModel {
+type InlineView = (props: { readonly panel: PanelModel }) => JSX.Element;
+
+export interface PanelModel {
   readonly shell: Shell;
   readonly navigate: Navigate;
   readonly route: ReviewRoute;
@@ -38,8 +40,6 @@ interface PanelModel {
   readonly writes: Writes;
   readonly receipt: Receipt;
   readonly record: RecordAction;
-  readonly sourcesOpen: Accessor<boolean>;
-  readonly setSourcesOpen: (open: boolean) => void;
   readonly busy: Accessor<string>;
   readonly note: Accessor<string>;
   readonly cardEditing: Accessor<boolean>;
@@ -47,6 +47,8 @@ interface PanelModel {
   readonly settled: () => boolean;
   readonly emptySide: () => string | undefined;
   readonly bookLabel: (book: BookComparison) => string;
+  /** DESIGN SCAFFOLDING: the header's title or actions, for a layout that places them itself. */
+  readonly header: (part: "title" | "actions", saveReady?: () => boolean) => JSX.Element;
 }
 
 interface PanelBase {
@@ -64,7 +66,15 @@ function createPanelParts(base: PanelBase) {
   const { shell, services, navigate, route, sides, decisions, setNote, nameOf } = base;
   const compare = createCompare({ shell, services, sides, decisions, setNote });
   const units = createUnits({ services, route, sides, decisions, compare, nameOf });
-  const writes = createWrites({ shell, services, sides, decisions, units, setNote });
+  const writes = createWrites({
+    shell,
+    services,
+    sides,
+    decisions,
+    units,
+    setNote,
+    onWritten: compare.patchLive,
+  });
   const form = createSaveForm({ shell, services, route, sides });
   const receipt = createReceipt({ shell, services, navigate, sides, form });
   const record = createRecordAction({
@@ -100,22 +110,33 @@ function watchRoute(route: ReviewRoute, decisions: Decisions, sides: Sides): voi
   );
 }
 
-function ReviewHeaderView(props: { readonly panel: PanelModel }) {
+function reasonOf(panel: PanelModel): ReviewReason {
+  if (panel.route.pull() !== undefined) return "suggestion";
+  if (panel.route.fromCopy()) return "copy";
+  if (panel.sides.againstShared()) return "incoming";
+  if (panel.sides.againstWriter()) return "writer";
+  const ids = new Set([panel.sides.leftId(), panel.sides.rightId()]);
+  return ids.has("project") && ids.has("disk") ? "unsaved" : "other";
+}
+
+function ReviewHeaderView(props: {
+  readonly panel: PanelModel;
+  readonly part?: "title" | "actions";
+  readonly saveReady?: () => boolean;
+}) {
   return (
     <ReviewHeader
       sides={props.panel.sides}
       compare={props.panel.compare}
       decisions={props.panel.decisions}
       form={props.panel.form}
-      sourcesOpen={props.panel.sourcesOpen()}
-      onSourcesOpenChange={props.panel.setSourcesOpen}
-      sourcesLabel={
-        props.panel.sides.editorFirst()
-          ? `${props.panel.sides.leftLabel()} → ${props.panel.sides.rightLabel()}`
-          : `${props.panel.sides.rightLabel()} → ${props.panel.sides.leftLabel()}`
-      }
       busy={props.panel.busy()}
       note={props.panel.note()}
+      reason={reasonOf(props.panel)}
+      changes={props.panel.compare.result() === undefined ? 0 : props.panel.units.totals().total}
+      books={props.panel.compare.result()?.changedBooks ?? 0}
+      part={props.part}
+      saveReady={props.saveReady?.()}
     />
   );
 }
@@ -170,22 +191,11 @@ export function ReviewPanel() {
   const navigate = useNavigate();
   const { services } = shell;
   const route = createReviewRoute(shell);
-  onCleanup(
-    claimSidebar(
-      () => (
-        <ChangesHistorySidebar active="changes" changes={0}>
-          <p class="px-6 pt-3 text-small text-on-surface-tertiary">{m.review_nothing_differs()}</p>
-        </ChangesHistorySidebar>
-      ),
-      { show: m.sidebar_show_changes(), hide: m.sidebar_hide_changes() },
-    ),
-  );
   const [note, setNote] = createSignal("", { name: "reviewNote" });
   const [busy, setBusy] = createSignal("", { name: "reviewBusy" });
   const decisions = createDecisions();
   const sides = createSides({ shell, services, navigate, route, decisions, setNote, setBusy });
   const { leftShort, rightShort, leftLabel, rightLabel } = sides;
-  const [sourcesOpen, setSourcesOpen] = createSignal(false, { name: "reviewSourcesOpen" });
   const [cardEditing, setCardEditing] = createSignal(false, { name: "reviewCardEditing" });
   const nameOf = (bookId: BookId): string => bookName(bookId, metadataOf(shell.project()));
 
@@ -213,6 +223,19 @@ export function ReviewPanel() {
   };
 
   watchRoute(route, decisions, sides);
+  // DESIGN SCAFFOLDING: the inline layout under trial, loaded only into a design build.
+  const [layout, setLayout] = createSignal<ReviewLayout>("cards", {
+    name: "reviewLayout",
+    ownedWrite: true,
+  });
+  const [inline, setInline] = createSignal<InlineView | undefined>(undefined, {
+    name: "reviewInlineView",
+    ownedWrite: true,
+  });
+  if (__SEFER_DESIGN__) {
+    designReviewStates({ shell, route, sides, compare, units, decisions, setLayout });
+    void import("#dev/review/InlineReview").then((module) => setInline(() => module.InlineReview));
+  }
 
   const emptySide = (): string | undefined => {
     const books = compare.result()?.books ?? [];
@@ -237,8 +260,6 @@ export function ReviewPanel() {
     sides,
     decisions,
     ...parts,
-    sourcesOpen,
-    setSourcesOpen,
     busy,
     note,
     cardEditing,
@@ -246,17 +267,35 @@ export function ReviewPanel() {
     settled,
     emptySide,
     bookLabel,
+    header: (part, saveReady) => (
+      <ReviewHeaderView panel={panel} part={part} saveReady={saveReady} />
+    ),
   };
 
   return (
-    <main class="flex h-full min-w-0 flex-col gap-2 px-4 pt-3 pb-2" data-review>
+    <main
+      class={cx(
+        "flex h-full min-w-0 flex-col gap-2 px-4 pt-3 pb-2",
+        // DESIGN SCAFFOLDING: the inline layout sits on the canvas, the text and cards on it.
+        layout() === "inline" && "bg-surface-canvas",
+      )}
+      data-review
+    >
       <Show
         when={shell.project()}
         fallback={<EmptyState icon={<Scale size={22} />} title={m.common_open_a_project_first()} />}
       >
-        <ReviewHeaderView panel={panel} />
+        <Show when={layout() !== "inline" || inline() === undefined}>
+          <ReviewHeaderView panel={panel} />
+        </Show>
 
-        <ReviewBodyView panel={panel} />
+        <Show
+          when={layout() === "inline" ? inline() : undefined}
+          fallback={<ReviewBodyView panel={panel} />}
+          keyed
+        >
+          {(View) => untrack(() => View({ panel }))}
+        </Show>
 
         <SaveDialogView panel={panel} />
       </Show>

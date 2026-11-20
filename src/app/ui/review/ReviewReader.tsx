@@ -2,7 +2,7 @@ import type { JSX } from "@solidjs/web";
 import type { EditorBook } from "@wycliffeassociates/sefer-editor";
 import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import { Effect } from "effect";
-import { Show, createMemo, createSignal, onCleanup, untrack, type Accessor } from "solid-js";
+import { Show, createMemo, createSignal, untrack, type Accessor } from "solid-js";
 
 import type { Analysis, DecisionUnit, MergeSide } from "#core/galley";
 
@@ -15,8 +15,6 @@ import type { CardAction } from "../multibuffer/CardAction";
 import type { ContextStep } from "../multibuffer/cardState";
 import { createCardViews } from "../multibuffer/cardViews";
 import { EmptyState, type VirtualSection } from "../primitives";
-import { claimSidebar } from "../workspace/sidebarSlot";
-import { BooksSidebar } from "./reader/BooksSidebar";
 import { ChangeCards, type CardItem } from "./reader/ChangeCards";
 import { createChapterNav, type ChapterNav } from "./reader/createChapterNav";
 import { createCursor, type Cursor } from "./reader/createCursor";
@@ -73,7 +71,6 @@ interface ReviewReaderProps {
   readonly currentFirst?: boolean;
   readonly writesDecisions?: boolean;
   readonly dimUnchosen?: boolean;
-  readonly claimSidebar?: boolean;
   readonly sides?: (
     hunk: Hunk,
     split: boolean,
@@ -365,7 +362,6 @@ function ReaderToolbarView(props: { readonly reader: ReaderModel }): JSX.Element
       counter={
         props.reader.cursor.place() === undefined ? undefined : props.reader.cursor.counter()
       }
-      onStep={props.reader.cursor.step}
       decideAll={
         <DecideAll
           decidable={props.reader.props.decidable}
@@ -516,7 +512,7 @@ export function ReviewReader(props: ReviewReaderProps) {
     prepared().find((held) => held.book.bookId === props.selected) ?? prepared()[0];
 
   const { decide, replacedOf } = createReplaced(props, prepared);
-  const { controls, decidedOf } = createControls(props, prepared, decide);
+  const { controls } = createControls(props, prepared, decide);
 
   const cursor = createCursor({
     scope,
@@ -542,29 +538,6 @@ export function ReviewReader(props: ReviewReaderProps) {
   const cardDecision = (hunk: Hunk): readonly CardAction[] =>
     cardDecisionFor(props, split, hunk, decide);
   const sections = createSections(prepared);
-
-  if (untrack(() => props.claimSidebar) !== false)
-    onCleanup(
-      claimSidebar(
-        () => (
-          <BooksSidebar
-            books={prepared()}
-            focused={
-              scope() === "book"
-                ? selectedBook()?.book.bookId
-                : (cursor.activeBook() ?? prepared()[0]?.book.bookId)
-            }
-            decidable={props.decidable}
-            decidedOf={decidedOf}
-            baselineShort={props.baselineShort}
-            currentShort={props.currentShort}
-            onPick={cursor.pickBook}
-            onDecide={(bookId, units, side) => decide(bookId, units, side)}
-          />
-        ),
-        { show: m.sidebar_show_changes(), hide: m.sidebar_hide_changes() },
-      ),
-    );
 
   const editable = (): boolean => props.decidable;
 
