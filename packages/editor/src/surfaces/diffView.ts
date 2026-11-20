@@ -61,7 +61,12 @@ export interface DiffHunk {
    * so the one text reads as tracked changes. Not part of the document: the
    * caret steps over them and typing never lands in them.
    */
-  readonly ghosts?: readonly { readonly at: number; readonly text: string }[];
+  readonly ghosts?: readonly {
+    readonly at: number;
+    readonly text: string;
+    /** Words arriving rather than leaving: drawn as an addition, not struck through. */
+    readonly added?: boolean;
+  }[];
 }
 
 export interface DiffPaint {
@@ -138,15 +143,18 @@ class Note extends WidgetType {
 }
 
 class Ghost extends WidgetType {
-  constructor(readonly text: string) {
+  constructor(
+    readonly text: string,
+    readonly added: boolean,
+  ) {
     super();
   }
   override eq(other: Ghost): boolean {
-    return other.text === this.text;
+    return other.text === this.text && other.added === this.added;
   }
   toDOM(): HTMLElement {
     const span = document.createElement("span");
-    span.className = "cm-diff-removed cm-diff-ghost";
+    span.className = this.added ? "cm-diff-added cm-diff-ghost" : "cm-diff-removed cm-diff-ghost";
     span.textContent = this.text;
     return span;
   }
@@ -254,7 +262,12 @@ const decorateHunks = (
   for (const hunk of hunks)
     for (const ghost of hunk.ghosts ?? [])
       if (ghost.at <= doc && ghost.text !== "")
-        ranges.push(Decoration.widget({ widget: new Ghost(ghost.text), side: -1 }).range(ghost.at));
+        ranges.push(
+          Decoration.widget({
+            widget: new Ghost(ghost.text, ghost.added === true),
+            side: -1,
+          }).range(ghost.at),
+        );
   return Decoration.set(ranges, true);
 };
 

@@ -177,8 +177,6 @@ type TextRun = NonNullable<DecisionUnit["text"]>["current"][number];
  * between two changed words is not a break: "Let me tell of" → "I will
  * proclaim" is one stretch, not four, so it reads as one tracked change
  * ("~~Let me tell of~~ I will proclaim") rather than alternating word by word.
- * Both sides' unchanged runs come in the same order, so stretch k on one side
- * pairs with stretch k on the other.
  */
 interface Stretch {
   /** The first and last changed run of the stretch, if it has any. */
@@ -213,29 +211,89 @@ const stretchesOf = (runs: readonly TextRun[], usfm: boolean, start: number): St
 };
 
 /**
+ * A changed run's anchor: how many unchanged non-space characters come before
+ * it on its own side. Both sides hold the same unchanged words, so a removed
+ * stretch and the added one that replaced it share an anchor however the two
+ * sides cut their unchanged text into runs, and a space alone never parts them.
+ */
+const anchored = (
+  runs: readonly TextRun[],
+  kind: "removed" | "added",
+  usfm: boolean,
+): Map<number, TextRun[]> => {
+  const out = new Map<number, TextRun[]>();
+  let seen = 0;
+  for (const run of runs) {
+    if (run.kind === "unchanged") {
+      seen += run.text.replace(/\s+/gu, "").length;
+      continue;
+    }
+    if (run.kind !== kind || !visibleRun(run.what, usfm)) continue;
+    const group = out.get(seen);
+    if (group === undefined) out.set(seen, [run]);
+    else group.push(run);
+  }
+  return out;
+};
+
+/**
+ * A changed unit as tracked changes, in reading order: each removed stretch
+ * with the added one that took its place ("" when nothing did), paired by the
+ * same anchor the inline paint uses.
+ */
+export const replacements = (
+  unit: DecisionUnit,
+  usfm: boolean,
+): readonly { readonly removed: string; readonly added: string }[] => {
+  const removed = anchored(unit.text?.baseline ?? [], "removed", usfm);
+  const added = anchored(unit.text?.current ?? [], "added", usfm);
+  const text = (runs: readonly TextRun[] | undefined): string =>
+    (runs ?? []).map((run) => run.text).join(" ");
+  return [...new Set([...removed.keys(), ...added.keys()])]
+    .toSorted((a, b) => a - b)
+    .map((anchor) => ({ removed: text(removed.get(anchor)), added: text(added.get(anchor)) }));
+};
+
+/** The current-text offset just after `count` unchanged non-space characters, and the spaces after them. */
+const offsetAfter = (runs: readonly TextRun[], count: number, start: number): number => {
+  let left = count;
+  let at = start;
+  for (const run of runs) {
+    if (run.kind !== "unchanged") {
+      if (left === 0) return at;
+      continue;
+    }
+    at = run.from;
+    for (const char of run.text) {
+      if (left === 0 && !/\s/u.test(char)) return at;
+      if (!/\s/u.test(char)) left -= 1;
+      at += char.length;
+    }
+  }
+  return at;
+};
+
+/**
  * Where each stretch's removed words stand in the current text: just before
- * the words that replaced them, as a tracked change reads ("~~At~~ About").
+ * the words that replaced them, as a tracked change reads ("~~At~~ About"), or
+ * where they stood when nothing replaced them.
  */
 const ghostsOf = (unit: DecisionUnit, usfm: boolean): { at: number; text: string }[] => {
   const baseline = unit.text?.baseline ?? [];
-  const current = stretchesOf(
-    unit.text?.current ?? [],
-    usfm,
-    unit.current?.from ?? unit.place.current,
-  );
-  const was = stretchesOf(baseline, usfm, 0);
-  const out: { at: number; text: string }[] = [];
-  was.forEach((stretch, index) => {
-    if (stretch.first === undefined || stretch.last === undefined) return;
+  const current = unit.text?.current ?? [];
+  const added = anchored(current, "added", usfm);
+  const start = unit.current?.from ?? unit.place.current;
+  return [...anchored(baseline, "removed", usfm)].map(([anchor, runs]) => {
+    const first = runs[0];
+    const last = runs.at(-1);
     const text = baseline
-      .slice(baseline.indexOf(stretch.first), baseline.indexOf(stretch.last) + 1)
+      .slice(baseline.indexOf(first), baseline.indexOf(last ?? first) + 1)
       .filter((run) => run.kind === "unchanged" || visibleRun(run.what, usfm))
       .map((run) => run.text)
       .join("");
-    const now = current[index];
-    out.push({ at: now?.first?.from ?? now?.at ?? 0, text });
+    const replaced = added.get(anchor)?.[0];
+    return { at: replaced?.from ?? offsetAfter(current, anchor, start), text };
   });
-  return out;
 };
 
 /** One mark per stretch of added words, spaces between them included. */
@@ -256,6 +314,11 @@ export const hunkPaint = (
   active: string | undefined = undefined,
   /** A decided change reads as the text it settled on: no marks, unless it is the active one. */
   settled: (unit: DecisionUnit) => boolean = () => false,
+  /**
+   * The change came from the other side, so the words only it has are what
+   * arrives: inline, they read as added and the editor's own as struck through.
+   */
+  incoming: (unit: DecisionUnit) => boolean = () => false,
 ): DiffPaint => {
   const base = sidePaint(units, "current", usfm, controls, analysis);
   const hunks: DiffHunk[] = [];
@@ -264,6 +327,7 @@ export const hunkPaint = (
     const decision = controls?.decision(unit);
     if (!changed(unit) && decision === undefined) continue;
     const quiet = unit.id !== active && settled(unit);
+    const arriving = inlineRemoved && incoming(unit);
     if (span === undefined) {
       // Inline, a whole removed unit reads where it stood, struck through, as
       // removed words do; otherwise it waits behind its bar.
@@ -280,12 +344,14 @@ export const hunkPaint = (
         marks: [],
         old: () => was(unit),
         label: `Removed ${unitReference(unit)}`,
-        ghosts: gone === "" ? undefined : [{ at: unit.place.current, text: `${gone} ` }],
+        ghosts:
+          gone === "" ? undefined : [{ at: unit.place.current, text: `${gone} `, added: arriving }],
       });
       continue;
     }
     const end = usfm ? span.to : readingEnd(analysis, span.from, span.to);
-    const markClass = unit.id === active ? "cm-diff-added cm-diff-active" : "cm-diff-added";
+    const markKind = arriving ? "cm-diff-removed" : "cm-diff-added";
+    const markClass = unit.id === active ? `${markKind} cm-diff-active` : markKind;
     // Inline, a whole added unit is one mark, as added words are.
     const whole =
       inlineRemoved && unit.status === "added" && !quiet
@@ -316,7 +382,9 @@ export const hunkPaint = (
       old: unit.baseline === undefined || !changed(unit) ? undefined : () => was(unit),
       label: `${hunkVerb(unit)} ${unitReference(unit)}`,
       ghosts:
-        inlineRemoved && unit.status === "modified" && !quiet ? ghostsOf(unit, usfm) : undefined,
+        inlineRemoved && unit.status === "modified" && !quiet
+          ? ghostsOf(unit, usfm).map((ghost) => ({ ...ghost, added: arriving }))
+          : undefined,
     });
   }
   return { lines: [], marks: [], controls: base.controls, hunks };

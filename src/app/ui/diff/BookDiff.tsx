@@ -76,6 +76,8 @@ export interface BookDiffProps {
   readonly activeUnit?: string | undefined;
   /** A decided unit draws as plain text (unless it is the active one): the text it settled on. */
   readonly settled?: (unit: DecisionUnit) => boolean;
+  /** A change from the other side: inline, what only that side has reads as arriving. */
+  readonly incoming?: (unit: DecisionUnit) => boolean;
   /** Rows of their own between lines of the one text, e.g. chapters the book lacks. */
   readonly notes?: (text: string) => readonly { readonly at: number; readonly text: string }[];
 }
@@ -109,6 +111,7 @@ interface MountArgs {
   readonly inlineRemoved: boolean;
   readonly active: () => string | undefined;
   readonly settled: (unit: DecisionUnit) => boolean;
+  readonly incoming: (unit: DecisionUnit) => boolean;
   readonly notes: (text: string) => readonly { readonly at: number; readonly text: string }[];
 }
 
@@ -209,6 +212,7 @@ const mountPanes = (args: MountArgs): { held: Mounted[]; release: () => void } =
         args.inlineRemoved,
         args.active(),
         args.settled,
+        args.incoming,
       ),
     }));
     follow("current", current);
@@ -321,6 +325,7 @@ export function BookDiff(props: BookDiffProps) {
         inlineRemoved: untrack(() => props.inlineRemoved === true),
         active: () => untrack(() => props.activeUnit),
         settled: (unit) => untrack(() => props.settled?.(unit) === true),
+        incoming: (unit) => untrack(() => props.incoming?.(unit) === true),
         notes: (text) => untrack(() => props.notes?.(text) ?? []),
       });
       mounts = held;
