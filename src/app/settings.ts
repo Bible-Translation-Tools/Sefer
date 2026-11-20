@@ -2,7 +2,7 @@ import { Schema } from "effect";
 
 import { PRODUCERS, SEVERITIES } from "#core/findings/filter";
 import type { SettingKey, SettingsService } from "#core/host/settings";
-import { DEFAULT_JOURNAL_POLICY } from "#core/recovery/recovery";
+import { DEFAULT_AUTOSAVE_POLICY } from "#core/save/autosave";
 
 import type { Message } from "./i18n";
 import { automaticLocale, nativeName, shippedLocales } from "./locale";
@@ -108,7 +108,8 @@ export interface ShellKeys {
   readonly diffPalette: SettingKey<string>;
   /** What marks a removed word besides its colour: `strike`, `underline` or `none`. */
   readonly diffRemoved: SettingKey<string>;
-  readonly startInUsfmMode: SettingKey<boolean>;
+  /** The view a project opens in: `refine`, `form` (one verse per line) or `usfm`. */
+  readonly startMode: SettingKey<string>;
   /** Whether the settings route shows its advanced group. */
   readonly showAdvancedSettings: SettingKey<boolean>;
   readonly backupIdleMs: SettingKey<number>;
@@ -118,8 +119,9 @@ export interface ShellKeys {
   /** Enables the destructive multi-match action in Find. */
   readonly enableReplaceAll: SettingKey<boolean>;
   readonly showGatewayProjects: SettingKey<boolean>;
+  /** Tech and project manager mode: the Writer migration screens, which are slow and confusing for a translator. */
+  readonly techMode: SettingKey<boolean>;
   /** Ask about unsaved work found when a project opens. Backups are written either way. */
-  readonly offerRecovery: SettingKey<boolean>;
   readonly excerptContext: SettingKey<number>;
   readonly reviewLayout: SettingKey<string>;
   readonly reviewScope: SettingKey<string>;
@@ -181,12 +183,12 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
     locale: settings.register("ui.locale", Schema.String, ""),
     diffPalette: settings.register("review.palette", Schema.String, "standard"),
     diffRemoved: settings.register("review.removedWords", Schema.String, "strike"),
-    startInUsfmMode: settings.register("shell.startInUsfmMode", Schema.Boolean, false),
+    startMode: settings.register("editor.startMode", Schema.String, "refine"),
     showAdvancedSettings: settings.register("shell.showAdvancedSettings", Schema.Boolean, false),
     backupIdleMs: settings.register(
       "shell.backupIdleMs",
       Schema.Number,
-      DEFAULT_JOURNAL_POLICY.idleMs,
+      DEFAULT_AUTOSAVE_POLICY.idleMs,
     ),
     preferChapterView: settings.register("editor.preferChapterView", Schema.Boolean, false),
     lineByLine: settings.register("editor.lineByLine", Schema.Boolean, false),
@@ -197,7 +199,7 @@ export const shellKeys = (settings: SettingsService): ShellKeys => {
     ),
     enableReplaceAll: settings.register("find.enableReplaceAll", Schema.Boolean, false),
     showGatewayProjects: settings.register("projects.showGateways", Schema.Boolean, false),
-    offerRecovery: settings.register("recovery.offerOnOpen", Schema.Boolean, true),
+    techMode: settings.register("shell.techMode", Schema.Boolean, false),
     excerptContext: settings.register("excerpts.context", Schema.Number, 0),
     reviewLayout: settings.register("review.layout", Schema.String, "auto"),
     reviewScope: settings.register("review.scope", Schema.String, "changes"),
@@ -259,7 +261,6 @@ const appearanceRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
   {
     key: keys.theme,
     label: m.settings_display_mode(),
-    description: m.settings_choose_the_theme_used_throughout(),
     kind: "choice",
     group: "appearance",
     options: [
@@ -271,7 +272,6 @@ const appearanceRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
   {
     key: keys.fontSize,
     label: m.settings_interface_text_size(),
-    description: m.settings_scales_every_size_in_the(),
     kind: "number",
     group: "appearance",
     min: 12,
@@ -282,7 +282,6 @@ const appearanceRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
   {
     key: keys.zoom,
     label: m.settings_zoom(),
-    description: m.settings_adjust_the_overall_application_zoom(),
     kind: "number",
     group: "appearance",
     min: 50,
@@ -290,13 +289,18 @@ const appearanceRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
     step: 10,
     unit: "%",
   },
+  {
+    key: keys.techMode,
+    label: m.settings_tech_mode(),
+    kind: "boolean",
+    group: "appearance",
+  },
 ];
 
 const diffRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
   {
     key: keys.diffPalette,
-    label: m.settings_change_colours(),
-    description: m.settings_the_colours_review_draws_added(),
+    label: m.settings_diff_colour_palette(),
     kind: "choice",
     group: "appearance",
     options: [
@@ -307,7 +311,6 @@ const diffRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
   {
     key: keys.diffRemoved,
     label: m.settings_removed_words(),
-    description: m.settings_how_a_removed_word_is(),
     kind: "choice",
     group: "appearance",
     options: [
@@ -323,7 +326,7 @@ const editorRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
   {
     key: keys.editorFontSize,
     label: m.settings_scripture_text_size(),
-    description: m.settings_how_large_the_book_itself(),
+    description: m.settings_editor_text_size_on_its_own(),
     kind: "number",
     group: "editor",
     min: EDITOR_FONT_SIZE_RANGE.min,
@@ -334,7 +337,7 @@ const editorRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
   {
     key: keys.excerptContext,
     label: m.settings_context_around_a_result(),
-    description: m.settings_how_many_verses_or_headings(),
+    description: m.settings_extra_verses_of_context(),
     kind: "number",
     group: "editor",
     min: 0,
@@ -344,7 +347,6 @@ const editorRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
   {
     key: keys.reviewLayout,
     label: m.settings_review_layout(),
-    description: m.settings_how_review_draws_a_difference(),
     kind: "choice",
     group: "editor",
     options: [
@@ -355,12 +357,11 @@ const editorRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
   },
   {
     key: keys.reviewScope,
-    label: m.settings_review_shows(),
-    description: m.settings_each_change_as_a_card(),
+    label: m.settings_default_change_ui(),
     kind: "choice",
     group: "editor",
     options: [
-      { value: "changes", label: m.common_changes() },
+      { value: "changes", label: m.settings_verse_by_verse() },
       { value: "book", label: m.settings_the_whole_book() },
     ],
   },
@@ -368,11 +369,15 @@ const editorRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
 
 const editorBehaviourRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
   {
-    key: keys.startInUsfmMode,
+    key: keys.startMode,
     label: m.settings_editor_mode_default(),
-    description: m.settings_open_books_in_usfm_mode(),
-    kind: "boolean",
+    kind: "choice",
     group: "editor",
+    options: [
+      { value: "refine", label: m.workspace_refine() },
+      { value: "form", label: m.workspace_form_mode() },
+      { value: "usfm", label: m.settings_usfm() },
+    ],
   },
   {
     key: keys.preferChapterView,
@@ -383,22 +388,21 @@ const editorBehaviourRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
   },
   {
     key: keys.annotateEmptyParagraphs,
-    label: m.settings_name_paragraphs_that_have_no(),
-    description: m.settings_a_paragraph_or_poetry_marker(),
+    label: m.settings_show_empty_paragraph_markers(),
+    description: m.settings_empty_paragraph_markers_hint(),
     kind: "boolean",
     group: "editor",
   },
   {
     key: keys.pairBlocks,
-    label: m.settings_show_what_a_block_corresponds(),
-    description: m.settings_marks_the_block_you_are(),
+    label: m.settings_highlight_the_same_paragraph(),
     kind: "boolean",
     group: "editor",
   },
   {
     key: keys.verseShortcuts,
     label: m.settings_verse_shortcuts(),
-    description: m.settings_typing_1_1_v1_or(),
+    description: m.settings_verse_shortcuts_hint(),
     kind: "boolean",
     group: "editor",
   },
@@ -418,7 +422,6 @@ const editorBehaviourRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
   {
     key: keys.syncReferences,
     label: m.settings_references_follow_the_book_you(),
-    description: m.settings_scrolling_the_book_moves_every(),
     kind: "boolean",
     group: "editor",
   },
@@ -435,13 +438,6 @@ const advancedRows = (keys: ShellKeys): readonly AnyDescriptor[] => [
     max: 10000,
     step: 100,
     unit: "ms",
-  },
-  {
-    key: keys.offerRecovery,
-    label: m.settings_offer_unsaved_work_on_open(),
-    description: m.settings_ask_about_unsaved_work_found(),
-    kind: "boolean",
-    group: "advanced",
   },
   {
     key: keys.enableReplaceAll,
@@ -501,14 +497,14 @@ export const shellSettings = (settings: SettingsService): readonly AnyDescriptor
 export const SETTING_GROUPS: readonly {
   readonly id: SettingGroup;
   readonly title: Message;
-  readonly subtitle: Message;
+  readonly subtitle?: Message;
 }[] = [
   {
     id: "appearance",
     title: m.settings_app_appearance,
     subtitle: m.settings_how_sefer_looks_on_this,
   },
-  { id: "editor", title: m.settings_editor, subtitle: m.settings_what_a_book_does_when },
+  { id: "editor", title: m.settings_editor },
   {
     id: "network",
     title: m.settings_network,

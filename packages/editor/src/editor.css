@@ -41,7 +41,11 @@
   /* The reading column's measure: the regular projection's text, its notes
      and its front matter card, and anything outside the editor that lines up
      with them (the panels layout's action bar, `EditorPanel`). */
-  --editor-measure: 50rem;
+  /* In the text's own characters (Thomas, 2026-11-16): `ch` resolves where
+     it is used, so the column is 60 characters of the editor's font, never
+     less than 30. */
+  --editor-measure: 60ch;
+  --editor-measure-min: 30ch;
   --editor-paper: var(--surface-primary);
   --editor-ink: var(--on-surface-primary);
   /* Verse and chapter numbers, and the caret. The mockup's "verse numbers
@@ -174,6 +178,8 @@
 }
 .cm-host .cm-scroller {
   overflow: auto;
+  /* Reserved even on a short text, so the padding beside it never changes. */
+  scrollbar-gutter: stable;
 }
 .cm-mode-regular .usfm-join {
   white-space: pre;
@@ -210,9 +216,13 @@
   margin: 0 auto;
   /* 3rem a side: the text's own 1.5rem, and the 1.5rem the panel no longer
      pads, so the scroller can run flush to the panel's edge. */
-  padding: 56px 3rem 30vh;
+  /* The end side gives up the scrollbar's 20px (the app-wide one in tokens.css), which always sits there
+     (`scrollbar-gutter`, below): the text is 3rem from the panel's edge on
+     both sides (Thomas, 2026-11-16). */
+  padding: 56px calc(3rem - 20px) 30vh 3rem;
   /* The measure is the TEXT's width: the padding either side is added to it. */
-  max-width: calc(var(--editor-measure) + 6rem);
+  max-width: calc(var(--editor-measure) + 6rem - 20px);
+  min-width: calc(var(--editor-measure-min) + 6rem - 20px);
   font-family: var(--font-scripture);
   /* The reader's own size (`editor.fontSize`, written onto <html> by
      `src/app/ui/theme.ts`). The fallback is the value this was hardcoded to,
@@ -222,11 +232,18 @@
   color: var(--editor-ink);
   caret-color: var(--editor-accent);
 }
-/* A reference pane is narrower than the 50rem column, so `margin: auto` gives
-   its text no gutter at all; it takes the reading's own breathing room. */
+/* A reference pane's text runs to the pane's edges: no side padding of its
+   own (Thomas, 2026-11-16); the column's end padding is its only gutter. */
 [data-reference] .cm-mode-regular .cm-content {
-  padding-inline: 1.5rem;
-  max-width: calc(var(--editor-measure) + 3rem);
+  padding-inline: 0;
+  max-width: var(--editor-measure);
+  /* No minimum: the reference gives way when the two panels do not fit. */
+  min-width: 0;
+}
+/* Bare in Refine's reference column, under its dropdown, the 56px the
+   editor keeps below its own bar is only a gap (Will, 2026-11-17). */
+[data-bare][data-reference] .cm-mode-regular .cm-content {
+  padding-top: 0.75rem;
 }
 .cm-mode-regular .cm-cursor {
   border-left-color: var(--editor-accent);
@@ -484,6 +501,13 @@
 .cm-mode-regular .usfm-b:has(.cm-diff-ghost) {
   height: auto;
   padding-inline-start: calc(var(--usfm-indent) * 1em);
+}
+
+/* A \b is Shift-Enter's line break: the line before it keeps less than a
+   paragraph's gap, so the break reads as a new line, not a new paragraph.
+   Specific enough to win over the stanza's end, which a \b would otherwise be. */
+.cm-mode-regular .cm-line.usfm-block:has(+ .cm-line.usfm-b) {
+  padding-bottom: 0.25em;
 }
 
 .cm-mode-regular .usfm-verse {
@@ -1375,8 +1399,11 @@
   padding-top: 4em;
   padding-bottom: 2em;
 }
+/* With a book label (`\cl` before chapter 1) it stands before each number;
+   without one the number alone is the title. No fallback word: a project that
+   uses numbers only reads "1", not an English "Chapter 1". */
 .cm-mode-regular .usfm-chap-named .usfm-num-c::before {
-  content: var(--usfm-chapter-label, "Chapter") " ";
+  content: var(--usfm-chapter-label) " ";
 }
 .cm-mode-regular .usfm-chap-named .usfm-num-c {
   font-size: 1.6em;
@@ -2333,4 +2360,23 @@
   font-size: 0.8em;
   text-align: center;
   user-select: none;
+}
+
+/* The floating Find box: every match outlined in yellow, the one the reader
+   is on filled, and the text outside its verse greyed (Thomas, 2026-11-16). */
+.usfm-find {
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--warning-80), var(--warning-30) 40%);
+  border-radius: 2px;
+}
+.usfm-find-active {
+  background: var(--warning-80);
+  color: var(--warning-20);
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--warning-80), var(--warning-30) 40%);
+}
+.cm-host .cm-editor .usfm-find-dim,
+.cm-host .cm-editor .usfm-find-dim * {
+  color: var(--on-surface-tertiary);
+}
+.cm-host .cm-editor .usfm-find-dim .usfm-find {
+  color: inherit;
 }

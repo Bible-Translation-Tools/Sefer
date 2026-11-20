@@ -7,6 +7,7 @@ import { Repositories } from "../git/repository";
 import { Observability } from "../observability";
 import type { Project } from "../project/project";
 import { Remote } from "../remote/remote";
+import { standingAside } from "../save/autosave";
 import { SaveCoordinator } from "../save/saveCoordinator";
 import { booksByPath, classify, giveBack, handOver, isScripture, unmoved } from "./classify";
 import type { BookFacts } from "./facts";
@@ -77,7 +78,7 @@ export const receive = (
     const repo = yield* Effect.mapError(git.open(root), fromPort);
     yield* Effect.mapError(remote.fetch(repo), fromPort);
     return yield* Effect.catchTag(
-      repositories.exclusive(root, "receive", program(options)),
+      repositories.exclusive(root, "receive", standingAside(program(options))),
       "RepositoryError",
       (error) =>
         Effect.fail(new ReceiveError({ refusal: undefined, description: error.description })),

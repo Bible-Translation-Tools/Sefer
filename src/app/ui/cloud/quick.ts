@@ -9,13 +9,21 @@ import type { Sync } from "#core/sync";
 
 import { describe } from "../../describe";
 import type { Shell } from "../../ProjectContext";
+import { shellKeys } from "../../settings";
 import { checkForChanges, sendNow } from "../../syncActions";
 import { syncWatch } from "../../syncWatch";
 import { toasts } from "../primitives";
 import { createAccount } from "./account";
 import { sendOutcomeCopy } from "./copy";
 
-export type QuickAction = "see" | "send" | "check" | "resolve" | "sign-in" | "open";
+export type QuickAction =
+  | "see"
+  | "send"
+  | "check"
+  | "resolve"
+  | "sign-in"
+  | "open"
+  | "switch-server";
 
 export const quickActionOf = (sync: Sync): QuickAction => {
   switch (sync.primary) {
@@ -31,6 +39,8 @@ export const quickActionOf = (sync: Sync): QuickAction => {
       return "resolve";
     case "sign-in":
       return "sign-in";
+    case "switch-server":
+      return "switch-server";
     case "attach":
     case "publish":
       return "open";
@@ -51,6 +61,8 @@ export const quickLabel = (action: QuickAction): string => {
       return m.common_sign_in();
     case "open":
       return m.common_set_up_sharing();
+    case "switch-server":
+      return m.cloud_switch_servers();
   }
 };
 
@@ -61,6 +73,7 @@ export const attentionOf = (sync: Sync | undefined): "none" | "tint" | "alert" =
     case "diverged":
     case "conflicted":
     case "unauthorized":
+    case "elsewhere":
       return "alert";
     case "ahead":
       return sync.reading.sendRefused ? "alert" : "tint";
@@ -80,17 +93,42 @@ export const shareableLink = (origin: string): string => {
   }
 };
 
+/** Scroll Settings to its Network card once the page has drawn it. */
+const revealNetwork = (tries = 20): void => {
+  const card = document.querySelector('[data-settings-group="network"]');
+  if (card !== null) card.scrollIntoView({ block: "start" });
+  else if (tries > 0) setTimeout(() => revealNetwork(tries - 1), 50);
+};
+
 export interface QuickSync {
   readonly sync: Accessor<Sync | undefined>;
   readonly busy: Accessor<"" | "send" | "check" | "resolve">;
   readonly run: (action: QuickAction) => void;
 }
 
+/**
+ * Abort a merge something outside Sefer left half done. It is a hard reset of
+ * the folder, and autosave keeps the person's edits in the files, so it
+ * refuses while any file the merge did not bring has changes no version holds.
+ */
 const abortTransfer = (root: string) =>
   Effect.gen(function* () {
     const git = yield* Git;
     const remote = yield* Remote;
-    return yield* remote.abortMerge(yield* git.open(root));
+    const repo = yield* git.open(root);
+    const status = yield* git.status(repo);
+    // Unreadable MERGE_HEAD: nothing counts as the merge's, so any change refuses.
+    const merging = yield* Effect.orElseSucceed(
+      git.changedPathsBetween(repo, "HEAD", "MERGE_HEAD"),
+      () => [],
+    );
+    const theirs = new Set(merging.map((entry) => entry.path));
+    const mine = status.changed.map((entry) => entry.path).filter((path) => !theirs.has(path));
+    if (mine.length > 0)
+      return yield* Effect.fail(
+        new Error(m.cloud_finishing_would_discard_changes({ paths: mine.join(", ") })),
+      );
+    return yield* remote.abortMerge(repo);
   });
 
 const announceSend = (
@@ -144,10 +182,17 @@ export const createQuickSync = (shell: Shell, onSee?: () => void): QuickSync => 
       case "open":
         void navigate({ to: "/project/$slug/settings", params: { slug: shell.slug() } });
         return;
+      case "switch-server":
+        // The server choice sits with the advanced settings: show them, then go to it.
+        void services
+          .run(services.settings.set(shellKeys(services.settings).showAdvancedSettings, true))
+          .then(() => navigate({ to: "/project/$slug/settings", params: { slug: shell.slug() } }))
+          .then(() => revealNetwork());
+        return;
       case "resolve":
         setBusy("resolve");
         void services
-          .run(abortTransfer(project.root))
+          .run(services.autosave.hold(abortTransfer(project.root)))
           .catch((cause: unknown) =>
             toasts.error({
               title: m.cloud_could_not_finish_the_transfer(),
@@ -164,6 +209,15 @@ export const createQuickSync = (shell: Shell, onSee?: () => void): QuickSync => 
         void checkForChanges(services, project).finally(() => setBusy(""));
         return;
       case "send":
+        // Books no version holds go through Review first; its save records and uploads.
+        if ((sync()?.reading.uncommitted ?? 0) > 0) {
+          void navigate({
+            to: "/project/$slug/review",
+            params: { slug: shell.slug() },
+            search: { upload: 1 },
+          });
+          return;
+        }
         setBusy("send");
         void sendNow(services, project)
           .then((outcome) => announceSend(outcome, syncWatch.sync(project.root)?.state))

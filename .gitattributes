@@ -1,0 +1,4 @@
+# pnpm applies patches/*.patch byte for byte and refuses CRLF ("invalid char
+# in" the patch), and a Windows checkout with core.autocrlf (GitHub's Windows
+# runners have it on) writes CRLF. Keep patches LF on every checkout.
+*.patch text eol=lf

@@ -3,7 +3,6 @@ import type { BookId } from "@wycliffeassociates/sefer-text/book";
 export type ShellEvent =
   | { readonly kind: "book.apply"; readonly books: readonly BookId[] }
   | { readonly kind: "book.write"; readonly books: readonly BookId[]; readonly recorded: boolean }
-  | { readonly kind: "journal.restore"; readonly books: readonly BookId[] }
   | { readonly kind: "project.open" }
   | { readonly kind: "corpus.publish" }
   | { readonly kind: "corpus.rejudge" }
@@ -15,7 +14,6 @@ export const booksOf = (event: ShellEvent): readonly BookId[] | "all" => {
   switch (event.kind) {
     case "book.apply":
     case "book.write":
-    case "journal.restore":
     case "seat.open":
     case "seat.close":
       return event.books;

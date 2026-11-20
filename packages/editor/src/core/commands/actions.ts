@@ -1,9 +1,11 @@
 import type { EditorState, StateCommand, TransactionSpec } from "@codemirror/state";
 
-import { structureAt } from "../editorState";
+import { planAt, structureAt } from "../editorState";
 import { focusFrontMatter } from "../frontmatter";
+import { lineBreak } from "../guards/input";
 import {
   insertFootnote,
+  insertMargin,
   insertParagraph,
   insertPoetry,
   insertVerse,
@@ -32,6 +34,8 @@ const editFrontMatter: StateCommand = ({ state, dispatch }) => {
 const COMMANDS: Record<EditorAction, () => StateCommand> = {
   "insert.verse": () => insertVerse(structureAt),
   "insert.paragraph": () => insertParagraph(structureAt),
+  "insert.margin": () => insertMargin(structureAt),
+  "insert.lineBreak": () => lineBreak(structureAt, planAt),
   "insert.poetry": () => insertPoetry(structureAt),
   "insert.poetry1": () => insertPoetry(structureAt, 1),
   "insert.poetry2": () => insertPoetry(structureAt, 2),

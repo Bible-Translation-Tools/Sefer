@@ -34,6 +34,7 @@ export function createFindBooks(inputs: BooksInputs) {
       booksFor(want),
       query.text,
       query.caseSensitive,
+      query.ignoreAccents,
       query.wholeWord,
       query.regex,
       markup(),

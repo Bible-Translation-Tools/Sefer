@@ -7,7 +7,6 @@ import type { BookComparison } from "#core/compare";
 
 import type { Shell } from "../../../ProjectContext";
 import { Button, EmptyState } from "../../primitives";
-import { RecoveryBanner } from "../../recovery/RecoveryBanner";
 import { ReviewReader } from "../ReviewReader";
 import { SuggestionLine } from "../SuggestionLine";
 import type { Compare } from "./createCompare";
@@ -179,7 +178,6 @@ export function ReviewBody(props: ReviewBodyProps) {
   return (
     <>
       <ReviewNotices body={props} />
-      <RecoveryBanner />
       <Show
         when={props.compare.result()}
         fallback={

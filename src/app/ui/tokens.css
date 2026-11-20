@@ -583,9 +583,11 @@
     cursor: not-allowed;
   }
 
+  /* One blue line, laid over the element's own 1px edge rather than a gap
+     away from it, so focus never reads as two lines (Thomas, 2026-11-13). */
   :focus-visible {
     outline: var(--border-thick) solid var(--brand-base);
-    outline-offset: 2px;
+    outline-offset: -1px;
   }
 }
 

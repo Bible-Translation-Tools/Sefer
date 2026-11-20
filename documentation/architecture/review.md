@@ -30,7 +30,7 @@ current project**. Both sides implement one port, `CompareSource`
 ```ts
 interface CompareSource {
   readonly id: string; // stable within a session
-  readonly label: string; // "In the editor", "On disk", "shared-nt"
+  readonly label: string; // "In the editor", "Last version", "shared-nt"
   readonly kind: CompareSourceKind; // "project" | "folder" | an open string ("disk", "recorded", "remote")
   readonly canApply: boolean; // may this side be written?
   books(): Effect<readonly BookId[], CompareError>;
@@ -48,13 +48,13 @@ Core has five kinds, and the LEFT and RIGHT pickers (`src/app/ui/review/sources.
 | picker choice      | core source                                               | what                                                                        | writable |
 | ------------------ | --------------------------------------------------------- | --------------------------------------------------------------------------- | -------- |
 | In the editor      | `currentProjectSource` (`project`)                        | the books as the editor holds them, unsaved keystrokes included             | **yes**  |
-| On disk            | `savedSource` (`disk`, `src/core/compare/pastSources.ts`) | the bytes in the project's files (`SaveCoordinator.baseline`)               | no       |
+| Last version       | `savedSource` (`disk`, `src/core/compare/pastSources.ts`) | each book's recorded version (`SaveCoordinator.baseline`, "Two baselines")  | no       |
 | Last recorded      | `recordedSource` (`recorded`, same file)                  | the blobs at HEAD, read once per commit (`src/app/ui/panels/recorded.ts`)   | no       |
 | The shared project | `sharedSource` (`remote`, same file)                      | the blobs at the remote-tracking ref, as of the last check                  | no       |
 | A zip              | `folderSource` (`folder`)                                 | a `.zip` unpacked into a scratch folder first — a zip is not a kind in core | no       |
 | A folder           | `folderSource` (`folder`)                                 | any directory the `FileSystem` port can read                                | no       |
 
-Left defaults to the editor and right to the file on disk, because that is the
+Left defaults to the editor and right to the last version, because that is the
 comparison a reader wants nine times in ten — **not** because the screen knows
 anything about them. Any pairing is legal, a zip against a folder included. The
 same source on both sides is not: a text is never a review of itself, and the
@@ -69,8 +69,8 @@ option is disabled on the other side's picker rather than silently ignored.
   screen it is drawn on the RIGHT, the other side on the left, so a reader of
   a left-to-right script reads was-then-now, the way History lays out time
   (`ReviewReader`'s `currentFirst`, off by default). The chip, the pickers and
-  each card's buttons follow the same order: "On disk → In the editor",
-  "Take the file's", "Keep the editor's". The colours follow the columns, not
+  each card's buttons follow the same order: "Last version → In the editor",
+  "Take the last version's", "Keep the editor's". The colours follow the columns, not
   the editor: the right column is "now", its words green, the left's red.
   Against the shared project `currentFirst` is on too (Will, 2026-11-10): what comes from
   outside reads as what this device has, then what is arriving, so the editor is on the left
@@ -169,8 +169,8 @@ decision map keep them, and should, because the model has two sides and no opini
 them. `baseline` and `current` are the ENGINE's words for the same two sides
 (right and left respectively), and the decision wire uses them verbatim. The
 SCREEN says what each source calls itself, and each choice carries a
-`shortLabel` ("the editor", "the file", "the zip") so a button can read "Take
-the file's" rather than "Take right". A reader choosing between two copies of
+`shortLabel` ("the editor", "the last version", "the zip") so a button can read
+"Take the last version's" rather than "Take right". A reader choosing between two copies of
 their own work is not reading a coordinate system.
 
 The colours follow the same thought, and this is why they are not red and
@@ -250,7 +250,7 @@ sid-aligned rule exists to prevent.
 ### The reading: three layers
 
 **The chrome is one row**, so the reading has the screen. What is compared is
-a chip ("On disk → In the editor") that opens the two pickers (From, To); the count says
+a chip ("Last version → In the editor") that opens the two pickers (From, To); the count says
 how far the review is; **Save** — the header's one primary button, and its
 largest thing, with the way back a small borderless × beside it
 (`BackToEditor quiet`) — opens a dialog for its message, and the dialog stays
@@ -315,7 +315,7 @@ do with):
 - **Writer** — "new work in N books" and See it, when the books' Writer
   projects have some.
 
-The header is one row: the comparison itself is the page's title ("On disk →
+The header is one row: the comparison itself is the page's title ("Last version →
 In the editor", pressed to change the two sides, as Spiritual terms' title is
 the term), then Save, then the way back. There is no ⋮ menu: Clear these
 decisions is in Decide all, History is the sidebar's tab, and the last backup
@@ -430,7 +430,7 @@ says where you are.
 
 **Decisions in three sizes.** A unit, in the gutter: ✓ keeps the current
 side's text, ↶ takes the other's, pressing the chosen one again clears it. A
-card, in its header ("Take the file's", "Keep the editor's", at Edit's weight;
+card, in its header ("Take the last version's", "Keep the editor's", at Edit's weight;
 the pressed one says which side, and the engine's status — "unchanged", once
 a take makes both sides read the same — is hidden on a decided card). A book,
 from its row's menu in the sidebar. Everything the view shows, from the
@@ -494,12 +494,12 @@ column cards; whether the reading needs it too is open, and is the
 
 ## 3. One mental model: the review is the editor
 
-Clicking "Keep the editor's" or "Take the file's" writes at once, one Undo
+Clicking "Keep the editor's" or "Take the last version's" writes at once, one Undo
 step each. `aria-pressed` rather than a radio group, because there are three
 states and two buttons: undecided is neither pressed. Clicking the pressed
 one again clears it, and a take cleared is put back.
 
-**Revert is that, exactly.** Taking the file's version of a unit is what
+**Revert is that, exactly.** Taking the last version's text for a unit is what
 "revert this verse" has always meant, and the screen says so rather than
 offering a second button that does the same thing under a different name.
 
@@ -509,133 +509,116 @@ a book yet, and it says so in one line.
 
 ---
 
-## 4. Save (record a version): the save model, explicit only
+## 4. Save: autosave writes the file, a version is recorded on purpose
 
-**The project file is written only when a version is recorded.** There is no
-timer on the file, no idle write, no `autosave` — Review's one button calls
-`saveAll` and then `Git.commit`, in that order, as one action
-(`recordVersion`, `src/app/recordVersion.ts`; the button says **Save**, the code and this document
-still say "record a version" for what it does; the save key shares it when
-"Skip review of my changes" is on). It is offered whenever the project is one
-of the two sides, because what it records is the project's own unsaved work
-and not the comparison. The commit takes exactly the save's receipts, plus
-what each save kept current beside its book — a burrito's `metadata.json`
-checksums — so no file Sefer wrote is left unrecorded.
+Two writes, kept apart (ruled 2026-11-18; the plan is
+`planning/items/2026-11-18-autosave-to-disk-the-journal-goes-review-moves-to-.mdx`,
+which reverses the explicit-only model of 2026-09-14):
 
-The version is by a person ([sync](sync.md), "Who a version is by"): the
-signed-in username, or this device's name, asked once the first time. The
-default message is worked out from the books BEFORE they are saved, because
-after the save nothing differs and it read "Edited". When "Send my changes on
-save" is on, the send follows the commit; a refused send leaves the version
-recorded, and the words say only the sending did not happen.
+| What             | Written by                                 | When                                                                                                           |
+| ---------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| The project file | `Autosave` → `SaveCoordinator.save`        | 1.5 s after typing stops, at most every 5 s; at once on blur, a hidden page, closing the window or the project |
+| A version        | `recordVersion` → `saveAll` + `Git.commit` | Review's **Save** (or the app bar's Save with "Skip review of my changes" on)                                  |
 
-The one other writer of a book's text and baseline is a receive: Git's bytes
-arrive through `SaveCoordinator.takeDisk(book, "incoming", stamp)`, as one
-edit and a new baseline in the same step ([sync](sync.md), Receiving).
+**⌘S (Mod-S, `book.save`) writes what autosave holds, at once, and opens
+nothing**: it is the habit key, and Review is not a habit. The app bar's Save
+button and the menu's Save & Review are `book.review`; ⌘⇧S is
+`project.saveAll`, "Record a version", which opens Review too.
 
-The only automatic write left in the product is Recovery's journal: the
-**working-state backup**. It is debounced off the keystroke path ("Back up work
-after", `shell.backupIdleMs`, default 500 ms), it lives outside the project,
-and it is neither the file nor a version.
+**"Saved" means the file holds the work.** The app bar's Save button reads
+`Autosave`'s states: "Saving changes…" while an edit waits, "Saved" once it is
+written, "Save" with a warning when a write failed (the books stay waiting and
+go again with the next edit). Pressing it is still Save & Review. Nothing
+requires a version until work comes in or goes out (WACS, a sideload); that is
+when review is mandatory, and the sync paths ask for it ([sync](sync.md)):
+books that differ from HEAD count as `uncommitted` in the sync reading and make
+the project `ahead`, and the WACS panel's Review and upload (or the chip's
+Send) opens Review with `upload=1`, whose save records the version and
+uploads it whatever "Send my changes on save" says.
+There is no journal and no "restore unsaved work" banner: the file is the
+backup.
 
-| What                     | Written by                | When                                         |
-| ------------------------ | ------------------------- | -------------------------------------------- |
-| The working-state backup | `Recovery`                | a moment after typing pauses                 |
-| The project file         | `SaveCoordinator.saveAll` | "Record a version"                           |
-| The version              | `Git.commit`              | "Record a version", straight after the write |
+`Autosave` (`src/core/save/autosave.ts`) follows `project.edits`, keeps the
+books waiting, and on its debounce writes each one `SaveCoordinator.unwritten`
+says still differs from its file. The delay is Settings › Advanced, "Save work
+after" (`shell.backupIdleMs`). The window and page events and the desktop
+close (`beforeWindowClose`, which Tauri waits for) are wired in
+`src/app/services.ts`; closing a project flushes in `lifecycle.ts`.
+`Autosave.hold(effect)` writes what is waiting, then writes nothing until
+`effect` ends: a receive or combine runs inside it (`standingAside`), because
+`handOver` puts the incoming text into the open books as ordinary edits and
+sync writes those files itself; recording a version runs inside it so nothing
+moves between the commit and marking the books recorded; finishing a transfer
+runs inside it so its refusal sees every edit.
 
-A write that fails records nothing — there is no half-recorded version. A
-commit that fails after a write that succeeded is reported as exactly that: the
-files **are** on disk and no version holds them. That is the only way the third
-status state, `on disk, not recorded`, can be reached.
+Recording a version calls `saveAll` (writes anything autosave has not reached;
+a receipt for every book that differs from its version either way) and then
+`Git.commit`, as one action. The commit takes those receipts plus what each
+save kept current beside its book — a burrito's `metadata.json` checksums.
+The version is by a person ([sync](sync.md), "Who a version is by"). The
+default message is worked out from the books against their last version.
+When "Send my changes on save" is on, the send follows the commit; a refused
+send leaves the version recorded.
 
-`ProjectContext.saveState`'s three states are `unsaved`, `recorded`, and `on
-disk, not recorded`. The book screen no longer shows them in a line under the
-editor (removed 2026-10-01 as developer readout). `recorded` is inferred rather than read from git on every keystroke,
-and that inference is only sound because of this model: writing the file and
-recording the version are one action, so a book that matches the file matches
-the last version too. `ProjectContext.saveState` holds the one exception, fed
-by `noteWritten` from this screen.
-
-Why not write on a timer as well? Because a file that moves under a shared
-drive, a Git working tree and another editor without anyone asking is a file
-nobody can reason about, and because a review screen whose diff is against the
-disk reads a whole session's work as nothing at all. Crash-safety is the
-backup's job, and it does it without touching the project's own bytes.
+`ProjectContext.saveState` has three states: `unsaved` (an edit autosave has
+not written yet), `on disk, not recorded` (written, no version holds it), and
+`recorded`. The Save button's tooltip and the diagnostics' `unsavedBooks` use
+"not recorded"; `unwrittenBooks` counts the first.
 
 ### The write path, end to end
 
 ```text
 keystroke → phases → apply → publish ─┬─ the view renders
                                       ├─ windows apply the same changes
-                                      ├─ Save: dirty
-                                      ├─ Recovery.journal armed  ← the only automatic write
+                                      ├─ Autosave: waiting, debounce armed
                                       └─ ProjectAnalysis: stale(bookId)
-"Record a version" → saveAll → save(book) → serialize(path) → writeFileAtomic
-                                          → receipt → baseline → Recovery.compact
-                   → Git.commit(receipts), immediately after, as the same action
+debounce / blur / close → Autosave.flush → save(book) → serialize(path)
+                          → read the text → writeFileAtomic → written baseline
+Review's Save → recordVersion → hold( saveAll → Git.commit → recorded(book) )
 ```
 
-`save(book)` is snapshot-bound: capture the stamp and text **once**; `encode`
-to UTF-8; `serialize(path)(writeFileAtomic(…))`; build the receipt
-`{ bookId, path, stamp, hash?, bytes, at }`; store the baseline;
-`note('save','rewrote', …)`; `Recovery.compact(bookId, stamp)`. Capturing once
-is the whole point: an edit that lands while the bytes are in flight stays
-dirty instead of being promoted by a receipt that never described it. A
-`Recovery` that cannot compact is noted, never fatal — the bytes are already on
-disk.
+`save(book)` takes the file's turn first (`serialize(path)`, one `Semaphore`
+permit per path) and only then reads the book's stamp and text, encodes, and
+`writeFileAtomic`s (the `<path>.sefer-tmp` sibling renamed over the target,
+[storage](storage.md)). Reading inside the turn means queued saves write the
+newest text, and the written baseline is exactly the bytes that landed. A
+conflicted book refuses with `Conflict` instead of overwriting. Autosave's
+writes are `save(book, { checked: true })`: inside the turn they read the file
+first, and a file that is not the written baseline (changed or removed
+outside Sefer) marks the book conflicted. The Save button then offers one
+toast per book, **Keep mine** (`resolve(change, "keepMine")`, then a flush);
+reopening the project takes the file.
 
-`serialize(path)` is one Effect `Semaphore` of one permit per path. Save is the
-only owner of write ordering, so two explicit saves and a `saveAll` cannot
-interleave writes to the same file. `writeFileAtomic` ([storage](storage.md))
-writes the deterministic `<path>.sefer-tmp` sibling and renames it over the
-target.
-
-`saveAll(books)` writes one receipt per dirty book, in order, and stops at the
-first failure. Git commits receipts and never guesses.
-
-### The Baseline contract
+### Two baselines
 
 `Baseline { bookId; path; stamp; hash?; text; savedAt }`
-(`src/core/save/baseline.ts`) is a value with no operations: what Save last
-wrote for one book. Save produces exactly one per successful write; the `disk`
-compare source reads it; Recovery asks about it to know what is pending.
+(`src/core/save/baseline.ts`) is a value with no operations. The coordinator
+keeps two per book:
 
-**The file is what "On disk" means on this screen**, and that follows directly
-from explicit-only saving: the file is the text nobody has agreed to change, so
-the books that differ from it are exactly the books a press of "Record a
-version" is about, and a project somebody merely opened differs from its files
-in nothing. The review used to diff against the blob at HEAD; that was right
-while the file was written on a timer and it is wrong now — a 66-book project
-with no repository has no HEAD, so every book read as "recorded for the first
-time" and the screen offered to record all 66. The last commit is still
-History's baseline, and it is now also one of the five sources by name.
+- **written** — what the file holds, as Sefer last wrote or read it.
+  `unwritten(book)` compares against it (autosave's question), and
+  `externalChanges` against it (an outside change is a file that is not it).
+- **recorded** — the last version, local HEAD. `baseline(book)` returns it and
+  `dirty(book)` compares against it: Review's default left side ("Last
+  version", the `disk` source by id), the changes panel, the Save tooltip and
+  which books a record or a combine includes all mean this.
 
-`adopt(book)` seeds a baseline from a book's current text, as "what disk
-holds". It exists because "no baseline" and "not saved" are not the same thing:
-a book Sefer just READ has no baseline, but the text in hand _is_ the bytes on
-disk. The shell calls it where it opens a book (`ProjectContext.focus`) and
-where Recovery replays one, so `dirty(book)` is the only question a marker has
-to ask. Adopting is refused quietly when a baseline already exists or when the
-book's revision is past 0. The `disk` source follows the same rule from the
-other end: a book with no baseline reads as its own current text, because that
-text IS the bytes on disk. (So a Review against the file that says "No
-differences" right after an edit means the baselines are gone — a hot reload
-that rebuilt the services under an open project does exactly that; reopening
-the project re-adopts.)
+`adopt(book)` seeds both from the book's text as it opens. On open,
+`adoptRecorded` (`src/app/shell/lifecycle.ts`) asks git which files differ
+from HEAD, and for each book among them sets the recorded baseline from
+HEAD's blob (`recordedAs`; a book HEAD lacks gets the empty text, so all of
+it reads as new). A folder outside git, or a status that fails, leaves every
+book recorded as its file, which is also why a 66-book project with no
+repository does not offer to record all 66. `recorded(book)` moves it to the
+written one after a commit; `takeDisk(book, …, "keep")` moves both, since it
+follows a fast-forward or a combine.
 
-Baselines, conflicts and the books Save has seen are keyed by `BookId` alone and
-the coordinator lives for the session, so `forget()` clears them and the shell's
-`closeProject` calls it. Without that, the next project's `GEN` was measured
-against the last project's text and path: every book "changed entirely" in
-Review, and Record a version could commit receipts for the wrong files. The
-per-path write queues are kept, so a write still finishing keeps its turn.
-
-`dirty(book)` answers from the baseline alone. No baseline means dirty. Within
-a session the stamp's revision decides; when the baseline and the current text
-both carry an engine hash, the hash decides. A same-length replacement can
-therefore never pass as saved. `SaveCoordinatorLive({ hasher })` takes the
-engine's xxh3 from composition (`src/app/services.ts`).
+Within a session the stamp's revision decides; when both sides carry an engine
+hash, the hash decides, so a same-length replacement never passes as saved.
+`SaveCoordinatorLive({ hasher })` takes the engine's xxh3 from composition.
+Baselines, conflicts and the books Save has seen are keyed by `BookId` and the
+coordinator lives for the session, so `forget()` clears them when a project
+closes.
 
 ### Serialisation style: the dominant form, written back
 
@@ -670,15 +653,10 @@ everything unrecognised is `Io`.
 
 ## 5. Recovery
 
-The working-state backup is Recovery's journal: one per book, outside every
-project folder, replayed through `book.apply` so today's rules re-judge it. Its
-format, timing and replay are in [recovery](recovery.md). Review has its own
-per-book restore list for an earlier session's journal, whether or not its book
-is open; Restore
-instantiates the book, `adopt`s its disk baseline — without it the restored
-work comes back invisible to this very screen — and replays.
-
-Recovery never writes the project file, and Save never writes the journal.
+There is none beyond the file. The recovery journal (`src/core/recovery`), its
+banner and Review's restore list were removed on 2026-11-18 with the move to
+autosave: a crash loses at most the last second or two of typing.
+Journals an older build wrote stay in `<appData>/journals`; nothing reads them.
 
 ---
 

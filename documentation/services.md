@@ -9,7 +9,7 @@ One section per service: what it is in plain words, what is wrong or constrained
 1. **Location** — done: every place question goes through Citation, Address and Location over the engine's TOC, and no regex reads a designator. Anchors (for comments) are the next piece, when comments start. See [Location](#location-and-reference) and [the Location chapter](architecture/location.md).
 2. **Git, top to bottom** — the lifecycle pass is built on the `git-lifecycle` branch (2026-09-30): one writer per repository, receive as a fast-forward through the Books, Combine as a decision commit, intake, check on open and send on save. History time travel is next. See [Git](#git).
 3. **One diff and sync model** — after the primitives settle: stop reading every book (the line diff is retired, 2026-09-27), one change classification for History, Review and Cloud. See [Diff](#diff) and the retired Git lifecycle spec (`git log -- planning/01-discussing/diff-and-sync-model-2026-09-23.md`).
-4. **Data safety in Recovery** — done on the review branch (2026-09-28): a journal knows the text it started from by hash, and one subscriber on the canonical edit feed backs up every book. What is left is a damaged journal's valid prefix, and a recovery unit test (a candidate in the testing chapter). See [Recovery](#recovery).
+4. **Autosave** (2026-11-18) replaced the recovery journal: edits reach the file a moment after typing stops, and a version is recorded on purpose. See [Save and Baseline](#save-and-baseline).
 
 ## The graph
 
@@ -48,7 +48,7 @@ flowchart TB
 
 Above core: `packages/editor` (CodeMirror; Book → EditorBook, the funnel, recipes) and `src/platform/{web,tauri,node}` (one Layer per host capability). Above those sits `src/app` (composition, commands, ProjectContext, stores, workflows, UI) with `src/routes`. `src/dev` is the design surface and never ships. [Boundaries](architecture/boundaries.md) is the enforced version of this.
 
-Save ↔ Recovery is one two-way pair: recovery reads the Baseline type, and save optionally asks for Recovery to clear a journal. Resources ↔ Project is the other: the Library describes a folder through `discovery.ts`'s `readProjectMetadata` (so a Resource Container's `manifest.yaml` names it), and discovery decodes through the resources schemas. No file imports back into itself; `pnpm deadcode` checks the cycles.
+Resources ↔ Project is the one two-way pair: the Library describes a folder through `discovery.ts`'s `readProjectMetadata` (so a Resource Container's `manifest.yaml` names it), and discovery decodes through the resources schemas. No file imports back into itself; `pnpm deadcode` checks the cycles.
 
 ---
 
@@ -90,7 +90,7 @@ The port is `effect/FileSystem` used as-is. Implementations: memory (tests, fixt
 
 ### Overview
 
-Schema-validated preferences persisted as JSON through `writeFileAtomic`. Each module registers its own keys and gets a token back; a bad value falls back to its default. Writes go one at a time (a one-permit `Semaphore` across snapshot, save and publish): overlapping `set`s used to each save a file missing the other's key, and opening a project — three keys at once — lost its slug, so a reload found no project. `src/core/host/settings.ts`, `src/app/settings.ts`, the `/project/$slug/settings` route (`/settings` redirects to `/projects`). → [host](architecture/host.md), [shell](architecture/shell.md)
+Schema-validated preferences persisted as JSON through `writeFileAtomic`. Each module registers its own keys and gets a token back; a bad value falls back to its default. Writes go one at a time (a one-permit `Semaphore` across snapshot, save and publish): overlapping `set`s used to each save a file missing the other's key, and opening a project — three keys at once — lost its slug, so a reload found no project. `src/core/host/settings.ts`, `src/app/settings.ts`, the `/project/$slug/settings` route, and `/settings` with no project open (one page, `src/app/ui/settings/SettingsPage.tsx`). → [host](architecture/host.md), [shell](architecture/shell.md)
 
 ### Constraints and known bugs
 
@@ -442,38 +442,21 @@ The one compare screen, `/review`. Both sides are pickers over a `CompareSource`
 
 ### Overview
 
-**Only Save writes a book to disk.** Everything else is a journal of the dirty buffer, so the app is not constantly writing files the way Zed or VS Code do, which would fight with Git. The SaveCoordinator does snapshot-bound writes with a per-path lock, a receipt and a Baseline, and `dirty` is decided by revision and hash. `src/core/save`. → [review §4](architecture/review.md)
+**Autosave writes the file; a version is recorded on purpose** (2026-11-18, reversing explicit-only save). `Autosave` follows each project's edits and writes the book through the SaveCoordinator 1.5 s after typing stops (at most every 5 s), and at once on blur, a hidden page, a desktop window's close and a project's close. The coordinator does per-path-serialised atomic writes and keeps two baselines per book: what the file holds (`unwritten`, outside changes) and the last recorded version, local HEAD (`dirty`, Review's left side, the changes panel). Sync and recording stand autosave aside with `hold`. Review is required only when content comes in or goes out. `src/core/save`. → [review §4](architecture/review.md)
 
 ### Constraints and known bugs
 
-- `externalChanges`/`resolve` exist but nothing calls them, and Web has no `watch`. Something changing a file under OPFS or the sandbox mid-session is unlikely, but not impossible.
-- There is no disk-identity check at save time.
+- Autosave reads each file before it writes it and refuses a book whose file is not what Sefer last wrote (changed or removed outside Sefer: Dropbox, a git tool). The book then waits; a toast offers **Keep mine**, and reopening the project takes the file. Not driven: nothing on the Web writes OPFS behind Sefer. The watcher (`externalChanges`) is still not wired, and Web has no `watch`.
 - Partial `saveAll` failures have no user-facing report.
-- Baselines are keyed by book, not project: `forget()` on close (2026-10-07) is what keeps one project's text from judging the next. The seats in `services.ts` are keyed the same way and not cleared — harmless while callers only ask for the open project's books. A hot reload under an open project rebuilds the coordinator empty, and Review against the file then says "No differences" until the project is reopened.
+- A burrito's `metadata.json` rides into a version through the receipts' `also`, remembered per book for this session; a book autosaved in an earlier session and recorded now leaves the metadata out of that commit (it stays changed in the folder).
+- Opening a git project asks `git.status` once and reads HEAD's blob for each book whose file differs, to set its recorded version. Not measured on a big Web project.
+- Baselines are keyed by book, not project: `forget()` on close is what keeps one project's text from judging the next. A hot reload under an open project rebuilds the coordinator empty, and Review then says "No differences" until the project is reopened.
+- Journals older builds wrote stay in `appData/journals`; nothing reads or deletes them. Work in one at upgrade time is not offered back.
+- Not driven on desktop yet (the close hook, `core:window:allow-destroy`, the rewritten smoke claim).
 
 ### Ideas / future
 
-- If external change proves real: a conflict prompt (keep mine / take disk / compare).
-
-## Recovery
-
-### Overview
-
-A JSONL journal of edits to the dirty buffer, debounced and compacted. On open, `pendingOnOpen` checks against disk and a banner offers Restore all / Discard all. It is the only automatic write. `src/core/recovery`, `app/ui/recovery`. → [recovery](architecture/recovery.md)
-
-### Constraints and known bugs
-
-- **Data safety:**
-  - Fixed 2026-09-28 (review branch): journalling followed the editor's focus, so a book edited only through a card, a Review take or a trusted apply was never backed up, and a book visited twice was journalled twice. Recovery is now mounted once on `Project.edits`, the canonical edit feed, keyed by the book's path, and checks text by hash: a journal records the hash it started from, a flush that finds the text back at the file clears it, a save trims it and clears the set-aside ones, and restore compares hashes, not revisions.
-  - One bad or truncated line marks the whole journal `Corrupt`, and it is skipped silently. So is an unknown version.
-  - On desktop the journal works end to end (driven, 2026-10-13): an edit reaches `<appData>/journals/<project path>/<book>.jsonl` (`<appData>/<project path>/…` before 2026-10-13) and not the book file, Record a version writes the file and a commit, and after the app is killed the relaunch offers "Unsaved work from your last session" and Restore all puts the edit back. Finding the journals walked all of app data on desktop (every project's `.git`, the Library's Translation Notes): 7.3 s awake and 170–354 s asleep for `journal.offer` with nothing to offer; skipping the projects and the Library made it 47–75 ms, and journals now have their own folder, so there is nothing to skip.
-  - A journal written before hashes (no `base`) still uses the old length and last-insert check at open and the stamp check at restore.
-- No retention cap, no quota response, and no flush on `pagehide` (up to 500 ms of edits lost on a tab close).
-- Journals have their own folder, `appData/journals`, since 2026-10-13 (approved by Will after a review), found by one plain listing. The old place, the top of app data, is not read (no migration, Will, 2026-10-13): a journal an older build left there is not offered. Measured before that read was dropped, on an unattended machine (HID idle about 40 min): `journal.offer` 0.67–0.84 s with one to three candidates, against 0.66 s for the previous build; round 2's awake figure was 47–75 ms.
-
-### Ideas / future
-
-- Recover the valid prefix of a damaged journal and say so. (The hash at the head of each journal is done.)
+- A daily automatic version, if someone asks to see a day's work (MEL floated it).
 
 ## Git
 
@@ -522,7 +505,7 @@ Clone (the newest version only unless the caller asks for all; desktop backfills
 
 ### Overview
 
-The app bar's cloud popover (state, clocks, the one right move, sign in and out, publish, how your suggestion stands), Settings' Cloud section (account, shared project, how you work — together in the shared project or in your own copy — and the per-project switches), and the Suggestions tab for editors. `/cloud` was deleted on 2026-10-06. It reads the two clocks and sorts the project into one of ten states, plans what a Receive would change from change facts and one overlap policy, receives by fast-forward, and Combines as one decision commit; a contested book is settled in Review against the shared project. The check on open and send on save run per project, on by default. Scripture text is never merged automatically. A project from Writer also checks the Writer projects its books follow, after the shared project, and offers their work in the popover and Review. One reading for the whole application (`syncWatch`) feeds the app bar's cloud and its popover, `/cloud`, Review's sync line and Save's receipt; counts are verses and books, never versions. `src/core/sync`, `app/ui/cloud`. → [sync](architecture/sync.md)
+The app bar's cloud popover (state, clocks, the one right move, sign in and out, publish, how your suggestion stands), Settings' Cloud section (account, shared project, how you work — together in the shared project or in your own copy — and the per-project switches), and the Suggestions tab for editors. `/cloud` was deleted on 2026-10-06. It reads the two clocks and sorts the project into one of eleven states, plans what a Receive would change from change facts and one overlap policy, receives by fast-forward, and Combines as one decision commit; a contested book is settled in Review against the shared project. The check on open and send on save run per project, on by default. Scripture text is never merged automatically. A project from Writer also checks the Writer projects its books follow, after the shared project, and offers their work in the popover and Review. One reading for the whole application (`syncWatch`) feeds the app bar's cloud and its popover, `/cloud`, Review's sync line and Save's receipt; counts are verses and books, never versions. `src/core/sync`, `app/ui/cloud`. → [sync](architecture/sync.md)
 
 ### Constraints and known bugs
 

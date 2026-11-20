@@ -4,7 +4,6 @@ import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
 import { PROJECTS_WIDTH } from "../../settings";
 import { PanelHeader, Resizable } from "../primitives";
-import { RecoveryBanner } from "../recovery/RecoveryBanner";
 import type { PendingDownload } from "./downloads";
 import { ImportHub } from "./ImportHub";
 import { WacsProjects } from "./WacsProjects";
@@ -22,8 +21,6 @@ export function ProjectsLanding() {
 
   return (
     <main class="flex h-full min-w-0 flex-col gap-6 overflow-hidden p-6">
-      <RecoveryBanner />
-
       {/* Below lg the two stack, and the drag widths give way to the column. */}
       <Resizable.Root
         class="min-h-0 flex-1 max-lg:flex-col max-lg:gap-6"

@@ -178,10 +178,30 @@ export default defineConfig(({ mode }) => {
             name: "core",
             environment: "node",
             include: ["src/**/*.test.ts", "packages/*/src/**/*.test.ts", "tools/**/*.test.ts"],
-            exclude: [...configDefaults.exclude, "**/*.browser.test.*"],
+            exclude: [...configDefaults.exclude, "**/*.browser.test.*", "**/*.wacs.test.*"],
             setupFiles: ["src/platform/node/bento.setup.ts"],
           },
         },
+        // The local WACS smoke check (tools/wacs/). It needs Docker running
+        // `pnpm wacs:up`, so it exists only when `pnpm wacs:check` asks for
+        // it, never in a plain `vitest` or `pnpm check`.
+        ...(process.env.npm_lifecycle_event === "wacs:check"
+          ? [
+              {
+                extends: true,
+                test: {
+                  name: "wacs",
+                  environment: "node",
+                  include: ["tools/wacs/*.wacs.test.ts"],
+                  setupFiles: ["src/platform/node/bento.setup.ts"],
+                  testTimeout: 120_000,
+                  hookTimeout: 60_000,
+                  fileParallelism: false,
+                  sequence: { concurrent: false },
+                },
+              },
+            ]
+          : []),
         {
           extends: true,
           test: {

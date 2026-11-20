@@ -1,3 +1,4 @@
+import { shellKeys } from "../../settings";
 import type { Tour, TourContext } from "../machine";
 
 /**
@@ -46,6 +47,10 @@ export const writerTour: Tour = {
   steps: [
     {
       go: (context) => {
+        // Writer repos are behind tech and project manager mode; this tour is about them.
+        const { settings } = context.shell.services;
+        const techMode = shellKeys(settings).techMode;
+        if (!settings.get(techMode)) void context.shell.services.run(settings.set(techMode, true));
         if (!onPath("/projects")) void context.navigate({ to: "/projects" });
       },
       ready: () => present("[data-tour=wacs-repos]"),

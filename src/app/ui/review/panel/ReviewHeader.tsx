@@ -4,7 +4,6 @@ import { Match, Show, Switch, createSignal, onCleanup } from "solid-js";
 
 import { m } from "#app/paraglide/messages";
 
-import { ago } from "../../panels/format";
 import { Badge, Button, Tooltip } from "../../primitives";
 import { useBackToEditor } from "../../workspace/BackToEditor";
 import { bookCount, changeCount } from "../reader/helpers";
@@ -20,7 +19,6 @@ interface ReviewHeaderProps {
   readonly form: SaveForm;
   readonly busy: string;
   readonly note: string;
-  readonly lastBackup: number | undefined;
   /** How the person got here, which the subtitle answers: Review is no longer reached only from Save. */
   readonly reason: ReviewReason;
   readonly changes: number;
@@ -115,13 +113,7 @@ function HeaderActions(props: { readonly header: ReviewHeaderProps }) {
               !props.header.form.namesQueued() &&
               !props.header.sides.againstShared()
             }
-            title={
-              props.header.lastBackup === undefined
-                ? m.review_write_and_keep_a_version()
-                : m.review_write_and_keep_a_version_your({
-                    when: ago(props.header.lastBackup ?? 0),
-                  })
-            }
+            title={m.review_write_and_keep_a_version()}
             onClick={() => {
               if (props.header.saveReady !== false) {
                 props.header.form.openRecord();

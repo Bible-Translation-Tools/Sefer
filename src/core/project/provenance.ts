@@ -13,10 +13,21 @@ export interface LocalArrival {
   readonly books: readonly string[];
 }
 
+/** The language a catalogue row names for a repository: its code and its name. */
+export interface ArrivalLanguage {
+  readonly tag: string;
+  readonly name: string;
+}
+
 export interface RemoteArrival {
   readonly via: "remote";
   readonly url: string;
   readonly catalogueId?: string;
+  /**
+   * The catalogue row's language, kept so a project whose own manifest names
+   * none still has one to show. The manifest is never rewritten to hold it.
+   */
+  readonly language?: ArrivalLanguage;
 }
 
 export type Arrival = LocalArrival | RemoteArrival;
@@ -100,4 +111,21 @@ export const firstArrival = (
 ): Effect.Effect<Option.Option<ProjectOrigin>> =>
   Effect.map(readList(fileSystem, joinPath(root, PROVENANCE_PATH)), (list) =>
     list.length === 0 ? Option.none() : originOf(list[0]),
+  );
+
+const languageOf = (record: unknown): Option.Option<ArrivalLanguage> => {
+  if (!isRecord(record) || !isRecord(record.language)) return Option.none();
+  const { tag, name } = record.language;
+  if (typeof tag !== "string" || typeof name !== "string") return Option.none();
+  if (tag.trim() === "" && name.trim() === "") return Option.none();
+  return Option.some({ tag: tag.trim(), name: name.trim() });
+};
+
+/** The language the catalogue named when the project first arrived, if it came from one. */
+export const arrivalLanguage = (
+  fileSystem: FileSystem.FileSystem,
+  root: string,
+): Effect.Effect<Option.Option<ArrivalLanguage>> =>
+  Effect.map(readList(fileSystem, joinPath(root, PROVENANCE_PATH)), (list) =>
+    list.length === 0 ? Option.none() : languageOf(list[0]),
   );

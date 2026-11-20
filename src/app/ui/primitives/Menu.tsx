@@ -70,6 +70,8 @@ export interface MenuProps {
   readonly onOpenChange?: (open: boolean) => void;
   readonly class?: ClassValue;
   readonly triggerClass?: ClassValue;
+  /** False when the opener puts focus back itself (the editor's right-click menu). */
+  readonly restoreFocus?: boolean;
   readonly fitViewport?: boolean;
 }
 
@@ -93,6 +95,7 @@ export function Menu(props: MenuProps) {
         class={props.class}
         triggerClass={props.triggerClass}
         fitViewport={props.fitViewport}
+        restoreFocus={props.restoreFocus}
         initialFocus={ITEMS}
         trigger={props.trigger}
       >

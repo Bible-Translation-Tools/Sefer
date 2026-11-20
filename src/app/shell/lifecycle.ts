@@ -1,16 +1,16 @@
 import type { EditorBook } from "@wycliffeassociates/sefer-editor";
 import type { BookId } from "@wycliffeassociates/sefer-text/book";
+import { decode } from "@wycliffeassociates/sefer-text/source";
 import { Effect, Option, Result } from "effect";
 import { createSignal, onCleanup, untrack, type Accessor, type Setter } from "solid-js";
 
 import { m } from "#app/paraglide/messages";
 import { ProjectAnalysis } from "#core/analysis/projectAnalysis";
+import { repositoryPath } from "#core/git/git";
 import { Repositories } from "#core/git/repository";
 import { Observability } from "#core/observability";
 import { stepProject, type ProjectEvent, type ProjectPhase } from "#core/project/lifecycle";
 import { openProject as openProjectEffect, type Project } from "#core/project/project";
-import type { Restorable } from "#core/recovery/recovery";
-import { pendingOnOpen } from "#core/recovery/reopen";
 import { highestVersions } from "#core/resources/relationships";
 import { SaveCoordinator } from "#core/save/saveCoordinator";
 
@@ -19,7 +19,7 @@ import type { ResourceHandles } from "../kinds/handles";
 import { registerLegacyMarkers } from "../legacyMarkers";
 import { noteRenamed } from "../projectNames";
 import type { Services } from "../services";
-import type { LastLocation, shellKeys } from "../settings";
+import type { LastLocation } from "../settings";
 import type { ShellStores } from "../shellStores";
 import type { SuppressionStore } from "../suppressions";
 import { checkForChanges } from "../syncActions";
@@ -30,7 +30,6 @@ import type { LiveProject } from "./types";
 
 export interface LifecycleDeps {
   readonly services: Services;
-  readonly keys: ReturnType<typeof shellKeys>;
   readonly stores: ShellStores;
   readonly suppressions: SuppressionStore;
   readonly resources: ResourceHandles;
@@ -41,6 +40,8 @@ export interface LifecycleDeps {
   readonly live: LiveProject;
   readonly report: (message: string) => void;
   readonly lastLocation: (root: string) => LastLocation | undefined;
+  /** Puts the view in the mode Settings names as the default, as a project opens. */
+  readonly startInDefaultMode: () => void;
 }
 
 type Gesture = ReturnType<Services["composition"]["observability"]["operation"]>;
@@ -78,12 +79,7 @@ const createSeatWatch = (services: Services, changed: ShellStores["changed"]) =>
 
   const watch = (ready: Project): void => {
     const unwatchEdits = watchSeatedEdits();
-    const unmountRecovery = services.recovery.mount(ready, (bookId) => {
-      const book = ready.book(bookId);
-      return book === undefined
-        ? undefined
-        : Option.getOrUndefined(services.save.baseline(book))?.hash;
-    });
+    const unmountAutosave = services.autosave.mount(ready);
     const unwatchSwaps = ready.changed((bookId) => {
       edits.follow(bookId);
       changed({
@@ -94,7 +90,7 @@ const createSeatWatch = (services: Services, changed: ShellStores["changed"]) =>
     unwatchSeats = () => {
       unwatchSwaps();
       unwatchEdits();
-      unmountRecovery();
+      unmountAutosave();
     };
   };
 
@@ -113,9 +109,36 @@ const noteLegacyMarkers = (services: Services, ready: Project, gesture: Gesture)
   });
 };
 
+/**
+ * The recorded version of each book whose file differs from local HEAD: a
+ * file autosave wrote last session that no version holds yet. Every other
+ * book's recorded version is its file, as `adopt` already said. A project
+ * outside git, or a status that fails, leaves every book at its file.
+ */
+const adoptRecorded = (services: Services, ready: Project) =>
+  Effect.catch(
+    Effect.gen(function* () {
+      const repo = yield* services.git.open(ready.root);
+      const status = yield* services.git.status(repo);
+      const changed = new Set(status.changed.map((entry) => entry.path));
+      if (changed.size === 0) return;
+      for (const book of ready.books) {
+        const inside = repositoryPath(ready.root, book.path);
+        if (Option.isNone(inside) || !changed.has(inside.value)) continue;
+        const bytes = yield* Effect.result(services.git.show(repo, "HEAD", inside.value));
+        // Not in HEAD at all (a new book): no recorded version, so every line is a change.
+        const text = Result.isSuccess(bytes) ? decode(bytes.success) : undefined;
+        services.save.recordedAs(
+          book,
+          text !== undefined && text._tag === "Success" ? text.success.text : "",
+        );
+      }
+    }),
+    () => Effect.void,
+  );
+
 export const createLifecycle = ({
   services,
-  keys,
   stores,
   suppressions,
   resources,
@@ -126,15 +149,11 @@ export const createLifecycle = ({
   live,
   report,
   lastLocation,
+  startInDefaultMode,
 }: LifecycleDeps) => {
   const { changed } = stores;
 
   const seatWatch = createSeatWatch(services, changed);
-
-  const [recoveryOffer, setRecoveryOffer] = createSignal<readonly Restorable[] | undefined>(
-    undefined,
-    { name: "recoveryOffer" },
-  );
 
   const [phase, setPhase] = createSignal<ProjectPhase>(
     { kind: "closed" },
@@ -149,7 +168,8 @@ export const createLifecycle = ({
 
   const tearDown = async (): Promise<void> => {
     const staticOpen = untrack(() => project());
-    setRecoveryOffer(undefined);
+    // Whatever autosave is waiting on reaches disk before the books go.
+    if (staticOpen !== undefined) await services.run(services.autosave.flush);
     seatWatch.release();
     live.set(undefined);
     setFocused(undefined);
@@ -191,22 +211,6 @@ export const createLifecycle = ({
     });
   };
 
-  const offerRecovery = (ready: Project, root: string): void => {
-    // Backups are written and found either way; "Offer unsaved work on open"
-    // (Settings › Advanced, or the banner's "Don't remind me again" in a dev
-    // build) only decides whether opening a project asks.
-    if (services.settings.get(keys.offerRecovery)) {
-      void services
-        .run(pendingOnOpen(services.recovery, ready.id, (text) => services.galley.hash(text)))
-        .then(
-          (found) => {
-            if (opening?.root === root || live.get() === ready) setRecoveryOffer(found);
-          },
-          () => setRecoveryOffer([]),
-        );
-    } else setRecoveryOffer([]);
-  };
-
   const attachAnalysis = (root: string, ready: Project, gesture: Gesture) =>
     services.run(
       Effect.provideService(
@@ -215,6 +219,7 @@ export const createLifecycle = ({
           yield* Effect.forEach(ready.books, (book) => coordinator.adopt(book), {
             discard: true,
           });
+          yield* adoptRecorded(services, ready);
           const analysis = yield* ProjectAnalysis;
           yield* Effect.promise(() => suppressions.load(root));
           yield* analysis.attach(ready, { first: lastLocation(root)?.bookId });
@@ -244,7 +249,6 @@ export const createLifecycle = ({
       return;
     }
     const ready = opened.success;
-    offerRecovery(ready, root);
     noteLegacyMarkers(services, ready, gesture);
     await attachAnalysis(root, ready, gesture);
     gesture.end("ready", { "project.books": ready.books.length });
@@ -259,6 +263,7 @@ export const createLifecycle = ({
         }),
       ),
     );
+    startInDefaultMode();
     setProject(ready);
     send({ kind: "opened", root });
     setCursor(0);
@@ -277,5 +282,5 @@ export const createLifecycle = ({
     report(m.shell_opened_name_count_books({ name: ready.root, count: ready.books.length }));
   };
 
-  return { phase, recoveryOffer, setRecoveryOffer, closeProject, openProject };
+  return { phase, closeProject, openProject };
 };

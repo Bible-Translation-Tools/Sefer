@@ -1,0 +1,199 @@
+---
+id: 98ec1e8b-5511-4907-ac74-d2d3b22a36ca
+title: "Autosave to disk: the journal goes, review moves to the device boundary"
+kind: plan
+status: done
+created: 2026-11-18
+updated: 2026-11-18
+sha: 57fc8a07
+tags: [save, sync]
+related: [f26024e8-56d1-4991-b476-44c4bafbadda]
+---
+
+Approved by Will on 2026-11-18. This reverses the explicit-save rule of 2026-09-14, under which
+the real file was written only on Record a version and every automatic write went to the
+recovery journal. Mark this `done` when the work below lands.
+
+## What started it
+
+The designer's app bar showed a flashing "Saving" and then "Saved" while the file on disk was
+still the last recorded version. Will's objection:
+
+> I've made changes, you told with a flashing badge "saving" but they aren't. You have work
+> that's dirty and hasn't saved to disk. If you close the app it'd tell you there's recovered
+> work, but not saved work
+
+The designer's reading of "saved":
+
+> IMO, i'm not really sure that anyone actually knows or cares about the difference between
+> "saved" and "recoverable." I'm really just using it as a "if you close the app and come back,
+> your work will come back"
+
+and the ruling MEL brought back from her contacts:
+
+> if you are working only on your device and you aren't moving content in or out of Sefer, review
+> is a strictly optional step that you can do but we don't require. [...] Review is a mandatory
+> step if you sideload changes or if you upload / download changes from WACS.
+
+> the 'review' is more of an implied action tahts already been done by the team, so requiring it
+> to be done again is tedious
+
+## Why we were talking past each other
+
+"Save" was standing for four different things:
+
+|             | What it means                                | Before this plan                             |
+| ----------- | -------------------------------------------- | -------------------------------------------- |
+| Recoverable | close the app, come back, the work is there  | the journal, about 500 ms after typing stops |
+| On disk     | the USFM file holds the latest text          | only on Record a version                     |
+| Versioned   | a commit you can go back to                  | only on Record a version                     |
+| Shared      | uploaded to WACS, or brought in from outside | Review and upload                            |
+
+The designer meant the first. Will meant the second, and Sefer tied it to the third and to the
+review screen. That tie was the real friction: writing the file meant going through review, and
+review is exactly what MEL's contacts asked not to require.
+
+## Options considered
+
+<Tradeoff
+  id="autosave"
+  chose="Write edits to the file automatically"
+  cost="No dirty-buffer diff for the current session; the file is always in progress"
+>
+  Keeping explicit save, the way Zed and VS Code behave by default, was the alternative. Will's case
+  for it: serious text editors keep a dirty buffer, and "half-written scripture is broken
+  scripture." It lost because the people using Sefer expect the autosave of Word and Pages, both
+  code editors can autosave too (`files.autoSave`, Zed's `autosave`), and nothing executes
+  half-typed scripture. It only does harm if someone else reads it, and that happens at the device
+  boundary, where review stays mandatory. On desktop the project folder is visible, so a translator
+  who copied it to a USB stick used to get the last recorded version, not their work.
+</Tradeoff>
+
+<Tradeoff
+  id="banner"
+  chose="No restore banner"
+  cost="Word shows the same banner, and it's where the idea came from"
+>
+  Word shows its recovery pane only after a crash; a normal close asks to save first. Sefer showed
+  the banner after an ordinary close, which is why it read as a bug.
+</Tradeoff>
+
+<Tradeoff id="checkpoints" chose="No automatic commits of any kind" cost="No record of work between versions">
+Two ways to protect work that sits only on disk were considered and turned down:
+
+- Commit automatically, then squash before anything crosses the network. It rewrites local
+  history, it has to stop at named versions and Writer-migrated commits, and it goes against
+  keeping every Writer save as its own commit.
+- Commit to a private ref (`refs/sefer/checkpoints/*`, like `git stash create`) before any git
+  operation that rewrites the working tree. It's quiet, but at a 500 ms debounce it records
+  single keystrokes, and on a longer timer it records arbitrary points nobody chose.
+
+Tracing the callers showed neither is needed. Only three paths rewrite the working tree, two
+already guard themselves, and the third can refuse (see below). If someone later wants to see a
+day's work, the answer is a daily version on the branch, not a private ref.
+
+</Tradeoff>
+
+<Tradeoff
+  id="diff"
+  chose="The default diff is current text against local HEAD"
+  cost="No diff of this session's edits on their own"
+>
+  The comparison against the remote happens only in the upload review, against the remote branch
+  after a fetch.
+</Tradeoff>
+
+## The work
+
+1. **Remove the recovery journal.** The save coordinator writes edits to the book's file from a
+   debounced queue: 1–2 s after typing stops, plus a flush on blur, on switching book and on
+   close.
+2. **Make "Saved" and the cloud panel true** by reading their state from the queue. Remove the
+   "We restored your work" banner.
+3. **The default diff is current text against local HEAD.**
+4. **Build the combine commit from `git.status` paths.** At `combine.ts:390` only books where
+   `save.dirty` is true get saved, and the commit is built from those receipts. Under autosave
+   nothing is ever dirty, so edited books would drop out of the merge commit.
+5. **Route receive's refusal into review.** Receive already refuses with `"unrecorded"` when an
+   incoming file has changes on disk that no commit holds (`receive.ts:154`). Under autosave
+   that fires whenever the translator has edited an arriving book, which is MEL's rule. The
+   refusal has to open review or combine, not end at an error.
+6. **`abortMerge` refuses when the working tree has changes beyond the merge.** Its only caller
+   is the resolve quick action, and the state it clears (`.git/MERGE_HEAD`) is one Sefer never
+   creates itself. It's a hard reset, so under autosave it would throw away work.
+7. **Hold the queue during a sync transaction.** `handOver` (`classify.ts:120`) puts the
+   incoming text into the open books as ordinary edits, and `giveBack` reverts them the same
+   way. Under autosave each of those edits would schedule a disk write in the middle of the
+   transfer. Sync and autosave share one lock per file: the per-path `Semaphore` that
+   `serialize` already keeps. A sync transaction flushes any pending writes for its paths, takes
+   those paths' permits in sorted order, and keeps them from `handOver` through the
+   fast-forward or commit and `takeDisk`. Edits made in the meantime only mark the book
+   pending, and the book gets one write after the release.
+
+Every write is checked first against the save coordinator's hash of the file on disk
+(`reallyDiffers`). That check is what keeps autosave from silently overwriting changes made
+outside Sefer: a `git pull`, another app, or a folder shared over Dropbox.
+
+## Notes from tracing the code
+
+- **Write ordering is already safe**, desktop included. `serialize` puts each file's writes
+  through a one-at-a-time queue (`Semaphore(1)`) and waits for the whole `writeFileAtomic`
+  before starting the next. Tauri IPC can only reorder calls that are in flight together, so no
+  generation number is needed. One change: read the book's text after getting the turn in the
+  queue, not before, so the newest text wins and a burst of edits becomes one write.
+- **No worker.** OPFS `createWritable` is async; encoding and hashing a book costs about a
+  millisecond on the main thread. The per-file cost under Sophos comes from the antivirus, and
+  field laptops and phones don't run it.
+- **No fallback without `createWritable`.** The Web layer has no fallback when `createWritable`
+  is missing, and no feature check. The journal used the same call, so this plan makes nothing
+  worse.
+
+<Followup id="fast-forward-dirty">
+  Test that `fastForward` on both isomorphic-git and git2 leaves alone changed files that aren't
+  arriving. Receive's status check only covers incoming paths.
+</Followup>
+
+<Followup id="send-on-save">
+  "Sending on save" in `src/app/syncActions.ts` meant sending when a version was recorded. Decide
+  what triggers it now that saving no longer creates a commit.
+</Followup>
+
+<Followup id="daily-version">
+  MEL floated an automatic daily version. Not built; add it if someone asks to see a day's work.
+</Followup>
+
+## Built (2026-11-18, branch `feat/autosave-to-disk`)
+
+All seven pieces, plus the pre-write check. Driven on the Web fixture: an
+edit shows "Saving changes…" then "Saved" and a `save` of the book;
+Review lists it against "Last version" though the file already holds it;
+Record a version commits it (History shows one version) and the next edit
+reads against that version alone; two writes in a row pass the check.
+Unit tests, typecheck, lint, boundaries, deadcode and the build pass.
+
+<Followup id="desktop-drive">Run `pnpm test:desktop` (the rewritten save claim) and drive
+the window close: the flush before close and `core:window:allow-destroy`.
+Neither was run.</Followup>
+
+<Followup id="feature-file">`agents/skills/verify-sefer/features/edit-and-save.md` still
+says Save never writes straight away; the agent sandbox cannot write
+`agents/skills`, so it needs a hand edit.</Followup>
+
+<Followup id="copy-pass">For the PO copy pass: Review's right side still says "In the
+editor, to be saved"; the side pickers now offer "Last version" and "The last
+recorded version", which coincide in a git project.</Followup>
+
+<Followup id="old-journals">Journals older builds wrote stay in `appData/journals` and are
+never offered. Fine for testers; decide before a release whether one last
+"unsaved work from an older version" offer is owed.</Followup>
+
+<Followup id="conflict-drive">The outside-change refusal and its Keep mine toast are not
+driven: nothing on the Web writes OPFS behind Sefer. Desktop can, by editing
+the file while Sefer is open.</Followup>
+
+<Question id="send-on-save">"Send my changes on save" is off by default and hard to find, and
+autosave takes away the moment that used to make people decide. Proposed: remove the setting and
+give Review's save dialog an "Upload to WACS now" checkbox, ticked by default when the project is
+on WACS and writable, hidden otherwise; `upload=1` from the WACS panel would just tick it. Will
+deferred it (2026-11-18) to talk it over with the designer first.</Question>
+

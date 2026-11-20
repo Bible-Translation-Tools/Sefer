@@ -7,9 +7,15 @@ import { ShellGate } from "#app/ui/ShellGate";
 export const Route = createFileRoute("/_app/project/$slug/review")({
   validateSearch: (
     search: Record<string, unknown>,
-  ): { readonly against?: "shared" | "writer"; readonly pull?: number; readonly copy?: 1 } => {
+  ): {
+    readonly against?: "shared" | "writer";
+    readonly pull?: number;
+    readonly copy?: 1;
+    readonly upload?: 1;
+  } => {
     if (search.against === "writer") return { against: "writer" };
-    if (search.against !== "shared") return {};
+    // From the WACS panel's "Review and upload": saving this review also uploads.
+    if (search.against !== "shared") return Number(search.upload) === 1 ? { upload: 1 } : {};
     if (Number(search.copy) === 1) return { against: "shared", copy: 1 };
     const pull = Number(search.pull);
     return Number.isInteger(pull) && pull > 0 ? { against: "shared", pull } : { against: "shared" };

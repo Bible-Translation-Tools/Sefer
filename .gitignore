@@ -37,3 +37,6 @@ src/dev/design/local/
 .vitest/
 **/__screenshots__/
 spikes/
+
+# The local WACS proxy source, cloned by `pnpm wacs:up` (a private repo).
+tools/wacs/.proxy/

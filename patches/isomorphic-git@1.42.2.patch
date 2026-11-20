@@ -1,0 +1,104 @@
+diff --git a/index.cjs b/index.cjs
+index 27d19da57e8a2d2e5be0aec4d9988f1fc28c1e3b..caf1f395494a24dd00d9a1a63c6d3d8aedf64c99 100644
+--- a/index.cjs
++++ b/index.cjs
+@@ -11318,27 +11318,44 @@ async function _findMergeBase({ fs, cache, gitdir, oids }) {
+     return result
+   };
+   let heads = oids.map((oid, index) => ({ index, oid }));
++  // Ancestors of a common commit cannot be better merge bases, so a walker
++  // standing on one has nothing left to find. Without this, the walker that
++  // started at the older tip walked on to the root once the tips met: a push
++  // of one commit onto a 28,000-commit history read every commit. Every
++  // ancestor already read below a newly common commit is marked, so a walker
++  // that ran ahead of the meeting point stops too. (Sefer patch, 2026-11-18.)
++  const stale = new Set();
++  const markStale = oid => {
++    const stack = [...(parents.get(oid) || [])];
++    while (stack.length) {
++      const ancestor = stack.pop();
++      if (stale.has(ancestor)) continue
++      stale.add(ancestor);
++      for (const next of parents.get(ancestor) || []) stack.push(next);
++    }
++  };
+   while (heads.length) {
+     // Count how many times we've passed each commit
+     for (const { oid, index } of heads) {
+       await readParents(oid);
+       if (!visits[oid]) visits[oid] = new Set();
+       visits[oid].add(index);
+-      if (visits[oid].size === passes) {
++      if (visits[oid].size === passes && !common.has(oid)) {
+         common.add(oid);
++        markStale(oid);
+       }
+     }
+     const newheads = new Map();
+     for (const { oid, index } of heads) {
+       // Parents of a common commit cannot be better merge bases.
+-      if (common.has(oid)) continue
++      if (common.has(oid) || stale.has(oid)) continue
+       for (const parent of await readParents(oid)) {
+         if (!visits[parent] || !visits[parent].has(index)) {
+           newheads.set(parent + ':' + index, { oid: parent, index });
+         }
+       }
+     }
+-    heads = Array.from(newheads.values());
++    heads = Array.from(newheads.values()).filter(({ oid }) => !stale.has(oid));
+   }
+ 
+   if (common.size < 2) return [...common]
+diff --git a/index.js b/index.js
+index 74361cc030099751c9590a5757419bcab2314607..927a0614330094abbdbc63644ded98362e27ceff 100644
+--- a/index.js
++++ b/index.js
+@@ -11305,27 +11305,44 @@ async function _findMergeBase({ fs, cache, gitdir, oids }) {
+     return result
+   };
+   let heads = oids.map((oid, index) => ({ index, oid }));
++  // Ancestors of a common commit cannot be better merge bases, so a walker
++  // standing on one has nothing left to find. Without this, the walker that
++  // started at the older tip walked on to the root once the tips met: a push
++  // of one commit onto a 28,000-commit history read every commit. Every
++  // ancestor already read below a newly common commit is marked, so a walker
++  // that ran ahead of the meeting point stops too. (Sefer patch, 2026-11-18.)
++  const stale = new Set();
++  const markStale = oid => {
++    const stack = [...(parents.get(oid) || [])];
++    while (stack.length) {
++      const ancestor = stack.pop();
++      if (stale.has(ancestor)) continue
++      stale.add(ancestor);
++      for (const next of parents.get(ancestor) || []) stack.push(next);
++    }
++  };
+   while (heads.length) {
+     // Count how many times we've passed each commit
+     for (const { oid, index } of heads) {
+       await readParents(oid);
+       if (!visits[oid]) visits[oid] = new Set();
+       visits[oid].add(index);
+-      if (visits[oid].size === passes) {
++      if (visits[oid].size === passes && !common.has(oid)) {
+         common.add(oid);
++        markStale(oid);
+       }
+     }
+     const newheads = new Map();
+     for (const { oid, index } of heads) {
+       // Parents of a common commit cannot be better merge bases.
+-      if (common.has(oid)) continue
++      if (common.has(oid) || stale.has(oid)) continue
+       for (const parent of await readParents(oid)) {
+         if (!visits[parent] || !visits[parent].has(index)) {
+           newheads.set(parent + ':' + index, { oid: parent, index });
+         }
+       }
+     }
+-    heads = Array.from(newheads.values());
++    heads = Array.from(newheads.values()).filter(({ oid }) => !stale.has(oid));
+   }
+ 
+   if (common.size < 2) return [...common]

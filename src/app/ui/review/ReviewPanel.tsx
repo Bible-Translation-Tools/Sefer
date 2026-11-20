@@ -1,12 +1,10 @@
 import type { JSX } from "@solidjs/web";
 import { useNavigate } from "@tanstack/solid-router";
 import type { BookId } from "@wycliffeassociates/sefer-text/book";
-import { Option } from "effect";
 import Scale from "lucide-solid/icons/scale";
 import { Show, createEffect, createSignal, untrack, type Accessor } from "solid-js";
 
 import type { BookComparison } from "#core/compare";
-import type { Restorable } from "#core/recovery/recovery";
 
 import { m } from "../../paraglide/messages";
 import { useShell, type Navigate, type Shell } from "../../ProjectContext";
@@ -49,7 +47,6 @@ export interface PanelModel {
   readonly settled: () => boolean;
   readonly emptySide: () => string | undefined;
   readonly bookLabel: (book: BookComparison) => string;
-  readonly lastBackup: () => number | undefined;
   /** DESIGN SCAFFOLDING: the header's title or actions, for a layout that places them itself. */
   readonly header: (part: "title" | "actions", saveReady?: () => boolean) => JSX.Element;
 }
@@ -105,41 +102,6 @@ function watchRoute(route: ReviewRoute, decisions: Decisions, sides: Sides): voi
   );
 }
 
-function createLastBackup(
-  shell: Shell,
-  services: Services,
-  compare: Compare,
-  journals: Accessor<readonly Restorable[]>,
-  setJournals: (found: readonly Restorable[]) => void,
-): () => number | undefined {
-  const reload = (): void => {
-    const project = shell.project();
-    if (project === undefined) return;
-    void services
-      .run(
-        services.recovery.pending((bookId: BookId) => {
-          const book = project.book(bookId);
-          return book === undefined ? Option.none() : services.save.baseline(book);
-        }),
-      )
-      .then((found) => {
-        setJournals(found.filter((entry) => entry.projectId === project.id));
-      });
-  };
-
-  createEffect(compare.revisions, () => {
-    untrack(reload);
-  });
-
-  return (): number | undefined => {
-    let latest: number | undefined;
-    for (const journal of journals())
-      for (const entry of journal.entries)
-        if (latest === undefined || entry.at > latest) latest = entry.at;
-    return latest;
-  };
-}
-
 function reasonOf(panel: PanelModel): ReviewReason {
   if (panel.route.pull() !== undefined) return "suggestion";
   if (panel.route.fromCopy()) return "copy";
@@ -162,7 +124,6 @@ function ReviewHeaderView(props: {
       form={props.panel.form}
       busy={props.panel.busy()}
       note={props.panel.note()}
-      lastBackup={props.panel.lastBackup()}
       reason={reasonOf(props.panel)}
       changes={props.panel.compare.result() === undefined ? 0 : props.panel.units.totals().total}
       books={props.panel.compare.result()?.changedBooks ?? 0}
@@ -227,9 +188,6 @@ export function ReviewPanel() {
   const decisions = createDecisions();
   const sides = createSides({ shell, services, navigate, route, decisions, setNote, setBusy });
   const { leftShort, rightShort, leftLabel, rightLabel } = sides;
-  const [journals, setJournals] = createSignal<readonly Restorable[]>([], {
-    name: "reviewJournals",
-  });
   const [cardEditing, setCardEditing] = createSignal(false, { name: "reviewCardEditing" });
   const nameOf = (bookId: BookId): string => bookName(bookId, metadataOf(shell.project()));
 
@@ -270,7 +228,6 @@ export function ReviewPanel() {
     designReviewStates({ shell, route, sides, compare, units, decisions, setLayout });
     void import("#dev/review/InlineReview").then((module) => setInline(() => module.InlineReview));
   }
-  const lastBackup = createLastBackup(shell, services, compare, journals, setJournals);
 
   const emptySide = (): string | undefined => {
     const books = compare.result()?.books ?? [];
@@ -302,7 +259,6 @@ export function ReviewPanel() {
     settled,
     emptySide,
     bookLabel,
-    lastBackup,
     header: (part, saveReady) => (
       <ReviewHeaderView panel={panel} part={part} saveReady={saveReady} />
     ),

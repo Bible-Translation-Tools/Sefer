@@ -1,6 +1,7 @@
 import git from "isomorphic-git";
 
 import type { IsomorphicFs } from "#core/fileSystem/nodeView";
+import { objectCache } from "#core/fileSystem/objectCache";
 import {
   buildBookIndex,
   decodeIndex,
@@ -10,7 +11,6 @@ import {
   type BuildReport,
 } from "#core/history/bookIndex";
 
-import { packView } from "./packView";
 import { objectReader } from "./reader";
 import type { BuildRequest, WorkerMessage } from "./worker";
 
@@ -37,7 +37,7 @@ const inWorker = (request: BuildRequest): Promise<{ index: BookIndex; report: Bu
   });
 
 const inPage = (fs: IsomorphicFs, request: BuildRequest) =>
-  buildBookIndex(objectReader(packView(fs, request.root).fs, request.root), {
+  buildBookIndex(objectReader(objectCache(fs, { holdPack: true }).fs, request.root), {
     previous: request.previous,
   });
 

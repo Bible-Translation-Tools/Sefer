@@ -38,7 +38,7 @@ function SourceSwitches(props: { readonly row: FindScopeRowProps }) {
         onChange={(on) => props.row.updateSearch({ scope: on ? "reference" : "project" })}
       />
       <Show when={props.row.scope() === "reference"}>
-        <span data-tour="find-expect-toggle">
+        <span class="flex" data-tour="find-expect-toggle">
           <Switch
             label={m.find_expect()}
             checked={props.row.expect.expectShown()}
@@ -47,7 +47,7 @@ function SourceSwitches(props: { readonly row: FindScopeRowProps }) {
         </span>
       </Show>
       <Show when={props.row.sources.searchable().length > 0}>
-        <span data-tour="find-helps">
+        <span class="flex" data-tour="find-helps">
           <Switch
             label={m.find_search_title({ title: props.row.sources.helpsTitle() })}
             checked={props.row.scope() === "helps"}

@@ -38,6 +38,13 @@ export function FindSearchBar(props: { query: FindQuery; commit: () => void }) {
         />
         <IconButton
           size="sm"
+          label={m.find_match_accents()}
+          icon={<AccentGlyph />}
+          aria-pressed={props.query.matchAccents() ? "true" : "false"}
+          onClick={() => props.query.setMatchAccents((held) => !held)}
+        />
+        <IconButton
+          size="sm"
           label={m.find_whole_word()}
           icon={<WholeWordIcon />}
           aria-pressed={props.query.wholeWord() ? "true" : "false"}
@@ -62,5 +69,20 @@ export function FindSearchBar(props: { query: FindQuery; commit: () => void }) {
         {m.common_find()}
       </Button>
     </div>
+  );
+}
+
+/**
+ * An `é` drawn in the same 24-unit box as the Lucide icons beside it, so the
+ * button's size rule and its pressed colour reach it as they reach Match case's
+ * `Aa`. Lucide has no accent icon.
+ */
+function AccentGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <text x="12" y="18.5" text-anchor="middle" font-size="23" font-weight="700">
+        é
+      </text>
+    </svg>
   );
 }

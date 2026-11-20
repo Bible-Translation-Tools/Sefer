@@ -3,13 +3,13 @@ import { Effect, FileSystem, Option } from "effect";
 import { Git, type Repo } from "../git/git";
 import { excludeSeferFolder } from "../git/intake";
 import { Observability } from "../observability";
-import { appendArrival } from "../project/provenance";
+import { appendArrival, type RemoteArrival } from "../project/provenance";
 import { Remote, type CloneOptions, type Progress, type RemoteError } from "./remote";
 
 export const cloneRepository = (
   url: string,
   into: string,
-  catalogueId?: string,
+  catalogue?: Pick<RemoteArrival, "catalogueId" | "language">,
   options?: CloneOptions,
 ): Effect.Effect<
   { readonly repo: Repo; readonly progress: Progress },
@@ -25,7 +25,8 @@ export const cloneRepository = (
       appendArrival(fileSystem, into, {
         via: "remote",
         url,
-        ...(catalogueId === undefined ? {} : { catalogueId }),
+        ...(catalogue?.catalogueId === undefined ? {} : { catalogueId: catalogue.catalogueId }),
+        ...(catalogue?.language === undefined ? {} : { language: catalogue.language }),
       }),
     );
     if (options?.history === undefined && remote.backfills)

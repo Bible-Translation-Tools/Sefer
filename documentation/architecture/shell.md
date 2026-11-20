@@ -9,7 +9,7 @@ The shell is the Solid layer above every module: it composes their Layers once, 
 Wiring facts that carry meaning, not taste:
 
 - `run` provides the **application** scope (`runtime.scope`). `openProject` and `ProjectAnalysis.attach` require `Scope`; a per-call `Effect.scoped` would close the project the instant the call returned.
-- `RecoveryLive` is provided **to** `SaveCoordinatorLive` (`Layer.provideMerge`). Save reads Recovery through `serviceOption`, so it only journals when Recovery is in its own context.
+- `AutosaveLive` sits over `SaveCoordinatorLive` (`Layer.provideMerge`) and writes through it. Sync, recording a version and finishing a transfer stand it aside with `Autosave.hold` (core code through `standingAside`, which does nothing when no Autosave is provided).
 - The Save hasher is built with `Layer.unwrap` over `Galley`: the book hash is the engine's, and the hasher is a function that needs the built engine.
 - `Observability` is merged back over the modules (`provideMerge`, not `provide`) because `run` may ask for the ring itself.
 - The `seat` (`src/app/services.ts`) is how a plain Book becomes an `EditorBook`. It records each one it makes, which is how the shell reaches an `EditorBook` from a `Book` port with no type assertion. It gives each book a fresh `galley.memoize()`, and adds the **mountable** half of the editor (`commandsLayer`, `viewLayer()`, `usfmLinter()`, `lintHoverGrace()`, `findingMarks()`, `noteEditing()`) so a view can be constructed straight over `book.state`.
@@ -154,10 +154,6 @@ search dialog closes on it), and a full-page screen closes only through its X bu
 `installCommandKeys` skips a binding with no modifier while the reader is typing into an input, a
 text area or a contenteditable — which is what `.cm-content` is, so the editor and the palette's own
 search box are covered by one rule. Every other binding holds Mod, so the rule costs them nothing.
-
-The recovery banner is mounted on the book route as well as the project route, for the same reason:
-unsaved work found on open is the first thing to answer, and the project page is not where an open
-lands.
 
 ## The workspace chrome
 
@@ -342,7 +338,7 @@ The first is **Triage verse numbers** (`tours/verseNumbers.ts`): one step per fi
 
 ## Routes and tokens
 
-Top level: `/`, `/projects`, `/settings` (a redirect to `/projects`: Settings live under a project), `/start/create`, the dev-only `/dev/fixture`, and `/design` (outside the `_app` chrome). Under `/project/$slug`: the index (a redirect to the work, above), `book/$book`, `find`, `findings`, `history` (`?review=1` redirects to `review`), `inventory`, `terms`, `review`, `suggestions`, `settings` and `playground`. Settings is under the project so reaching it never closes the project, and its Cloud section is that project's; the preferences on it are still the device's, for every project. The app bar's Settings is disabled with no project open. A project's slug is minted by `shell.slugFor(root)` and kept in the `projectSlugs` setting, so a bookmark keeps working (deleting a project forgets its slug, so an old link never opens a project made later in the same folder); slugs minted this session are also held in memory and read first by `rootForSlug`, because a setting only answers a new value once the settings file is written and a click mints and navigates in the same tick. `find` owns its search params and derives its whole state from them, so a link into it from the app bar or the toolbar changes the screen that is already mounted. File routes under `src/routes`; `src/routeTree.gen.ts` is generated — never edit it.
+Top level: `/`, `/projects`, `/settings` (Settings with no project open: the device's preferences, without the project's own cards), `/start/create`, the dev-only `/dev/fixture`, and `/design` (outside the `_app` chrome). Under `/project/$slug`: the index (a redirect to the work, above), `book/$book`, `find`, `findings`, `history` (`?review=1` redirects to `review`), `inventory`, `terms`, `review`, `suggestions`, `settings` and `playground`. With a project open, Settings is under the project so reaching it never closes the project, and its project cards are that project's; with none, ⌘, and the app bar's Settings go to `/settings`, the same page (`src/app/ui/settings/SettingsPage.tsx`), since the preferences are the device's, for every project (Will, 2026-11-18). A project's slug is minted by `shell.slugFor(root)` and kept in the `projectSlugs` setting, so a bookmark keeps working (deleting a project forgets its slug, so an old link never opens a project made later in the same folder); slugs minted this session are also held in memory and read first by `rootForSlug`, because a setting only answers a new value once the settings file is written and a click mints and navigates in the same tick. `find` owns its search params and derives its whole state from them, so a link into it from the app bar or the toolbar changes the screen that is already mounted. File routes under `src/routes`; `src/routeTree.gen.ts` is generated — never edit it.
 
 ### Share links: `/r/$owner/$repo/…`
 

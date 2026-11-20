@@ -1,12 +1,17 @@
+import { useNavigate } from "@tanstack/solid-router";
 import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import { Option } from "effect";
+import ChevronRight from "lucide-solid/icons/chevron-right";
 import { For, Show, createMemo, createSignal } from "solid-js";
 
 import { m } from "#app/paraglide/messages";
 import {
   chapterLabelsOf,
   keptAsWritten,
+  renumbered,
+  standardize as standardizeBook,
   wordsOf,
+  type BookLabels,
   type ChapterLabel,
 } from "#core/rules/chapterLabels";
 
@@ -24,7 +29,41 @@ interface Row {
   /** The book label's word, when it has one. */
   readonly bookWord?: string;
   readonly kept: readonly ChapterLabel[];
+  /** Whether the book has any chapter label: one without is listed only while adding a word. */
+  readonly labeled: boolean;
+  readonly labels: BookLabels;
 }
+
+/**
+ * Why a book is not yet standard, against the project's word; `undefined`
+ * when Standardize with that word would change nothing and no number is off.
+ */
+type Difference = "number" | "mixed" | "word" | "perChapter" | "kept";
+
+const differenceOf = (row: Row, projectWord: string | undefined): Difference | undefined => {
+  if (row.kept.some((label) => label.mismatched)) return "number";
+  if (row.words.length > 1) return "mixed";
+  // Only labels written their own way: no word to judge, but each can be fixed.
+  if (row.words.length === 0) return row.kept.length > 0 ? "kept" : undefined;
+  if (projectWord === undefined) return undefined;
+  if (row.words[0]?.[0] !== projectWord) return "word";
+  return standardizeBook(row.labels, projectWord).length > 0 ? "perChapter" : undefined;
+};
+
+const differenceText = (difference: Difference, row: Row, projectWord: string): string => {
+  switch (difference) {
+    case "number":
+      return m.chapter_labels_differs_number();
+    case "mixed":
+      return m.chapter_labels_differs_mixed({ count: row.words.length });
+    case "word":
+      return m.chapter_labels_differs_word({ word: projectWord });
+    case "perChapter":
+      return m.chapter_labels_differs_per_chapter();
+    case "kept":
+      return m.chapter_labels_differs_kept({ count: row.kept.length });
+  }
+};
 
 /** The select's two values that are not a word. */
 const LEAVE = "";
@@ -35,15 +74,26 @@ const OTHER = "\u0000other";
  * labels is a row: leave it, or pick the word its chapters should read (its
  * own words, most used first, or another), and Standardize makes each chosen
  * book one book label with that word (`chapterLabels.standardize`). Labels a
- * book writes its own way ("Psalm One") are listed under it and never changed.
+ * book writes its own way ("Psalm One") are listed under it and never changed;
+ * one whose number is not its chapter's can be renumbered or removed
+ * (`chapterLabels.fix`). A project with no labels reads numbers only, which is
+ * fine; "Add a word" lists every book so one can be given.
  */
 export function ChapterLabelsDialog(props: {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
 }) {
   const shell = useShell();
-  const rows = createMemo((): readonly Row[] => {
+  const [adding, setAdding] = createSignal(false);
+  const openChange = (open: boolean): void => {
+    if (!open) setAdding(false);
+    props.onOpenChange(open);
+  };
+  const books = createMemo((): readonly Row[] => {
     if (!props.open) return [];
+    // Read again when the analysis republishes, so a label fixed from here
+    // (the dialog stays open) drops out of its book's list.
+    shell.findings();
     const project = shell.project();
     if (project === undefined) return [];
     const metadata = metadataOf(project);
@@ -51,7 +101,6 @@ export function ChapterLabelsDialog(props: {
       const held = shell.services.projectAnalysis.analysis(book.id);
       if (Option.isNone(held)) return [];
       const labels = chapterLabelsOf(held.value.analysis);
-      if (labels.labels.every((label) => label.text === "")) return [];
       return [
         {
           id: book.id,
@@ -59,10 +108,31 @@ export function ChapterLabelsDialog(props: {
           words: [...wordsOf(labels)],
           ...(labels.book === undefined ? {} : { bookWord: labels.book.text }),
           kept: keptAsWritten(labels),
+          labeled: labels.labels.some((label) => label.text !== ""),
+          labels,
         },
       ];
     });
   });
+  const rows = createMemo(() => books().filter((row) => row.labeled || adding()));
+  const unlabeled = createMemo(() => books().filter((row) => !row.labeled).length);
+  const navigate = useNavigate();
+  /** Into the book at the label, as Search opens a hit; the dialog closes. */
+  const goTo = (row: Row, label: ChapterLabel): void => {
+    shell.aim(row.id, label.textFrom, label.textTo, "centre");
+    openChange(false);
+    void navigate({
+      to: "/project/$slug/book/$book",
+      params: { slug: shell.slug(), book: encodeURIComponent(row.id) },
+    });
+  };
+  const keptCount = createMemo(() => books().reduce((sum, row) => sum + row.kept.length, 0));
+  const removeKept = (only?: BookId): void => {
+    runCommand("chapterLabels.removeKept", only === undefined ? {} : { books: [only] });
+  };
+  const fix = (row: Row, label: ChapterLabel, action: "renumber" | "remove"): void => {
+    runCommand("chapterLabels.fix", { book: row.id, from: label.from, action });
+  };
 
   const [choices, setChoices] = createSignal<ReadonlyMap<BookId, string>>(new Map());
   const [typed, setTyped] = createSignal<ReadonlyMap<BookId, string>>(new Map());
@@ -95,14 +165,31 @@ export function ChapterLabelsDialog(props: {
     return best;
   });
 
+  const difference = (row: Row): Difference | undefined =>
+    row.labeled ? differenceOf(row, mostUsed()?.word) : undefined;
+  /** Books to look at first; books already standard fold away below them. */
+  const differing = createMemo(() =>
+    rows().filter((row) => row.labeled && difference(row) !== undefined),
+  );
+  const standard = createMemo(() =>
+    rows().filter((row) => row.labeled && difference(row) === undefined),
+  );
+  const wordless = createMemo(() => rows().filter((row) => !row.labeled));
+
   const useEverywhere = (given?: string): void => {
     const word = (given ?? everyWord()).trim();
     if (word === "") return;
+    // One write per map: a signal read back in the same pass still holds what
+    // it held before (Solid 2), so a write per row kept only the last row.
+    const chose = new Map(choices());
+    const wrote = new Map(typed());
     for (const row of rows()) {
       const own = row.words.some(([candidate]) => candidate === word);
-      choose(row.id, own ? word : OTHER);
-      if (!own) type(row.id, word);
+      chose.set(row.id, own ? word : OTHER);
+      if (!own) wrote.set(row.id, word);
     }
+    setChoices(chose);
+    setTyped(wrote);
   };
 
   const standardize = (): void => {
@@ -111,20 +198,150 @@ export function ChapterLabelsDialog(props: {
       const word = wordFor(row);
       if (word !== undefined) chosen.set(row.id, word);
     }
-    props.onOpenChange(false);
+    openChange(false);
     if (chosen.size > 0) runCommand("chapterLabels.standardize", chosen);
   };
+
+  const bookRow = (row: Row) => (
+    <div
+      class="flex flex-col gap-2 border-t border-surface-border py-3"
+      data-chapter-labels-book={row.id}
+    >
+      <div class="flex items-center justify-between gap-controls">
+        <div class="flex min-w-0 flex-col">
+          <span
+            class={
+              row.labeled && difference(row) === undefined
+                ? "text-on-surface-secondary"
+                : "font-medium"
+            }
+          >
+            {row.name}
+          </span>
+          <Show when={difference(row)}>
+            {(differs) => (
+              <span class="text-smallest text-on-surface-warning">
+                {differenceText(differs(), row, mostUsed()?.word ?? "")}
+              </span>
+            )}
+          </Show>
+        </div>
+        <Select
+          wrapperClass="w-60 shrink-0"
+          aria-label={row.name}
+          value={choiceOf(row)}
+          onChange={(event) => choose(row.id, event.currentTarget.value)}
+        >
+          <option value={LEAVE}>{m.chapter_labels_leave()}</option>
+          <For each={row.words}>
+            {([word, count]) => (
+              <option value={word}>
+                {word === row.bookWord
+                  ? m.chapter_labels_book_label({ word, count })
+                  : m.chapter_labels_word_count({ word, count })}
+              </option>
+            )}
+          </For>
+          <option value={OTHER}>{m.chapter_labels_other()}</option>
+        </Select>
+      </div>
+      <Show when={choiceOf(row) === OTHER}>
+        <Input
+          aria-label={m.chapter_labels_other()}
+          value={typed().get(row.id) ?? ""}
+          onInput={(event) => type(row.id, event.currentTarget.value)}
+        />
+      </Show>
+      <Show when={row.kept.length > 0}>
+        <details
+          class="group text-on-surface-secondary"
+          open={row.kept.some((label) => label.mismatched) || difference(row) === "kept"}
+        >
+          <summary class="flex cursor-pointer list-none items-center gap-2">
+            <ChevronRight
+              aria-hidden="true"
+              class="size-4 shrink-0 transition-transform group-open:rotate-90"
+            />
+            <span class="min-w-0 flex-1">{m.chapter_labels_kept({ count: row.kept.length })}</span>
+            <Show when={row.kept.length > 1}>
+              <Button
+                size="sm"
+                variant="tertiary"
+                data-testid="chapter-labels-remove-book"
+                onClick={(event) => {
+                  // Inside the summary: act, without opening or closing it.
+                  event.preventDefault();
+                  removeKept(row.id);
+                }}
+              >
+                {m.chapter_labels_remove_all()}
+              </Button>
+            </Show>
+          </summary>
+          <ul class="mt-1 flex flex-col gap-1 ps-4">
+            <For each={row.kept}>
+              {(label) => (
+                <li class="flex items-center gap-2">
+                  <span class="min-w-0 flex-1">
+                    {label.mismatched
+                      ? m.chapter_labels_number_differs({
+                          chapter: String(label.chapter),
+                          text: label.text,
+                        })
+                      : m.chapter_labels_kept_row({
+                          chapter: String(label.chapter),
+                          text: label.text,
+                        })}
+                  </span>
+                  <div class="flex shrink-0 items-center gap-1">
+                    <Show when={label.mismatched ? renumbered(label) : undefined}>
+                      {(change) => (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          data-testid="chapter-labels-renumber"
+                          onClick={() => fix(row, label, "renumber")}
+                        >
+                          {m.chapter_labels_renumber({ number: change().insert })}
+                        </Button>
+                      )}
+                    </Show>
+                    <Button
+                      size="sm"
+                      variant="tertiary"
+                      data-testid="chapter-labels-remove"
+                      onClick={() => fix(row, label, "remove")}
+                    >
+                      {m.chapter_labels_remove()}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="tertiary"
+                      data-testid="chapter-labels-go"
+                      onClick={() => goTo(row, label)}
+                    >
+                      {m.chapter_labels_go()}
+                    </Button>
+                  </div>
+                </li>
+              )}
+            </For>
+          </ul>
+        </details>
+      </Show>
+    </div>
+  );
 
   return (
     <Dialog
       open={props.open}
-      onOpenChange={props.onOpenChange}
+      onOpenChange={openChange}
       title={m.chapter_labels_title()}
       description={m.chapter_labels_description()}
       class="w-[min(40rem,92vw)]"
       footer={
         <>
-          <Button variant="tertiary" onClick={() => props.onOpenChange(false)}>
+          <Button variant="tertiary" onClick={() => openChange(false)}>
             {m.common_cancel()}
           </Button>
           <Button
@@ -140,7 +357,18 @@ export function ChapterLabelsDialog(props: {
     >
       <Show
         when={rows().length > 0}
-        fallback={<p class="text-on-surface-secondary">{m.chapter_labels_none()}</p>}
+        fallback={
+          <div class="flex flex-col items-start gap-3">
+            <p class="text-on-surface-secondary">{m.chapter_labels_none()}</p>
+            <Button
+              variant="secondary"
+              data-testid="chapter-labels-add-word"
+              onClick={() => setAdding(true)}
+            >
+              {m.chapter_labels_add_word()}
+            </Button>
+          </div>
+        }
       >
         <div class="flex items-center gap-controls pb-3">
           <Input
@@ -158,80 +386,55 @@ export function ChapterLabelsDialog(props: {
             {m.chapter_labels_use_everywhere()}
           </Button>
         </div>
-        <Show when={mostUsed()}>
-          {(most) => (
-            <div class="pb-3">
+        <div class="flex flex-wrap items-center gap-x-2 gap-y-1 pb-3">
+          <Show when={keptCount() > 0}>
+            <Button
+              variant="secondary"
+              data-testid="chapter-labels-remove-kept"
+              onClick={() => removeKept()}
+            >
+              {m.chapter_labels_remove_kept_everywhere({ count: keptCount() })}
+            </Button>
+          </Show>
+          <Show when={mostUsed()}>
+            {(most) => (
               <Button
-                variant="secondary"
+                variant="tertiary"
                 data-testid="chapter-labels-use-most"
                 onClick={() => useEverywhere(most().word)}
               >
                 {m.chapter_labels_use_most({ word: most().word, count: most().count })}
               </Button>
-            </div>
-          )}
-        </Show>
-        <div class="max-h-[60vh] overflow-y-auto" data-testid="chapter-labels-books">
-          <For each={rows()}>
-            {(row) => (
-              <div
-                class="flex flex-col gap-2 border-t border-surface-border py-3"
-                data-chapter-labels-book={row.id}
-              >
-                <div class="flex items-center justify-between gap-controls">
-                  <span class="font-semibold">{row.name}</span>
-                  <Select
-                    aria-label={row.name}
-                    value={choiceOf(row)}
-                    onChange={(event) => choose(row.id, event.currentTarget.value)}
-                  >
-                    <option value={LEAVE}>{m.chapter_labels_leave()}</option>
-                    <For each={row.words}>
-                      {([word, count]) => (
-                        <option value={word}>
-                          {word === row.bookWord
-                            ? m.chapter_labels_book_label({ word, count })
-                            : m.chapter_labels_word_count({ word, count })}
-                        </option>
-                      )}
-                    </For>
-                    <option value={OTHER}>{m.chapter_labels_other()}</option>
-                  </Select>
-                </div>
-                <Show when={choiceOf(row) === OTHER}>
-                  <Input
-                    aria-label={m.chapter_labels_other()}
-                    value={typed().get(row.id) ?? ""}
-                    onInput={(event) => type(row.id, event.currentTarget.value)}
-                  />
-                </Show>
-                <Show when={row.kept.length > 0}>
-                  <details class="text-on-surface-secondary">
-                    <summary class="cursor-pointer">
-                      {m.chapter_labels_kept({ count: row.kept.length })}
-                    </summary>
-                    <ul class="mt-1 flex flex-col gap-1 ps-4">
-                      <For each={row.kept}>
-                        {(label) => (
-                          <li>
-                            {label.mismatched
-                              ? m.chapter_labels_number_differs({
-                                  chapter: String(label.chapter),
-                                  text: label.text,
-                                })
-                              : m.chapter_labels_kept_row({
-                                  chapter: String(label.chapter),
-                                  text: label.text,
-                                })}
-                          </li>
-                        )}
-                      </For>
-                    </ul>
-                  </details>
-                </Show>
-              </div>
             )}
-          </For>
+          </Show>
+          <Show when={!adding() && unlabeled() > 0}>
+            <Button variant="tertiary" onClick={() => setAdding(true)}>
+              {m.chapter_labels_add_word_others({ count: unlabeled() })}
+            </Button>
+          </Show>
+        </div>
+        <div class="max-h-[60vh] overflow-y-auto" data-testid="chapter-labels-books">
+          <For each={differing()}>{bookRow}</For>
+          <Show when={wordless().length > 0}>
+            <p class="pt-4 pb-1 text-smallest font-medium text-on-surface-tertiary">
+              {m.chapter_labels_without_word()}
+            </p>
+            <For each={wordless()}>{bookRow}</For>
+          </Show>
+          <Show when={standard().length > 0}>
+            <details
+              class="border-t border-surface-border"
+              open={differing().length === 0 && wordless().length === 0}
+            >
+              <summary class="cursor-pointer py-3 text-small text-on-surface-secondary">
+                {m.chapter_labels_already_standard({
+                  count: standard().length,
+                  word: mostUsed()?.word ?? "",
+                })}
+              </summary>
+              <For each={standard()}>{bookRow}</For>
+            </details>
+          </Show>
         </div>
       </Show>
     </Dialog>

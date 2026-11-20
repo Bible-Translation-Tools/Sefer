@@ -5,6 +5,19 @@ import { escapesRoot, normalisePath } from "../fileSystem/path";
 
 export const DEFAULT_BRANCH = "master";
 
+/**
+ * Set by a Writer migration to the head of the pack it wrote: that pack is the
+ * whole line to there and needs no other object, so a first publish into an
+ * empty repository can send it as it is. Gone once that publish lands.
+ */
+export const REPLAYED_REF = "refs/sefer/replayed";
+
+/** Where a log may end: the sync survey reads only back to where two lines meet. */
+export interface LogStop {
+  readonly until?: readonly CommitId[];
+  readonly depth?: number;
+}
+
 export type CommitId = string;
 
 export interface Repo {
@@ -83,7 +96,16 @@ export interface GitService {
     b: string,
   ) => Effect.Effect<Option.Option<CommitId>, GitError>;
   readonly log: (repo: Repo, path?: string) => Effect.Effect<readonly Commit[], GitError>;
-  readonly logFrom: (repo: Repo, ref: string) => Effect.Effect<readonly Commit[], GitError>;
+  /**
+   * The log from `ref`, newest first. With `stop`, a host may end it early:
+   * once every `until` commit is reached (it included), or after `depth`
+   * commits. A host that ignores `stop` is still right, only slower.
+   */
+  readonly logFrom: (
+    repo: Repo,
+    ref: string,
+    stop?: LogStop,
+  ) => Effect.Effect<readonly Commit[], GitError>;
   readonly resolve: (repo: Repo, ref: string) => Effect.Effect<Option.Option<CommitId>, GitError>;
   readonly branch: (repo: Repo) => Effect.Effect<Option.Option<string>, GitError>;
   readonly shallow: (repo: Repo) => Effect.Effect<boolean, GitError>;

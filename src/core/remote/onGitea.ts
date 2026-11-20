@@ -11,6 +11,21 @@ export const hostOf = (url: string): string => {
   }
 };
 
+/**
+ * The server a project's origin is on, when it is not `contentHost`, the one
+ * Sefer is set to: a project downloaded on dev, then Sefer switched to
+ * production. The project keeps its server; sync and suggestions, which sign
+ * in and search on `contentHost`, stand down and say where it is.
+ */
+export const elsewhereOf = (
+  origin: string | undefined,
+  contentHost: string | null,
+): string | undefined => {
+  if (origin === undefined || contentHost === null) return undefined;
+  const at = hostOf(origin).toLowerCase();
+  return at === hostOf(contentHost).toLowerCase() ? undefined : at;
+};
+
 const reasonOf = (reason: GiteaFailureReason): RemoteFailureReason => {
   switch (reason) {
     case "Unauthorized":

@@ -5,6 +5,7 @@ import { Git, type Commit, type Repo } from "#core/git/git";
 import { Settings } from "#core/host/settings";
 import type { Project } from "#core/project/project";
 import { Gitea, type ForkParent, type RemoteRepo } from "#core/remote/gitea";
+import { elsewhereOf } from "#core/remote/onGitea";
 import { COPY_REMOTE, Remote } from "#core/remote/remote";
 import { BROUGHT_IN, Suggestions, type Suggestion } from "#core/remote/suggestions";
 import { notIn, trackingRef } from "#core/sync";
@@ -54,6 +55,8 @@ const where = (project: Project) =>
     const branch = Option.getOrUndefined(yield* git.branch(repo));
     const found = origin === undefined ? undefined : ownerAndName(origin);
     if (host === null || found === undefined || branch === undefined) return undefined;
+    // A project on another server than Sefer's has no suggestions here to read or offer.
+    if (elsewhereOf(origin, host) !== undefined) return undefined;
     const session = yield* gitea.session(host);
     return {
       host,

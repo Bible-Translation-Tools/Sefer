@@ -25,6 +25,8 @@ import { useShell } from "../ProjectContext";
 import { queueBookNames } from "../recordVersion";
 import { shellKeys } from "../settings";
 import { allow, checkLabel, fineHere, flaggedText, turnOff } from "../suppressAnswers";
+import { FindBox } from "./find/FindBox";
+import { findBox } from "./find/findState";
 import { LineMenu, type LineMenuAt } from "./LineMenu";
 import { toasts } from "./primitives";
 import { ChapterLabelsDialog } from "./rules/ChapterLabels";
@@ -379,6 +381,9 @@ export function BookEditor(props: BookEditorProps) {
             {(at) => <LineMenu editor={editor()} at={at} onClose={() => setLineMenu(undefined)} />}
           </Show>
         )}
+      </Show>
+      <Show when={bound() !== undefined && host() !== undefined && findBox.open()}>
+        <FindBox editor={bound()!} book={props.book} host={host()!} />
       </Show>
       {/* Mounted only while open: each opening starts from the books as they are. */}
       <Show when={labelsOpen()}>

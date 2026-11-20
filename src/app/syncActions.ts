@@ -5,6 +5,7 @@ import { m } from "#app/paraglide/messages";
 import { Git, type Author } from "#core/git/git";
 import type { Verdict } from "#core/observability";
 import type { Project } from "#core/project/project";
+import { elsewhereOf } from "#core/remote/onGitea";
 import { COPY_REMOTE, Remote, remoteVerdict, type RemoteFailureReason } from "#core/remote/remote";
 import {
   combine,
@@ -17,6 +18,7 @@ import {
 
 import { collaboration } from "./collaboration";
 import { describe, remoteReasonOf } from "./describe";
+import { contentHostFor } from "./endpoints";
 import { recordVersion, type RecordOutcome } from "./recordVersion";
 import type { Services } from "./services";
 import {
@@ -149,6 +151,8 @@ export type SendOutcome =
   | { readonly kind: "sent"; readonly toCopy?: true; readonly ownCopy?: string }
   | { readonly kind: "detached" }
   | { readonly kind: "held" }
+  /** The project is on another server than the one Sefer is set to; nothing is sent. */
+  | { readonly kind: "elsewhere"; readonly host: string }
   | {
       readonly kind: "refused";
       readonly reason: RemoteFailureReason;
@@ -219,6 +223,9 @@ const runSend = async (
         kind: "refused",
         reason: outcome.noWrite === true ? undefined : outcome.reason,
       });
+    // Refused before routing, with no failure of its own: back to idle, no failure noted.
+    else if (outcome.kind === "elsewhere")
+      syncPhase.send(root, { kind: "refused", reason: undefined });
     else syncPhase.send(root, { kind: "detached" });
     await syncWatch.refresh(services, project).catch(() => undefined);
   }
@@ -274,6 +281,17 @@ const attemptSend = async (
   let to: string | undefined;
   let ownCopy: string | undefined;
   try {
+    // Before routing: a route may make a copy on Sefer's server for a project that lives on another.
+    const elsewhere = await services.run(
+      Effect.gen(function* () {
+        const origin = yield* (yield* Remote).origin(yield* (yield* Git).open(root));
+        return elsewhereOf(Option.getOrUndefined(origin), contentHostFor(services.settings));
+      }),
+    );
+    if (elsewhere !== undefined) {
+      operation.end("declined", { "sync.reason": "Elsewhere" });
+      return { kind: "elsewhere", host: elsewhere };
+    }
     const route = await routeOf(services, project, explicit);
     if ("noWrite" in route) {
       operation.end("refused", { "sync.reason": "NoWrite" });
@@ -406,9 +424,17 @@ const settle = async (
   // An upload was refused because the shared project had moved, and this review is what it
   // was waiting for: it goes once the review is saved, whatever send-on-save says.
   const uploadWaits = syncPhase.now(project.root).refused === "Rejected";
-  const received = await services.run(
-    Effect.result(receive({ project, settled, ...optionalTheirs(overrides.theirs) })),
-  );
+  const receiving = () =>
+    services.run(Effect.result(receive({ project, settled, ...optionalTheirs(overrides.theirs) })));
+  let received = await receiving();
+  // Autosave keeps the person's edits in the files: an arriving book they changed refuses as
+  // "unrecorded". This review is the moment to keep them, so they become a version first and
+  // the transfer goes again, now as both sides having moved (combine).
+  if (received._tag === "Failure" && received.failure.refusal === "unrecorded") {
+    const mine = project.books.filter((book) => services.save.dirty(book));
+    const kept = await recordVersion(services, project, mine, message, author);
+    if (kept.kind === "recorded") received = await receiving();
+  }
   if (received._tag === "Success") {
     await rereadManifest(services, project);
     const dirty = project.books.filter((book) => services.save.dirty(book));

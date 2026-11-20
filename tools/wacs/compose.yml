@@ -1,0 +1,108 @@
+# A local WACS for Sefer: Forgejo as WACS runs it, and the browser git proxy
+# in front of it, so the Web build can be driven against a server we own.
+# Started, seeded and checked by `pnpm wacs:up` / `pnpm wacs:check`; the
+# README beside this file says what is in it and how to point Sefer at it.
+#
+# Copied from wacs-dashboard-2's dev/wacs/compose.yml (2026-11-19), which was
+# read off wacsdev's wacs2 stack: Forgejo 15.0.6 rootless, MariaDB 10.11,
+# valkey 7.2 for cache, sessions and queues. Differences, on purpose: http on
+# localhost, no Turnstile captcha, no Cloudflare in front (so neither its
+# challenges nor its 100 MB request limit are here), and its own ports
+# (3410, 8790) so it runs beside the dashboard's copy (3400, 8787).
+name: sefer-wacs
+services:
+  db:
+    image: mariadb:10.11
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_DATABASE: gitea
+      MARIADB_USER: gitea
+      MARIADB_PASSWORD: gitea
+    volumes:
+      - db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 2s
+      retries: 90
+
+  redis:
+    image: valkey/valkey:7.2
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 2s
+      retries: 30
+
+  gitea:
+    image: codeberg.org/forgejo/forgejo:15.0.6-rootless
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    environment:
+      # As on wacsdev (GITEA__ env of wacs2-gitea-1), minus secrets.
+      GITEA____APP_NAME: Wycliffe Associates Content Service (Sefer local)
+      GITEA____RUN_MODE: dev
+      GITEA__database__DB_TYPE: mysql
+      GITEA__database__HOST: db:3306
+      GITEA__database__NAME: gitea
+      GITEA__database__USER: gitea
+      GITEA__database__PASSWD: gitea
+      GITEA__cache__ADAPTER: redis
+      GITEA__cache__HOST: redis://redis:6379/0
+      GITEA__session__PROVIDER: redis
+      GITEA__session__PROVIDER_CONFIG: redis://redis:6379/0
+      GITEA__queue__TYPE: redis
+      GITEA__queue__CONN_STR: redis://redis:6379/0
+      GITEA__security__INSTALL_LOCK: "true"
+      GITEA__server__DOMAIN: 127.0.0.1
+      GITEA__server__ROOT_URL: http://127.0.0.1:3410/
+      GITEA__server__HTTP_PORT: "3000"
+      GITEA__server__LFS_START_SERVER: "false"
+      GITEA__server__START_SSH_SERVER: "false"
+      GITEA__server__DISABLE_SSH: "true"
+      GITEA__repository__DEFAULT_BRANCH: master
+      GITEA__repository__DEFAULT_PRIVATE: public
+      GITEA__repository__DISABLED_REPO_UNITS: repo.packages,repo.actions
+      GITEA__mailer__ENABLED: "false"
+      GITEA__actions__ENABLED: "false"
+      GITEA__packages__ENABLED: "false"
+      GITEA__service__DISABLE_REGISTRATION: "false"
+      GITEA__service__REGISTER_EMAIL_CONFIRM: "false"
+      GITEA__service__ENABLE_CAPTCHA: "false"
+      GITEA__indexer__ISSUE_INDEXER_TYPE: db
+      GITEA__cron__ENABLED: "true"
+      GITEA__cron__RUN_AT_START: "false"
+      GITEA__log__LEVEL: warn
+    volumes:
+      - gitea:/var/lib/gitea
+    ports: ["127.0.0.1:3410:3000"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/api/v1/version"]
+      interval: 2s
+      retries: 90
+
+  # The browser git proxy (WycliffeAssociates/wacs-browser-git-proxy), the
+  # same Worker that fronts WACS in production, under `wrangler dev`. Its
+  # source is a private repo: `pnpm wacs:up` clones it into ./.proxy
+  # (gitignored) with the person's own GitHub sign-in, or WACS_PROXY_SRC names
+  # a checkout. Pinned to the Forgejo above, as production's is to WACS.
+  proxy:
+    build:
+      context: ${WACS_PROXY_SRC:-./.proxy}
+      dockerfile_inline: |
+        FROM node:22-slim
+        WORKDIR /proxy
+        RUN corepack enable
+        COPY package.json pnpm-lock.yaml pnpm-workspace.yaml* ./
+        RUN pnpm install --frozen-lockfile
+        COPY . .
+        ENV WRANGLER_SEND_METRICS=false
+        CMD ["pnpm", "exec", "wrangler", "dev", "--ip", "0.0.0.0", "--port", "8787", \
+             "--var", "UPSTREAM_GIT_BASE_URL:http://gitea:3000", \
+             "--var", "ALLOWED_APPS_CSV:sefer-local,sefer-dev,sefer-preview,sefer-prod"]
+    depends_on:
+      gitea: { condition: service_healthy }
+    ports: ["127.0.0.1:8790:8787"]
+
+volumes:
+  db:
+  gitea:

@@ -25,6 +25,8 @@ export interface PopoverProps {
   readonly triggerClass?: ClassValue;
   readonly fitViewport?: boolean;
   readonly initialFocus?: string;
+  /** False when the opener puts focus back itself: the editor's right-click menu does. */
+  readonly restoreFocus?: boolean;
   /**
    * Stay open when a click or focus lands on a password manager's own overlay
    * (an injected iframe or custom element) — filling a sign-in form otherwise
@@ -51,6 +53,7 @@ const injected = (target: EventTarget | null): boolean => {
 export function Popover(props: PopoverProps) {
   return (
     <CorvuPopover
+      restoreFocus={props.restoreFocus ?? true}
       open={props.open}
       onOpenChange={props.onOpenChange}
       onInitialFocus={(event) => {

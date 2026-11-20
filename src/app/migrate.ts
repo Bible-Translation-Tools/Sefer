@@ -6,7 +6,12 @@ import { joinPath, lastSegment } from "#core/fileSystem/path";
 import { Git } from "#core/git/git";
 import type { IntakeResult } from "#core/git/intake";
 import { addBooks, assemble, type AssembleForm } from "#core/migrate/assemble";
-import { openCandidate, type BookCandidate, type StagedBook } from "#core/migrate/candidate";
+import {
+  fullHistory,
+  openCandidate,
+  type BookCandidate,
+  type StagedBook,
+} from "#core/migrate/candidate";
 import { health, validate, type Health } from "#core/migrate/check";
 import { localCandidates } from "#core/migrate/local";
 import { recognizeWriter } from "#core/migrate/writerBook";
@@ -27,7 +32,13 @@ const stagingRootOf = (services: Services): string => `${services.hostInfo.paths
 export type Opened =
   | { readonly state: "waiting" }
   | { readonly state: "opening" }
-  | { readonly state: "ready"; readonly staged: StagedBook; readonly health: Health }
+  | {
+      readonly state: "ready";
+      readonly staged: StagedBook;
+      readonly health: Health;
+      /** The in-memory disk a remote copy was cloned to: its history is fetched into it at Assemble. */
+      readonly memory?: FileSystem.FileSystem;
+    }
   | { readonly state: "refused"; readonly reason: string };
 
 let writerList: Promise<readonly WriterLanguage[]> | undefined;
@@ -159,11 +170,10 @@ export const openOne = async (services: Services, candidate: BookCandidate): Pro
     "migrate.origin": candidate.origin.kind,
   });
   try {
-    const held = pickedFor(candidate);
-    const inMemory =
-      candidate.origin.kind === "remote" || held !== undefined
-        ? services.inMemoryTransfer?.(held)
-        : undefined;
+    const held =
+      pickedFor(candidate) ??
+      (candidate.origin.kind === "remote" ? makeMemoryFileSystem().fileSystem : undefined);
+    const inMemory = held === undefined ? undefined : services.inMemoryTransfer?.(held);
     const open = Effect.timeoutOption(
       openCandidate(candidate, inMemory === undefined ? stagingRootOf(services) : "/staging"),
       CANDIDATE_TIMEOUT,
@@ -187,10 +197,52 @@ export const openOne = async (services: Services, candidate: BookCandidate): Pro
     const census = health(services.galley, staged.project.book, staged.usfm);
     measured();
     operation.end("passed");
-    return { state: "ready", staged, health: census };
+    return {
+      state: "ready",
+      staged,
+      health: census,
+      ...(inMemory === undefined || held === undefined ? {} : { memory: held }),
+    };
   } catch (cause) {
     operation.end("failed", { "migrate.reason": describe(cause) });
     return { state: "refused", reason: describe(cause) };
+  }
+};
+
+/** Fetching one picked copy's saves: a big book's history on a slow line. */
+const HISTORY_TIMEOUT = "10 minutes";
+
+/**
+ * The picked copy with all its saves (`fullHistory`), fetched into the same
+ * in-memory disk it was cloned to. Copies are checked with their latest
+ * commit only, so this is where a book's history is downloaded, once, for
+ * the copy Assemble uses.
+ */
+export const historyFor = async (
+  services: Services,
+  opened: Extract<Opened, { readonly state: "ready" }>,
+): Promise<StagedBook> => {
+  const operation = services.composition.observability.operation("migrate.fullHistory", {
+    "migrate.book": opened.staged.candidate.book,
+  });
+  const inMemory =
+    opened.memory === undefined ? undefined : services.inMemoryTransfer?.(opened.memory);
+  const full = Effect.timeoutOrElse(fullHistory(opened.staged), {
+    duration: HISTORY_TIMEOUT,
+    orElse: () =>
+      Effect.fail(
+        new Error(m.migrate_history_did_not_arrive({ book: opened.staged.candidate.book })),
+      ),
+  });
+  try {
+    const where: Effect.Effect<StagedBook, unknown, Domain> =
+      inMemory === undefined ? full : Effect.provide(full, inMemory);
+    const staged = await services.run(Effect.provideService(where, Observability, operation));
+    operation.end("passed", { "migrate.saves": staged.history?.saves ?? 0 });
+    return staged;
+  } catch (cause) {
+    operation.end("failed", { "migrate.reason": describe(cause) });
+    throw cause;
   }
 };
 

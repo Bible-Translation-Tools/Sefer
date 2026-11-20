@@ -1,3 +1,4 @@
+import { useNavigate } from "@tanstack/solid-router";
 import { Effect, Option } from "effect";
 import CircleHelp from "lucide-solid/icons/circle-help";
 import CloudUpload from "lucide-solid/icons/cloud-upload";
@@ -5,16 +6,18 @@ import Copy from "lucide-solid/icons/copy";
 import GitCompare from "lucide-solid/icons/git-compare";
 import Link2 from "lucide-solid/icons/link-2";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
+import Settings from "lucide-solid/icons/settings";
 import UserIcon from "lucide-solid/icons/user";
 import { Show, createEffect, createSignal, onCleanup, untrack } from "solid-js";
 
 import { Git, repositoryPath } from "#core/git/git";
 import { Gitea } from "#core/remote/gitea";
 import { Remote } from "#core/remote/remote";
-import type { Sync } from "#core/sync";
+import { emptyReading, sync as syncOf, type Sync, type SyncReading } from "#core/sync";
 
 import { collaboration } from "../../collaboration";
 import { describe } from "../../describe";
+import { contentHostFor } from "../../endpoints";
 import { m } from "../../paraglide/messages";
 import { useShell, type Shell } from "../../ProjectContext";
 import { suggestMyChanges } from "../../suggestions";
@@ -26,7 +29,7 @@ import { bookName } from "../workspace/books";
 import { NetworkChip } from "../workspace/StatusChips";
 import { createAccount, type Account } from "./account";
 import { CollabSection } from "./CollabSection";
-import { sendOutcomeCopy, stateCopy, type StateCopy } from "./copy";
+import { hostName, sendOutcomeCopy, stateCopy, type StateCopy } from "./copy";
 import { putOnline, suggestedName } from "./PublishSection";
 import { createQuickSync, shareableLink, type QuickAction, type QuickSync } from "./quick";
 
@@ -37,6 +40,7 @@ const copyOf = (held: Sync | undefined, inCopy: boolean): StateCopy | undefined 
         sendRefused: held.reading.sendRefused,
         signedIn: held.reading.signedIn,
         inCopy,
+        elsewhere: held.reading.elsewhere,
       });
 
 const copyToClipboard = (held: string): void => {
@@ -91,7 +95,13 @@ const createSyncPopover = (shell: Shell, quick: QuickSync, account: Account) => 
       }
     },
     run: (action: QuickAction): void => {
-      if (action === "see" || action === "open" || action === "sign-in") setOpen(false);
+      if (
+        action === "see" ||
+        action === "open" ||
+        action === "sign-in" ||
+        action === "switch-server"
+      )
+        setOpen(false);
       quick.run(action);
     },
     copyLink: (): void => {
@@ -110,6 +120,16 @@ const createSync = (shell: Shell) => {
 };
 
 type SyncHandle = ReturnType<typeof createSync>;
+
+/**
+ * A stand-in for the chip's "Sync state" design tweak (SEFER-92): a reading to
+ * show instead of the live one. Set only in a design build, by
+ * `src/dev/design/syncChipTweak.ts`.
+ */
+interface ChipStandIn {
+  readonly reading: Partial<SyncReading>;
+  readonly noWrite: boolean;
+}
 
 /**
  * A failure in a few words for the line under the button: a name WACS
@@ -148,9 +168,12 @@ const ownerOf = (link: string): string | undefined => {
 };
 
 /** While something runs, the buttons give way to a bar saying what. */
-const Working = (props: { readonly label: string }) => (
+const Working = (props: { readonly label: string; readonly hint?: string | undefined }) => (
   <div class="space-y-2" role="status" data-sync-working>
     <p class="text-small text-on-surface-secondary">{props.label}</p>
+    <Show when={props.hint}>
+      {(hint) => <p class="text-smallest text-on-surface-tertiary">{hint()}</p>}
+    </Show>
     <div class="h-2 overflow-hidden rounded-full bg-surface-secondary">
       <div class="h-full w-1/3 animate-pulse rounded-full bg-brand" />
     </div>
@@ -236,6 +259,7 @@ const WacsBody = (props: {
   readonly sync: SyncHandle;
   readonly held: Sync | undefined;
   /** A design stand-in: show its state even when this browser isn't signed in. */
+  readonly standIn?: boolean;
   readonly noWrite: boolean | undefined;
   readonly onLeave: () => void;
 }) => {
@@ -244,7 +268,17 @@ const WacsBody = (props: {
   const facts = () => collaboration.facts(shell.project()?.root);
   const noWrite = (): boolean =>
     props.noWrite ?? (facts()?.canWrite === false || facts()?.mode === "copy");
-  const waiting = (): number => props.held?.reading.ahead.length ?? 0;
+  // Books autosave wrote that no version holds yet: work that has not gone up either.
+  const unrecorded = (): readonly string[] => {
+    const project = shell.project();
+    if (project === undefined) return [];
+    const metadata = Option.getOrUndefined(project.metadata());
+    return project.books
+      .filter((book) => shell.unsaved(book))
+      .map((book) => bookName(book.id, metadata));
+  };
+  const waiting = (): number => (props.held?.reading.ahead.length ?? 0) + unrecorded().length;
+  const navigate = useNavigate();
 
   // The books the waiting versions touch: what changed between WACS's copy
   // and this device's, read from git once per pair of commits.
@@ -289,6 +323,13 @@ const WacsBody = (props: {
         });
     },
   );
+  // Everything not on WACS by name: the versions' books and the unrecorded ones. While the
+  // versions' books are still being read, the generic wording ("Your saved changes").
+  const waitingNames = (): readonly string[] | undefined => {
+    const versions = waitingBooks();
+    if ((props.held?.reading.ahead.length ?? 0) > 0 && versions === undefined) return undefined;
+    return [...new Set([...(versions ?? []), ...unrecorded()])];
+  };
   const user = (): string | undefined => account.session()?.username;
 
   const opened = untrack(() => shell.project());
@@ -401,9 +442,15 @@ const WacsBody = (props: {
   };
 
   const run = (action: QuickAction): void => {
-    if (action === "see" || action === "sign-in") props.onLeave();
+    if (action === "see" || action === "sign-in" || action === "switch-server") props.onLeave();
     quick.run(action);
   };
+
+  /** Under "Uploading…": the first upload of a migrated Bible is its whole Writer history. */
+  const uploadHint = (): string | undefined =>
+    working() === "publish" || working() === "upload" || quick.busy() === "send"
+      ? m.wacs_uploading_hint()
+      : undefined;
 
   const busyLabel = (): string | undefined => {
     if (working() === "publish" || working() === "upload" || quick.busy() === "send")
@@ -432,6 +479,7 @@ const WacsBody = (props: {
   const mode = ():
     | "offline"
     | "reading"
+    | "elsewhere"
     | "unreachable"
     | "signed-out"
     | "new"
@@ -441,8 +489,10 @@ const WacsBody = (props: {
     if (syncStatus.workOffline()) return "offline";
     const held = props.held;
     if (held === undefined) return "reading";
+    if (held.state === "elsewhere") return "elsewhere";
     if (held.state === "offline") return "unreachable";
-    if (user() === undefined || held.state === "unauthorized") return "signed-out";
+    if ((user() === undefined && props.standIn !== true) || held.state === "unauthorized")
+      return "signed-out";
     if (held.reading.origin === undefined) return "new";
     // Both sides moved: the upload waits until the person has reviewed what
     // came in from WACS, so the review is the next step, not a retry.
@@ -458,10 +508,17 @@ const WacsBody = (props: {
           m.wacs_offline_body(),
           ...(waiting() === 0
             ? []
-            : [m.wacs_ready_when_online({ what: waitingWhat(waitingBooks()) })]),
+            : [m.wacs_ready_when_online({ what: waitingWhat(waitingNames()) })]),
         ];
       case "reading":
         return [m.cloud_reading_this_project()];
+      case "elsewhere":
+        return [
+          m.wacs_elsewhere({
+            host: hostName(props.held?.reading.elsewhere),
+            current: hostName(contentHostFor(shell.services.settings)),
+          }),
+        ];
       case "unreachable":
         return [m.wacs_unreachable()];
       case "signed-out":
@@ -471,14 +528,14 @@ const WacsBody = (props: {
       case "new":
         return [m.wacs_not_on_wacs(), m.wacs_name_suggested()];
       case "review":
-        return [m.wacs_on_wacs(), m.wacs_review_needed({ what: waitingWhat(waitingBooks()) })];
+        return [m.wacs_on_wacs(), m.wacs_review_needed({ what: waitingWhat(waitingNames()) })];
       case "incoming":
         return [m.wacs_on_wacs()];
       case "on-wacs":
         return [
           m.wacs_on_wacs(),
           waiting() > 0
-            ? m.wacs_not_uploaded_yet({ what: waitingWhat(waitingBooks()) })
+            ? m.wacs_not_uploaded_yet({ what: waitingWhat(waitingNames()) })
             : m.wacs_all_uploaded(),
           ...(refused() ? [m.wacs_last_upload_failed()] : []),
         ];
@@ -495,6 +552,18 @@ const WacsBody = (props: {
         </Show>
         {sentences().join(" ")}
       </p>
+
+      <Show when={mode() === "elsewhere"}>
+        <Button
+          variant="primary"
+          class="w-full justify-center"
+          icon={<Settings size={20} />}
+          onClick={() => run("switch-server")}
+          data-testid="sync-switch-server"
+        >
+          {m.cloud_switch_servers()}
+        </Button>
+      </Show>
 
       <Show when={mode() === "unreachable"}>
         <Button
@@ -564,7 +633,7 @@ const WacsBody = (props: {
               </Button>
             }
           >
-            {(label) => <Working label={label()} />}
+            {(label) => <Working label={label()} hint={uploadHint()} />}
           </Show>
           <Show when={problem()}>
             {(said) => (
@@ -641,7 +710,18 @@ const WacsBody = (props: {
               class="w-full justify-center"
               icon={<CloudUpload size={20} />}
               disabled={waiting() === 0}
-              onClick={() => (noWrite() ? submit() : upload())}
+              onClick={() => {
+                // Work no version holds goes through Review first, and its save uploads.
+                if (unrecorded().length > 0) {
+                  props.onLeave();
+                  void navigate({
+                    to: "/project/$slug/review",
+                    params: { slug: shell.slug() },
+                    search: { upload: 1 },
+                  });
+                } else if (noWrite()) submit();
+                else upload();
+              }}
               data-testid="wacs-upload"
             >
               {refused()
@@ -652,7 +732,7 @@ const WacsBody = (props: {
             </Button>
           }
         >
-          {(label) => <Working label={label()} />}
+          {(label) => <Working label={label()} hint={uploadHint()} />}
         </Show>
         <Show
           when={problem()}
@@ -686,13 +766,32 @@ const WacsBody = (props: {
 export function SyncChip() {
   const shell = useShell();
   const sync = createSync(shell);
-  const held = (): Sync | undefined => sync.quick.sync();
+  const [preview, setPreview] = createSignal<ChipStandIn | undefined>(undefined, {
+    name: "syncChipPreview",
+    ownedWrite: true,
+  });
+  if (__SEFER_DESIGN__) {
+    let stop: (() => void) | undefined;
+    let gone = false;
+    void import("#dev/design/syncChipTweak").then(({ startSyncChipTweak }) => {
+      if (!gone) stop = startSyncChipTweak((stand) => setPreview(() => stand));
+    });
+    onCleanup(() => {
+      gone = true;
+      stop?.();
+    });
+  }
+  const held = (): Sync | undefined => {
+    const stand = preview();
+    return stand === undefined ? sync.quick.sync() : syncOf({ ...emptyReading, ...stand.reading });
+  };
   // What the pill says in amber until the person opens the popover: updates on WACS, a
   // refused upload they have not seen yet, WACS out of reach, or a sign-in WACS refused.
   const warning = (): string | undefined => {
     const shown = held();
     const root = shell.project()?.root ?? "";
     if (shown === undefined || shown.reading.origin === undefined) return undefined;
+    if (shown.state === "elsewhere") return m.cloud_on_another_server();
     // WACS holds versions this device lacks: a review if something waits here too, and
     // otherwise still something to look at, which the popover says in amber.
     if (shown.reading.behind.length > 0)
@@ -711,7 +810,15 @@ export function SyncChip() {
       onOpenChange={(open) => {
         if (open) sync.pop.openChanged(true);
       }}
-      body={(close) => <WacsBody sync={sync} held={held()} noWrite={undefined} onLeave={close} />}
+      body={(close) => (
+        <WacsBody
+          sync={sync}
+          held={held()}
+          standIn={preview()?.reading.signedIn === true}
+          noWrite={preview()?.noWrite === true ? true : undefined}
+          onLeave={close}
+        />
+      )}
     />
   );
 }

@@ -10,6 +10,7 @@ import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 import { onboarding } from "../../onboarding";
 import { m } from "../../paraglide/messages";
 import { useShell } from "../../ProjectContext";
+import { shellKeys } from "../../settings";
 import { Badge, Button, Coachmark, Input } from "../primitives";
 import { BookChaptersRow, chaptersOf, type ChapterTile } from "./BookChapters";
 import { bookName, testamentOf, type Testament } from "./books";
@@ -277,19 +278,21 @@ export function ProjectSidebar() {
             </div>
           </Show>
 
-          <Button
-            variant="tertiary"
-            size="sm"
-            class="mt-2 w-full"
-            data-testid="add-book"
-            icon={<Plus aria-hidden="true" />}
-            onClick={() => {
-              const root = shell.project()?.root;
-              if (root !== undefined) void navigate({ to: "/migrate", search: { into: root } });
-            }}
-          >
-            {m.workspace_add_a_book()}
-          </Button>
+          <Show when={shell.services.settings.get(shellKeys(shell.services.settings).techMode)}>
+            <Button
+              variant="tertiary"
+              size="sm"
+              class="mt-2 w-full"
+              data-testid="add-book"
+              icon={<Plus aria-hidden="true" />}
+              onClick={() => {
+                const root = shell.project()?.root;
+                if (root !== undefined) void navigate({ to: "/migrate", search: { into: root } });
+              }}
+            >
+              {m.workspace_add_a_book()}
+            </Button>
+          </Show>
         </nav>
       </Show>
 

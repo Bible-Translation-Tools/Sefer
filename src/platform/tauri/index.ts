@@ -7,6 +7,7 @@ import { TauriHostInfoLive, tauriPaths } from "./hostInfo";
 import { TauriRemoteLive } from "./remote";
 import { TauriFolderTreeLive } from "./tree";
 import { TauriUpdaterLive } from "./updater";
+import { beforeWindowClose } from "./window";
 
 export const tauriHost = {
   TauriCredentialsLive,
@@ -19,4 +20,5 @@ export const tauriHost = {
   TauriUpdaterLive,
   tauriPaths,
   tauriFacts,
+  beforeWindowClose,
 };
