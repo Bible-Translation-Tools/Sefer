@@ -1,8 +1,11 @@
 import type { JSX } from "@solidjs/web";
+import { Category, MARKERS } from "@wycliffeassociates/scripture-kitchen/reader";
 import type { BookId } from "@wycliffeassociates/sefer-text/book";
 import Braces from "lucide-solid/icons/braces";
 import Check from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
+import Eye from "lucide-solid/icons/eye";
+import Pencil from "lucide-solid/icons/pencil";
 import Undo2 from "lucide-solid/icons/undo-2";
 import X from "lucide-solid/icons/x";
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
@@ -15,6 +18,7 @@ import { createPrepared } from "#app/ui/review/reader/createPrepared";
 import { createSeats } from "#app/ui/review/reader/createSeats";
 import type { ReviewBook } from "#app/ui/review/reader/types";
 import type { PanelModel } from "#app/ui/review/ReviewPanel";
+import { nameBlock } from "#app/ui/workspace/blockNames";
 import type { Analysis, DecisionUnit, MergeSide } from "#core/galley";
 
 /**
@@ -97,11 +101,86 @@ interface Part {
   readonly added: string;
 }
 
+/** The USFM markers a markup-only change took out and put in, for its label. */
+interface Markers {
+  readonly removed: readonly string[];
+  readonly added: readonly string[];
+  readonly spacing: boolean;
+}
+
 interface What extends Part {
   readonly verb: "Add" | "Delete" | "Replace" | "Formatting";
+  readonly markers: Markers;
   /** Each tracked change in the verse, in reading order: "love" → "dearly" pairs with itself, not with the verse's other words. */
   readonly parts: readonly Part[];
 }
+
+/** The kitchen's row for a marker: what it IS, from the generated table. `\\q2` is the `q` row. */
+const rowOf = (marker: string): (typeof MARKERS)[number] | undefined =>
+  MARKERS.find((row) => row.name === marker) ??
+  MARKERS.find((row) => row.name === marker.replace(/\d+$/u, ""));
+
+/** A marker's spec group in words, for counting and summing up. */
+const GROUPS: Readonly<Record<number, readonly [one: string, many: string]>> = {
+  [Category.ParaBody]: ["paragraph", "paragraphs"],
+  [Category.ParaPoetry]: ["poetry line", "poetry lines"],
+  [Category.ParaTitlesSections]: ["heading", "headings"],
+  [Category.ParaLists]: ["list item", "list items"],
+  [Category.ParaIntroductions]: ["introduction line", "introduction lines"],
+  [Category.ChapterVerse]: ["chapter or verse marker", "chapter or verse markers"],
+};
+const groupOf = (marker: string, many = false): string => {
+  // The spec files `\\b` under poetry; to a reader it is the gap between stanzas.
+  if (marker === "b") return many ? "stanza breaks" : "stanza break";
+  const group = GROUPS[rowOf(marker)?.category ?? Category.Unknown];
+  return (many ? group?.[1] : group?.[0]) ?? (many ? "markers" : "marker");
+};
+
+/**
+ * One marker in words: Sefer's own name where it has one (`blockNames.ts`,
+ * "Poetry 2"), else the kitchen's group for it ("heading"), with the marker beside.
+ */
+const named = (marker: string, article = "a "): string => {
+  const name = nameBlock(marker);
+  if (name !== `\\${marker}`) return `${name} (\\${marker})`;
+  const row = rowOf(marker);
+  return marker !== "b" && (row === undefined || GROUPS[row.category] === undefined)
+    ? `\\${marker}`
+    : `${article}${groupOf(marker)} (\\${marker})`;
+};
+
+/**
+ * A markup-only change in words: one change is named ("Removed Poetry 2
+ * (\\q2)"), several of one group are counted ("Added 3 paragraphs"), a mix is
+ * summed up, and anything else falls back to "Formatting changed".
+ */
+const markupLabel = (markers: Markers): string => {
+  const { removed, added } = markers;
+  if (removed.length === 0 && added.length === 0)
+    return markers.spacing ? "Spacing changed" : "Formatting changed";
+  const [gone] = removed;
+  const [come] = added;
+  if (removed.length === 1 && added.length === 0 && gone !== undefined)
+    return `Removed ${named(gone)}`;
+  if (removed.length === 0 && added.length === 1 && come !== undefined)
+    return `Added ${named(come)}`;
+  if (removed.length === 1 && added.length === 1 && gone !== undefined && come !== undefined)
+    return `${named(gone, "")} → ${named(come, "")}`;
+  const all = [...removed, ...added];
+  const groups = [...new Set(all.map((marker) => groupOf(marker, true)))];
+  if (groups.length === 1 && (removed.length === 0 || added.length === 0))
+    return `${removed.length === 0 ? "Added" : "Removed"} ${all.length} ${groups[0]}`;
+  return `Changed ${groups.join(" and ")} (${all.length} markers)`;
+};
+
+const markersIn = (
+  runs: readonly { readonly what: string; readonly kind: string; readonly text: string }[],
+  kind: string,
+): string[] =>
+  runs
+    .filter((run) => run.kind === kind && run.what === "markup")
+    .flatMap((run) => [...run.text.matchAll(/\\([a-z]+\d*)\*?/giu)].map((match) => match[1] ?? ""))
+    .filter((marker) => marker !== "");
 
 const partVerb = (part: Part): "Add" | "Delete" | "Replace" =>
   part.removed === "" ? "Add" : part.added === "" ? "Delete" : "Replace";
@@ -116,6 +195,7 @@ const whatOf = (item: Item): What => {
     removed: what.added,
     added: what.removed,
     parts: what.parts.map((part) => ({ removed: part.added, added: part.removed })),
+    markers: { ...what.markers, removed: what.markers.added, added: what.markers.removed },
   };
 };
 
@@ -124,6 +204,11 @@ const editorWhat = (
   usfm: boolean,
 ): What => {
   const { unit, book } = item;
+  const markers: Markers = {
+    removed: markersIn(unit.text?.baseline ?? [], "removed"),
+    added: markersIn(unit.text?.current ?? [], "added"),
+    spacing: unit.isWhitespaceChange,
+  };
   const visible = (what: string): boolean => what === "text" || (what === "markup" && usfm);
   if (unit.status === "added" && unit.current !== undefined)
     return {
@@ -131,6 +216,7 @@ const editorWhat = (
       removed: "",
       added: words(book.currentText.slice(unit.current.from, unit.current.to), usfm),
       parts: [],
+      markers,
     };
   if (unit.status === "deleted" && unit.baseline !== undefined)
     return {
@@ -138,6 +224,7 @@ const editorWhat = (
       removed: words(book.baselineText.slice(unit.baseline.from, unit.baseline.to), usfm),
       added: "",
       parts: [],
+      markers,
     };
   const removed = words(
     joined(
@@ -158,10 +245,10 @@ const editorWhat = (
   const parts = replacements(unit, usfm)
     .map((part) => ({ removed: words(part.removed, usfm), added: words(part.added, usfm) }))
     .filter((part) => part.removed !== "" || part.added !== "");
-  if (removed !== "" && added !== "") return { verb: "Replace", removed, added, parts };
-  if (removed !== "") return { verb: "Delete", removed, added, parts };
-  if (added !== "") return { verb: "Add", removed, added, parts };
-  return { verb: "Formatting", removed, added, parts };
+  if (removed !== "" && added !== "") return { verb: "Replace", removed, added, parts, markers };
+  if (removed !== "") return { verb: "Delete", removed, added, parts, markers };
+  if (added !== "") return { verb: "Add", removed, added, parts, markers };
+  return { verb: "Formatting", removed, added, parts, markers };
 };
 
 function createItems(panel: PanelModel) {
@@ -169,11 +256,14 @@ function createItems(panel: PanelModel) {
   const describe = (
     key: string,
     base: { readonly book: ReviewBook; readonly unit: DecisionUnit },
+    decided: boolean,
   ): { readonly editor: What; readonly usfmOnly: boolean } => {
     const held = described.get(key);
-    if (held !== undefined && !changed(base.unit)) return held;
-    const usfmOnly = editorWhat(base, false).verb === "Formatting";
-    const fresh = { editor: editorWhat(base, usfmOnly), usfmOnly };
+    // Decided, the card keeps saying what was decided, through any hand edits after.
+    if (held !== undefined && (decided || !changed(base.unit))) return held;
+    // A markup-only change is described by its markers ("Removed a poetry line (\\q2)"), not as USFM text.
+    const editor = editorWhat(base, false);
+    const fresh = { editor, usfmOnly: editor.verb === "Formatting" };
     described.set(key, fresh);
     return fresh;
   };
@@ -190,7 +280,13 @@ function createItems(panel: PanelModel) {
           const reference = referenceOf(book, unit);
           const origin = panel.units.originOf(book.bookId, [unit]);
           const key = `${book.bookId} ${unit.id}`;
-          const base = { book, unit, reference, key, ...describe(key, { book, unit }) };
+          const base = {
+            book,
+            unit,
+            reference,
+            key,
+            ...describe(key, { book, unit }, decided !== undefined),
+          };
           // One card per verse, so one decision per card: a verse both sides
           // changed is theirs to Accept, or the editor's to keep with Reject.
           if (origin === "both" || origin === "there")
@@ -271,7 +367,7 @@ function OneChange(props: { readonly what: What }) {
         </p>
       </Show>
       <Show when={props.what.verb === "Formatting"}>
-        <p>Formatting changed</p>
+        <p data-inline-markup>{markupLabel(props.what.markers)}</p>
       </Show>
     </div>
   );
@@ -329,6 +425,10 @@ function PendingCard(props: {
   /** A decided card in Completed: marked, with Undo in place of the choices. */
   readonly outcome?: Outcome;
   readonly onUndo?: () => void;
+  /** Decided, then edited by hand: the verse is neither side's text any more. */
+  readonly custom?: boolean;
+  /** Pick a side again over custom edits: that side's text comes back. */
+  readonly onRepick?: (outcome: "accepted" | "rejected") => void;
   readonly usfm: boolean;
   readonly onToggleUsfm: () => void;
 }) {
@@ -353,7 +453,20 @@ function PendingCard(props: {
         usfm={props.usfm}
         onToggleUsfm={props.onToggleUsfm}
         end={
-          <Show when={props.outcome}>
+          <Show
+            when={props.custom !== true ? props.outcome : undefined}
+            fallback={
+              <Show when={props.custom === true}>
+                <span
+                  class="flex shrink-0 items-center gap-1 text-small font-semibold text-on-surface-primary"
+                  data-inline-outcome="custom"
+                >
+                  <Pencil size={16} aria-hidden="true" />
+                  Custom
+                </span>
+              </Show>
+            }
+          >
             {(outcome) => (
               <span
                 class={cx(
@@ -376,6 +489,39 @@ function PendingCard(props: {
         <p class="text-smallest text-on-surface-tertiary" data-inline-both>
           You changed this verse too. Reject keeps your version.
         </p>
+      </Show>
+      <Show when={props.custom === true}>
+        <p class="text-smallest text-on-surface-secondary" data-inline-custom>
+          Custom edits for this verse. Accept or Reject again puts that side's text back.
+        </p>
+      </Show>
+      <Show when={props.custom === true && props.active && props.editable}>
+        <div class="grid grid-cols-2 gap-2">
+          <Button
+            size="md"
+            variant="secondary"
+            icon={<Check />}
+            data-inline-repick="accepted"
+            onClick={(event: MouseEvent) => {
+              event.stopPropagation();
+              props.onRepick?.("accepted");
+            }}
+          >
+            Accept
+          </Button>
+          <Button
+            size="md"
+            variant="secondary"
+            icon={<X />}
+            data-inline-repick="rejected"
+            onClick={(event: MouseEvent) => {
+              event.stopPropagation();
+              props.onRepick?.("rejected");
+            }}
+          >
+            Reject
+          </Button>
+        </div>
       </Show>
       <Show when={decided() && props.active && props.editable}>
         <Button
@@ -436,7 +582,7 @@ function CompletedToggle(props: {
     <button
       type="button"
       aria-expanded={props.open ? "true" : "false"}
-      class="ms-auto flex h-12 cursor-pointer items-center gap-2 rounded-lg px-3 text-[14px] font-medium text-on-surface-primary hover:bg-surface-primary"
+      class="ms-auto flex h-12 cursor-pointer items-center gap-2 rounded-lg px-3 text-[14px] font-medium whitespace-nowrap text-on-surface-primary hover:bg-surface-primary"
       data-inline-completed-toggle
       onClick={() => props.onToggle()}
     >
@@ -462,6 +608,8 @@ function Completed(props: {
   readonly editable: boolean;
   readonly onActivate: (item: Item) => void;
   readonly onUndo: (item: Item) => void;
+  readonly customOf: (item: Item) => boolean;
+  readonly onRepick: (item: Item, outcome: "accepted" | "rejected") => void;
   readonly usfm: boolean;
   readonly onToggleUsfm: () => void;
 }) {
@@ -481,6 +629,8 @@ function Completed(props: {
               onActivate={() => props.onActivate(item)}
               onDecide={() => {}}
               onUndo={() => props.onUndo(item)}
+              custom={props.customOf(item)}
+              onRepick={(outcome) => props.onRepick(item, outcome)}
             />
           )}
         </For>
@@ -508,6 +658,8 @@ function TextPanel(props: {
   readonly active: Item | undefined;
   /** Bumped when a card is picked: only then does the text move to it. */
   readonly reveal: number;
+  /** Show final: every verse as it would end up, no marks. */
+  readonly final: boolean;
   /** `onChange`: the click landed on a changed word itself, which alone opens the popup. */
   readonly onClickUnit: (bookId: BookId, unit: DecisionUnit, at: Point, onChange: boolean) => void;
   /** The pointer is over a decided change's underline: say what was decided. */
@@ -577,12 +729,15 @@ function TextPanel(props: {
               "[&_.cm-diff-settled]:underline [&_.cm-diff-settled]:decoration-on-surface-tertiary [&_.cm-diff-settled]:decoration-dotted [&_.cm-diff-settled]:underline-offset-4 [&_.cm-diff-ghost]:me-1 [&_.cm-diff-ghost]:select-none",
               // The word marks and the cards already say where each change is; no gutter bars.
               "[&_.cm-diff-bars]:hidden!",
+              // Show final: words leaving drop out, words arriving read as plain text.
+              "data-final:[&_.cm-diff-removed]:hidden! data-final:[&_.cm-diff-added]:text-inherit! data-final:[&_.cm-diff-added]:no-underline! data-final:[&_.cm-diff-settled]:no-underline!",
               // No outline round the text: the card it sits in is the edge.
               "[&_.cm-diff-pane]:border-0!",
               // Refine's page padding (editor.css, `.cm-mode-regular .cm-content`), not the diff's 12px 16px.
               "[&_.cm-diff_.cm-content]:px-12! [&_.cm-diff_.cm-content]:pt-14! [&_.cm-diff_.cm-content]:pb-[30vh]!",
             )}
             data-inline-text
+            data-final={props.final ? "" : undefined}
             ref={(element: HTMLDivElement) => {
               host = element;
             }}
@@ -649,12 +804,19 @@ function TextPanel(props: {
               awaitLive={panel.writes.editable()}
               inlineRemoved
               hideLabel
-              activeUnit={props.active?.unit.id}
+              activeUnit={props.final ? undefined : props.active?.unit.id}
               notes={(text) => (props.book === undefined ? [] : missingChapters(props.book, text))}
-              settled={(unit) =>
-                props.book !== undefined &&
-                panel.decisions.decisionFor(props.book.bookId, unit.id) !== undefined
-              }
+              settled={(unit) => {
+                if (props.book === undefined) return false;
+                if (panel.decisions.decisionFor(props.book.bookId, unit.id) !== undefined)
+                  return true;
+                // Final: a verse not yet decided reads as its default. Only one that
+                // defaults to the other side's words keeps marks, which the CSS
+                // above turns into plain text.
+                return (
+                  props.final && panel.units.effectiveFor(props.book.bookId, unit.id) !== "baseline"
+                );
+              }}
               incoming={(unit) => {
                 if (props.book === undefined) return false;
                 const origin = panel.units.originOf(props.book.bookId, [unit]);
@@ -766,6 +928,49 @@ export function InlineReview(props: { readonly panel: PanelModel }): JSX.Element
   };
   const pending = (): readonly Item[] => items().filter((item) => outcomeOf(item) === undefined);
   const done = (): readonly Item[] => items().filter((item) => outcomeOf(item) !== undefined);
+
+  /**
+   * The verse as its decision left it, and the whole book then: what a hand
+   * edit after deciding is measured against, and what re-picking the editor's
+   * own side puts back. Taken once the decision's write has landed.
+   */
+  const settledAs = new Map<string, { readonly verse: string; readonly book: string }>();
+  const verseOf = (item: Item): string =>
+    item.unit.current === undefined
+      ? ""
+      : item.book.currentText.slice(item.unit.current.from, item.unit.current.to);
+  createEffect(
+    () => items().map((item) => ({ item, decided: outcomeOf(item) !== undefined })),
+    (seen) => {
+      for (const { item, decided } of seen) {
+        if (!decided) settledAs.delete(item.key);
+        else if (!settledAs.has(item.key))
+          settledAs.set(item.key, { verse: verseOf(item), book: item.book.currentText });
+      }
+    },
+  );
+  /** Decided, then edited in the text: "Custom edits for this verse", as Spiritual terms says it. */
+  const customOf = (item: Item): boolean => {
+    if (outcomeOf(item) === undefined) return false;
+    const held = settledAs.get(item.key);
+    return held !== undefined && verseOf(item) !== held.verse;
+  };
+  /** Picking a side again throws the hand edits away: that side's text comes back. */
+  const repick = (item: Item, outcome: "accepted" | "rejected"): void => {
+    const side = outcome === "accepted" ? item.accept : other(item.accept);
+    const held = settledAs.get(item.key);
+    const decided = panel.decisions.decisionFor(item.book.bookId, item.unit.id);
+    settledAs.delete(item.key);
+    // The editor's own side was never written, so it comes back from the book as it was decided.
+    if (side === "current" && decided === "current" && held !== undefined) {
+      panel.writes.restore(item.book.bookId, [item.unit], held.book);
+      return;
+    }
+    panel.writes.decideAny(item.book.bookId, [item.unit], side);
+  };
+
+  /** The text as it would end up: each verse as decided, or as its default when not yet. */
+  const [final, setFinal] = createSignal(false, { name: "inlineFinal" });
   // A card just decided stays in the list a moment longer, folding shut, so the
   // list closes up under the reader instead of jumping.
   const [folding, setFolding] = createSignal<ReadonlySet<string>>(new Set(), {
@@ -957,6 +1162,7 @@ export function InlineReview(props: { readonly panel: PanelModel }): JSX.Element
             book={book()}
             active={active()}
             reveal={reveal()}
+            final={final()}
             onClickUnit={fromText}
             onScroll={() => setPopup(undefined)}
             onLeaveSettled={() => {
@@ -1034,8 +1240,19 @@ export function InlineReview(props: { readonly panel: PanelModel }): JSX.Element
             {/* Sticky, so Save and Cancel are always in reach; the canvas behind it hides the cards passing under. */}
             <div class="sticky -top-1 z-10 -mx-2 -mt-1 flex flex-col gap-3 bg-surface-canvas px-3 pt-3 pb-2 [&_.ms-auto]:ms-0">
               {panel.header("title")}
-              <div class="flex items-center gap-2 [&>div]:ms-0">
+              <div class="flex flex-wrap items-center gap-2 [&>div]:ms-0">
                 {panel.header("actions", () => pending().length === 0)}
+                <button
+                  type="button"
+                  aria-pressed={final() ? "true" : "false"}
+                  title="Show the text as it would end up: each verse as decided, or as its default"
+                  class="flex h-12 cursor-pointer items-center gap-2 rounded-lg px-3 text-[14px] font-medium whitespace-nowrap text-on-surface-secondary hover:bg-surface-primary aria-pressed:bg-surface-primary aria-pressed:text-on-surface-primary"
+                  data-inline-final
+                  onClick={() => setFinal((was) => !was)}
+                >
+                  <Eye size={20} aria-hidden="true" />
+                  Show final
+                </button>
                 <CompletedToggle
                   count={done().length}
                   total={items().length}
@@ -1052,6 +1269,8 @@ export function InlineReview(props: { readonly panel: PanelModel }): JSX.Element
               editable={panel.writes.editable()}
               onActivate={(item) => pick(item.key)}
               onUndo={(item) => decide(item, undefined)}
+              customOf={customOf}
+              onRepick={repick}
               usfm={usfm()}
               onToggleUsfm={toggleUsfm}
             />

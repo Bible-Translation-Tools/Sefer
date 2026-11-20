@@ -133,7 +133,23 @@ export function createWrites(inputs: WritesInputs) {
     return services.seated(bookId);
   };
 
-  return { editable, writeNow: write, decideAny, seatBook };
+  /**
+   * Put units back as they read in `from`, an earlier text of the same book:
+   * re-picking a side after editing the verse it settled on throws the edits away.
+   */
+  const restore = (bookId: BookId, staticUnits: readonly DecisionUnit[], from: string): void => {
+    if (!editable()) return;
+    const book = shell.project()?.book(bookId);
+    const live = book?.source().text;
+    if (book === undefined || live === undefined || staticUnits.length === 0) return;
+    const operation = services.composition.observability.operation("review.diff.restore", {
+      "review.book": bookId,
+      "review.units": staticUnits.length,
+    });
+    applyTaken(inputs, operation, book, bookId, live, from, staticUnits);
+  };
+
+  return { editable, writeNow: write, decideAny, seatBook, restore };
 }
 
 export type Writes = ReturnType<typeof createWrites>;
