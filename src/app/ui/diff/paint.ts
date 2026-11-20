@@ -202,7 +202,8 @@ const stretchesOf = (runs: readonly TextRun[], usfm: boolean, start: number): St
       at = run.to;
       continue;
     }
-    if (!visibleRun(run.what, usfm)) continue;
+    // A space on its own is no word to mark: underlined, it reads as "_day".
+    if (!visibleRun(run.what, usfm) || run.text.trim() === "") continue;
     first ??= run;
     last = run;
   }
@@ -228,7 +229,7 @@ const anchored = (
       seen += run.text.replace(/\s+/gu, "").length;
       continue;
     }
-    if (run.kind !== kind || !visibleRun(run.what, usfm)) continue;
+    if (run.kind !== kind || !visibleRun(run.what, usfm) || run.text.trim() === "") continue;
     const group = out.get(seen);
     if (group === undefined) out.set(seen, [run]);
     else group.push(run);

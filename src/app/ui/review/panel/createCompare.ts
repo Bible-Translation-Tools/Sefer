@@ -180,21 +180,48 @@ function createCompareRun(inputs: CompareInputs, setters: CompareSetters) {
       changedBooks: books.filter((entry) => !entry.identical).length,
     };
     const skeletons = new Map(held.skeletons);
-    if (inReview(decisions, book))
+    if (inReview(decisions, book)) {
+      const patching = services.composition.observability.operation("review.diff.patch", {
+        "review.book": bookId,
+        "review.chars": text.length,
+      });
       skeletons.set(
         bookId,
         diffSkeleton(services.galley, bookId, book.rightText, text, {
           unchanged: decidedIn(decisions, bookId),
         }),
       );
+      patching.end("passed");
+    }
     state.computed = { result, skeletons };
     setResult(result);
   };
 
-  return { runCompare, computed: () => state.computed, patchLive };
+  /**
+   * Typing in the editor's book: patch each book whose text moved on, so a
+   * deleted word turns into its struck-through ghost as it goes rather than
+   * vanishing until the typing pause's compare.
+   */
+  const patchTyped = (): void => {
+    const held = state.computed;
+    const project = inputs.shell.project();
+    if (held === undefined || project === undefined || untrack(leftId) !== "project") return;
+    for (const compared of held.result.books) {
+      const text = project.book(compared.bookId)?.source().text;
+      if (text !== undefined && compared.leftText !== undefined && text !== compared.leftText)
+        patchLive(compared.bookId, text);
+    }
+  };
+
+  return { runCompare, computed: () => state.computed, patchLive, patchTyped };
 }
 
-function watchSides(inputs: CompareInputs, revisions: () => string, runCompare: () => void): void {
+function watchSides(
+  inputs: CompareInputs,
+  revisions: () => string,
+  runCompare: () => void,
+  patchTyped: () => void,
+): void {
   const { leftId, rightId, leftPicked, rightPicked, version, shared, live } = inputs.sides;
   let lastSides: string | undefined;
   let typing: ReturnType<typeof setTimeout> | undefined;
@@ -216,6 +243,7 @@ function watchSides(inputs: CompareInputs, revisions: () => string, runCompare: 
         untrack(runCompare);
         return;
       }
+      untrack(patchTyped);
       typing = setTimeout(() => {
         typing = undefined;
         untrack(runCompare);
@@ -288,12 +316,12 @@ export function createCompare(inputs: CompareInputs) {
     return project.books.map((book) => shell.stampOf(book.id)?.revision ?? -1).join(",");
   };
 
-  const { runCompare, computed, patchLive } = createCompareRun(inputs, {
+  const { runCompare, computed, patchLive, patchTyped } = createCompareRun(inputs, {
     setResult,
     setSelected,
     setComparing,
   });
-  watchSides(inputs, revisions, runCompare);
+  watchSides(inputs, revisions, runCompare, patchTyped);
 
   const changed = (): readonly BookComparison[] => {
     decisions();
