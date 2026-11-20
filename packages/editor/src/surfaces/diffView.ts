@@ -66,6 +66,8 @@ export interface DiffHunk {
     readonly text: string;
     /** Words arriving rather than leaving: drawn as an addition, not struck through. */
     readonly added?: boolean;
+    /** Letters inside a word ("wal~~k~~"), not a word of its own: no gap after it. */
+    readonly letters?: boolean;
   }[];
 }
 
@@ -146,15 +148,18 @@ class Ghost extends WidgetType {
   constructor(
     readonly text: string,
     readonly added: boolean,
+    readonly letters: boolean,
   ) {
     super();
   }
   override eq(other: Ghost): boolean {
-    return other.text === this.text && other.added === this.added;
+    return other.text === this.text && other.added === this.added && other.letters === this.letters;
   }
   toDOM(): HTMLElement {
     const span = document.createElement("span");
-    span.className = this.added ? "cm-diff-added cm-diff-ghost" : "cm-diff-removed cm-diff-ghost";
+    span.className =
+      (this.added ? "cm-diff-added cm-diff-ghost" : "cm-diff-removed cm-diff-ghost") +
+      (this.letters ? " cm-diff-letters" : "");
     span.textContent = this.text;
     return span;
   }
@@ -264,7 +269,7 @@ const decorateHunks = (
       if (ghost.at <= doc && ghost.text !== "")
         ranges.push(
           Decoration.widget({
-            widget: new Ghost(ghost.text, ghost.added === true),
+            widget: new Ghost(ghost.text, ghost.added === true, ghost.letters === true),
             side: -1,
           }).range(ghost.at),
         );

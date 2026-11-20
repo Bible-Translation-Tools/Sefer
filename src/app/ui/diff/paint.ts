@@ -297,6 +297,63 @@ const ghostsOf = (unit: DecisionUnit, usfm: boolean): { at: number; text: string
   });
 };
 
+/**
+ * One word changed by a few letters ("walk" → "wal", "man" → "men", "sinner"
+ * → "sinners"): drawn as those letters, not the whole word struck and
+ * written again. Only when one removed word and one added word share an
+ * anchor, neither holds a space, and what differs is one run of at most two
+ * letters or a third of the word. Display only: the decision is still the
+ * whole unit.
+ *
+ * TODO(Will, 2026-11-20): a trial. Once the rule reads right, move it into
+ * the kitchen's word runs (`unit_text_diff`, onion/src/diff.rs) so every
+ * consumer draws the same letters, and take this back out.
+ */
+interface Letters {
+  /** The added word as the engine gave it. */
+  readonly word: { readonly from: number; readonly to: number };
+  /** The letters only the old word had, and where they stand in the new one. */
+  readonly ghost: { readonly at: number; readonly text: string };
+  /** The letters only the new word has; empty when it only lost some. */
+  readonly mark: { readonly from: number; readonly to: number };
+}
+
+const lettersOf = (unit: DecisionUnit, usfm: boolean): Letters[] => {
+  const removed = anchored(unit.text?.baseline ?? [], "removed", usfm);
+  const out: Letters[] = [];
+  for (const [anchor, added] of anchored(unit.text?.current ?? [], "added", usfm)) {
+    const gone = removed.get(anchor);
+    const [was] = gone ?? [];
+    const [now] = added;
+    if (gone?.length !== 1 || added.length !== 1 || was === undefined || now === undefined)
+      continue;
+    const before = [...was.text];
+    const after = [...now.text];
+    if (before.some((char) => /\s/u.test(char)) || after.some((char) => /\s/u.test(char))) continue;
+    let head = 0;
+    while (head < before.length && head < after.length && before[head] === after[head]) head += 1;
+    let tail = 0;
+    while (
+      tail < before.length - head &&
+      tail < after.length - head &&
+      before[before.length - 1 - tail] === after[after.length - 1 - tail]
+    )
+      tail += 1;
+    const lost = before.slice(head, before.length - tail).join("");
+    const gained = after.slice(head, after.length - tail).join("");
+    const longest = Math.max(before.length, after.length);
+    const differs = Math.max([...lost].length, [...gained].length);
+    if (head + tail === 0 || (differs > 2 && differs * 3 > longest)) continue;
+    const at = now.from + after.slice(0, head).join("").length;
+    out.push({
+      word: { from: now.from, to: now.to },
+      ghost: { at: at, text: lost },
+      mark: { from: at, to: at + gained.length },
+    });
+  }
+  return out;
+};
+
 /** One mark per stretch of added words, spaces between them included. */
 const addedMarks = (unit: DecisionUnit, usfm: boolean): { from: number; to: number }[] =>
   stretchesOf(unit.text?.current ?? [], usfm, 0).flatMap((stretch) =>
@@ -304,6 +361,28 @@ const addedMarks = (unit: DecisionUnit, usfm: boolean): { from: number; to: numb
       ? []
       : [{ from: stretch.first.from, to: stretch.last.to }],
   );
+
+/** A changed word's mark narrowed to the letters it gained; none when it only lost some. */
+const withLetters = (
+  marks: readonly { readonly from: number; readonly to: number }[],
+  letters: readonly Letters[],
+): { from: number; to: number }[] =>
+  marks.flatMap((mark) => {
+    const word = letters.find((each) => each.word.from === mark.from && each.word.to === mark.to);
+    if (word === undefined) return [mark];
+    return word.mark.to > word.mark.from ? [word.mark] : [];
+  });
+
+/** The whole struck word becomes the struck letters, inside the new word; none when it only gained some. */
+const lettersInGhosts = (
+  ghosts: readonly { readonly at: number; readonly text: string }[],
+  letters: readonly Letters[],
+): { at: number; text: string; letters?: boolean }[] =>
+  ghosts.flatMap((ghost) => {
+    const word = letters.find((each) => each.word.from === ghost.at);
+    if (word === undefined) return [ghost];
+    return word.ghost.text === "" ? [] : [{ ...word.ghost, letters: true }];
+  });
 
 export const hunkPaint = (
   units: readonly DecisionUnit[],
@@ -377,14 +456,22 @@ export const hunkPaint = (
         : changed(unit)
           ? "cm-diff-now"
           : tint(unit, decision, controls?.live === true, true, false),
-      marks: [...(unit.status === "modified" && !quiet ? addedMarks(unit, usfm) : []), ...whole]
+      marks: [
+        ...(unit.status === "modified" && !quiet
+          ? withLetters(addedMarks(unit, usfm), inlineRemoved ? lettersOf(unit, usfm) : [])
+          : []),
+        ...whole,
+      ]
         .map((mark) => ({ ...mark, class: markClass }))
         .concat(settledMarks),
       old: unit.baseline === undefined || !changed(unit) ? undefined : () => was(unit),
       label: `${hunkVerb(unit)} ${unitReference(unit)}`,
       ghosts:
         inlineRemoved && unit.status === "modified" && !quiet
-          ? ghostsOf(unit, usfm).map((ghost) => ({ ...ghost, added: arriving }))
+          ? lettersInGhosts(ghostsOf(unit, usfm), lettersOf(unit, usfm)).map((ghost) => ({
+              ...ghost,
+              added: arriving,
+            }))
           : undefined,
     });
   }

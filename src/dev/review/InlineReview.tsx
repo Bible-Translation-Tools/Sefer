@@ -729,7 +729,7 @@ function TextPanel(props: {
               "[&_.cm-diff-added]:bg-transparent! [&_.cm-diff-added]:text-brand! [&_.cm-diff-added]:underline! [&_.cm-diff-added]:decoration-dotted! [&_.cm-diff-added]:underline-offset-4!",
               "[&_.cm-diff-removed]:bg-transparent! [&_.cm-diff-removed]:text-on-surface-tertiary! [&_.cm-diff-removed]:line-through!",
               "[&_.cm-diff-added.cm-diff-active]:decoration-solid! [&_.cm-diff-added.cm-diff-active]:decoration-2!",
-              "[&_.cm-diff-settled]:underline [&_.cm-diff-settled]:decoration-on-surface-tertiary [&_.cm-diff-settled]:decoration-dotted [&_.cm-diff-settled]:underline-offset-4 [&_.cm-diff-ghost]:me-1 [&_.cm-diff-ghost]:select-none",
+              "[&_.cm-diff-settled]:underline [&_.cm-diff-settled]:decoration-on-surface-tertiary [&_.cm-diff-settled]:decoration-dotted [&_.cm-diff-settled]:underline-offset-4 [&_.cm-diff-ghost]:me-1 [&_.cm-diff-ghost]:select-none [&_.cm-diff-letters]:me-0!",
               // The word marks and the cards already say where each change is; no gutter bars.
               "[&_.cm-diff-bars]:hidden!",
               // Show final: words leaving drop out, words arriving read as plain text.
