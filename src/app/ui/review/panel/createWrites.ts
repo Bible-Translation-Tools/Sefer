@@ -19,6 +19,8 @@ export interface WritesInputs {
   readonly decisions: Decisions;
   readonly units: Units;
   readonly setNote: (note: string) => void;
+  /** Told the book's new text the moment a decision writes it, so the comparison need not wait. */
+  readonly onWritten?: (bookId: BookId, text: string) => void;
 }
 
 type Operation = ReturnType<Services["composition"]["observability"]["operation"]>;
@@ -60,6 +62,7 @@ function applyTaken(
     "review.splices": splices.success.length,
   });
   if (TextResult.isFailure(applied)) setNote(describe(applied.failure));
+  else inputs.onWritten?.(bookId, book.source().text);
   shell.changed({ kind: "book.apply", books: [bookId] });
 }
 

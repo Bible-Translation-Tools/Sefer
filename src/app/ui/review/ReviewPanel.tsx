@@ -66,7 +66,15 @@ function createPanelParts(base: PanelBase) {
   const { shell, services, navigate, route, sides, decisions, setNote, nameOf } = base;
   const compare = createCompare({ shell, services, sides, decisions, setNote });
   const units = createUnits({ services, route, sides, decisions, compare, nameOf });
-  const writes = createWrites({ shell, services, sides, decisions, units, setNote });
+  const writes = createWrites({
+    shell,
+    services,
+    sides,
+    decisions,
+    units,
+    setNote,
+    onWritten: compare.patchLive,
+  });
   const form = createSaveForm({ shell, services, route, sides });
   const receipt = createReceipt({ shell, services, navigate, sides, form });
   const record = createRecordAction({

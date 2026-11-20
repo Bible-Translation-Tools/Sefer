@@ -159,7 +159,39 @@ function createCompareRun(inputs: CompareInputs, setters: CompareSetters) {
       });
   };
 
-  return { runCompare, computed: () => state.computed };
+  /**
+   * Review just wrote `text` into the editor's book: diff that one book now, so
+   * the text repaints as the decision lands rather than after the typing pause
+   * and a whole compare. The compare that follows confirms it.
+   */
+  const patchLive = (bookId: BookId, text: string): void => {
+    const held = state.computed;
+    if (held === undefined || untrack(leftId) !== "project") return;
+    const books = held.result.books.map((book) =>
+      book.bookId === bookId
+        ? { ...book, leftText: text, identical: text === book.rightText }
+        : book,
+    );
+    const book = books.find((entry) => entry.bookId === bookId);
+    if (book?.rightText === undefined) return;
+    const result = {
+      ...held.result,
+      books,
+      changedBooks: books.filter((entry) => !entry.identical).length,
+    };
+    const skeletons = new Map(held.skeletons);
+    if (inReview(decisions, book))
+      skeletons.set(
+        bookId,
+        diffSkeleton(services.galley, bookId, book.rightText, text, {
+          unchanged: decidedIn(decisions, bookId),
+        }),
+      );
+    state.computed = { result, skeletons };
+    setResult(result);
+  };
+
+  return { runCompare, computed: () => state.computed, patchLive };
 }
 
 function watchSides(inputs: CompareInputs, revisions: () => string, runCompare: () => void): void {
@@ -256,7 +288,7 @@ export function createCompare(inputs: CompareInputs) {
     return project.books.map((book) => shell.stampOf(book.id)?.revision ?? -1).join(",");
   };
 
-  const { runCompare, computed } = createCompareRun(inputs, {
+  const { runCompare, computed, patchLive } = createCompareRun(inputs, {
     setResult,
     setSelected,
     setComparing,
@@ -270,7 +302,17 @@ export function createCompare(inputs: CompareInputs) {
 
   const { skeletons, diffRefusal } = createSkeletons(inputs, result, selected, computed);
 
-  return { result, selected, setSelected, comparing, revisions, changed, skeletons, diffRefusal };
+  return {
+    result,
+    selected,
+    setSelected,
+    comparing,
+    revisions,
+    changed,
+    skeletons,
+    diffRefusal,
+    patchLive,
+  };
 }
 
 export type Compare = ReturnType<typeof createCompare>;
