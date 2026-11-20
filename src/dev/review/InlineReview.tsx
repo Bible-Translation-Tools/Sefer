@@ -919,6 +919,10 @@ function onScreen(host: HTMLElement | undefined): boolean {
 export function InlineReview(props: { readonly panel: PanelModel }): JSX.Element {
   const panel = untrack(() => props.panel);
   const items = createItems(panel);
+  // Drawn inline, a deleted word must turn into its ghost as it goes: this
+  // screen asks for a one-book diff on every edit, not the typing pause.
+  panel.compare.patchWhileTyping(true);
+  onCleanup(() => panel.compare.patchWhileTyping(false));
 
   const outcomeOf = (item: Item): Outcome => {
     // Only an explicit choice counts: the engine's presets still wait for one here.

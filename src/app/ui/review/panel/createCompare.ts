@@ -200,9 +200,16 @@ function createCompareRun(inputs: CompareInputs, setters: CompareSetters) {
   /**
    * Typing in the editor's book: patch each book whose text moved on, so a
    * deleted word turns into its struck-through ghost as it goes rather than
-   * vanishing until the typing pause's compare.
+   * vanishing until the typing pause's compare. A screen's choice
+   * (`patchWhileTyping`): where nothing is drawn inline, the pause's one
+   * compare is the cheaper answer.
    */
+  let patching = false;
+  const patchWhileTyping = (on: boolean): void => {
+    patching = on;
+  };
   const patchTyped = (): void => {
+    if (!patching) return;
     const held = state.computed;
     const project = inputs.shell.project();
     if (held === undefined || project === undefined || untrack(leftId) !== "project") return;
@@ -213,7 +220,13 @@ function createCompareRun(inputs: CompareInputs, setters: CompareSetters) {
     }
   };
 
-  return { runCompare, computed: () => state.computed, patchLive, patchTyped };
+  return {
+    runCompare,
+    computed: () => state.computed,
+    patchLive,
+    patchTyped,
+    patchWhileTyping,
+  };
 }
 
 function watchSides(
@@ -316,11 +329,14 @@ export function createCompare(inputs: CompareInputs) {
     return project.books.map((book) => shell.stampOf(book.id)?.revision ?? -1).join(",");
   };
 
-  const { runCompare, computed, patchLive, patchTyped } = createCompareRun(inputs, {
-    setResult,
-    setSelected,
-    setComparing,
-  });
+  const { runCompare, computed, patchLive, patchTyped, patchWhileTyping } = createCompareRun(
+    inputs,
+    {
+      setResult,
+      setSelected,
+      setComparing,
+    },
+  );
   watchSides(inputs, revisions, runCompare, patchTyped);
 
   const changed = (): readonly BookComparison[] => {
@@ -340,6 +356,7 @@ export function createCompare(inputs: CompareInputs) {
     skeletons,
     diffRefusal,
     patchLive,
+    patchWhileTyping,
   };
 }
 
