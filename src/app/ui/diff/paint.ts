@@ -393,9 +393,9 @@ export const hunkPaint = (
   inlineRemoved = false,
   active: string | undefined = undefined,
   /**
-   * A decided change reads as the text it settled on. Inline, the active one
-   * keeps what it passed over beside it, faint and struck, and the words it
-   * kept carry the settled underline: its current side is what was kept.
+   * A decided change reads as the text it settled on: no marks, unless it is
+   * the active one. Inline, the active one too: the buffer holds only what is
+   * there, and its card says what was passed over.
    */
   settled: (unit: DecisionUnit) => boolean = () => false,
   /**
@@ -410,11 +410,8 @@ export const hunkPaint = (
     const span = unit.current;
     const decision = controls?.decision(unit);
     if (!changed(unit) && decision === undefined) continue;
-    const decided = settled(unit);
-    const quiet = unit.id !== active && decided;
-    // Decided and active, inline: the kept words settled, the passed-over ones faint.
-    const kept = inlineRemoved && unit.id === active && decided;
-    const arriving = inlineRemoved && incoming(unit) && !kept;
+    const quiet = (inlineRemoved || unit.id !== active) && settled(unit);
+    const arriving = inlineRemoved && incoming(unit);
     if (span === undefined) {
       // Inline, a whole removed unit reads where it stood, struck through, as
       // removed words do; otherwise it waits behind its bar.
@@ -432,19 +429,13 @@ export const hunkPaint = (
         old: () => was(unit),
         label: `Removed ${unitReference(unit)}`,
         ghosts:
-          gone === ""
-            ? undefined
-            : [{ at: unit.place.current, text: `${gone} `, added: arriving, lost: kept }],
+          gone === "" ? undefined : [{ at: unit.place.current, text: `${gone} `, added: arriving }],
       });
       continue;
     }
     const end = usfm ? span.to : readingEnd(analysis, span.from, span.to);
     const markKind = arriving ? "cm-diff-removed" : "cm-diff-added";
-    const markClass = kept
-      ? "cm-diff-settled"
-      : unit.id === active
-        ? `${markKind} cm-diff-active`
-        : markKind;
+    const markClass = unit.id === active ? `${markKind} cm-diff-active` : markKind;
     // Inline, a whole added unit is one mark, as added words are.
     const whole =
       inlineRemoved && unit.status === "added" && !quiet
@@ -464,12 +455,11 @@ export const hunkPaint = (
       kind: hunkKind(unit),
       from: span.from,
       to: Math.max(span.from + 1, end),
-      tint:
-        quiet || kept
-          ? ""
-          : changed(unit)
-            ? "cm-diff-now"
-            : tint(unit, decision, controls?.live === true, true, false),
+      tint: quiet
+        ? ""
+        : changed(unit)
+          ? "cm-diff-now"
+          : tint(unit, decision, controls?.live === true, true, false),
       marks: [
         ...(unit.status === "modified" && !quiet
           ? withLetters(addedMarks(unit, usfm), inlineRemoved ? lettersOf(unit, usfm) : [])
@@ -485,7 +475,6 @@ export const hunkPaint = (
           ? lettersInGhosts(ghostsOf(unit, usfm), lettersOf(unit, usfm)).map((ghost) => ({
               ...ghost,
               added: arriving,
-              lost: kept,
             }))
           : undefined,
     });

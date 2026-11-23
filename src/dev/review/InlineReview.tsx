@@ -738,8 +738,7 @@ function TextPanel(props: {
   /**
    * A verse decided by taking the other side's words no longer differs from
    * them: drawn against the editor's text from before the take instead, so
-   * the words that changed keep their settled underline, and the active one
-   * shows what it passed over. Worked out with the units it swaps into, so
+   * the words that changed keep their settled underline. Worked out with the units it swaps into, so
    * it follows the take's write; the book's own text, as the units lag it.
    */
   const withPassedOver = (units: readonly DecisionUnit[]): readonly DecisionUnit[] => {
@@ -805,7 +804,7 @@ function TextPanel(props: {
               "[&_.cm-diff-added]:bg-transparent! [&_.cm-diff-added]:text-brand! [&_.cm-diff-added]:underline! [&_.cm-diff-added]:decoration-dotted! [&_.cm-diff-added]:underline-offset-4!",
               "[&_.cm-diff-removed]:bg-transparent! [&_.cm-diff-removed]:text-on-surface-tertiary! [&_.cm-diff-removed]:line-through!",
               "[&_.cm-diff-added.cm-diff-active]:decoration-solid! [&_.cm-diff-added.cm-diff-active]:decoration-2!",
-              "[&_.cm-diff-settled]:underline [&_.cm-diff-settled]:decoration-on-surface-tertiary [&_.cm-diff-settled]:decoration-dotted [&_.cm-diff-settled]:underline-offset-4 [&_.cm-diff-ghost]:me-1 [&_.cm-diff-ghost]:select-none [&_.cm-diff-letters]:me-0! [&_.cm-diff-lost]:opacity-50",
+              "[&_.cm-diff-settled]:underline [&_.cm-diff-settled]:decoration-on-surface-tertiary [&_.cm-diff-settled]:decoration-dotted [&_.cm-diff-settled]:underline-offset-4 [&_.cm-diff-ghost]:me-1 [&_.cm-diff-ghost]:select-none [&_.cm-diff-letters]:me-0!",
               // The word marks and the cards already say where each change is; no gutter bars.
               "[&_.cm-diff-bars]:hidden!",
               // Show final: words leaving drop out, words arriving read as plain text.
