@@ -1,6 +1,7 @@
 import type { JSX } from "@solidjs/web";
 import { Category, MARKERS } from "@wycliffeassociates/scripture-kitchen/reader";
 import type { BookId } from "@wycliffeassociates/sefer-text/book";
+import { Result } from "effect";
 import Braces from "lucide-solid/icons/braces";
 import Check from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
@@ -21,6 +22,7 @@ import { createSeats } from "#app/ui/review/reader/createSeats";
 import type { ReviewBook } from "#app/ui/review/reader/types";
 import type { PanelModel } from "#app/ui/review/ReviewPanel";
 import { nameBlock } from "#app/ui/workspace/blockNames";
+import { diffSkeleton } from "#core/diff/skeleton";
 import type { Analysis, DecisionUnit, MergeSide } from "#core/galley";
 
 /**
@@ -728,6 +730,44 @@ function TextPanel(props: {
     analysisOf,
   });
   const usfm = (): boolean => panel.shell.mode() === "usfm";
+  /**
+   * The active verse, decided by taking the other side's words, no longer
+   * differs from them: drawn against the editor's text from before the take,
+   * so what was passed over still shows beside it.
+   */
+  /**
+   * A verse decided by taking the other side's words no longer differs from
+   * them: drawn against the editor's text from before the take instead, so
+   * the words that changed keep their settled underline, and the active one
+   * shows what it passed over. Worked out with the units it swaps into, so
+   * it follows the take's write; the book's own text, as the units lag it.
+   */
+  const withPassedOver = (units: readonly DecisionUnit[]): readonly DecisionUnit[] => {
+    const bookId = props.book?.bookId;
+    // Read to follow it: the write landing is what makes a take differ from before.
+    const compared = props.book?.currentText;
+    if (bookId === undefined || compared === undefined) return units;
+    const before = panel.decisions.originals.get(bookId);
+    const now = untrack(() => panel.shell.project()?.book(bookId)?.source().text);
+    if (before === undefined || now === undefined || before === now) return units;
+    const found = diffSkeleton(panel.shell.services.galley, bookId, before, now);
+    if (Result.isFailure(found)) return units;
+    // Right after the first take the list may not carry the verse at all (only
+    // changed verses are listed until the book counts as decided): add it then.
+    const swaps = new Map(
+      found.success.units
+        .filter(
+          (unit) => changed(unit) && panel.decisions.decisionFor(bookId, unit.id) === "baseline",
+        )
+        .map((unit) => [unit.id, unit]),
+    );
+    if (swaps.size === 0) return units;
+    const kept = units.filter((unit) => changed(unit) || !swaps.has(unit.id));
+    const keptIds = new Set(kept.map((unit) => unit.id));
+    const added = [...swaps.values()].filter((unit) => !keptIds.has(unit.id));
+    if (added.length === 0) return kept;
+    return [...kept, ...added].toSorted((a, b) => a.place.current - b.place.current);
+  };
 
   let api: BookDiffApi | undefined;
   let host: HTMLDivElement | undefined;
@@ -765,7 +805,7 @@ function TextPanel(props: {
               "[&_.cm-diff-added]:bg-transparent! [&_.cm-diff-added]:text-brand! [&_.cm-diff-added]:underline! [&_.cm-diff-added]:decoration-dotted! [&_.cm-diff-added]:underline-offset-4!",
               "[&_.cm-diff-removed]:bg-transparent! [&_.cm-diff-removed]:text-on-surface-tertiary! [&_.cm-diff-removed]:line-through!",
               "[&_.cm-diff-added.cm-diff-active]:decoration-solid! [&_.cm-diff-added.cm-diff-active]:decoration-2!",
-              "[&_.cm-diff-settled]:underline [&_.cm-diff-settled]:decoration-on-surface-tertiary [&_.cm-diff-settled]:decoration-dotted [&_.cm-diff-settled]:underline-offset-4 [&_.cm-diff-ghost]:me-1 [&_.cm-diff-ghost]:select-none [&_.cm-diff-letters]:me-0!",
+              "[&_.cm-diff-settled]:underline [&_.cm-diff-settled]:decoration-on-surface-tertiary [&_.cm-diff-settled]:decoration-dotted [&_.cm-diff-settled]:underline-offset-4 [&_.cm-diff-ghost]:me-1 [&_.cm-diff-ghost]:select-none [&_.cm-diff-letters]:me-0! [&_.cm-diff-lost]:opacity-50",
               // The word marks and the cards already say where each change is; no gutter bars.
               "[&_.cm-diff-bars]:hidden!",
               // Show final: words leaving drop out, words arriving read as plain text.
@@ -831,7 +871,7 @@ function TextPanel(props: {
             <BookDiff
               class="min-h-0 flex-1"
               sides={held().sides}
-              units={held().units}
+              units={withPassedOver(held().units)}
               split={false}
               usfm={usfm()}
               controls={undefined}
