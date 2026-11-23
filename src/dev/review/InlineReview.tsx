@@ -5,6 +5,7 @@ import Braces from "lucide-solid/icons/braces";
 import Check from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import Eye from "lucide-solid/icons/eye";
+import EyeOff from "lucide-solid/icons/eye-off";
 import Pencil from "lucide-solid/icons/pencil";
 import Undo2 from "lucide-solid/icons/undo-2";
 import X from "lucide-solid/icons/x";
@@ -432,6 +433,11 @@ function PendingCard(props: {
   readonly custom?: boolean;
   /** Pick a side again over custom edits: that side's text comes back. */
   readonly onRepick?: (outcome: "accepted" | "rejected") => void;
+  /**
+   * Decided cards stay in the list: Accept and Reject stay too, the chosen one
+   * marked. The other switches sides; the chosen one again takes it back.
+   */
+  readonly inPlace?: boolean;
   readonly usfm: boolean;
   readonly onToggleUsfm: () => void;
 }) {
@@ -526,7 +532,37 @@ function PendingCard(props: {
           </Button>
         </div>
       </Show>
-      <Show when={decided() && props.active && props.editable}>
+      <Show
+        when={props.inPlace === true && props.custom !== true && props.active && props.editable}
+      >
+        <div class="grid grid-cols-2 gap-2">
+          <For each={["accepted", "rejected"] as const}>
+            {(side) => (
+              <Button
+                size="md"
+                variant="secondary"
+                icon={side === "accepted" ? <Check /> : <X />}
+                aria-pressed={props.outcome === side ? "true" : "false"}
+                class={cx(
+                  props.outcome === side &&
+                    (side === "accepted"
+                      ? "ring-2 ring-brand ring-inset"
+                      : "ring-2 ring-on-surface-error ring-inset"),
+                )}
+                data-inline-choice={side}
+                onClick={(event: MouseEvent) => {
+                  event.stopPropagation();
+                  if (props.outcome === side) props.onUndo?.();
+                  else props.onDecide(side);
+                }}
+              >
+                {side === "accepted" ? "Accept" : "Reject"}
+              </Button>
+            )}
+          </For>
+        </div>
+      </Show>
+      <Show when={props.inPlace !== true && decided() && props.active && props.editable}>
         <Button
           size="md"
           variant="secondary"
@@ -541,7 +577,7 @@ function PendingCard(props: {
           Undo
         </Button>
       </Show>
-      <Show when={!decided() && props.active && props.editable}>
+      <Show when={props.inPlace !== true && !decided() && props.active && props.editable}>
         <div class="grid grid-cols-2 gap-2">
           <Button
             size="md"
@@ -1018,6 +1054,19 @@ export function InlineReview(props: { readonly panel: PanelModel }): JSX.Element
     name: "inlineClosing",
   });
   const [completedOpen, setCompletedOpen] = createSignal(false, { name: "inlineCompletedOpen" });
+  /**
+   * What a decision does to its card, a design tweak (`review.decided`):
+   * "stay" (the default) keeps it where it is, marked, so Accept and Reject
+   * can be flipped to compare; "fly" folds it away into Completed and moves on.
+   */
+  const [decidedMode, setDecidedMode] = createSignal<"stay" | "fly">("stay", {
+    name: "inlineDecidedMode",
+    ownedWrite: true,
+  });
+  const inPlace = (): boolean => decidedMode() === "stay";
+  registerDecidedTweak(setDecidedMode);
+  /** "stay" only: decided cards leave the list while this is on. */
+  const [hideDecided, setHideDecided] = createSignal(false, { name: "inlineHideDecided" });
   /** A decided card's ghost flies up into the Completed toggle while the card folds shut. */
   const flyToCompleted = (key: string): void => {
     const card = document.querySelector<HTMLElement>(`[data-inline-card="${CSS.escape(key)}"]`);
@@ -1056,7 +1105,10 @@ export function InlineReview(props: { readonly panel: PanelModel }): JSX.Element
     };
   };
   const listed = (): readonly Item[] =>
-    items().filter((item) => outcomeOf(item) === undefined || folding().has(item.key));
+    items().filter(
+      (item) =>
+        outcomeOf(item) === undefined || folding().has(item.key) || (inPlace() && !hideDecided()),
+    );
   const close = (key: string): void => {
     setFolding((was) => new Set(was).add(key));
     setTimeout(() => {
@@ -1135,15 +1187,26 @@ export function InlineReview(props: { readonly panel: PanelModel }): JSX.Element
   const decide = (item: Item, outcome: "accepted" | "rejected" | undefined, stay = false): void => {
     const side =
       outcome === undefined ? undefined : outcome === "accepted" ? item.accept : other(item.accept);
+    const switching = outcome !== undefined && outcomeOf(item) !== undefined;
     undone.delete(item.key);
     panel.decisions.held.delete(keyOf(item.book.bookId, item.unit.id));
     if (outcome === undefined) beforeDecision.delete(item.key);
-    else beforeDecision.set(item.key, verseOf(item));
+    // Switching sides keeps the verse as it was before the first decision.
+    else if (!switching) beforeDecision.set(item.key, verseOf(item));
+    // The other side's text is not a hand edit: it is taken again once written.
+    if (switching) settledAs.delete(item.key);
     // The next undecided card in this book becomes the active one, as a
     // suggestion list moves on; another book waits for "Next book".
     const after = pending().filter((each) => each.book.bookId === item.book.bookId);
     const at = after.findIndex((each) => each.key === item.key);
     setPopup(undefined);
+    if (inPlace()) {
+      // The card stays, marked, and stays the active one: flipping between
+      // Accept and Reject shows each in the text. Moving on is the person's.
+      panel.writes.decideAny(item.book.bookId, [item.unit], side);
+      setActiveKey(item.key);
+      return;
+    }
     if (outcome !== undefined) {
       flyToCompleted(item.key);
       close(item.key);
@@ -1182,7 +1245,9 @@ export function InlineReview(props: { readonly panel: PanelModel }): JSX.Element
   const fromText = (bookId: BookId, unit: DecisionUnit, at: Point, onChange: boolean): void => {
     // A decided change stays as the text it settled on: clicking it in the text
     // does nothing; only its card in Completed shows the change again.
-    const found = pending().find((item) => item.book.bookId === bookId && item.unit.id === unit.id);
+    const found = (inPlace() ? items() : pending()).find(
+      (item) => item.book.bookId === bookId && item.unit.id === unit.id,
+    );
     if (found === undefined) return;
     setActiveKey(found.key);
     showCard(found.key);
@@ -1298,16 +1363,35 @@ export function InlineReview(props: { readonly panel: PanelModel }): JSX.Element
                   <Eye size={20} aria-hidden="true" />
                   Show final
                 </button>
-                <CompletedToggle
-                  count={done().length}
-                  total={items().length}
-                  open={completedOpen()}
-                  onToggle={() => setCompletedOpen((was) => !was)}
-                />
+                <Show
+                  when={inPlace()}
+                  fallback={
+                    <CompletedToggle
+                      count={done().length}
+                      total={items().length}
+                      open={completedOpen()}
+                      onToggle={() => setCompletedOpen((was) => !was)}
+                    />
+                  }
+                >
+                  <button
+                    type="button"
+                    aria-pressed={hideDecided() ? "true" : "false"}
+                    class="ms-auto flex h-12 cursor-pointer items-center gap-2 rounded-lg px-3 text-[14px] font-medium whitespace-nowrap text-on-surface-secondary hover:bg-surface-primary aria-pressed:bg-surface-primary aria-pressed:text-on-surface-primary"
+                    data-inline-hide-decided
+                    onClick={() => setHideDecided((was) => !was)}
+                  >
+                    <EyeOff size={20} aria-hidden="true" />
+                    Hide decided
+                    <span class="text-on-surface-secondary tabular-nums">
+                      {done().length} / {items().length}
+                    </span>
+                  </button>
+                </Show>
               </div>
             </div>
             <Completed
-              open={completedOpen()}
+              open={!inPlace() && completedOpen()}
               done={done()}
               outcomeOf={outcomeOf}
               activeKey={activeKey()}
@@ -1340,6 +1424,11 @@ export function InlineReview(props: { readonly panel: PanelModel }): JSX.Element
                       editable={panel.writes.editable()}
                       onActivate={() => pick(item().key)}
                       onDecide={(outcome) => decide(item(), outcome)}
+                      inPlace={inPlace()}
+                      outcome={inPlace() ? outcomeOf(item()) : undefined}
+                      onUndo={() => decide(item(), undefined)}
+                      custom={inPlace() && customOf(item())}
+                      onRepick={(outcome) => repick(item(), outcome)}
                     />
                   </div>
                 </div>
@@ -1377,4 +1466,50 @@ export function InlineReview(props: { readonly panel: PanelModel }): JSX.Element
       </Show>
     </Show>
   );
+}
+
+/**
+ * DESIGN SCAFFOLDING: the `review.decided` tweak, beside Review's own state
+ * and layout tweaks (`designStates.ts`). The design surface installs
+ * `register` a moment after boot, so this waits for it.
+ */
+function registerDecidedTweak(set: (mode: "stay" | "fly") => void): void {
+  let release: (() => void) | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let tries = 0;
+  const attempt = (): void => {
+    // SAFETY: the design surface installs `register` with exactly this shape (`src/dev/designSurface.ts`), and only in a design build; anything else reads as absent.
+    const design = globalThis.__sefer?.design as
+      | {
+          readonly register?: (registration: {
+            readonly namespace: string;
+            readonly tweaks: readonly {
+              readonly key: string;
+              readonly label: string;
+              readonly kind: "choice";
+              readonly options: readonly string[];
+            }[];
+            readonly onChange: (values: Readonly<Record<string, string>>) => void;
+          }) => () => void;
+        }
+      | undefined;
+    if (design?.register === undefined) {
+      tries += 1;
+      if (tries < 100) timer = setTimeout(attempt, 50);
+      return;
+    }
+    release = design.register({
+      namespace: "review",
+      tweaks: [
+        { key: "decided", label: "Decided cards", kind: "choice", options: ["stay", "fly"] },
+      ],
+      onChange: (values) => set(values["review.decided"] === "fly" ? "fly" : "stay"),
+    });
+  };
+  // Out of the mount: registering notifies every screen's tweaks, and none may write mid-render.
+  timer = setTimeout(attempt, 0);
+  onCleanup(() => {
+    if (timer !== undefined) clearTimeout(timer);
+    release?.();
+  });
 }
