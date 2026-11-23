@@ -25,6 +25,8 @@ import { hunkPaint, sidePaint, type Controls, type Side } from "./paint";
 export interface BookDiffApi {
   readonly showUnit: (unit: DecisionUnit) => void;
   readonly middle: () => number | undefined;
+  /** The unit under a screen point, in the current text: what a click landed in. */
+  readonly unitAt: (point: { readonly x: number; readonly y: number }) => DecisionUnit | undefined;
 }
 
 const spanOn = (side: Side, unit: DecisionUnit) =>
@@ -66,6 +68,18 @@ export interface BookDiffProps {
     | { readonly book: EditorBook; readonly analyze: (text: string) => Analysis }
     | undefined;
   readonly awaitLive?: boolean;
+  /** One text only: removed words drawn struck through where they stood, as tracked changes. */
+  readonly inlineRemoved?: boolean;
+  /** No label row above the text: the host already names what it shows. */
+  readonly hideLabel?: boolean;
+  /** The unit the reader is on: its changed words carry `cm-diff-active` as well. */
+  readonly activeUnit?: string | undefined;
+  /** A decided unit draws as plain text (unless it is the active one): the text it settled on. */
+  readonly settled?: (unit: DecisionUnit) => boolean;
+  /** A change from the other side: inline, what only that side has reads as arriving. */
+  readonly incoming?: (unit: DecisionUnit) => boolean;
+  /** Rows of their own between lines of the one text, e.g. chapters the book lacks. */
+  readonly notes?: (text: string) => readonly { readonly at: number; readonly text: string }[];
 }
 
 interface Pane {
@@ -94,6 +108,11 @@ interface MountArgs {
   readonly report: (unit: DecisionUnit | undefined) => void;
   readonly linked: () => boolean;
   readonly currentFirst: boolean;
+  readonly inlineRemoved: boolean;
+  readonly active: () => string | undefined;
+  readonly settled: (unit: DecisionUnit) => boolean;
+  readonly incoming: (unit: DecisionUnit) => boolean;
+  readonly notes: (text: string) => readonly { readonly at: number; readonly text: string }[];
 }
 
 const mountPanes = (args: MountArgs): { held: Mounted[]; release: () => void } => {
@@ -182,15 +201,20 @@ const mountPanes = (args: MountArgs): { held: Mounted[]; release: () => void } =
       }),
     );
   } else {
-    const current = add("unified", rightHost, sides.currentText, () =>
-      hunkPaint(
+    const current = add("unified", rightHost, sides.currentText, () => ({
+      notes: args.notes(live?.book.source().text ?? now().sides.currentText),
+      ...hunkPaint(
         now().units,
         markup,
         controls(),
         wasBlock(now().sides.baseline, mode),
         now().sides.current,
+        args.inlineRemoved,
+        args.active(),
+        args.settled,
+        args.incoming,
       ),
-    );
+    }));
     follow("current", current);
   }
   painted();
@@ -236,10 +260,21 @@ export function BookDiff(props: BookDiffProps) {
     const entry = mounts.find((held) => held.side !== "baseline");
     return entry?.mount.editor.centerOffset();
   };
+  const unitAtPoint = (point: { readonly x: number; readonly y: number }) => {
+    const entry = mounts.find((held) => held.side !== "baseline");
+    const at = entry?.mount.editor.offsetAt(point);
+    return at === undefined
+      ? undefined
+      : unitAt(
+          untrack(() => props.units),
+          "current",
+          at,
+        );
+  };
   createEffect(
     () => props.ref,
     (give) => {
-      give?.({ showUnit, middle });
+      give?.({ showUnit, middle, unitAt: unitAtPoint });
     },
   );
 
@@ -287,6 +322,11 @@ export function BookDiff(props: BookDiffProps) {
         report,
         linked,
         currentFirst: untrack(() => props.currentFirst === true),
+        inlineRemoved: untrack(() => props.inlineRemoved === true),
+        active: () => untrack(() => props.activeUnit),
+        settled: (unit) => untrack(() => props.settled?.(unit) === true),
+        incoming: (unit) => untrack(() => props.incoming?.(unit) === true),
+        notes: (text) => untrack(() => props.notes?.(text) ?? []),
       });
       mounts = held;
       const first = untrack(() => props.initial);
@@ -304,6 +344,8 @@ export function BookDiff(props: BookDiffProps) {
       units: props.units,
       text: props.sides.currentText,
       decided: props.units.map((unit) => props.controls?.decision(unit) ?? "-").join(","),
+      active: props.activeUnit,
+      settled: props.units.map((unit) => (props.settled?.(unit) === true ? "s" : "-")).join(""),
     }),
     ({ text }) => {
       for (const entry of mounts) {
@@ -338,28 +380,30 @@ export function BookDiff(props: BookDiffProps) {
         </div>
       </Show>
       <div class="flex min-h-0 flex-col">
-        <div class="flex min-w-0 items-center gap-2 pb-1 text-smallest text-on-surface-tertiary">
-          <Show
-            when={props.split ? props.columnChoice : undefined}
-            fallback={
-              <p class="truncate">
-                {props.currentLabel}
-                <Show when={props.live !== undefined}>
-                  <span class="text-brand"> · {m.diff_editable()}</span>
-                </Show>
-              </p>
-            }
-          >
-            {(choice) => (
-              <>
-                {choice()("current")}
-                <Show when={props.live !== undefined}>
-                  <span class="truncate text-brand">{m.diff_editable()}</span>
-                </Show>
-              </>
-            )}
-          </Show>
-        </div>
+        <Show when={props.hideLabel !== true}>
+          <div class="flex min-w-0 items-center gap-2 pb-1 text-smallest text-on-surface-tertiary">
+            <Show
+              when={props.split ? props.columnChoice : undefined}
+              fallback={
+                <p class="truncate">
+                  {props.currentLabel}
+                  <Show when={props.live !== undefined}>
+                    <span class="text-brand"> · {m.diff_editable()}</span>
+                  </Show>
+                </p>
+              }
+            >
+              {(choice) => (
+                <>
+                  {choice()("current")}
+                  <Show when={props.live !== undefined}>
+                    <span class="truncate text-brand">{m.diff_editable()}</span>
+                  </Show>
+                </>
+              )}
+            </Show>
+          </div>
+        </Show>
         <div
           class={cx(
             "cm-diff-pane min-h-0 flex-1",

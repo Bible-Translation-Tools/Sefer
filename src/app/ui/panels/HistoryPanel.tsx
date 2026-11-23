@@ -877,7 +877,6 @@ export function HistoryPanel() {
                   decision={() => undefined}
                   decide={() => {}}
                   decidable={false}
-                  claimSidebar={false}
                   sides={sidesOf}
                   usfm={markup()}
                   onUsfm={setMarkup}

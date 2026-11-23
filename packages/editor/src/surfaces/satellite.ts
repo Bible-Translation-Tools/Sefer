@@ -1,5 +1,6 @@
 import { defaultKeymap } from "@codemirror/commands";
 import {
+  type EditorSelection,
   EditorState,
   Facet,
   Prec,
@@ -328,7 +329,65 @@ export interface SatelliteOptions {
   readonly label: string;
 }
 
-function satelliteExtensions(opts: SatelliteOptions): Extension[] {
+/**
+ * Where this satellite's caret stood around each history step it made. The
+ * book's history is the book's, and records the book's own caret; without
+ * this, Undo from a satellite brought the text back and left its caret where
+ * the deletion had put it. Steps are keyed by the book's undo depth, so a step
+ * another surface made is left alone.
+ */
+interface CaretStep {
+  readonly depth: number;
+  readonly before: EditorSelection;
+  after: EditorSelection;
+}
+
+function caretHistory(host: Funnel) {
+  let steps: CaretStep[] = [];
+  let known = host.depth().undo;
+  const place = (view: EditorView, selection: EditorSelection): void => {
+    const length = view.state.doc.length;
+    const main = selection.main;
+    if (main.anchor > length || main.head > length) return;
+    view.dispatch({
+      selection: { anchor: main.anchor, head: main.head },
+      annotations: fromCanonical.of(true),
+      scrollIntoView: true,
+    });
+  };
+  return {
+    /** An edit of this satellite's reached the book: a new step, or more of the one it joined. */
+    submitted: (before: EditorSelection, after: EditorSelection): void => {
+      const depth = host.depth().undo;
+      if (depth > known) {
+        steps = steps.filter((step) => step.depth < depth);
+        steps.push({ depth, before, after });
+      } else {
+        const joined = steps.find((step) => step.depth === depth);
+        if (joined !== undefined) joined.after = after;
+      }
+      known = depth;
+    },
+    undo: (view: EditorView): boolean => {
+      const step = steps.find((each) => each.depth === host.depth().undo);
+      const done = host.undo();
+      known = host.depth().undo;
+      if (done && step !== undefined) place(view, step.before);
+      return done;
+    },
+    redo: (view: EditorView): boolean => {
+      const done = host.redo();
+      known = host.depth().undo;
+      const step = steps.find((each) => each.depth === known);
+      if (done && step !== undefined) place(view, step.after);
+      return done;
+    },
+  };
+}
+
+type CaretHistory = ReturnType<typeof caretHistory>;
+
+function satelliteExtensions(opts: SatelliteOptions, carets: CaretHistory): Extension[] {
   return [
     initialRange.of(opts.range),
     scope,
@@ -348,17 +407,17 @@ function satelliteExtensions(opts: SatelliteOptions): Extension[] {
       ),
     ),
     keymap.of([
-      { key: "Mod-z", run: () => opts.host.undo() },
-      { key: "Mod-Shift-z", run: () => opts.host.redo() },
-      { key: "Mod-y", run: () => opts.host.redo() },
+      { key: "Mod-z", run: (view) => carets.undo(view) },
+      { key: "Mod-Shift-z", run: (view) => carets.redo(view) },
+      { key: "Mod-y", run: (view) => carets.redo(view) },
     ]),
     EditorView.domEventHandlers({
-      beforeinput(event) {
+      beforeinput(event, view) {
         const undo = event.inputType === "historyUndo";
         if (!undo && event.inputType !== "historyRedo") return false;
         event.preventDefault();
-        if (undo) opts.host.undo();
-        else opts.host.redo();
+        if (undo) carets.undo(view);
+        else carets.redo(view);
         return true;
       },
     }),
@@ -383,9 +442,10 @@ export function mountSatellite(opts: SatelliteOptions): Satellite {
   const done = span("satellite-mount", opts.label);
   let detach: () => void = () => {};
 
+  const carets = caretHistory(opts.host);
   const state = EditorState.create({
     doc: opts.host.doc(),
-    extensions: satelliteExtensions(opts),
+    extensions: satelliteExtensions(opts, carets),
   });
 
   let submitting = false;
@@ -405,6 +465,8 @@ export function mountSatellite(opts: SatelliteOptions): Satellite {
       } finally {
         submitting = false;
       }
+      if (!(outcome instanceof Refusal))
+        carets.submitted(tr.startState.selection, tr.selection ?? tr.state.selection);
       if (tr.selection && !(outcome instanceof Refusal))
         self.dispatch({ selection: tr.selection, annotations: fromCanonical.of(true) });
       done2();

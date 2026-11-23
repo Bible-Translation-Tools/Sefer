@@ -318,7 +318,11 @@ export function AppBar() {
   const open = (): boolean => shell.project() !== undefined;
 
   const refining = (): "true" | "false" =>
-    path().startsWith("/project/") && !within().startsWith("/terms") ? "true" : "false";
+    path().startsWith("/project/") &&
+    !within().startsWith("/terms") &&
+    !within().startsWith("/review")
+      ? "true"
+      : "false";
   const terms = (): "true" | "false" => at("/terms");
 
   const mode = (): Mode | undefined => {
